@@ -1,5 +1,5 @@
-import "@/styles/fonts.css"
 import "@mezo-org/mezo-clay/dist/mezo-clay.css"
+import "@/styles/fonts.css"
 import { PageLoader } from "@/components/PageLoader"
 import type { AppProps } from "next/app"
 import dynamic from "next/dynamic"

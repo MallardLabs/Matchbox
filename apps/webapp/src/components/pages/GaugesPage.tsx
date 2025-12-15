@@ -283,6 +283,16 @@ export default function GaugesPage() {
                     overflow: "auto",
                   },
                 },
+                TableHeadCell: {
+                  style: {
+                    backgroundColor: theme.colors.backgroundSecondary,
+                  },
+                },
+                TableBodyRow: {
+                  style: {
+                    backgroundColor: theme.colors.backgroundPrimary,
+                  },
+                },
               }}
             >
               <TableBuilderColumn header="veBTC NFT">
