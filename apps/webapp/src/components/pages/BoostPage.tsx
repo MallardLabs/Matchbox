@@ -11,6 +11,9 @@ import {
   useVoteOnGauge,
   useVoteState,
 } from "@/hooks/useVoting"
+import { useReadContracts } from "wagmi"
+import { getContractConfig } from "@/config/contracts"
+import { CHAIN_ID } from "@repo/shared/contracts"
 import { formatFixedPoint, formatMultiplier } from "@/utils/format"
 import {
   Button,
@@ -39,6 +42,7 @@ type GaugeSortColumn =
   | "veMEZOWeight"
   | "boost"
   | "optimalVeMEZO"
+  | "bribes"
   | null
 type SortDirection = "asc" | "desc"
 type StatusFilter = "all" | "active" | "inactive"
@@ -54,6 +58,137 @@ export default function BoostPage() {
   const { isConnected } = useAccount()
   const { locks: veMEZOLocks, isLoading: isLoadingLocks } = useVeMEZOLocks()
   const { gauges, isLoading: isLoadingGauges } = useBoostGauges()
+
+  // Load bribe addresses for all gauges for sorting
+  const contracts = getContractConfig(CHAIN_ID.testnet)
+  const gaugeAddresses = gauges.map((g) => g.address)
+  const { data: bribeAddressesData } = useReadContracts({
+    contracts: gaugeAddresses.map((address) => ({
+      ...contracts.boostVoter,
+      functionName: "gaugeToBribe",
+      args: [address],
+    })),
+    query: {
+      enabled: gaugeAddresses.length > 0,
+    },
+  })
+
+  // Extract valid bribe addresses for fetching incentive data
+  const bribeAddresses = useMemo(() => {
+    if (!bribeAddressesData) return []
+    return gaugeAddresses.map((gaugeAddr, i) => {
+      const result = bribeAddressesData[i]
+      const bribeAddress = result?.result as `0x${string}` | undefined
+      const hasBribe =
+        bribeAddress !== undefined &&
+        bribeAddress !== "0x0000000000000000000000000000000000000000"
+      return { gaugeAddress: gaugeAddr, bribeAddress: hasBribe ? bribeAddress : undefined }
+    })
+  }, [bribeAddressesData, gaugeAddresses])
+
+  // Fetch rewards list length for all bribe contracts to get incentive counts
+  const { data: rewardsLengthData } = useReadContracts({
+    contracts: bribeAddresses.map(({ bribeAddress }) => ({
+      address: bribeAddress,
+      abi: [
+        {
+          inputs: [],
+          name: "rewardsListLength",
+          outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
+          stateMutability: "view",
+          type: "function",
+        },
+      ] as const,
+      functionName: "rewardsListLength" as const,
+    })),
+    query: {
+      enabled: bribeAddresses.some((b) => b.bribeAddress !== undefined),
+    },
+  })
+
+  // Build a list of all reward token fetches needed
+  const rewardTokenFetches = useMemo(() => {
+    if (!rewardsLengthData) return []
+    const fetches: Array<{ gaugeAddress: `0x${string}`; bribeAddress: `0x${string}`; tokenIndex: number }> = []
+    bribeAddresses.forEach(({ gaugeAddress, bribeAddress }, i) => {
+      if (!bribeAddress) return
+      const length = Number(rewardsLengthData[i]?.result ?? 0n)
+      for (let j = 0; j < length; j++) {
+        fetches.push({ gaugeAddress, bribeAddress, tokenIndex: j })
+      }
+    })
+    return fetches
+  }, [bribeAddresses, rewardsLengthData])
+
+  // Fetch all reward token addresses
+  const { data: rewardTokensData } = useReadContracts({
+    contracts: rewardTokenFetches.map(({ bribeAddress, tokenIndex }) => ({
+      address: bribeAddress,
+      abi: [
+        {
+          inputs: [{ internalType: "uint256", name: "", type: "uint256" }],
+          name: "rewards",
+          outputs: [{ internalType: "address", name: "", type: "address" }],
+          stateMutability: "view",
+          type: "function",
+        },
+      ] as const,
+      functionName: "rewards" as const,
+      args: [BigInt(tokenIndex)],
+    })),
+    query: {
+      enabled: rewardTokenFetches.length > 0,
+    },
+  })
+
+  // Get current epoch start for fetching rewards
+  const EPOCH_DURATION = 7 * 24 * 60 * 60
+  const currentEpochStart = BigInt(Math.floor(Date.now() / 1000 / EPOCH_DURATION) * EPOCH_DURATION)
+
+  // Fetch token rewards per epoch for all tokens
+  const { data: tokenRewardsData } = useReadContracts({
+    contracts: rewardTokenFetches.map(({ bribeAddress }, i) => {
+      const tokenAddress = rewardTokensData?.[i]?.result as `0x${string}` | undefined
+      return {
+        address: bribeAddress,
+        abi: [
+          {
+            inputs: [
+              { internalType: "address", name: "token", type: "address" },
+              { internalType: "uint256", name: "epochStart", type: "uint256" },
+            ],
+            name: "tokenRewardsPerEpoch",
+            outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
+            stateMutability: "view",
+            type: "function",
+          },
+        ] as const,
+        functionName: "tokenRewardsPerEpoch" as const,
+        args: [tokenAddress ?? "0x0000000000000000000000000000000000000000", currentEpochStart],
+      }
+    }),
+    query: {
+      enabled: rewardTokenFetches.length > 0 && !!rewardTokensData,
+    },
+  })
+
+  // Create a map of gauge address -> total bribe amount (sum of all token rewards)
+  const gaugeBribeAmountMap = useMemo(() => {
+    const map = new Map<string, bigint>()
+    // Initialize all gauges to 0
+    gauges.forEach((gauge) => {
+      map.set(gauge.address.toLowerCase(), 0n)
+    })
+    // Sum up rewards for each gauge
+    if (tokenRewardsData) {
+      rewardTokenFetches.forEach(({ gaugeAddress }, i) => {
+        const amount = (tokenRewardsData[i]?.result as bigint) ?? 0n
+        const current = map.get(gaugeAddress.toLowerCase()) ?? 0n
+        map.set(gaugeAddress.toLowerCase(), current + amount)
+      })
+    }
+    return map
+  }, [gauges, tokenRewardsData, rewardTokenFetches])
 
   // Voting state
   const [selectedLockIndex, setSelectedLockIndex] = useState<
@@ -73,7 +208,6 @@ export default function BoostPage() {
     isInVotingWindow,
     usedWeight,
   } = useVoteState(selectedLock?.tokenId)
-  const gaugeAddresses = gauges.map((g) => g.address)
   const { allocations: currentAllocations } = useVoteAllocations(
     selectedLock?.tokenId,
     gaugeAddresses,
@@ -110,11 +244,18 @@ export default function BoostPage() {
   )
 
   const getGaugeSortIndicator = (column: GaugeSortColumn) => {
-    if (gaugeSortColumn !== column) return null
-    return gaugeSortDirection === "asc" ? (
-      <ChevronUp size={16} />
-    ) : (
-      <ChevronDown size={16} />
+    if (gaugeSortColumn === column) {
+      return gaugeSortDirection === "asc" ? (
+        <ChevronUp size={16} />
+      ) : (
+        <ChevronDown size={16} />
+      )
+    }
+    // Show neutral chevron to indicate sortable
+    return (
+      <span className={css({ opacity: 0.3 })}>
+        <ChevronDown size={16} />
+      </span>
     )
   }
 
@@ -237,6 +378,13 @@ export default function BoostPage() {
             comparison = aVal < bVal ? -1 : aVal > bVal ? 1 : 0
             break
           }
+          case "bribes": {
+            const aAmount = gaugeBribeAmountMap.get(a.address.toLowerCase()) ?? 0n
+            const bAmount = gaugeBribeAmountMap.get(b.address.toLowerCase()) ?? 0n
+            // Sort by total bribe amount
+            comparison = aAmount < bAmount ? -1 : aAmount > bAmount ? 1 : 0
+            break
+          }
           default:
             return 0
         }
@@ -252,6 +400,7 @@ export default function BoostPage() {
     gaugeSortDirection,
     gaugeStatusFilter,
     gaugeAllocations,
+    gaugeBribeAmountMap,
   ])
 
   const handleAllocationChange = (gaugeIndex: number, percentage: number) => {
@@ -627,7 +776,13 @@ export default function BoostPage() {
                               formatMultiplier(gauge.boostMultiplier)
                             }
                           </TableBuilderColumn>
-                          <TableBuilderColumn header="Bribes">
+                          <TableBuilderColumn
+                            header={
+                              <GaugeSortableHeader column="bribes">
+                                Bribes
+                              </GaugeSortableHeader>
+                            }
+                          >
                             {(gauge: GaugeWithAllocation) => (
                               <GaugeBribesCell gaugeAddress={gauge.address} />
                             )}
