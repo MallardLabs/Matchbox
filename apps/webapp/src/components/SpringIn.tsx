@@ -26,7 +26,7 @@ export function SpringIn({
   return (
     <div
       className={`${animationClass} ${delayClass} ${className}`.trim()}
-      style={delayStyle}
+      style={{ height: "100%", ...delayStyle }}
     >
       {children}
     </div>

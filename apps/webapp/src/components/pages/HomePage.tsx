@@ -37,6 +37,7 @@ function ActionCard({
         borderRadius: "16px",
         border: `1px solid ${theme.colors.borderOpaque}`,
         backgroundColor: theme.colors.backgroundPrimary,
+        height: "100%",
       })}
     >
       <HeadingSmall marginBottom="scale300">{title}</HeadingSmall>
