@@ -1,4 +1,5 @@
 import { Layout } from "@/components/Layout"
+import { SpringIn } from "@/components/SpringIn"
 import { useBoostGaugeForToken, useBoostInfo } from "@/hooks/useGauges"
 import { useVeBTCLocks, useVeMEZOLocks } from "@/hooks/useLocks"
 import { useVoteState } from "@/hooks/useVoting"
@@ -247,18 +248,20 @@ export default function DashboardPage() {
         </div>
 
         {!isConnected ? (
-          <Card withBorder overrides={{}}>
-            <div
-              className={css({
-                padding: "48px",
-                textAlign: "center",
-              })}
-            >
-              <ParagraphMedium color={theme.colors.contentSecondary}>
-                Connect your wallet to view your dashboard
-              </ParagraphMedium>
-            </div>
-          </Card>
+          <SpringIn delay={0} variant="card">
+            <Card withBorder overrides={{}}>
+              <div
+                className={css({
+                  padding: "48px",
+                  textAlign: "center",
+                })}
+              >
+                <ParagraphMedium color={theme.colors.contentSecondary}>
+                  Connect your wallet to view your dashboard
+                </ParagraphMedium>
+              </div>
+            </Card>
+          </SpringIn>
         ) : isLoading ? (
           <div
             className={css({
@@ -280,112 +283,128 @@ export default function DashboardPage() {
                 gap: "16px",
               })}
             >
-              <Card withBorder overrides={{}}>
-                <div className={css({ padding: "8px 0" })}>
-                  <LabelSmall color={theme.colors.contentSecondary}>
-                    Your veBTC Locks
-                  </LabelSmall>
-                  <HeadingMedium>{veBTCLocks.length}</HeadingMedium>
-                </div>
-              </Card>
-
-              <Card withBorder overrides={{}}>
-                <div className={css({ padding: "8px 0" })}>
-                  <LabelSmall color={theme.colors.contentSecondary}>
-                    Your veBTC Power
-                  </LabelSmall>
-                  <HeadingMedium>
-                    {formatUnits(totalVeBTCVotingPower, 18).slice(0, 8)}
-                  </HeadingMedium>
-                </div>
-              </Card>
-
-              <Card withBorder overrides={{}}>
-                <div className={css({ padding: "8px 0" })}>
-                  <LabelSmall color={theme.colors.contentSecondary}>
-                    Your veMEZO Locks
-                  </LabelSmall>
-                  <HeadingMedium>{veMEZOLocks.length}</HeadingMedium>
-                </div>
-              </Card>
-
-              <Card withBorder overrides={{}}>
-                <div className={css({ padding: "8px 0" })}>
-                  <LabelSmall color={theme.colors.contentSecondary}>
-                    Your veMEZO Power
-                  </LabelSmall>
-                  <HeadingMedium>
-                    {formatUnits(totalVeMEZOVotingPower, 18).slice(0, 8)}
-                  </HeadingMedium>
-                </div>
-              </Card>
-            </div>
-
-            <div>
-              <HeadingMedium marginBottom="scale500">
-                Your veBTC Locks
-              </HeadingMedium>
-              {veBTCLocks.length === 0 ? (
+              <SpringIn delay={0} variant="card">
                 <Card withBorder overrides={{}}>
-                  <div
-                    className={css({
-                      padding: "32px",
-                      textAlign: "center",
-                    })}
-                  >
-                    <ParagraphMedium color={theme.colors.contentSecondary}>
-                      No veBTC locks found
-                    </ParagraphMedium>
+                  <div className={css({ padding: "8px 0" })}>
+                    <LabelSmall color={theme.colors.contentSecondary}>
+                      Your veBTC Locks
+                    </LabelSmall>
+                    <HeadingMedium>{veBTCLocks.length}</HeadingMedium>
                   </div>
                 </Card>
-              ) : (
-                <div
-                  className={css({
-                    display: "grid",
-                    gridTemplateColumns:
-                      "repeat(auto-fill, minmax(350px, 1fr))",
-                    gap: "16px",
-                  })}
-                >
-                  {veBTCLocks.map((lock) => (
-                    <VeBTCLockCard key={lock.tokenId.toString()} lock={lock} />
-                  ))}
-                </div>
-              )}
-            </div>
+              </SpringIn>
 
-            <div>
-              <HeadingMedium marginBottom="scale500">
-                Your veMEZO Locks
-              </HeadingMedium>
-              {veMEZOLocks.length === 0 ? (
+              <SpringIn delay={1} variant="card">
                 <Card withBorder overrides={{}}>
-                  <div
-                    className={css({
-                      padding: "32px",
-                      textAlign: "center",
-                    })}
-                  >
-                    <ParagraphMedium color={theme.colors.contentSecondary}>
-                      No veMEZO locks found
-                    </ParagraphMedium>
+                  <div className={css({ padding: "8px 0" })}>
+                    <LabelSmall color={theme.colors.contentSecondary}>
+                      Your veBTC Power
+                    </LabelSmall>
+                    <HeadingMedium>
+                      {formatUnits(totalVeBTCVotingPower, 18).slice(0, 8)}
+                    </HeadingMedium>
                   </div>
                 </Card>
-              ) : (
-                <div
-                  className={css({
-                    display: "grid",
-                    gridTemplateColumns:
-                      "repeat(auto-fill, minmax(350px, 1fr))",
-                    gap: "16px",
-                  })}
-                >
-                  {veMEZOLocks.map((lock) => (
-                    <VeMEZOLockCard key={lock.tokenId.toString()} lock={lock} />
-                  ))}
-                </div>
-              )}
+              </SpringIn>
+
+              <SpringIn delay={2} variant="card">
+                <Card withBorder overrides={{}}>
+                  <div className={css({ padding: "8px 0" })}>
+                    <LabelSmall color={theme.colors.contentSecondary}>
+                      Your veMEZO Locks
+                    </LabelSmall>
+                    <HeadingMedium>{veMEZOLocks.length}</HeadingMedium>
+                  </div>
+                </Card>
+              </SpringIn>
+
+              <SpringIn delay={3} variant="card">
+                <Card withBorder overrides={{}}>
+                  <div className={css({ padding: "8px 0" })}>
+                    <LabelSmall color={theme.colors.contentSecondary}>
+                      Your veMEZO Power
+                    </LabelSmall>
+                    <HeadingMedium>
+                      {formatUnits(totalVeMEZOVotingPower, 18).slice(0, 8)}
+                    </HeadingMedium>
+                  </div>
+                </Card>
+              </SpringIn>
             </div>
+
+            <SpringIn delay={4} variant="card">
+              <div>
+                <HeadingMedium marginBottom="scale500">
+                  Your veBTC Locks
+                </HeadingMedium>
+                {veBTCLocks.length === 0 ? (
+                  <Card withBorder overrides={{}}>
+                    <div
+                      className={css({
+                        padding: "32px",
+                        textAlign: "center",
+                      })}
+                    >
+                      <ParagraphMedium color={theme.colors.contentSecondary}>
+                        No veBTC locks found
+                      </ParagraphMedium>
+                    </div>
+                  </Card>
+                ) : (
+                  <div
+                    className={css({
+                      display: "grid",
+                      gridTemplateColumns:
+                        "repeat(auto-fill, minmax(350px, 1fr))",
+                      gap: "16px",
+                    })}
+                  >
+                    {veBTCLocks.map((lock, index) => (
+                      <SpringIn key={lock.tokenId.toString()} delay={5 + index} variant="card">
+                        <VeBTCLockCard lock={lock} />
+                      </SpringIn>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </SpringIn>
+
+            <SpringIn delay={5 + veBTCLocks.length} variant="card">
+              <div>
+                <HeadingMedium marginBottom="scale500">
+                  Your veMEZO Locks
+                </HeadingMedium>
+                {veMEZOLocks.length === 0 ? (
+                  <Card withBorder overrides={{}}>
+                    <div
+                      className={css({
+                        padding: "32px",
+                        textAlign: "center",
+                      })}
+                    >
+                      <ParagraphMedium color={theme.colors.contentSecondary}>
+                        No veMEZO locks found
+                      </ParagraphMedium>
+                    </div>
+                  </Card>
+                ) : (
+                  <div
+                    className={css({
+                      display: "grid",
+                      gridTemplateColumns:
+                        "repeat(auto-fill, minmax(350px, 1fr))",
+                      gap: "16px",
+                    })}
+                  >
+                    {veMEZOLocks.map((lock, index) => (
+                      <SpringIn key={lock.tokenId.toString()} delay={6 + veBTCLocks.length + index} variant="card">
+                        <VeMEZOLockCard lock={lock} />
+                      </SpringIn>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </SpringIn>
           </>
         )}
       </div>

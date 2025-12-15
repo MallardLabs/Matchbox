@@ -1,9 +1,9 @@
-import { PageLoader } from "@/components/PageLoader"
+import { InitialLoader } from "@/components/InitialLoader"
 import dynamic from "next/dynamic"
 
 const GaugesPage = dynamic(() => import("@/components/pages/GaugesPage"), {
   ssr: false,
-  loading: () => <PageLoader />,
+  loading: () => <InitialLoader />,
 })
 
 export default function Gauges() {

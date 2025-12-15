@@ -1,4 +1,5 @@
 import { Layout } from "@/components/Layout"
+import { SpringIn } from "@/components/SpringIn"
 import { useTheme } from "@/contexts/ThemeContext"
 import {
   Button,
@@ -77,35 +78,37 @@ export default function HomePage() {
           paddingTop: "48px",
         })}
       >
-        <div
-          className={css({
-            textAlign: "center",
-            maxWidth: "600px",
-          })}
-        >
+        <SpringIn delay={0} variant="card">
           <div
             className={css({
-              display: "flex",
-              justifyContent: "center",
-              marginBottom: "24px",
+              textAlign: "center",
+              maxWidth: "600px",
             })}
           >
-            <img
-              src="/matchbox.png"
-              alt="Matchbox"
+            <div
               className={css({
-                height: "80px",
-                width: "auto",
-                imageRendering: "crisp-edges",
-                filter: currentTheme === "dark" ? "invert(1)" : "none",
+                display: "flex",
+                justifyContent: "center",
+                marginBottom: "24px",
               })}
-            />
+            >
+              <img
+                src="/matchbox.png"
+                alt="Matchbox"
+                className={css({
+                  height: "80px",
+                  width: "auto",
+                  imageRendering: "crisp-edges",
+                  filter: currentTheme === "dark" ? "invert(1)" : "none",
+                })}
+              />
+            </div>
+            <ParagraphLarge color={theme.colors.contentSecondary}>
+              Boost your veBTC voting power with veMEZO or attract veMEZO capital
+              to your gauge with incentives.
+            </ParagraphLarge>
           </div>
-          <ParagraphLarge color={theme.colors.contentSecondary}>
-            Boost your veBTC voting power with veMEZO or attract veMEZO capital
-            to your gauge with incentives.
-          </ParagraphLarge>
-        </div>
+        </SpringIn>
 
         <div
           className={css({
@@ -119,40 +122,48 @@ export default function HomePage() {
             },
           })}
         >
-          <ActionCard
-            title="veMEZO Holders"
-            description="Vote on veBTC gauges to boost their voting power and earn incentives in return."
-            buttonText="Vote to Boost"
-            href="/boost"
-          />
-          <ActionCard
-            title="veBTC Holders"
-            description="Add incentives to your gauge to attract veMEZO votes and boost your voting power."
-            buttonText="Add Incentives"
-            href="/incentives"
-          />
-          <ActionCard
-            title="Track Performance"
-            description="Monitor your boosts, fees earned, and gauge performance over time."
-            buttonText="View Dashboard"
-            href="/dashboard"
-            variant="secondary"
-          />
+          <SpringIn delay={1} variant="card">
+            <ActionCard
+              title="veMEZO Holders"
+              description="Vote on veBTC gauges to boost their voting power and earn incentives in return."
+              buttonText="Vote to Boost"
+              href="/boost"
+            />
+          </SpringIn>
+          <SpringIn delay={2} variant="card">
+            <ActionCard
+              title="veBTC Holders"
+              description="Add incentives to your gauge to attract veMEZO votes and boost your voting power."
+              buttonText="Add Incentives"
+              href="/incentives"
+            />
+          </SpringIn>
+          <SpringIn delay={3} variant="card">
+            <ActionCard
+              title="Track Performance"
+              description="Monitor your boosts, fees earned, and gauge performance over time."
+              buttonText="View Dashboard"
+              href="/dashboard"
+              variant="secondary"
+            />
+          </SpringIn>
         </div>
 
         {!isConnected && (
-          <div
-            className={css({
-              backgroundColor: theme.colors.backgroundSecondary,
-              padding: "24px",
-              borderRadius: "12px",
-              textAlign: "center",
-            })}
-          >
-            <ParagraphSmall color={theme.colors.contentSecondary}>
-              Connect your wallet to get started
-            </ParagraphSmall>
-          </div>
+          <SpringIn delay={4} variant="card">
+            <div
+              className={css({
+                backgroundColor: theme.colors.backgroundSecondary,
+                padding: "24px",
+                borderRadius: "12px",
+                textAlign: "center",
+              })}
+            >
+              <ParagraphSmall color={theme.colors.contentSecondary}>
+                Connect your wallet to get started
+              </ParagraphSmall>
+            </div>
+          </SpringIn>
         )}
       </div>
     </Layout>

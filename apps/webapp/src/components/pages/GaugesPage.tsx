@@ -1,5 +1,6 @@
 import { AddressLink } from "@/components/AddressLink"
 import { Layout } from "@/components/Layout"
+import { SpringIn } from "@/components/SpringIn"
 import { useBoostGauges, useVoterTotals } from "@/hooks/useGauges"
 import type { BoostGauge } from "@/hooks/useGauges"
 import { useBribeAddress, useBribeIncentives } from "@/hooks/useVoting"
@@ -354,53 +355,61 @@ export default function GaugesPage() {
             gap: "16px",
           })}
         >
-          <Card withBorder overrides={{}}>
-            <div className={css({ padding: "8px 0" })}>
-              <LabelSmall color={theme.colors.contentSecondary}>
-                Total Gauges
-              </LabelSmall>
-              <HeadingMedium>{totalGauges}</HeadingMedium>
-            </div>
-          </Card>
+          <SpringIn delay={0} variant="card">
+            <Card withBorder overrides={{}}>
+              <div className={css({ padding: "8px 0" })}>
+                <LabelSmall color={theme.colors.contentSecondary}>
+                  Total Gauges
+                </LabelSmall>
+                <HeadingMedium>{totalGauges}</HeadingMedium>
+              </div>
+            </Card>
+          </SpringIn>
 
-          <Card withBorder overrides={{}}>
-            <div className={css({ padding: "8px 0" })}>
-              <LabelSmall color={theme.colors.contentSecondary}>
-                Total veMEZO Votes
-              </LabelSmall>
-              <HeadingMedium>
-                {boostVoterTotalWeight
-                  ? `${formatUnits(boostVoterTotalWeight, 18).slice(0, 10)}`
-                  : "0"}
-              </HeadingMedium>
-            </div>
-          </Card>
+          <SpringIn delay={1} variant="card">
+            <Card withBorder overrides={{}}>
+              <div className={css({ padding: "8px 0" })}>
+                <LabelSmall color={theme.colors.contentSecondary}>
+                  Total veMEZO Votes
+                </LabelSmall>
+                <HeadingMedium>
+                  {boostVoterTotalWeight
+                    ? `${formatUnits(boostVoterTotalWeight, 18).slice(0, 10)}`
+                    : "0"}
+                </HeadingMedium>
+              </div>
+            </Card>
+          </SpringIn>
 
-          <Card withBorder overrides={{}}>
-            <div className={css({ padding: "8px 0" })}>
-              <LabelSmall color={theme.colors.contentSecondary}>
-                Total veMEZO Power
-              </LabelSmall>
-              <HeadingMedium>
-                {veMEZOTotalVotingPower
-                  ? `${formatUnits(veMEZOTotalVotingPower, 18).slice(0, 10)}`
-                  : "0"}
-              </HeadingMedium>
-            </div>
-          </Card>
+          <SpringIn delay={2} variant="card">
+            <Card withBorder overrides={{}}>
+              <div className={css({ padding: "8px 0" })}>
+                <LabelSmall color={theme.colors.contentSecondary}>
+                  Total veMEZO Power
+                </LabelSmall>
+                <HeadingMedium>
+                  {veMEZOTotalVotingPower
+                    ? `${formatUnits(veMEZOTotalVotingPower, 18).slice(0, 10)}`
+                    : "0"}
+                </HeadingMedium>
+              </div>
+            </Card>
+          </SpringIn>
 
-          <Card withBorder overrides={{}}>
-            <div className={css({ padding: "8px 0" })}>
-              <LabelSmall color={theme.colors.contentSecondary}>
-                Total veBTC Power
-              </LabelSmall>
-              <HeadingMedium>
-                {veBTCTotalVotingPower
-                  ? `${formatUnits(veBTCTotalVotingPower, 18).slice(0, 10)}`
-                  : "0"}
-              </HeadingMedium>
-            </div>
-          </Card>
+          <SpringIn delay={3} variant="card">
+            <Card withBorder overrides={{}}>
+              <div className={css({ padding: "8px 0" })}>
+                <LabelSmall color={theme.colors.contentSecondary}>
+                  Total veBTC Power
+                </LabelSmall>
+                <HeadingMedium>
+                  {veBTCTotalVotingPower
+                    ? `${formatUnits(veBTCTotalVotingPower, 18).slice(0, 10)}`
+                    : "0"}
+                </HeadingMedium>
+              </div>
+            </Card>
+          </SpringIn>
         </div>
 
         {isLoading ? (
@@ -416,21 +425,24 @@ export default function GaugesPage() {
             <Skeleton width="100%" height="100px" animation />
           </div>
         ) : gauges.length === 0 ? (
-          <Card withBorder overrides={{}}>
-            <div
-              className={css({
-                padding: "48px",
-                textAlign: "center",
-              })}
-            >
-              <ParagraphMedium color={theme.colors.contentSecondary}>
-                No boost gauges found. veBTC holders can create gauges to
-                attract veMEZO votes.
-              </ParagraphMedium>
-            </div>
-          </Card>
+          <SpringIn delay={4} variant="card">
+            <Card withBorder overrides={{}}>
+              <div
+                className={css({
+                  padding: "48px",
+                  textAlign: "center",
+                })}
+              >
+                <ParagraphMedium color={theme.colors.contentSecondary}>
+                  No boost gauges found. veBTC holders can create gauges to
+                  attract veMEZO votes.
+                </ParagraphMedium>
+              </div>
+            </Card>
+          </SpringIn>
         ) : (
-          <Card title="Gauges" withBorder overrides={{}}>
+          <SpringIn delay={4} variant="card">
+            <Card title="Gauges" withBorder overrides={{}}>
             <div className={css({ padding: "16px 0" })}>
               <div
                 className={css({
@@ -561,6 +573,7 @@ export default function GaugesPage() {
               </TableBuilder>
             </div>
           </Card>
+          </SpringIn>
         )}
       </div>
     </Layout>

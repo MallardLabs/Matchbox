@@ -1,11 +1,11 @@
-import { PageLoader } from "@/components/PageLoader"
+import { InitialLoader } from "@/components/InitialLoader"
 import dynamic from "next/dynamic"
 
 const DashboardPage = dynamic(
   () => import("@/components/pages/DashboardPage"),
   {
     ssr: false,
-    loading: () => <PageLoader />,
+    loading: () => <InitialLoader />,
   },
 )
 

@@ -1,4 +1,5 @@
 import { Layout } from "@/components/Layout"
+import { SpringIn } from "@/components/SpringIn"
 import { TokenSelector } from "@/components/TokenSelector"
 import { useBoostGaugeForToken, useBoostInfo } from "@/hooks/useGauges"
 import { useVeBTCLocks } from "@/hooks/useLocks"
@@ -167,18 +168,20 @@ export default function IncentivesPage() {
         </div>
 
         {!isConnected ? (
-          <Card withBorder overrides={{}}>
-            <div
-              className={css({
-                padding: "48px",
-                textAlign: "center",
-              })}
-            >
-              <ParagraphMedium color={theme.colors.contentSecondary}>
-                Connect your wallet to manage incentives
-              </ParagraphMedium>
-            </div>
-          </Card>
+          <SpringIn delay={0} variant="card">
+            <Card withBorder overrides={{}}>
+              <div
+                className={css({
+                  padding: "48px",
+                  textAlign: "center",
+                })}
+              >
+                <ParagraphMedium color={theme.colors.contentSecondary}>
+                  Connect your wallet to manage incentives
+                </ParagraphMedium>
+              </div>
+            </Card>
+          </SpringIn>
         ) : isLoading ? (
           <div
             className={css({
@@ -191,22 +194,25 @@ export default function IncentivesPage() {
             <Skeleton width="100%" height="150px" animation />
           </div>
         ) : veBTCLocks.length === 0 ? (
-          <Card withBorder overrides={{}}>
-            <div
-              className={css({
-                padding: "48px",
-                textAlign: "center",
-              })}
-            >
-              <ParagraphMedium color={theme.colors.contentSecondary}>
-                You don&apos;t have any veBTC locks. Lock BTC to get veBTC and
-                create a boost gauge.
-              </ParagraphMedium>
-            </div>
-          </Card>
+          <SpringIn delay={0} variant="card">
+            <Card withBorder overrides={{}}>
+              <div
+                className={css({
+                  padding: "48px",
+                  textAlign: "center",
+                })}
+              >
+                <ParagraphMedium color={theme.colors.contentSecondary}>
+                  You don&apos;t have any veBTC locks. Lock BTC to get veBTC and
+                  create a boost gauge.
+                </ParagraphMedium>
+              </div>
+            </Card>
+          </SpringIn>
         ) : (
           <>
-            <Card title="Select veBTC Lock" withBorder overrides={{}}>
+            <SpringIn delay={0} variant="card">
+              <Card title="Select veBTC Lock" withBorder overrides={{}}>
               <div className={css({ padding: "16px 0" })}>
                 <Select
                   options={veBTCLocks.map((lock, i) => ({
@@ -342,10 +348,12 @@ export default function IncentivesPage() {
                 )}
               </div>
             </Card>
+            </SpringIn>
 
             {selectedLock &&
               (!hasGauge && !isLoadingGauge ? (
-                <Card title="Create Boost Gauge" withBorder overrides={{}}>
+                <SpringIn delay={1} variant="card">
+                  <Card title="Create Boost Gauge" withBorder overrides={{}}>
                   <div
                     className={css({
                       padding: "16px 0",
@@ -375,8 +383,10 @@ export default function IncentivesPage() {
                     )}
                   </div>
                 </Card>
+                </SpringIn>
               ) : (
-                <Card title="Add Incentives" withBorder overrides={{}}>
+                <SpringIn delay={1} variant="card">
+                  <Card title="Add Incentives" withBorder overrides={{}}>
                   <div
                     className={css({
                       padding: "16px 0",
@@ -459,6 +469,7 @@ export default function IncentivesPage() {
                     )}
                   </div>
                 </Card>
+                </SpringIn>
               ))}
           </>
         )}

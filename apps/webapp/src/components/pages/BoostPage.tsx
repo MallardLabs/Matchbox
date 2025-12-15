@@ -1,5 +1,6 @@
 import { AddressLink } from "@/components/AddressLink"
 import { Layout } from "@/components/Layout"
+import { SpringIn } from "@/components/SpringIn"
 import type { BoostGauge } from "@/hooks/useGauges"
 import { useBoostGauges } from "@/hooks/useGauges"
 import { useVeMEZOLocks } from "@/hooks/useLocks"
@@ -456,18 +457,20 @@ export default function BoostPage() {
         </div>
 
         {!isConnected ? (
-          <Card withBorder overrides={{}}>
-            <div
-              className={css({
-                padding: "48px",
-                textAlign: "center",
-              })}
-            >
-              <ParagraphMedium color={theme.colors.contentSecondary}>
-                Connect your wallet to vote with veMEZO
-              </ParagraphMedium>
-            </div>
-          </Card>
+          <SpringIn delay={0} variant="card">
+            <Card withBorder overrides={{}}>
+              <div
+                className={css({
+                  padding: "48px",
+                  textAlign: "center",
+                })}
+              >
+                <ParagraphMedium color={theme.colors.contentSecondary}>
+                  Connect your wallet to vote with veMEZO
+                </ParagraphMedium>
+              </div>
+            </Card>
+          </SpringIn>
         ) : isLoading ? (
           <div
             className={css({
@@ -483,7 +486,8 @@ export default function BoostPage() {
           <>
             {/* Voting Form - shown when user has veMEZO locks */}
             {veMEZOLocks.length > 0 && (
-              <Card title="Vote on Gauge" withBorder overrides={{}}>
+              <SpringIn delay={0} variant="card">
+                <Card title="Vote on Gauge" withBorder overrides={{}}>
                 <div className={css({ padding: "16px 0" })}>
                   <div
                     className={css({
@@ -889,10 +893,12 @@ export default function BoostPage() {
                   </div>
                 </div>
               </Card>
+              </SpringIn>
             )}
 
             {/* Empty state when no locks */}
             {veMEZOLocks.length === 0 && (
+              <SpringIn delay={0} variant="card">
                 <Card withBorder overrides={{}}>
                   <div
                     className={css({
@@ -906,6 +912,7 @@ export default function BoostPage() {
                     </ParagraphMedium>
                   </div>
                 </Card>
+              </SpringIn>
               )}
           </>
         )}

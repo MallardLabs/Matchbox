@@ -1,6 +1,7 @@
 import "@mezo-org/mezo-clay/dist/mezo-clay.css"
 import "@/styles/fonts.css"
-import { PageLoader } from "@/components/PageLoader"
+import "@/styles/animations.css"
+import { InitialLoader } from "@/components/InitialLoader"
 import type { AppProps } from "next/app"
 import dynamic from "next/dynamic"
 
@@ -9,7 +10,7 @@ const ClientApp = dynamic(
   () => import("@/components/ClientApp").then((mod) => mod.ClientApp),
   {
     ssr: false,
-    loading: () => <PageLoader />,
+    loading: () => <InitialLoader />,
   },
 )
 
