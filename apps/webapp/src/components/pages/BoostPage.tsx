@@ -3,7 +3,7 @@ import { Layout } from "@/components/Layout"
 import { SpringIn } from "@/components/SpringIn"
 import type { BoostGauge } from "@/hooks/useGauges"
 import { useBoostGauges } from "@/hooks/useGauges"
-import { useGaugeProfiles } from "@/hooks/useGaugeProfiles"
+import { useAllGaugeProfiles } from "@/hooks/useGaugeProfiles"
 import { useVeMEZOLocks } from "@/hooks/useLocks"
 import {
   useBribeAddress,
@@ -35,6 +35,7 @@ import {
   Tag,
   useStyletron,
 } from "@mezo-org/mezo-clay"
+import Link from "next/link"
 import type React from "react"
 import { useCallback, useMemo, useState } from "react"
 import { formatUnits } from "viem"
@@ -66,8 +67,8 @@ export default function BoostPage() {
   const contracts = getContractConfig(CHAIN_ID.testnet)
   const gaugeAddresses = useMemo(() => gauges.map((g) => g.address), [gauges])
 
-  // Fetch gauge profiles from Supabase
-  const { profiles: gaugeProfiles } = useGaugeProfiles(gaugeAddresses)
+  // Fetch all gauge profiles from Supabase (pre-fetches all for faster loading)
+  const { profiles: gaugeProfiles } = useAllGaugeProfiles()
   const { data: bribeAddressesData } = useReadContracts({
     contracts: gaugeAddresses.map((address) => ({
       ...contracts.boostVoter,
@@ -769,11 +770,17 @@ export default function BoostPage() {
                             {(gauge: GaugeWithAllocation) => {
                               const profile = gaugeProfiles.get(gauge.address.toLowerCase())
                               return (
-                                <div
+                                <Link
+                                  href={`/gauges/${gauge.address}`}
                                   className={css({
                                     display: "flex",
                                     alignItems: "center",
                                     gap: "12px",
+                                    textDecoration: "none",
+                                    color: "inherit",
+                                    ":hover": {
+                                      opacity: 0.8,
+                                    },
                                   })}
                                 >
                                   {/* Profile Picture */}
@@ -883,7 +890,7 @@ export default function BoostPage() {
                                       </ParagraphSmall>
                                     )}
                                   </div>
-                                </div>
+                                </Link>
                               )
                             }}
                           </TableBuilderColumn>

@@ -5,6 +5,7 @@ import { getContractConfig } from "@/config/contracts"
 import { useBoostInfo } from "@/hooks/useGauges"
 import { useGaugeProfile } from "@/hooks/useGaugeProfiles"
 import { useBribeAddress, useBribeIncentives } from "@/hooks/useVoting"
+import { useGaugeAPY, formatAPY } from "@/hooks/useAPY"
 import { formatFixedPoint, formatMultiplier } from "@/utils/format"
 import { CHAIN_ID, NON_STAKING_GAUGE_ABI } from "@repo/shared/contracts"
 import {
@@ -120,6 +121,12 @@ export default function GaugeDetailPage() {
   const { bribeAddress, hasBribe } = useBribeAddress(gaugeAddress)
   const { incentives, isLoading: isLoadingIncentives } =
     useBribeIncentives(bribeAddress)
+
+  // Calculate APY for this gauge
+  const { apy, totalIncentivesUSD, isLoading: isLoadingAPY } = useGaugeAPY(
+    gaugeAddress,
+    totalWeight
+  )
 
   const isLoading = isLoadingGauge || isLoadingProfile || isLoadingBoost
 
@@ -293,10 +300,13 @@ export default function GaugeDetailPage() {
             <div
               className={css({
                 display: "grid",
-                gridTemplateColumns: "repeat(4, 1fr)",
+                gridTemplateColumns: "repeat(5, 1fr)",
                 gap: "16px",
                 alignItems: "stretch",
                 "@media (max-width: 1024px)": {
+                  gridTemplateColumns: "repeat(3, 1fr)",
+                },
+                "@media (max-width: 768px)": {
                   gridTemplateColumns: "repeat(2, 1fr)",
                 },
                 "@media (max-width: 480px)": {
@@ -378,6 +388,37 @@ export default function GaugeDetailPage() {
                     })}
                   >
                     <LabelSmall color={theme.colors.contentSecondary}>
+                      Voting APY
+                    </LabelSmall>
+                    <HeadingMedium
+                      color={
+                        apy && apy > 0
+                          ? theme.colors.positive
+                          : theme.colors.contentPrimary
+                      }
+                    >
+                      {isLoadingAPY ? "..." : formatAPY(apy)}
+                    </HeadingMedium>
+                    {totalIncentivesUSD > 0 && (
+                      <LabelSmall color={theme.colors.contentSecondary}>
+                        ${totalIncentivesUSD.toFixed(2)}/week
+                      </LabelSmall>
+                    )}
+                  </div>
+                </Card>
+              </SpringIn>
+
+              <SpringIn delay={5} variant="card">
+                <Card withBorder overrides={{}}>
+                  <div
+                    className={css({
+                      padding: "8px 0",
+                      display: "flex",
+                      flexDirection: "column",
+                      height: "100%",
+                    })}
+                  >
+                    <LabelSmall color={theme.colors.contentSecondary}>
                       Manager
                     </LabelSmall>
                     {beneficiary ? (
@@ -408,7 +449,7 @@ export default function GaugeDetailPage() {
             </div>
 
             {/* Incentives */}
-            <SpringIn delay={5} variant="card">
+            <SpringIn delay={6} variant="card">
               <Card title="Current Epoch Incentives" withBorder overrides={{}}>
                 <div className={css({ padding: "16px 0" })}>
                   {isLoadingIncentives ? (

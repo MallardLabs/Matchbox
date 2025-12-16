@@ -436,3 +436,21 @@ export function useVoterTotals() {
     isLoading,
   }
 }
+
+export function useGaugeWeight(gaugeAddress: Address | undefined) {
+  const contracts = getContractConfig(CHAIN_ID.testnet)
+
+  const { data, isLoading } = useReadContract({
+    ...contracts.boostVoter,
+    functionName: "weights",
+    args: gaugeAddress ? [gaugeAddress] : undefined,
+    query: {
+      enabled: !!gaugeAddress,
+    },
+  })
+
+  return {
+    weight: data as bigint | undefined,
+    isLoading,
+  }
+}

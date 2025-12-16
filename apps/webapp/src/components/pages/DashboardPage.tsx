@@ -1,6 +1,6 @@
 import { Layout } from "@/components/Layout"
 import { SpringIn } from "@/components/SpringIn"
-import { useBoostGaugeForToken, useBoostInfo } from "@/hooks/useGauges"
+import { useBoostGaugeForToken, useBoostInfo, useGaugeWeight } from "@/hooks/useGauges"
 import { useGaugeProfile } from "@/hooks/useGaugeProfiles"
 import { useVeBTCLocks, useVeMEZOLocks } from "@/hooks/useLocks"
 import {
@@ -9,6 +9,7 @@ import {
   useClaimBribes,
   useVoteState,
 } from "@/hooks/useVoting"
+import { useGaugeAPY, formatAPY } from "@/hooks/useAPY"
 import {
   Button,
   Card,
@@ -73,6 +74,8 @@ function VeBTCLockCard({
   const { hasGauge, gaugeAddress } = useBoostGaugeForToken(lock.tokenId)
   const { boostMultiplier } = useBoostInfo(lock.tokenId)
   const { profile } = useGaugeProfile(gaugeAddress)
+  const { weight: gaugeWeight } = useGaugeWeight(gaugeAddress)
+  const { apy, isLoading: isLoadingAPY } = useGaugeAPY(gaugeAddress, gaugeWeight)
 
   const unlockDate = new Date(Number(lock.end) * 1000)
   const isExpired = unlockDate < new Date()
@@ -210,8 +213,11 @@ function VeBTCLockCard({
         <div
           className={css({
             display: "grid",
-            gridTemplateColumns: "repeat(2, 1fr)",
+            gridTemplateColumns: "repeat(3, 1fr)",
             gap: "16px",
+            "@media (max-width: 640px)": {
+              gridTemplateColumns: "repeat(2, 1fr)",
+            },
             "@media (max-width: 480px)": {
               gap: "12px",
             },
@@ -255,6 +261,26 @@ function VeBTCLockCard({
             >
               {boostMultiplier.toFixed(2)}x
             </LabelMedium>
+          </div>
+          <div>
+            <LabelSmall color={theme.colors.contentSecondary}>
+              Voting APY
+            </LabelSmall>
+            {hasGauge ? (
+              <LabelMedium
+                color={
+                  apy && apy > 0
+                    ? theme.colors.positive
+                    : theme.colors.contentPrimary
+                }
+              >
+                {isLoadingAPY ? "..." : formatAPY(apy)}
+              </LabelMedium>
+            ) : (
+              <LabelMedium color={theme.colors.contentSecondary}>
+                —
+              </LabelMedium>
+            )}
           </div>
           <div>
             <LabelSmall color={theme.colors.contentSecondary}>

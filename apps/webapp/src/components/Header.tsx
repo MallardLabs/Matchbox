@@ -5,6 +5,7 @@ import { useRouter } from "next/router"
 import { useState, useEffect } from "react"
 import { useAccount, useConnect, useDisconnect } from "wagmi"
 import { injected } from "wagmi/connectors"
+import { TokenPrices } from "./TokenPrices"
 
 function SunIcon({ color }: { color: string }) {
   return (
@@ -224,6 +225,7 @@ export function Header() {
             },
           })}
         >
+          <TokenPrices />
           <Button
             kind="secondary"
             onClick={toggleTheme}

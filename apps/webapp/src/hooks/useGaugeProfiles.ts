@@ -1,10 +1,22 @@
 import { type GaugeProfile, supabase } from "@/config/supabase"
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { Address } from "viem"
+
+// Global cache for gauge profiles to avoid refetching
+const profilesCache = new Map<string, GaugeProfile>()
+let lastFetchTime = 0
+const CACHE_TTL = 30000 // 30 seconds
 
 export function useGaugeProfiles(gaugeAddresses: Address[]) {
   const [profiles, setProfiles] = useState<Map<string, GaugeProfile>>(new Map())
   const [isLoading, setIsLoading] = useState(true)
+  const fetchingRef = useRef(false)
+
+  // Create a stable key for the addresses array to prevent unnecessary refetches
+  const addressesKey = useMemo(
+    () => gaugeAddresses.map((a) => a.toLowerCase()).sort().join(","),
+    [gaugeAddresses],
+  )
 
   const fetchProfiles = useCallback(async () => {
     if (gaugeAddresses.length === 0) {
@@ -13,7 +25,33 @@ export function useGaugeProfiles(gaugeAddresses: Address[]) {
       return
     }
 
+    // Check cache first
+    const now = Date.now()
+    const allCached = gaugeAddresses.every((a) =>
+      profilesCache.has(a.toLowerCase()),
+    )
+    const cacheValid = now - lastFetchTime < CACHE_TTL
+
+    if (allCached && cacheValid) {
+      const cachedMap = new Map<string, GaugeProfile>()
+      for (const addr of gaugeAddresses) {
+        const cached = profilesCache.get(addr.toLowerCase())
+        if (cached) {
+          cachedMap.set(addr.toLowerCase(), cached)
+        }
+      }
+      setProfiles(cachedMap)
+      setIsLoading(false)
+      return
+    }
+
+    // Prevent concurrent fetches
+    if (fetchingRef.current) {
+      return
+    }
+    fetchingRef.current = true
     setIsLoading(true)
+
     const { data, error } = await supabase
       .from("gauge_profiles")
       .select("*")
@@ -21,6 +59,8 @@ export function useGaugeProfiles(gaugeAddresses: Address[]) {
         "gauge_address",
         gaugeAddresses.map((a) => a.toLowerCase()),
       )
+
+    fetchingRef.current = false
 
     if (error) {
       console.error("Error fetching gauge profiles:", error)
@@ -31,10 +71,13 @@ export function useGaugeProfiles(gaugeAddresses: Address[]) {
     const profileMap = new Map<string, GaugeProfile>()
     for (const profile of (data as unknown as GaugeProfile[]) ?? []) {
       profileMap.set(profile.gauge_address.toLowerCase(), profile)
+      // Update global cache
+      profilesCache.set(profile.gauge_address.toLowerCase(), profile)
     }
+    lastFetchTime = Date.now()
     setProfiles(profileMap)
     setIsLoading(false)
-  }, [gaugeAddresses])
+  }, [addressesKey, gaugeAddresses])
 
   useEffect(() => {
     fetchProfiles()
@@ -58,6 +101,14 @@ export function useGaugeProfile(gaugeAddress: Address | undefined) {
       return
     }
 
+    // Check cache first
+    const cached = profilesCache.get(gaugeAddress.toLowerCase())
+    if (cached && Date.now() - lastFetchTime < CACHE_TTL) {
+      setProfile(cached)
+      setIsLoading(false)
+      return
+    }
+
     setIsLoading(true)
     const { data, error } = await supabase
       .from("gauge_profiles")
@@ -71,7 +122,11 @@ export function useGaugeProfile(gaugeAddress: Address | undefined) {
       return
     }
 
-    setProfile(data as unknown as GaugeProfile | null)
+    const profileData = data as unknown as GaugeProfile | null
+    if (profileData) {
+      profilesCache.set(gaugeAddress.toLowerCase(), profileData)
+    }
+    setProfile(profileData)
     setIsLoading(false)
   }, [gaugeAddress])
 
@@ -83,6 +138,52 @@ export function useGaugeProfile(gaugeAddress: Address | undefined) {
     profile,
     isLoading,
     refetch: fetchProfile,
+  }
+}
+
+// Pre-fetch all profiles for faster page loads
+export function useAllGaugeProfiles() {
+  const [profiles, setProfiles] = useState<Map<string, GaugeProfile>>(new Map())
+  const [isLoading, setIsLoading] = useState(true)
+  const fetchedRef = useRef(false)
+
+  useEffect(() => {
+    // Only fetch once
+    if (fetchedRef.current) {
+      // Return cached data
+      setProfiles(new Map(profilesCache))
+      setIsLoading(false)
+      return
+    }
+
+    const fetchAll = async () => {
+      const { data, error } = await supabase
+        .from("gauge_profiles")
+        .select("*")
+
+      if (error) {
+        console.error("Error fetching all gauge profiles:", error)
+        setIsLoading(false)
+        return
+      }
+
+      const profileMap = new Map<string, GaugeProfile>()
+      for (const profile of (data as unknown as GaugeProfile[]) ?? []) {
+        profileMap.set(profile.gauge_address.toLowerCase(), profile)
+        profilesCache.set(profile.gauge_address.toLowerCase(), profile)
+      }
+      lastFetchTime = Date.now()
+      fetchedRef.current = true
+      setProfiles(profileMap)
+      setIsLoading(false)
+    }
+
+    fetchAll()
+  }, [])
+
+  return {
+    profiles,
+    isLoading,
   }
 }
 
