@@ -2,12 +2,15 @@ import { AddressLink } from "@/components/AddressLink"
 import { Layout } from "@/components/Layout"
 import { SpringIn } from "@/components/SpringIn"
 import { getContractConfig } from "@/config/contracts"
-import { useBoostInfo } from "@/hooks/useGauges"
+import { formatAPY, useGaugeAPY } from "@/hooks/useAPY"
 import { useGaugeProfile } from "@/hooks/useGaugeProfiles"
+import { useBoostInfo } from "@/hooks/useGauges"
 import { useBribeAddress, useBribeIncentives } from "@/hooks/useVoting"
-import { useGaugeAPY, formatAPY } from "@/hooks/useAPY"
-import { formatFixedPoint, formatMultiplier, formatTokenAmount } from "@/utils/format"
-import { CHAIN_ID, NON_STAKING_GAUGE_ABI } from "@repo/shared/contracts"
+import {
+  formatFixedPoint,
+  formatMultiplier,
+  formatTokenAmount,
+} from "@/utils/format"
 import {
   Button,
   Card,
@@ -21,6 +24,7 @@ import {
   Tag,
   useStyletron,
 } from "@mezo-org/mezo-clay"
+import { CHAIN_ID, NON_STAKING_GAUGE_ABI } from "@repo/shared/contracts"
 import Link from "next/link"
 import { useRouter } from "next/router"
 import { useMemo } from "react"
@@ -82,19 +86,21 @@ export default function GaugeDetailPage() {
 
   // Get ALL token IDs owned by beneficiary
   const { data: tokenIdsData } = useReadContracts({
-    contracts: beneficiary && balance > 0
-      ? Array.from({ length: balance }, (_, i) => ({
-          ...contracts.veBTC,
-          functionName: "ownerToNFTokenIdList",
-          args: [beneficiary, BigInt(i)],
-        }))
-      : [],
+    contracts:
+      beneficiary && balance > 0
+        ? Array.from({ length: balance }, (_, i) => ({
+            ...contracts.veBTC,
+            functionName: "ownerToNFTokenIdList",
+            args: [beneficiary, BigInt(i)],
+          }))
+        : [],
     query: {
       enabled: !!beneficiary && balance > 0,
     },
   })
 
-  const tokenIdList = tokenIdsData?.map((r) => r.result as bigint).filter(Boolean) ?? []
+  const tokenIdList =
+    tokenIdsData?.map((r) => r.result as bigint).filter(Boolean) ?? []
 
   // Check which token maps to our gauge
   const { data: mappedGaugesData } = useReadContracts({
@@ -111,7 +117,7 @@ export default function GaugeDetailPage() {
   // Find the token that maps to this gauge
   const veBTCTokenId = useMemo(() => {
     if (!gaugeAddress || !mappedGaugesData) return undefined
-    
+
     for (let i = 0; i < tokenIdList.length; i++) {
       const mappedGauge = mappedGaugesData[i]?.result as Address | undefined
       if (mappedGauge?.toLowerCase() === gaugeAddress.toLowerCase()) {
@@ -122,7 +128,8 @@ export default function GaugeDetailPage() {
   }, [gaugeAddress, tokenIdList, mappedGaugesData])
 
   // Get boost info
-  const { boostMultiplier, isLoading: isLoadingBoost } = useBoostInfo(veBTCTokenId)
+  const { boostMultiplier, isLoading: isLoadingBoost } =
+    useBoostInfo(veBTCTokenId)
 
   // Get veBTC voting power
   const { data: veBTCVotingPower } = useReadContract({
@@ -143,10 +150,11 @@ export default function GaugeDetailPage() {
     useBribeIncentives(bribeAddress)
 
   // Calculate APY for this gauge
-  const { apy, totalIncentivesUSD, isLoading: isLoadingAPY } = useGaugeAPY(
-    gaugeAddress,
-    totalWeight
-  )
+  const {
+    apy,
+    totalIncentivesUSD,
+    isLoading: isLoadingAPY,
+  } = useGaugeAPY(gaugeAddress, totalWeight)
 
   const isLoading = isLoadingGauge || isLoadingProfile || isLoadingBoost
 
@@ -257,12 +265,15 @@ export default function GaugeDetailPage() {
                     >
                       <HeadingLarge
                         color={
-                          profile?.display_name || profile?.description || profile?.profile_picture_url
+                          profile?.display_name ||
+                          profile?.description ||
+                          profile?.profile_picture_url
                             ? theme.colors.positive
                             : theme.colors.negative
                         }
                       >
-                        {profile?.display_name || `veBTC #${veBTCTokenId?.toString() ?? "Unknown"}`}
+                        {profile?.display_name ||
+                          `veBTC #${veBTCTokenId?.toString() ?? "Unknown"}`}
                       </HeadingLarge>
                       {profile?.display_name && (
                         <span
@@ -470,7 +481,8 @@ export default function GaugeDetailPage() {
                     <div
                       className={css({
                         display: "grid",
-                        gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
+                        gridTemplateColumns:
+                          "repeat(auto-fill, minmax(200px, 1fr))",
                         gap: "16px",
                       })}
                     >
@@ -508,4 +520,3 @@ export default function GaugeDetailPage() {
     </Layout>
   )
 }
-

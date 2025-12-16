@@ -14,7 +14,11 @@ export function useGaugeProfiles(gaugeAddresses: Address[]) {
 
   // Create a stable key for the addresses array to prevent unnecessary refetches
   const addressesKey = useMemo(
-    () => gaugeAddresses.map((a) => a.toLowerCase()).sort().join(","),
+    () =>
+      gaugeAddresses
+        .map((a) => a.toLowerCase())
+        .sort()
+        .join(","),
     [gaugeAddresses],
   )
 
@@ -157,9 +161,7 @@ export function useAllGaugeProfiles() {
     }
 
     const fetchAll = async () => {
-      const { data, error } = await supabase
-        .from("gauge_profiles")
-        .select("*")
+      const { data, error } = await supabase.from("gauge_profiles").select("*")
 
       if (error) {
         console.error("Error fetching all gauge profiles:", error)
@@ -292,4 +294,3 @@ export function useUploadProfilePicture() {
     error,
   }
 }
-

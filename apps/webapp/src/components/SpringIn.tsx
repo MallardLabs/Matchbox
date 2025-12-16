@@ -21,7 +21,10 @@ export function SpringIn({
   const animationClass =
     variant === "card" ? "spring-fly-in-card" : "spring-fly-in"
   const delayClass = delay <= 10 ? `spring-delay-${delay}` : ""
-  const delayStyle = delay > 10 ? { "--spring-delay": delay } as React.CSSProperties : undefined
+  const delayStyle =
+    delay > 10
+      ? ({ "--spring-delay": delay } as React.CSSProperties)
+      : undefined
 
   return (
     <div
@@ -65,4 +68,3 @@ export function SpringInGrid({
     </>
   )
 }
-

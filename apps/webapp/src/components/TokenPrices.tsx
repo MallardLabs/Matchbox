@@ -1,5 +1,5 @@
-import { useStyletron } from "@mezo-org/mezo-clay"
 import { useBtcPrice } from "@/hooks/useBtcPrice"
+import { useStyletron } from "@mezo-org/mezo-clay"
 
 // Feature flags for token prices
 const SHOW_MEZO_PRICE = true // Set to true when MEZO price oracle is available
@@ -10,7 +10,7 @@ const MEZO_PLACEHOLDER_PRICE: number | null = 0.22
 
 function formatPrice(price: number | null): string {
   if (price === null) return "—"
-  
+
   // Format with commas and 2 decimal places for large numbers
   if (price >= 1000) {
     return price.toLocaleString("en-US", {
@@ -18,7 +18,7 @@ function formatPrice(price: number | null): string {
       maximumFractionDigits: 2,
     })
   }
-  
+
   // For smaller prices, show more precision
   return price.toLocaleString("en-US", {
     minimumFractionDigits: 2,
@@ -34,7 +34,13 @@ type TokenPriceItemProps = {
   isUnavailable?: boolean
 }
 
-function TokenPriceItem({ icon, symbol, price, isLoading, isUnavailable }: TokenPriceItemProps) {
+function TokenPriceItem({
+  icon,
+  symbol,
+  price,
+  isLoading,
+  isUnavailable,
+}: TokenPriceItemProps) {
   const [css, theme] = useStyletron()
 
   return (
@@ -64,19 +70,14 @@ function TokenPriceItem({ icon, symbol, price, isLoading, isUnavailable }: Token
           fontFamily: "'Riforma LL', system-ui, sans-serif",
           fontSize: "14px",
           fontWeight: 500,
-          color: isLoading || isUnavailable 
-            ? theme.colors.contentTertiary 
-            : theme.colors.contentPrimary,
+          color:
+            isLoading || isUnavailable
+              ? theme.colors.contentTertiary
+              : theme.colors.contentPrimary,
           whiteSpace: "nowrap",
         })}
       >
-        {isLoading ? (
-          "..."
-        ) : isUnavailable ? (
-          "N/A"
-        ) : (
-          `$${formatPrice(price)}`
-        )}
+        {isLoading ? "..." : isUnavailable ? "N/A" : `$${formatPrice(price)}`}
       </span>
     </div>
   )
@@ -116,4 +117,3 @@ export function TokenPrices() {
     </div>
   )
 }
-

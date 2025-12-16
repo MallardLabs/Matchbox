@@ -1,9 +1,10 @@
-import { useReadContracts } from "wagmi"
 import { mezoTestnet } from "@/config/wagmi"
+import { useReadContracts } from "wagmi"
 
 // Skip Oracle contract address on Mezo testnet (Chainlink-compatible interface)
 // Docs: https://mezo.org/docs/developers/architecture/oracles/read-oracle
-const SKIP_ORACLE_ADDRESS = "0x7b7c000000000000000000000000000000000015" as const
+const SKIP_ORACLE_ADDRESS =
+  "0x7b7c000000000000000000000000000000000015" as const
 
 // Chainlink Aggregator ABI (only the functions we need)
 const CHAINLINK_AGGREGATOR_ABI = [
@@ -71,4 +72,3 @@ export function useBtcPrice() {
     refetch,
   }
 }
-

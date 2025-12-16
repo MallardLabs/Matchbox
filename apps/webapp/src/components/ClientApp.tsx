@@ -1,5 +1,9 @@
 import { wagmiConfig } from "@/config/wagmi"
-import { ThemeProvider, getThemeObject, useTheme } from "@/contexts/ThemeContext"
+import {
+  ThemeProvider,
+  getThemeObject,
+  useTheme,
+} from "@/contexts/ThemeContext"
 import { ClayProvider } from "@mezo-org/mezo-clay"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import type { AppProps } from "next/app"

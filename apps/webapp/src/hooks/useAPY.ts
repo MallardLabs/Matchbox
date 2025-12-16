@@ -9,7 +9,8 @@ import { useBtcPrice } from "./useBtcPrice"
 const MEZO_PRICE = 0.22
 
 // MEZO token address (only token that uses MEZO price, everything else is BTC-based on this L2)
-const MEZO_TOKEN_ADDRESS = "0x7b7c000000000000000000000000000000000001".toLowerCase()
+const MEZO_TOKEN_ADDRESS =
+  "0x7b7c000000000000000000000000000000000001".toLowerCase()
 
 // Epoch duration in seconds (7 days)
 const EPOCH_DURATION = 7 * 24 * 60 * 60
@@ -33,26 +34,27 @@ export type GaugeAPYData = {
  */
 export function useGaugeAPY(
   gaugeAddress: Address | undefined,
-  totalWeight: bigint | undefined
+  totalWeight: bigint | undefined,
 ): GaugeAPYData {
   const { price: btcPrice } = useBtcPrice()
   const contracts = getContractConfig(CHAIN_ID.testnet)
 
   // Get bribe address for the gauge
-  const { data: bribeAddressData, isLoading: isLoadingBribe } = useReadContracts({
-    contracts: gaugeAddress
-      ? [
-          {
-            ...contracts.boostVoter,
-            functionName: "gaugeToBribe",
-            args: [gaugeAddress],
-          },
-        ]
-      : [],
-    query: {
-      enabled: !!gaugeAddress,
-    },
-  })
+  const { data: bribeAddressData, isLoading: isLoadingBribe } =
+    useReadContracts({
+      contracts: gaugeAddress
+        ? [
+            {
+              ...contracts.boostVoter,
+              functionName: "gaugeToBribe",
+              args: [gaugeAddress],
+            },
+          ]
+        : [],
+      query: {
+        enabled: !!gaugeAddress,
+      },
+    })
 
   const bribeAddress = bribeAddressData?.[0]?.result as Address | undefined
   const hasBribe =
@@ -60,94 +62,104 @@ export function useGaugeAPY(
     bribeAddress !== "0x0000000000000000000000000000000000000000"
 
   // Get rewards list length
-  const { data: rewardsLengthData, isLoading: isLoadingLength } = useReadContracts({
-    contracts: hasBribe
-      ? [
-          {
-            address: bribeAddress!,
-            abi: [
-              {
-                inputs: [],
-                name: "rewardsListLength",
-                outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
-                stateMutability: "view",
-                type: "function",
-              },
-            ] as const,
-            functionName: "rewardsListLength" as const,
-          },
-        ]
-      : [],
-    query: {
-      enabled: hasBribe,
-    },
-  })
+  const { data: rewardsLengthData, isLoading: isLoadingLength } =
+    useReadContracts({
+      contracts: hasBribe
+        ? [
+            {
+              address: bribeAddress!,
+              abi: [
+                {
+                  inputs: [],
+                  name: "rewardsListLength",
+                  outputs: [
+                    { internalType: "uint256", name: "", type: "uint256" },
+                  ],
+                  stateMutability: "view",
+                  type: "function",
+                },
+              ] as const,
+              functionName: "rewardsListLength" as const,
+            },
+          ]
+        : [],
+      query: {
+        enabled: hasBribe,
+      },
+    })
 
   const rewardsLength = Number(rewardsLengthData?.[0]?.result ?? 0n)
 
   // Get all reward token addresses
-  const { data: rewardTokensData, isLoading: isLoadingTokens } = useReadContracts({
-    contracts: Array.from({ length: rewardsLength }, (_, i) => ({
-      address: bribeAddress!,
-      abi: [
-        {
-          inputs: [{ internalType: "uint256", name: "", type: "uint256" }],
-          name: "rewards",
-          outputs: [{ internalType: "address", name: "", type: "address" }],
-          stateMutability: "view",
-          type: "function",
-        },
-      ] as const,
-      functionName: "rewards" as const,
-      args: [BigInt(i)],
-    })),
-    query: {
-      enabled: hasBribe && rewardsLength > 0,
-    },
-  })
+  const { data: rewardTokensData, isLoading: isLoadingTokens } =
+    useReadContracts({
+      contracts: Array.from({ length: rewardsLength }, (_, i) => ({
+        address: bribeAddress!,
+        abi: [
+          {
+            inputs: [{ internalType: "uint256", name: "", type: "uint256" }],
+            name: "rewards",
+            outputs: [{ internalType: "address", name: "", type: "address" }],
+            stateMutability: "view",
+            type: "function",
+          },
+        ] as const,
+        functionName: "rewards" as const,
+        args: [BigInt(i)],
+      })),
+      query: {
+        enabled: hasBribe && rewardsLength > 0,
+      },
+    })
 
-  const tokenAddresses = rewardTokensData?.map((r) => r.result as Address).filter(Boolean) ?? []
+  const tokenAddresses =
+    rewardTokensData?.map((r) => r.result as Address).filter(Boolean) ?? []
 
   const currentEpochStart = getEpochStart(Math.floor(Date.now() / 1000))
 
   // Get token rewards per epoch and decimals for each token
-  const { data: tokenDataResults, isLoading: isLoadingRewards } = useReadContracts({
-    contracts: tokenAddresses.flatMap((tokenAddress) => [
-      {
-        address: bribeAddress!,
-        abi: [
-          {
-            inputs: [
-              { internalType: "address", name: "token", type: "address" },
-              { internalType: "uint256", name: "epochStart", type: "uint256" },
-            ],
-            name: "tokenRewardsPerEpoch",
-            outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
-            stateMutability: "view",
-            type: "function",
-          },
-        ] as const,
-        functionName: "tokenRewardsPerEpoch" as const,
-        args: [tokenAddress, currentEpochStart],
+  const { data: tokenDataResults, isLoading: isLoadingRewards } =
+    useReadContracts({
+      contracts: tokenAddresses.flatMap((tokenAddress) => [
+        {
+          address: bribeAddress!,
+          abi: [
+            {
+              inputs: [
+                { internalType: "address", name: "token", type: "address" },
+                {
+                  internalType: "uint256",
+                  name: "epochStart",
+                  type: "uint256",
+                },
+              ],
+              name: "tokenRewardsPerEpoch",
+              outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
+              stateMutability: "view",
+              type: "function",
+            },
+          ] as const,
+          functionName: "tokenRewardsPerEpoch" as const,
+          args: [tokenAddress, currentEpochStart],
+        },
+        {
+          address: tokenAddress,
+          abi: [
+            {
+              inputs: [],
+              name: "decimals",
+              outputs: [{ internalType: "uint8", name: "", type: "uint8" }],
+              stateMutability: "view",
+              type: "function",
+            },
+          ] as const,
+          functionName: "decimals" as const,
+        },
+      ]),
+      query: {
+        enabled: hasBribe && tokenAddresses.length > 0,
       },
-      {
-        address: tokenAddress,
-        abi: [
-          {
-            inputs: [],
-            name: "decimals",
-            outputs: [{ internalType: "uint8", name: "", type: "uint8" }],
-            stateMutability: "view",
-            type: "function",
-          },
-        ] as const,
-        functionName: "decimals" as const,
-      },
-    ]),
-    query: {
-      enabled: hasBribe && tokenAddresses.length > 0,
-    },
-  })
+    })
 
   // Calculate total incentives in USD
   const totalIncentivesUSD = useMemo(() => {
@@ -157,20 +169,20 @@ export function useGaugeAPY(
     tokenAddresses.forEach((tokenAddress, i) => {
       const amount = tokenDataResults[i * 2]?.result as bigint | undefined
       const decimals = tokenDataResults[i * 2 + 1]?.result as number | undefined
-      
+
       if (amount && amount > 0n) {
         const tokenAmount = Number(amount) / Math.pow(10, decimals ?? 18)
         const tokenKey = tokenAddress.toLowerCase()
-        
+
         // Get price for this token
         // On this Bitcoin L2, assume everything except MEZO is BTC-denominated
         const isMezo = tokenKey === MEZO_TOKEN_ADDRESS
         const price = isMezo ? MEZO_PRICE : (btcPrice ?? 0)
-        
+
         total += tokenAmount * price
       }
     })
-    
+
     return total
   }, [tokenDataResults, tokenAddresses, btcPrice])
 
@@ -182,10 +194,10 @@ export function useGaugeAPY(
 
     // Convert veMEZO weight to a number (18 decimals)
     const totalVeMEZOAmount = Number(totalWeight) / 1e18
-    
+
     // Value of veMEZO votes in USD
     const totalVeMEZOValueUSD = totalVeMEZOAmount * MEZO_PRICE
-    
+
     if (totalVeMEZOValueUSD === 0) return null
 
     // APY = (weekly rewards / total position value) * 52 weeks * 100%
@@ -212,7 +224,7 @@ export function useGaugeAPY(
  * Calculate APY for multiple gauges at once (more efficient)
  */
 export function useGaugesAPY(
-  gauges: Array<{ address: Address; totalWeight: bigint }>
+  gauges: Array<{ address: Address; totalWeight: bigint }>,
 ): {
   apyMap: Map<string, GaugeAPYData>
   isLoading: boolean
@@ -223,16 +235,17 @@ export function useGaugesAPY(
   const gaugeAddresses = gauges.map((g) => g.address)
 
   // Get bribe addresses for all gauges
-  const { data: bribeAddressesData, isLoading: isLoadingBribes } = useReadContracts({
-    contracts: gaugeAddresses.map((address) => ({
-      ...contracts.boostVoter,
-      functionName: "gaugeToBribe",
-      args: [address],
-    })),
-    query: {
-      enabled: gaugeAddresses.length > 0,
-    },
-  })
+  const { data: bribeAddressesData, isLoading: isLoadingBribes } =
+    useReadContracts({
+      contracts: gaugeAddresses.map((address) => ({
+        ...contracts.boostVoter,
+        functionName: "gaugeToBribe",
+        args: [address],
+      })),
+      query: {
+        enabled: gaugeAddresses.length > 0,
+      },
+    })
 
   // Extract valid bribe addresses
   const bribeInfos = useMemo(() => {
@@ -242,109 +255,135 @@ export function useGaugesAPY(
       const hasBribe =
         bribeAddress !== undefined &&
         bribeAddress !== "0x0000000000000000000000000000000000000000"
-      return { gaugeAddress: gaugeAddr, bribeAddress: hasBribe ? bribeAddress : undefined }
+      return {
+        gaugeAddress: gaugeAddr,
+        bribeAddress: hasBribe ? bribeAddress : undefined,
+      }
     })
   }, [bribeAddressesData, gaugeAddresses])
 
   const validBribes = bribeInfos.filter((b) => b.bribeAddress)
 
   // Get rewards list length for all bribe contracts
-  const { data: rewardsLengthData, isLoading: isLoadingLengths } = useReadContracts({
-    contracts: validBribes.map(({ bribeAddress }) => ({
-      address: bribeAddress!,
-      abi: [
-        {
-          inputs: [],
-          name: "rewardsListLength",
-          outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
-          stateMutability: "view",
-          type: "function",
-        },
-      ] as const,
-      functionName: "rewardsListLength" as const,
-    })),
-    query: {
-      enabled: validBribes.length > 0,
-    },
-  })
+  const { data: rewardsLengthData, isLoading: isLoadingLengths } =
+    useReadContracts({
+      contracts: validBribes.map(({ bribeAddress }) => ({
+        address: bribeAddress!,
+        abi: [
+          {
+            inputs: [],
+            name: "rewardsListLength",
+            outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
+            stateMutability: "view",
+            type: "function",
+          },
+        ] as const,
+        functionName: "rewardsListLength" as const,
+      })),
+      query: {
+        enabled: validBribes.length > 0,
+      },
+    })
 
   // Build queries for all reward tokens
   const rewardTokenQueries = useMemo(() => {
     if (!rewardsLengthData) return []
-    const queries: Array<{ gaugeAddress: Address; bribeAddress: Address; tokenIndex: number }> = []
+    const queries: Array<{
+      gaugeAddress: Address
+      bribeAddress: Address
+      tokenIndex: number
+    }> = []
     validBribes.forEach(({ gaugeAddress, bribeAddress }, i) => {
       const length = Number(rewardsLengthData[i]?.result ?? 0n)
       for (let j = 0; j < length; j++) {
-        queries.push({ gaugeAddress, bribeAddress: bribeAddress!, tokenIndex: j })
+        queries.push({
+          gaugeAddress,
+          bribeAddress: bribeAddress!,
+          tokenIndex: j,
+        })
       }
     })
     return queries
   }, [validBribes, rewardsLengthData])
 
   // Get all reward token addresses
-  const { data: rewardTokensData, isLoading: isLoadingTokens } = useReadContracts({
-    contracts: rewardTokenQueries.map(({ bribeAddress, tokenIndex }) => ({
-      address: bribeAddress,
-      abi: [
-        {
-          inputs: [{ internalType: "uint256", name: "", type: "uint256" }],
-          name: "rewards",
-          outputs: [{ internalType: "address", name: "", type: "address" }],
-          stateMutability: "view",
-          type: "function",
-        },
-      ] as const,
-      functionName: "rewards" as const,
-      args: [BigInt(tokenIndex)],
-    })),
-    query: {
-      enabled: rewardTokenQueries.length > 0,
-    },
-  })
+  const { data: rewardTokensData, isLoading: isLoadingTokens } =
+    useReadContracts({
+      contracts: rewardTokenQueries.map(({ bribeAddress, tokenIndex }) => ({
+        address: bribeAddress,
+        abi: [
+          {
+            inputs: [{ internalType: "uint256", name: "", type: "uint256" }],
+            name: "rewards",
+            outputs: [{ internalType: "address", name: "", type: "address" }],
+            stateMutability: "view",
+            type: "function",
+          },
+        ] as const,
+        functionName: "rewards" as const,
+        args: [BigInt(tokenIndex)],
+      })),
+      query: {
+        enabled: rewardTokenQueries.length > 0,
+      },
+    })
 
   const currentEpochStart = getEpochStart(Math.floor(Date.now() / 1000))
 
   // Get token rewards per epoch and decimals
-  const { data: tokenRewardsData, isLoading: isLoadingRewards } = useReadContracts({
-    contracts: rewardTokenQueries.flatMap(({ bribeAddress }, i) => {
-      const tokenAddress = rewardTokensData?.[i]?.result as Address | undefined
-      return [
-        {
-          address: bribeAddress,
-          abi: [
-            {
-              inputs: [
-                { internalType: "address", name: "token", type: "address" },
-                { internalType: "uint256", name: "epochStart", type: "uint256" },
-              ],
-              name: "tokenRewardsPerEpoch",
-              outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
-              stateMutability: "view",
-              type: "function",
-            },
-          ] as const,
-          functionName: "tokenRewardsPerEpoch" as const,
-          args: [tokenAddress ?? "0x0000000000000000000000000000000000000000", currentEpochStart],
-        },
-        {
-          address: tokenAddress ?? "0x0000000000000000000000000000000000000000",
-          abi: [
-            {
-              inputs: [],
-              name: "decimals",
-              outputs: [{ internalType: "uint8", name: "", type: "uint8" }],
-              stateMutability: "view",
-              type: "function",
-            },
-          ] as const,
-          functionName: "decimals" as const,
-        },
-      ]
-    }),
-    query: {
-      enabled: rewardTokenQueries.length > 0 && !!rewardTokensData,
-    },
-  })
+  const { data: tokenRewardsData, isLoading: isLoadingRewards } =
+    useReadContracts({
+      contracts: rewardTokenQueries.flatMap(({ bribeAddress }, i) => {
+        const tokenAddress = rewardTokensData?.[i]?.result as
+          | Address
+          | undefined
+        return [
+          {
+            address: bribeAddress,
+            abi: [
+              {
+                inputs: [
+                  { internalType: "address", name: "token", type: "address" },
+                  {
+                    internalType: "uint256",
+                    name: "epochStart",
+                    type: "uint256",
+                  },
+                ],
+                name: "tokenRewardsPerEpoch",
+                outputs: [
+                  { internalType: "uint256", name: "", type: "uint256" },
+                ],
+                stateMutability: "view",
+                type: "function",
+              },
+            ] as const,
+            functionName: "tokenRewardsPerEpoch" as const,
+            args: [
+              tokenAddress ?? "0x0000000000000000000000000000000000000000",
+              currentEpochStart,
+            ],
+          },
+          {
+            address:
+              tokenAddress ?? "0x0000000000000000000000000000000000000000",
+            abi: [
+              {
+                inputs: [],
+                name: "decimals",
+                outputs: [{ internalType: "uint8", name: "", type: "uint8" }],
+                stateMutability: "view",
+                type: "function",
+              },
+            ] as const,
+            functionName: "decimals" as const,
+          },
+        ]
+      }),
+      query: {
+        enabled: rewardTokenQueries.length > 0 && !!rewardTokensData,
+      },
+    })
 
   // Calculate APY for each gauge
   const apyMap = useMemo(() => {
@@ -366,7 +405,9 @@ export function useGaugesAPY(
     rewardTokenQueries.forEach((query, i) => {
       const tokenAddress = rewardTokensData?.[i]?.result as Address | undefined
       const amount = tokenRewardsData?.[i * 2]?.result as bigint | undefined
-      const decimals = tokenRewardsData?.[i * 2 + 1]?.result as number | undefined
+      const decimals = tokenRewardsData?.[i * 2 + 1]?.result as
+        | number
+        | undefined
 
       if (tokenAddress && amount && amount > 0n) {
         const tokenAmount = Number(amount) / Math.pow(10, decimals ?? 18)
@@ -442,7 +483,7 @@ export function formatAPY(apy: number | null): string {
  */
 export function useVotingAPY(
   totalClaimableUSD: number,
-  usedWeight: bigint | undefined
+  usedWeight: bigint | undefined,
 ): { apy: number | null } {
   const apy = useMemo(() => {
     if (!usedWeight || usedWeight === 0n || totalClaimableUSD === 0) {
@@ -451,10 +492,10 @@ export function useVotingAPY(
 
     // Convert used veMEZO weight to a number (18 decimals)
     const usedVeMEZOAmount = Number(usedWeight) / 1e18
-    
+
     // Value of used veMEZO votes in USD
     const usedVeMEZOValueUSD = usedVeMEZOAmount * MEZO_PRICE
-    
+
     if (usedVeMEZOValueUSD === 0) return null
 
     // APY = (weekly rewards / total position value) * 52 weeks * 100%
@@ -476,18 +517,18 @@ export type VoteAllocation = {
 /**
  * Calculate upcoming/projected APY based on user's vote proportion vs total votes
  * This shows what the user will earn next epoch based on their current vote allocations.
- * 
+ *
  * Formula:
  * For each gauge the user voted on:
  *   userShare = userVoteWeight / totalGaugeWeight
  *   userIncentives += gaugeIncentivesUSD * userShare
- * 
+ *
  * upcomingAPY = (userIncentives / usedWeightUSD) * 52 * 100
  */
 export function useUpcomingVotingAPY(
   voteAllocations: VoteAllocation[],
   apyMap: Map<string, GaugeAPYData>,
-  usedWeight: bigint | undefined
+  usedWeight: bigint | undefined,
 ): { upcomingAPY: number | null; projectedIncentivesUSD: number } {
   const result = useMemo(() => {
     if (!usedWeight || usedWeight === 0n || voteAllocations.length === 0) {
@@ -500,10 +541,15 @@ export function useUpcomingVotingAPY(
     for (const allocation of voteAllocations) {
       const gaugeKey = allocation.gaugeAddress.toLowerCase()
       const gaugeData = apyMap.get(gaugeKey)
-      
-      if (gaugeData && gaugeData.totalVeMEZOWeight > 0n && gaugeData.totalIncentivesUSD > 0) {
+
+      if (
+        gaugeData &&
+        gaugeData.totalVeMEZOWeight > 0n &&
+        gaugeData.totalIncentivesUSD > 0
+      ) {
         // Calculate user's share of this gauge's incentives
-        const userShare = Number(allocation.weight) / Number(gaugeData.totalVeMEZOWeight)
+        const userShare =
+          Number(allocation.weight) / Number(gaugeData.totalVeMEZOWeight)
         const userIncentivesFromGauge = gaugeData.totalIncentivesUSD * userShare
         totalUserIncentivesUSD += userIncentivesFromGauge
       }
@@ -518,7 +564,10 @@ export function useUpcomingVotingAPY(
     const usedVeMEZOValueUSD = usedVeMEZOAmount * MEZO_PRICE
 
     if (usedVeMEZOValueUSD === 0) {
-      return { upcomingAPY: null, projectedIncentivesUSD: totalUserIncentivesUSD }
+      return {
+        upcomingAPY: null,
+        projectedIncentivesUSD: totalUserIncentivesUSD,
+      }
     }
 
     // Calculate APY: (weekly rewards / total position value) * 52 weeks * 100%
@@ -526,9 +575,11 @@ export function useUpcomingVotingAPY(
     const annualReturn = weeklyReturn * EPOCHS_PER_YEAR
     const apyPercent = annualReturn * 100
 
-    return { upcomingAPY: apyPercent, projectedIncentivesUSD: totalUserIncentivesUSD }
+    return {
+      upcomingAPY: apyPercent,
+      projectedIncentivesUSD: totalUserIncentivesUSD,
+    }
   }, [voteAllocations, apyMap, usedWeight])
 
   return result
 }
-

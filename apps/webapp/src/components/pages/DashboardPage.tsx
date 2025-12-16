@@ -1,17 +1,28 @@
 import { Layout } from "@/components/Layout"
 import { SpringIn } from "@/components/SpringIn"
-import { useBoostGaugeForToken, useBoostGauges, useBoostInfo, useGaugeWeight } from "@/hooks/useGauges"
+import {
+  formatAPY,
+  useGaugeAPY,
+  useGaugesAPY,
+  useUpcomingVotingAPY,
+  useVotingAPY,
+} from "@/hooks/useAPY"
+import { useBtcPrice } from "@/hooks/useBtcPrice"
 import { useGaugeProfile } from "@/hooks/useGaugeProfiles"
+import {
+  useBoostGaugeForToken,
+  useBoostGauges,
+  useBoostInfo,
+  useGaugeWeight,
+} from "@/hooks/useGauges"
 import { useVeBTCLocks, useVeMEZOLocks } from "@/hooks/useLocks"
 import {
   type ClaimableBribe,
-  useClaimableBribes,
   useClaimBribes,
+  useClaimableBribes,
   useVoteAllocations,
   useVoteState,
 } from "@/hooks/useVoting"
-import { useGaugeAPY, useGaugesAPY, formatAPY, useVotingAPY, useUpcomingVotingAPY } from "@/hooks/useAPY"
-import { useBtcPrice } from "@/hooks/useBtcPrice"
 import {
   Button,
   Card,
@@ -33,17 +44,24 @@ import { useAccount } from "wagmi"
 
 // Price constants
 const MEZO_PRICE = 0.22
-const MEZO_TOKEN_ADDRESS = "0x7b7c000000000000000000000000000000000001".toLowerCase()
+const MEZO_TOKEN_ADDRESS =
+  "0x7b7c000000000000000000000000000000000001".toLowerCase()
 
 // Format token values with appropriate precision based on magnitude
 function formatTokenValue(amount: bigint, decimals: number): string {
   const value = Number(formatUnits(amount, decimals))
   if (value === 0) return "0"
-  if (value >= 1000) return value.toLocaleString(undefined, { maximumFractionDigits: 2 })
-  if (value >= 1) return value.toLocaleString(undefined, { maximumFractionDigits: 4 })
-  if (value >= 0.0001) return value.toLocaleString(undefined, { maximumFractionDigits: 6 })
+  if (value >= 1000)
+    return value.toLocaleString(undefined, { maximumFractionDigits: 2 })
+  if (value >= 1)
+    return value.toLocaleString(undefined, { maximumFractionDigits: 4 })
+  if (value >= 0.0001)
+    return value.toLocaleString(undefined, { maximumFractionDigits: 6 })
   // For very small values (like satoshis), show up to 8 decimals
-  return value.toLocaleString(undefined, { maximumFractionDigits: 8, minimumSignificantDigits: 1 })
+  return value.toLocaleString(undefined, {
+    maximumFractionDigits: 8,
+    minimumSignificantDigits: 1,
+  })
 }
 
 // Token icon mapping
@@ -57,7 +75,7 @@ const TOKEN_ICONS: Record<string, string> = {
 function TokenIcon({ symbol, size = 16 }: { symbol: string; size?: number }) {
   const iconPath = TOKEN_ICONS[symbol.toUpperCase()]
   if (!iconPath) return null
-  
+
   return (
     <img
       src={iconPath}
@@ -81,7 +99,10 @@ function VeBTCLockCard({
   const { boostMultiplier } = useBoostInfo(lock.tokenId)
   const { profile } = useGaugeProfile(gaugeAddress)
   const { weight: gaugeWeight } = useGaugeWeight(gaugeAddress)
-  const { apy, isLoading: isLoadingAPY } = useGaugeAPY(gaugeAddress, gaugeWeight)
+  const { apy, isLoading: isLoadingAPY } = useGaugeAPY(
+    gaugeAddress,
+    gaugeWeight,
+  )
 
   const unlockDate = new Date(Number(lock.end) * 1000)
   const isExpired = unlockDate < new Date()
@@ -162,7 +183,9 @@ function VeBTCLockCard({
               >
                 <LabelMedium
                   color={
-                    profile?.display_name || profile?.description || profile?.profile_picture_url
+                    profile?.display_name ||
+                    profile?.description ||
+                    profile?.profile_picture_url
                       ? theme.colors.positive
                       : theme.colors.negative
                   }
@@ -238,18 +261,14 @@ function VeBTCLockCard({
               })}
             >
               <TokenIcon symbol="BTC" size={18} />
-              <LabelMedium>
-                {formatTokenValue(lock.amount, 18)} BTC
-              </LabelMedium>
+              <LabelMedium>{formatTokenValue(lock.amount, 18)} BTC</LabelMedium>
             </div>
           </div>
           <div>
             <LabelSmall color={theme.colors.contentSecondary}>
               Voting Power
             </LabelSmall>
-            <LabelMedium>
-              {formatTokenValue(lock.votingPower, 18)}
-            </LabelMedium>
+            <LabelMedium>{formatTokenValue(lock.votingPower, 18)}</LabelMedium>
           </div>
           <div>
             <LabelSmall color={theme.colors.contentSecondary}>
@@ -266,29 +285,41 @@ function VeBTCLockCard({
             </LabelMedium>
           </div>
           <div>
-            <LabelSmall color={theme.colors.contentSecondary}>
-              Gauge{" "}
-              {hasGauge && !isLoadingAPY && apy !== null && (
-                <span className={css({ color: theme.colors.positive })}>
-                  ({formatAPY(apy)} APY)
-                </span>
-              )}
-            </LabelSmall>
+            <LabelSmall color={theme.colors.contentSecondary}>Gauge</LabelSmall>
             {hasGauge && gaugeAddress ? (
-              <Link
-                href={`/gauges/${gaugeAddress}`}
-                className={css({
-                  textDecoration: "none",
-                  color: theme.colors.accent,
-                  ":hover": {
-                    textDecoration: "underline",
-                  },
-                })}
-              >
-                <LabelMedium color={theme.colors.accent}>
-                  View Gauge →
-                </LabelMedium>
-              </Link>
+              <>
+                <Link
+                  href={`/gauges/${gaugeAddress}`}
+                  className={css({
+                    textDecoration: "none",
+                    color: theme.colors.accent,
+                    ":hover": {
+                      textDecoration: "underline",
+                    },
+                  })}
+                >
+                  <LabelMedium color={theme.colors.accent}>
+                    View Gauge →
+                  </LabelMedium>
+                </Link>
+                {!isLoadingAPY && apy !== null && apy > 0 && (
+                  <div
+                    className={css({
+                      marginTop: "4px",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      padding: "2px 6px",
+                      borderRadius: "4px",
+                      backgroundColor: `${theme.colors.positive}15`,
+                      border: `1px solid ${theme.colors.positive}30`,
+                    })}
+                  >
+                    <LabelSmall color={theme.colors.positive}>
+                      {formatAPY(apy)} next epoch
+                    </LabelSmall>
+                  </div>
+                )}
+              </>
             ) : (
               <LabelMedium color={theme.colors.contentSecondary}>
                 No Gauge
@@ -318,13 +349,23 @@ function VeBTCLockCard({
 function VeMEZOLockCard({
   lock,
   claimableUSD,
+  allGaugeAddresses,
+  apyMap,
 }: {
   lock: ReturnType<typeof useVeMEZOLocks>["locks"][0]
   claimableUSD: number
+  allGaugeAddresses: Address[]
+  apyMap: Map<string, ReturnType<typeof useGaugeAPY>>
 }) {
   const [css, theme] = useStyletron()
   const { usedWeight, canVoteInCurrentEpoch } = useVoteState(lock.tokenId)
   const { apy } = useVotingAPY(claimableUSD, usedWeight)
+
+  // Get vote allocations for this specific token
+  const { allocations } = useVoteAllocations(lock.tokenId, allGaugeAddresses)
+
+  // Calculate projected APY based on vote allocations
+  const { upcomingAPY } = useUpcomingVotingAPY(allocations, apyMap, usedWeight)
 
   const unlockDate = new Date(Number(lock.end) * 1000)
   const isExpired = unlockDate < new Date()
@@ -342,11 +383,77 @@ function VeMEZOLockCard({
         >
           <div>
             <LabelMedium>veMEZO #{lock.tokenId.toString()}</LabelMedium>
-            {apy !== null && apy > 0 && (
-              <LabelSmall color={theme.colors.positive}>
-                {formatAPY(apy)} APY
-              </LabelSmall>
-            )}
+            {(apy !== null && apy > 0) ||
+            (upcomingAPY !== null && upcomingAPY > 0) ? (
+              <div
+                className={css({
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  marginTop: "4px",
+                })}
+              >
+                {/* Current APY */}
+                {apy !== null && apy > 0 && (
+                  <span
+                    className={css({
+                      display: "inline-flex",
+                      alignItems: "center",
+                      padding: "2px 6px",
+                      borderRadius: "4px",
+                      backgroundColor: `${theme.colors.positive}15`,
+                      border: `1px solid ${theme.colors.positive}30`,
+                      fontSize: "11px",
+                      fontWeight: 600,
+                      color: theme.colors.positive,
+                    })}
+                  >
+                    {formatAPY(apy)} APY
+                  </span>
+                )}
+                {/* Upcoming/Projected APY */}
+                {upcomingAPY !== null && upcomingAPY > 0 && (
+                  <>
+                    {apy !== null && apy > 0 && (
+                      <span
+                        className={css({
+                          fontSize: "10px",
+                          color: theme.colors.contentTertiary,
+                        })}
+                      >
+                        →
+                      </span>
+                    )}
+                    <span
+                      className={css({
+                        display: "inline-flex",
+                        alignItems: "center",
+                        padding: "2px 6px",
+                        borderRadius: "4px",
+                        backgroundColor:
+                          apy === null || apy === 0
+                            ? `${theme.colors.positive}15`
+                            : theme.colors.backgroundSecondary,
+                        border: `1px solid ${
+                          apy === null || apy === 0
+                            ? `${theme.colors.positive}30`
+                            : theme.colors.borderOpaque
+                        }`,
+                        fontSize: apy === null || apy === 0 ? "11px" : "10px",
+                        fontWeight: apy === null || apy === 0 ? 600 : 500,
+                        color:
+                          apy === null || apy === 0
+                            ? theme.colors.positive
+                            : theme.colors.contentSecondary,
+                      })}
+                    >
+                      {formatAPY(upcomingAPY)}{" "}
+                      {apy === null || apy === 0 ? "projected" : "next"}
+                    </span>
+                  </>
+                )}
+              </div>
+            ) : null}
           </div>
           <Tag
             color={lock.isPermanent ? "green" : isExpired ? "red" : "yellow"}
@@ -383,9 +490,7 @@ function VeMEZOLockCard({
             <LabelSmall color={theme.colors.contentSecondary}>
               Voting Power
             </LabelSmall>
-            <LabelMedium>
-              {formatTokenValue(lock.votingPower, 18)}
-            </LabelMedium>
+            <LabelMedium>{formatTokenValue(lock.votingPower, 18)}</LabelMedium>
           </div>
           <div>
             <LabelSmall color={theme.colors.contentSecondary}>
@@ -484,7 +589,9 @@ function ClaimableRewardRow({
         justifyContent: "space-between",
         gap: "16px",
         padding: "20px 0",
-        borderBottom: isLast ? "none" : `1px solid ${theme.colors.borderOpaque}`,
+        borderBottom: isLast
+          ? "none"
+          : `1px solid ${theme.colors.borderOpaque}`,
         "@media (max-width: 600px)": {
           flexDirection: "column",
           alignItems: "stretch",
@@ -647,7 +754,8 @@ export default function DashboardPage() {
       const tokenIdKey = bribe.tokenId.toString()
       let usdValue = 0
       for (const reward of bribe.rewards) {
-        const tokenAmount = Number(reward.earned) / Math.pow(10, reward.decimals)
+        const tokenAmount =
+          Number(reward.earned) / Math.pow(10, reward.decimals)
         const isMezo = reward.tokenAddress.toLowerCase() === MEZO_TOKEN_ADDRESS
         const price = isMezo ? MEZO_PRICE : (btcPrice ?? 0)
         usdValue += tokenAmount * price
@@ -657,7 +765,6 @@ export default function DashboardPage() {
     }
     return map
   }, [claimableBribes, btcPrice])
-
 
   const handleClaimBribes = (tokenId: bigint) => {
     const bribesForToken = bribesGroupedByTokenId.get(tokenId.toString()) ?? []
@@ -683,7 +790,10 @@ export default function DashboardPage() {
   )
 
   // Calculate total APY based on total claimable and total veMEZO voting power
-  const { apy: totalAPY } = useVotingAPY(totalClaimableUSD, totalVeMEZOVotingPower)
+  const { apy: totalAPY } = useVotingAPY(
+    totalClaimableUSD,
+    totalVeMEZOVotingPower,
+  )
 
   // Get all gauges for upcoming APY calculation
   const { gauges: allGauges } = useBoostGauges()
@@ -709,7 +819,7 @@ export default function DashboardPage() {
   const firstTokenId = veMEZOTokenIds[0]
   const { allocations: firstTokenAllocations } = useVoteAllocations(
     firstTokenId,
-    allGaugeAddresses
+    allGaugeAddresses,
   )
 
   // For simplicity, we use the first token's allocations
@@ -724,13 +834,15 @@ export default function DashboardPage() {
   const { usedWeight: firstTokenUsedWeight } = useVoteState(firstTokenId)
 
   // Calculate upcoming APY based on vote proportions
-  const { upcomingAPY } = useUpcomingVotingAPY(
+  const { upcomingAPY, projectedIncentivesUSD } = useUpcomingVotingAPY(
     aggregatedAllocations,
     apyMap,
-    firstTokenUsedWeight
+    firstTokenUsedWeight,
   )
 
   const hasClaimableRewards = claimableBribes.length > 0
+  const hasFutureRewards = projectedIncentivesUSD > 0
+  const showRewardsSection = hasClaimableRewards || hasFutureRewards
 
   return (
     <Layout>
@@ -778,7 +890,7 @@ export default function DashboardPage() {
         ) : (
           <>
             {/* Claimable Rewards Section */}
-            {hasClaimableRewards && (
+            {showRewardsSection && (
               <SpringIn delay={0} variant="card">
                 <div
                   className={css({
@@ -830,7 +942,8 @@ export default function DashboardPage() {
                           >
                             Total Claimable
                           </LabelSmall>
-                          {(totalAPY !== null && totalAPY > 0) || (upcomingAPY !== null && upcomingAPY > 0) ? (
+                          {(totalAPY !== null && totalAPY > 0) ||
+                          (upcomingAPY !== null && upcomingAPY > 0) ? (
                             <div
                               className={css({
                                 display: "inline-flex",
@@ -856,131 +969,227 @@ export default function DashboardPage() {
                                   {formatAPY(totalAPY)} APY
                                 </span>
                               )}
-                              {/* Arrow and upcoming APY */}
+                              {/* Arrow and upcoming APY - show arrow only if there's both current and upcoming */}
                               {upcomingAPY !== null && upcomingAPY > 0 && (
                                 <>
-                                  <span
-                                    className={css({
-                                      fontSize: "12px",
-                                      color: theme.colors.contentTertiary,
-                                    })}
-                                  >
-                                    →
-                                  </span>
+                                  {totalAPY !== null && totalAPY > 0 && (
+                                    <span
+                                      className={css({
+                                        fontSize: "12px",
+                                        color: theme.colors.contentTertiary,
+                                      })}
+                                    >
+                                      →
+                                    </span>
+                                  )}
                                   <span
                                     className={css({
                                       display: "inline-flex",
                                       alignItems: "center",
                                       padding: "2px 8px",
                                       borderRadius: "4px",
-                                      backgroundColor: theme.colors.backgroundSecondary,
-                                      border: `1px solid ${theme.colors.borderOpaque}`,
-                                      fontSize: "11px",
-                                      fontWeight: 500,
-                                      color: theme.colors.contentSecondary,
+                                      backgroundColor:
+                                        totalAPY === null || totalAPY === 0
+                                          ? `${theme.colors.positive}20`
+                                          : theme.colors.backgroundSecondary,
+                                      border: `1px solid ${
+                                        totalAPY === null || totalAPY === 0
+                                          ? `${theme.colors.positive}40`
+                                          : theme.colors.borderOpaque
+                                      }`,
+                                      fontSize:
+                                        totalAPY === null || totalAPY === 0
+                                          ? "12px"
+                                          : "11px",
+                                      fontWeight:
+                                        totalAPY === null || totalAPY === 0
+                                          ? 600
+                                          : 500,
+                                      color:
+                                        totalAPY === null || totalAPY === 0
+                                          ? theme.colors.positive
+                                          : theme.colors.contentSecondary,
                                     })}
                                   >
-                                    {formatAPY(upcomingAPY)} next
+                                    {formatAPY(upcomingAPY)}{" "}
+                                    {totalAPY === null || totalAPY === 0
+                                      ? "projected APY"
+                                      : "next"}
                                   </span>
                                 </>
                               )}
                             </div>
                           ) : null}
                         </div>
-                        <div
-                          className={css({
-                            display: "flex",
-                            alignItems: "baseline",
-                            gap: "16px",
-                            flexWrap: "wrap",
-                          })}
-                        >
-                          {Array.from(totalClaimable.entries()).map(
-                            ([tokenAddr, info]) => (
-                              <div
-                                key={tokenAddr}
-                                className={css({
-                                  display: "flex",
-                                  alignItems: "center",
-                                  gap: "10px",
-                                })}
+                        {/* Current claimable rewards */}
+                        {hasClaimableRewards && (
+                          <>
+                            <div
+                              className={css({
+                                display: "flex",
+                                alignItems: "baseline",
+                                gap: "16px",
+                                flexWrap: "wrap",
+                              })}
+                            >
+                              {Array.from(totalClaimable.entries()).map(
+                                ([tokenAddr, info]) => (
+                                  <div
+                                    key={tokenAddr}
+                                    className={css({
+                                      display: "flex",
+                                      alignItems: "center",
+                                      gap: "10px",
+                                    })}
+                                  >
+                                    <TokenIcon symbol={info.symbol} size={28} />
+                                    <HeadingLarge
+                                      overrides={{
+                                        Block: {
+                                          style: {
+                                            fontVariantNumeric: "tabular-nums",
+                                          },
+                                        },
+                                      }}
+                                    >
+                                      {formatTokenValue(
+                                        info.amount,
+                                        info.decimals,
+                                      )}
+                                    </HeadingLarge>
+                                    <LabelMedium
+                                      color={theme.colors.contentSecondary}
+                                    >
+                                      {info.symbol}
+                                    </LabelMedium>
+                                  </div>
+                                ),
+                              )}
+                            </div>
+                            {totalClaimableUSD > 0 && (
+                              <LabelSmall
+                                color={theme.colors.contentSecondary}
+                                overrides={{
+                                  Block: {
+                                    style: { marginTop: "8px" },
+                                  },
+                                }}
                               >
-                                <TokenIcon symbol={info.symbol} size={28} />
-                                <HeadingLarge
-                                  overrides={{
-                                    Block: {
-                                      style: {
-                                        fontVariantNumeric: "tabular-nums",
-                                      },
-                                    },
-                                  }}
-                                >
-                                  {formatTokenValue(info.amount, info.decimals)}
-                                </HeadingLarge>
-                                <LabelMedium color={theme.colors.contentSecondary}>
-                                  {info.symbol}
-                                </LabelMedium>
-                              </div>
-                            ),
-                          )}
-                        </div>
-                        {totalClaimableUSD > 0 && (
-                          <LabelSmall
-                            color={theme.colors.contentSecondary}
-                            overrides={{
-                              Block: {
-                                style: { marginTop: "8px" },
-                              },
-                            }}
+                                ≈ $
+                                {totalClaimableUSD.toLocaleString(undefined, {
+                                  maximumFractionDigits: 2,
+                                })}
+                              </LabelSmall>
+                            )}
+                          </>
+                        )}
+
+                        {/* Projected future rewards */}
+                        {hasFutureRewards && (
+                          <div
+                            className={css({
+                              marginTop: hasClaimableRewards ? "16px" : "0",
+                              paddingTop: hasClaimableRewards ? "16px" : "0",
+                              borderTop: hasClaimableRewards
+                                ? `1px solid ${theme.colors.borderOpaque}`
+                                : "none",
+                            })}
                           >
-                            ≈ ${totalClaimableUSD.toLocaleString(undefined, { maximumFractionDigits: 2 })}
-                          </LabelSmall>
+                            <LabelSmall
+                              color={theme.colors.contentSecondary}
+                              overrides={{
+                                Block: {
+                                  style: {
+                                    textTransform: "uppercase",
+                                    letterSpacing: "0.05em",
+                                    marginBottom: "8px",
+                                  },
+                                },
+                              }}
+                            >
+                              Projected Next Epoch
+                            </LabelSmall>
+                            <div
+                              className={css({
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "8px",
+                              })}
+                            >
+                              <HeadingMedium
+                                color={theme.colors.contentSecondary}
+                                overrides={{
+                                  Block: {
+                                    style: {
+                                      fontVariantNumeric: "tabular-nums",
+                                    },
+                                  },
+                                }}
+                              >
+                                ≈ $
+                                {projectedIncentivesUSD.toLocaleString(
+                                  undefined,
+                                  { maximumFractionDigits: 2 },
+                                )}
+                              </HeadingMedium>
+                            </div>
+                          </div>
                         )}
                       </div>
 
-                      <div
-                        className={css({
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "8px",
-                          padding: "8px 14px",
-                          borderRadius: "20px",
-                          background: `${theme.colors.positive}15`,
-                          border: `1px solid ${theme.colors.positive}30`,
-                        })}
-                      >
+                      {hasClaimableRewards && (
                         <div
                           className={css({
-                            width: "8px",
-                            height: "8px",
-                            borderRadius: "50%",
-                            backgroundColor: theme.colors.positive,
-                            boxShadow: `0 0 8px ${theme.colors.positive}`,
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "8px",
+                            padding: "8px 14px",
+                            borderRadius: "20px",
+                            background: `${theme.colors.positive}15`,
+                            border: `1px solid ${theme.colors.positive}30`,
                           })}
-                        />
-                        <LabelSmall color={theme.colors.positive}>
-                          {bribesGroupedByTokenId.size} {bribesGroupedByTokenId.size === 1 ? "position" : "positions"} ready
-                        </LabelSmall>
-                      </div>
+                        >
+                          <div
+                            className={css({
+                              width: "8px",
+                              height: "8px",
+                              borderRadius: "50%",
+                              backgroundColor: theme.colors.positive,
+                              boxShadow: `0 0 8px ${theme.colors.positive}`,
+                            })}
+                          />
+                          <LabelSmall color={theme.colors.positive}>
+                            {bribesGroupedByTokenId.size}{" "}
+                            {bribesGroupedByTokenId.size === 1
+                              ? "position"
+                              : "positions"}{" "}
+                            ready
+                          </LabelSmall>
+                        </div>
+                      )}
                     </div>
                   </div>
 
-                  {/* Reward rows */}
-                  <div className={css({ padding: "4px 28px 8px" })}>
-                    {Array.from(bribesGroupedByTokenId.entries()).map(
-                      ([tokenIdStr, bribes], index, arr) => (
-                        <ClaimableRewardRow
-                          key={tokenIdStr}
-                          tokenId={BigInt(tokenIdStr)}
-                          bribes={bribes}
-                          onClaim={() => handleClaimBribes(BigInt(tokenIdStr))}
-                          isPending={isClaimPending}
-                          isConfirming={isClaimConfirming}
-                          isLast={index === arr.length - 1}
-                        />
-                      ),
-                    )}
-                  </div>
+                  {/* Reward rows - only show if there are claimable rewards */}
+                  {hasClaimableRewards && (
+                    <div className={css({ padding: "4px 28px 8px" })}>
+                      {Array.from(bribesGroupedByTokenId.entries()).map(
+                        ([tokenIdStr, bribes], index, arr) => (
+                          <ClaimableRewardRow
+                            key={tokenIdStr}
+                            tokenId={BigInt(tokenIdStr)}
+                            bribes={bribes}
+                            onClaim={() =>
+                              handleClaimBribes(BigInt(tokenIdStr))
+                            }
+                            isPending={isClaimPending}
+                            isConfirming={isClaimConfirming}
+                            isLast={index === arr.length - 1}
+                          />
+                        ),
+                      )}
+                    </div>
+                  )}
                 </div>
               </SpringIn>
             )}
@@ -999,7 +1208,7 @@ export default function DashboardPage() {
                 },
               })}
             >
-              <SpringIn delay={hasClaimableRewards ? 1 : 0} variant="card">
+              <SpringIn delay={showRewardsSection ? 1 : 0} variant="card">
                 <Card withBorder overrides={{}}>
                   <div className={css({ padding: "8px 0" })}>
                     <div
@@ -1020,7 +1229,7 @@ export default function DashboardPage() {
                 </Card>
               </SpringIn>
 
-              <SpringIn delay={hasClaimableRewards ? 2 : 1} variant="card">
+              <SpringIn delay={showRewardsSection ? 2 : 1} variant="card">
                 <Card withBorder overrides={{}}>
                   <div className={css({ padding: "8px 0" })}>
                     <div
@@ -1043,7 +1252,7 @@ export default function DashboardPage() {
                 </Card>
               </SpringIn>
 
-              <SpringIn delay={hasClaimableRewards ? 3 : 2} variant="card">
+              <SpringIn delay={showRewardsSection ? 3 : 2} variant="card">
                 <Card withBorder overrides={{}}>
                   <div className={css({ padding: "8px 0" })}>
                     <div
@@ -1064,7 +1273,7 @@ export default function DashboardPage() {
                 </Card>
               </SpringIn>
 
-              <SpringIn delay={hasClaimableRewards ? 4 : 3} variant="card">
+              <SpringIn delay={showRewardsSection ? 4 : 3} variant="card">
                 <Card withBorder overrides={{}}>
                   <div className={css({ padding: "8px 0" })}>
                     <div
@@ -1088,7 +1297,7 @@ export default function DashboardPage() {
               </SpringIn>
             </div>
 
-            <SpringIn delay={hasClaimableRewards ? 5 : 4} variant="card">
+            <SpringIn delay={showRewardsSection ? 5 : 4} variant="card">
               <div>
                 <HeadingMedium marginBottom="scale500">
                   Your veMEZO Locks
@@ -1120,10 +1329,20 @@ export default function DashboardPage() {
                     })}
                   >
                     {veMEZOLocks.map((lock, index) => (
-                      <SpringIn key={lock.tokenId.toString()} delay={(hasClaimableRewards ? 6 : 5) + index} variant="card">
-                        <VeMEZOLockCard 
-                          lock={lock} 
-                          claimableUSD={claimableUSDByTokenId.get(lock.tokenId.toString()) ?? 0}
+                      <SpringIn
+                        key={lock.tokenId.toString()}
+                        delay={(showRewardsSection ? 6 : 5) + index}
+                        variant="card"
+                      >
+                        <VeMEZOLockCard
+                          lock={lock}
+                          claimableUSD={
+                            claimableUSDByTokenId.get(
+                              lock.tokenId.toString(),
+                            ) ?? 0
+                          }
+                          allGaugeAddresses={allGaugeAddresses}
+                          apyMap={apyMap}
                         />
                       </SpringIn>
                     ))}
@@ -1132,7 +1351,10 @@ export default function DashboardPage() {
               </div>
             </SpringIn>
 
-            <SpringIn delay={(hasClaimableRewards ? 6 : 5) + veMEZOLocks.length} variant="card">
+            <SpringIn
+              delay={(showRewardsSection ? 6 : 5) + veMEZOLocks.length}
+              variant="card"
+            >
               <div>
                 <HeadingMedium marginBottom="scale500">
                   Your veBTC Locks
@@ -1164,7 +1386,15 @@ export default function DashboardPage() {
                     })}
                   >
                     {veBTCLocks.map((lock, index) => (
-                      <SpringIn key={lock.tokenId.toString()} delay={(hasClaimableRewards ? 7 : 6) + veMEZOLocks.length + index} variant="card">
+                      <SpringIn
+                        key={lock.tokenId.toString()}
+                        delay={
+                          (showRewardsSection ? 7 : 6) +
+                          veMEZOLocks.length +
+                          index
+                        }
+                        variant="card"
+                      >
                         <VeBTCLockCard lock={lock} />
                       </SpringIn>
                     ))}

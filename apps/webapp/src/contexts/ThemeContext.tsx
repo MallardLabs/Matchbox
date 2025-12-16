@@ -1,5 +1,11 @@
 import { ClayDarkTheme, ClayLightTheme } from "@mezo-org/mezo-clay"
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react"
+import {
+  type ReactNode,
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+} from "react"
 
 type Theme = "light" | "dark"
 
@@ -15,7 +21,9 @@ const THEME_STORAGE_KEY = "matchbox-theme"
 
 function getSystemTheme(): Theme {
   if (typeof window === "undefined") return "light"
-  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"
+  return window.matchMedia("(prefers-color-scheme: dark)").matches
+    ? "dark"
+    : "light"
 }
 
 function getStoredTheme(): Theme | null {
@@ -46,7 +54,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   // Listen for system preference changes (only if user hasn't manually set a preference)
   useEffect(() => {
     const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)")
-    
+
     const handleChange = (e: MediaQueryListEvent) => {
       // Only follow system changes if user hasn't manually set a preference
       if (!getStoredTheme()) {
@@ -93,4 +101,3 @@ export function useTheme() {
 export function getThemeObject(theme: Theme) {
   return theme === "dark" ? ClayDarkTheme : ClayLightTheme
 }
-

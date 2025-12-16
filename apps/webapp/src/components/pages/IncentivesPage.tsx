@@ -1,12 +1,12 @@
 import { Layout } from "@/components/Layout"
 import { SpringIn } from "@/components/SpringIn"
 import { TokenSelector } from "@/components/TokenSelector"
-import { useBoostGaugeForToken, useBoostInfo } from "@/hooks/useGauges"
 import {
   useGaugeProfile,
   useUploadProfilePicture,
   useUpsertGaugeProfile,
 } from "@/hooks/useGaugeProfiles"
+import { useBoostGaugeForToken, useBoostInfo } from "@/hooks/useGauges"
 import { useVeBTCLocks } from "@/hooks/useLocks"
 import type { Token } from "@/hooks/useTokenList"
 import {
@@ -559,7 +559,9 @@ export default function IncentivesPage() {
                                   <Button
                                     kind="secondary"
                                     size="small"
-                                    onClick={() => fileInputRef.current?.click()}
+                                    onClick={() =>
+                                      fileInputRef.current?.click()
+                                    }
                                   >
                                     {profilePicturePreview
                                       ? "Change Picture"
@@ -569,7 +571,8 @@ export default function IncentivesPage() {
                                     color={theme.colors.contentSecondary}
                                     marginTop="scale200"
                                   >
-                                    Recommended: Square image, at least 200x200px
+                                    Recommended: Square image, at least
+                                    200x200px
                                   </ParagraphSmall>
                                 </div>
                               </div>

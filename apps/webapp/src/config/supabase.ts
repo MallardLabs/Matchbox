@@ -11,10 +11,7 @@ if (!supabaseAnonKey) {
   console.warn("Missing NEXT_PUBLIC_SUPABASE_ANON_KEY environment variable")
 }
 
-export const supabase = createClient(
-  supabaseUrl ?? "",
-  supabaseAnonKey ?? "",
-)
+export const supabase = createClient(supabaseUrl ?? "", supabaseAnonKey ?? "")
 
 export type GaugeProfile = {
   gauge_address: string
@@ -26,4 +23,3 @@ export type GaugeProfile = {
   created_at: string
   updated_at: string
 }
-

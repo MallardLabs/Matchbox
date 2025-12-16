@@ -109,8 +109,8 @@ export default function HomePage() {
               />
             </div>
             <ParagraphLarge color={theme.colors.contentSecondary}>
-              Boost your veBTC voting power with veMEZO or attract veMEZO capital
-              to your gauge with incentives.
+              Boost your veBTC voting power with veMEZO or attract veMEZO
+              capital to your gauge with incentives.
             </ParagraphLarge>
           </div>
         </SpringIn>

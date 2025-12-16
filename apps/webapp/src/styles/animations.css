@@ -33,17 +33,39 @@
 }
 
 /* Staggered animation delays */
-.spring-delay-0 { animation-delay: 0ms; }
-.spring-delay-1 { animation-delay: 50ms; }
-.spring-delay-2 { animation-delay: 100ms; }
-.spring-delay-3 { animation-delay: 150ms; }
-.spring-delay-4 { animation-delay: 200ms; }
-.spring-delay-5 { animation-delay: 250ms; }
-.spring-delay-6 { animation-delay: 300ms; }
-.spring-delay-7 { animation-delay: 350ms; }
-.spring-delay-8 { animation-delay: 400ms; }
-.spring-delay-9 { animation-delay: 450ms; }
-.spring-delay-10 { animation-delay: 500ms; }
+.spring-delay-0 {
+  animation-delay: 0ms;
+}
+.spring-delay-1 {
+  animation-delay: 50ms;
+}
+.spring-delay-2 {
+  animation-delay: 100ms;
+}
+.spring-delay-3 {
+  animation-delay: 150ms;
+}
+.spring-delay-4 {
+  animation-delay: 200ms;
+}
+.spring-delay-5 {
+  animation-delay: 250ms;
+}
+.spring-delay-6 {
+  animation-delay: 300ms;
+}
+.spring-delay-7 {
+  animation-delay: 350ms;
+}
+.spring-delay-8 {
+  animation-delay: 400ms;
+}
+.spring-delay-9 {
+  animation-delay: 450ms;
+}
+.spring-delay-10 {
+  animation-delay: 500ms;
+}
 
 /* For dynamically generated delays */
 [style*="--spring-delay"] {
@@ -67,8 +89,8 @@ body {
 
 /* Better touch targets on mobile */
 @media (max-width: 768px) {
-  button, 
-  a, 
+  button,
+  a,
   input[type="button"],
   input[type="submit"] {
     min-height: 44px;

@@ -12,4 +12,3 @@ const GaugeDetailPage = dynamic(
 export default function GaugeDetail() {
   return <GaugeDetailPage />
 }
-
