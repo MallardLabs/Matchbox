@@ -39,7 +39,7 @@ export function useVoteState(tokenId: bigint | undefined): VoteStateResult {
     },
   })
 
-  const { data: usedWeight, isLoading: isLoadingUsedWeight } = useReadContract({
+  const { data: usedWeight } = useReadContract({
     ...contracts.boostVoter,
     functionName: "usedWeights",
     args: tokenId !== undefined ? [tokenId] : undefined,
@@ -657,7 +657,7 @@ export function useAllVoteAllocations(
 
   const aggregatedAllocations = useMemo(() => {
     const aggregatedWeights = new Map<string, bigint>()
-    tokenIds.forEach((tokenId, tokenIndex) => {
+    tokenIds.forEach((_tokenId, tokenIndex) => {
       gaugeAddresses.forEach((gaugeAddress, gaugeIndex) => {
         const dataIndex = tokenIndex * gaugeAddresses.length + gaugeIndex
         const weight = (data?.[dataIndex]?.result as bigint) ?? 0n

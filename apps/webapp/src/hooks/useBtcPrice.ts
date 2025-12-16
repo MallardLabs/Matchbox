@@ -30,7 +30,13 @@ const CHAINLINK_AGGREGATOR_ABI = [
   },
 ] as const
 
-export function useBtcPrice() {
+export function useBtcPrice(): {
+  price: number | null
+  updatedAt: Date | null
+  isLoading: boolean
+  isError: boolean
+  refetch: () => void
+} {
   const { data, isLoading, isError, refetch } = useReadContracts({
     contracts: [
       {

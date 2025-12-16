@@ -751,7 +751,7 @@ function ClaimableRewardRow({
       {/* Right side: Claim button */}
       <Button
         onClick={onClaim}
-        size="compact"
+        size="small"
         kind="secondary"
         isLoading={isPending || isConfirming}
         disabled={isPending || isConfirming}
@@ -898,7 +898,7 @@ function ProjectedRewardRow({
 
       {/* Right side: Disabled Claim button */}
       <Button
-        size="compact"
+        size="small"
         kind="secondary"
         disabled
         overrides={{
@@ -931,7 +931,6 @@ export default function DashboardPage() {
   const {
     claimableBribes,
     totalClaimable,
-    isLoading: isLoadingBribes,
     refetch: refetchBribes,
   } = useClaimableBribes(veMEZOTokenIds)
 
