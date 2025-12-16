@@ -8,10 +8,8 @@ import { useBtcPrice } from "./useBtcPrice"
 // MEZO token price - same as in TokenPrices component
 const MEZO_PRICE = 0.22
 
-// Token addresses on testnet (normalized to lowercase for comparison)
-const TOKEN_PRICES_MAP: Record<string, "btc" | "mezo"> = {
-  "0x7b7c000000000000000000000000000000000001": "mezo", // MEZO token
-}
+// MEZO token address (only token that uses MEZO price, everything else is BTC-based on this L2)
+const MEZO_TOKEN_ADDRESS = "0x7b7c000000000000000000000000000000000001".toLowerCase()
 
 // Epoch duration in seconds (7 days)
 const EPOCH_DURATION = 7 * 24 * 60 * 60
@@ -165,16 +163,9 @@ export function useGaugeAPY(
         const tokenKey = tokenAddress.toLowerCase()
         
         // Get price for this token
-        const priceType = TOKEN_PRICES_MAP[tokenKey]
-        let price = 0
-        if (priceType === "mezo") {
-          price = MEZO_PRICE
-        } else if (priceType === "btc") {
-          price = btcPrice ?? 0
-        } else {
-          // Default: assume it's MEZO if unknown
-          price = MEZO_PRICE
-        }
+        // On this Bitcoin L2, assume everything except MEZO is BTC-denominated
+        const isMezo = tokenKey === MEZO_TOKEN_ADDRESS
+        const price = isMezo ? MEZO_PRICE : (btcPrice ?? 0)
         
         total += tokenAmount * price
       }
@@ -382,16 +373,9 @@ export function useGaugesAPY(
         const tokenKey = tokenAddress.toLowerCase()
 
         // Get price for this token
-        const priceType = TOKEN_PRICES_MAP[tokenKey]
-        let price = 0
-        if (priceType === "mezo") {
-          price = MEZO_PRICE
-        } else if (priceType === "btc") {
-          price = btcPrice ?? 0
-        } else {
-          // Default: assume it's MEZO if unknown
-          price = MEZO_PRICE
-        }
+        // On this Bitcoin L2, assume everything except MEZO is BTC-denominated
+        const isMezo = tokenKey === MEZO_TOKEN_ADDRESS
+        const price = isMezo ? MEZO_PRICE : (btcPrice ?? 0)
 
         const usdValue = tokenAmount * price
         const gaugeKey = query.gaugeAddress.toLowerCase()

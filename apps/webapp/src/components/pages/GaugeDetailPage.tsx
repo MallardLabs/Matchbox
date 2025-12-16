@@ -303,7 +303,7 @@ export default function GaugeDetailPage() {
                 gridTemplateColumns: "repeat(5, 1fr)",
                 gap: "16px",
                 alignItems: "stretch",
-                "@media (max-width: 1024px)": {
+                "@media (max-width: 1200px)": {
                   gridTemplateColumns: "repeat(3, 1fr)",
                 },
                 "@media (max-width: 768px)": {
@@ -316,15 +316,13 @@ export default function GaugeDetailPage() {
               })}
             >
               <SpringIn delay={1} variant="card">
-                <Card withBorder overrides={{}}>
-                  <div
-                    className={css({
-                      padding: "8px 0",
-                      display: "flex",
-                      flexDirection: "column",
-                      height: "100%",
-                    })}
-                  >
+                <Card
+                  withBorder
+                  overrides={{
+                    Root: { style: { height: "100%" } },
+                  }}
+                >
+                  <div className={css({ padding: "8px 0" })}>
                     <LabelSmall color={theme.colors.contentSecondary}>
                       veBTC Weight
                     </LabelSmall>
@@ -338,15 +336,13 @@ export default function GaugeDetailPage() {
               </SpringIn>
 
               <SpringIn delay={2} variant="card">
-                <Card withBorder overrides={{}}>
-                  <div
-                    className={css({
-                      padding: "8px 0",
-                      display: "flex",
-                      flexDirection: "column",
-                      height: "100%",
-                    })}
-                  >
+                <Card
+                  withBorder
+                  overrides={{
+                    Root: { style: { height: "100%" } },
+                  }}
+                >
+                  <div className={css({ padding: "8px 0" })}>
                     <LabelSmall color={theme.colors.contentSecondary}>
                       veMEZO Weight
                     </LabelSmall>
@@ -358,15 +354,13 @@ export default function GaugeDetailPage() {
               </SpringIn>
 
               <SpringIn delay={3} variant="card">
-                <Card withBorder overrides={{}}>
-                  <div
-                    className={css({
-                      padding: "8px 0",
-                      display: "flex",
-                      flexDirection: "column",
-                      height: "100%",
-                    })}
-                  >
+                <Card
+                  withBorder
+                  overrides={{
+                    Root: { style: { height: "100%" } },
+                  }}
+                >
+                  <div className={css({ padding: "8px 0" })}>
                     <LabelSmall color={theme.colors.contentSecondary}>
                       Current Boost
                     </LabelSmall>
@@ -378,15 +372,13 @@ export default function GaugeDetailPage() {
               </SpringIn>
 
               <SpringIn delay={4} variant="card">
-                <Card withBorder overrides={{}}>
-                  <div
-                    className={css({
-                      padding: "8px 0",
-                      display: "flex",
-                      flexDirection: "column",
-                      height: "100%",
-                    })}
-                  >
+                <Card
+                  withBorder
+                  overrides={{
+                    Root: { style: { height: "100%" } },
+                  }}
+                >
+                  <div className={css({ padding: "8px 0" })}>
                     <LabelSmall color={theme.colors.contentSecondary}>
                       Voting APY
                     </LabelSmall>
@@ -399,25 +391,21 @@ export default function GaugeDetailPage() {
                     >
                       {isLoadingAPY ? "..." : formatAPY(apy)}
                     </HeadingMedium>
-                    {totalIncentivesUSD > 0 && (
-                      <LabelSmall color={theme.colors.contentSecondary}>
-                        ${totalIncentivesUSD.toFixed(2)}/week
-                      </LabelSmall>
-                    )}
+                    <LabelSmall color={theme.colors.contentSecondary}>
+                      ${totalIncentivesUSD.toFixed(2)}/week
+                    </LabelSmall>
                   </div>
                 </Card>
               </SpringIn>
 
               <SpringIn delay={5} variant="card">
-                <Card withBorder overrides={{}}>
-                  <div
-                    className={css({
-                      padding: "8px 0",
-                      display: "flex",
-                      flexDirection: "column",
-                      height: "100%",
-                    })}
-                  >
+                <Card
+                  withBorder
+                  overrides={{
+                    Root: { style: { height: "100%" } },
+                  }}
+                >
+                  <div className={css({ padding: "8px 0" })}>
                     <LabelSmall color={theme.colors.contentSecondary}>
                       Manager
                     </LabelSmall>

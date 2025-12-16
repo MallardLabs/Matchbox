@@ -213,11 +213,8 @@ function VeBTCLockCard({
         <div
           className={css({
             display: "grid",
-            gridTemplateColumns: "repeat(3, 1fr)",
+            gridTemplateColumns: "repeat(2, 1fr)",
             gap: "16px",
-            "@media (max-width: 640px)": {
-              gridTemplateColumns: "repeat(2, 1fr)",
-            },
             "@media (max-width: 480px)": {
               gap: "12px",
             },
@@ -264,27 +261,7 @@ function VeBTCLockCard({
           </div>
           <div>
             <LabelSmall color={theme.colors.contentSecondary}>
-              Voting APY
-            </LabelSmall>
-            {hasGauge ? (
-              <LabelMedium
-                color={
-                  apy && apy > 0
-                    ? theme.colors.positive
-                    : theme.colors.contentPrimary
-                }
-              >
-                {isLoadingAPY ? "..." : formatAPY(apy)}
-              </LabelMedium>
-            ) : (
-              <LabelMedium color={theme.colors.contentSecondary}>
-                —
-              </LabelMedium>
-            )}
-          </div>
-          <div>
-            <LabelSmall color={theme.colors.contentSecondary}>
-              Gauge
+              Gauge {hasGauge && !isLoadingAPY && apy !== null && `(${formatAPY(apy)} APY)`}
             </LabelSmall>
             {hasGauge && gaugeAddress ? (
               <Link
