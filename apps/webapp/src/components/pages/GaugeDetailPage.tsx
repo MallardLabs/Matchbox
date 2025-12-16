@@ -23,6 +23,7 @@ import {
 } from "@mezo-org/mezo-clay"
 import Link from "next/link"
 import { useRouter } from "next/router"
+import { useMemo } from "react"
 import type { Address } from "viem"
 import { useReadContract, useReadContracts } from "wagmi"
 
@@ -77,28 +78,48 @@ export default function GaugeDetailPage() {
     },
   })
 
-  // Get the first token ID owned by beneficiary
-  const { data: tokenId } = useReadContract({
-    ...contracts.veBTC,
-    functionName: "ownerToNFTokenIdList",
-    args: beneficiary && veBTCBalance ? [beneficiary, 0n] : undefined,
+  const balance = Number(veBTCBalance ?? 0n)
+
+  // Get ALL token IDs owned by beneficiary
+  const { data: tokenIdsData } = useReadContracts({
+    contracts: beneficiary && balance > 0
+      ? Array.from({ length: balance }, (_, i) => ({
+          ...contracts.veBTC,
+          functionName: "ownerToNFTokenIdList",
+          args: [beneficiary, BigInt(i)],
+        }))
+      : [],
     query: {
-      enabled: !!beneficiary && !!veBTCBalance && veBTCBalance > 0n,
+      enabled: !!beneficiary && balance > 0,
     },
   })
 
-  // Check if this token maps to our gauge
-  const { data: mappedGauge } = useReadContract({
-    ...contracts.boostVoter,
-    functionName: "boostableTokenIdToGauge",
-    args: tokenId ? [tokenId] : undefined,
+  const tokenIdList = tokenIdsData?.map((r) => r.result as bigint).filter(Boolean) ?? []
+
+  // Check which token maps to our gauge
+  const { data: mappedGaugesData } = useReadContracts({
+    contracts: tokenIdList.map((tokenId) => ({
+      ...contracts.boostVoter,
+      functionName: "boostableTokenIdToGauge",
+      args: [tokenId],
+    })),
     query: {
-      enabled: !!tokenId,
+      enabled: tokenIdList.length > 0,
     },
   })
 
-  const veBTCTokenId =
-    mappedGauge?.toLowerCase() === gaugeAddress?.toLowerCase() ? tokenId : undefined
+  // Find the token that maps to this gauge
+  const veBTCTokenId = useMemo(() => {
+    if (!gaugeAddress || !mappedGaugesData) return undefined
+    
+    for (let i = 0; i < tokenIdList.length; i++) {
+      const mappedGauge = mappedGaugesData[i]?.result as Address | undefined
+      if (mappedGauge?.toLowerCase() === gaugeAddress.toLowerCase()) {
+        return tokenIdList[i]
+      }
+    }
+    return undefined
+  }, [gaugeAddress, tokenIdList, mappedGaugesData])
 
   // Get boost info
   const { boostMultiplier, isLoading: isLoadingBoost } = useBoostInfo(veBTCTokenId)
