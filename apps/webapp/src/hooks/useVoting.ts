@@ -8,12 +8,13 @@ import {
   useWaitForTransactionReceipt,
   useWriteContract,
 } from "wagmi"
+import { useMemo } from "react"
 
 type VoteStateResult = {
   lastVoted: bigint | undefined
   usedWeight: bigint | undefined
   canVoteInCurrentEpoch: boolean
-  hasVotedThisEpoch: boolean
+  hasVotedThisEpoch: boolean | undefined // undefined while loading
   isInVotingWindow: boolean
   epochNext: bigint | undefined
   isLoading: boolean
@@ -21,9 +22,15 @@ type VoteStateResult = {
 
 export function useVoteState(tokenId: bigint | undefined): VoteStateResult {
   const contracts = getContractConfig(CHAIN_ID.testnet)
-  const now = BigInt(Math.floor(Date.now() / 1000))
+  // Stabilize the timestamp to avoid refetches on every render
+  // Round to nearest minute to reduce query key changes
+  const now = useMemo(() => {
+    const timestamp = Math.floor(Date.now() / 1000)
+    // Round to nearest 60 seconds to stabilize the query
+    return BigInt(Math.floor(timestamp / 60) * 60)
+  }, [])
 
-  const { data, isLoading } = useReadContract({
+  const { data, isLoading: isLoadingLastVoted } = useReadContract({
     ...contracts.boostVoter,
     functionName: "lastVoted",
     args: tokenId !== undefined ? [tokenId] : undefined,
@@ -32,7 +39,7 @@ export function useVoteState(tokenId: bigint | undefined): VoteStateResult {
     },
   })
 
-  const { data: usedWeight } = useReadContract({
+  const { data: usedWeight, isLoading: isLoadingUsedWeight } = useReadContract({
     ...contracts.boostVoter,
     functionName: "usedWeights",
     args: tokenId !== undefined ? [tokenId] : undefined,
@@ -41,7 +48,7 @@ export function useVoteState(tokenId: bigint | undefined): VoteStateResult {
     },
   })
 
-  const { data: epochNextData } = useReadContract({
+  const { data: epochNextData, isLoading: isLoadingEpochNext } = useReadContract({
     ...contracts.boostVoter,
     functionName: "epochNext",
     args: [now],
@@ -50,15 +57,25 @@ export function useVoteState(tokenId: bigint | undefined): VoteStateResult {
   const lastVoted = data as bigint | undefined
   const epochNext = epochNextData as bigint | undefined
 
+  // Track overall loading state for vote-related data
+  const isLoading = tokenId !== undefined 
+    ? (isLoadingLastVoted || isLoadingEpochNext)
+    : isLoadingEpochNext
+
   // Contract check: epochStart(block.timestamp) <= lastVoted[_tokenId]
   // epochStart = epochNext - 604800 (7 days)
   const epochStart = epochNext !== undefined ? epochNext - 604800n : undefined
 
-  // Can vote if lastVoted < epochStart (haven't voted this epoch)
-  const hasNotVotedThisEpoch =
-    lastVoted !== undefined && epochStart !== undefined
-      ? lastVoted < epochStart
-      : true
+  // Use current time for voting window check (not the stabilized one)
+  const currentTime = BigInt(Math.floor(Date.now() / 1000))
+
+  // Determine voting state only when all data is loaded
+  // Return undefined while loading to prevent flickering
+  const hasVotedThisEpoch = useMemo(() => {
+    if (tokenId === undefined) return undefined
+    if (lastVoted === undefined || epochStart === undefined) return undefined
+    return lastVoted >= epochStart
+  }, [tokenId, lastVoted, epochStart])
 
   // Also check we're in the voting window (after first hour, before last hour)
   // epochVoteStart = epochStart + 1 hour
@@ -68,16 +85,16 @@ export function useVoteState(tokenId: bigint | undefined): VoteStateResult {
   const epochVoteEnd = epochNext !== undefined ? epochNext - 3600n : undefined
   const isInVotingWindow =
     epochVoteStart !== undefined && epochVoteEnd !== undefined
-      ? now > epochVoteStart && now <= epochVoteEnd
+      ? currentTime > epochVoteStart && currentTime <= epochVoteEnd
       : true
 
-  const canVoteInCurrentEpoch = hasNotVotedThisEpoch && isInVotingWindow
+  const canVoteInCurrentEpoch = hasVotedThisEpoch === false && isInVotingWindow
 
   return {
     lastVoted,
     usedWeight: usedWeight as bigint | undefined,
     canVoteInCurrentEpoch,
-    hasVotedThisEpoch: !hasNotVotedThisEpoch,
+    hasVotedThisEpoch,
     isInVotingWindow,
     epochNext,
     isLoading,

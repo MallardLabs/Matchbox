@@ -235,10 +235,27 @@ export default function GaugeDetailPage() {
                             : theme.colors.negative
                         }
                       >
-                        {profile?.display_name
-                          ? profile.display_name
-                          : `veBTC #${veBTCTokenId?.toString() ?? "Unknown"}`}
+                        {profile?.display_name || `veBTC #${veBTCTokenId?.toString() ?? "Unknown"}`}
                       </HeadingLarge>
+                      {profile?.display_name && (
+                        <span
+                          className={css({
+                            display: "inline-flex",
+                            alignItems: "center",
+                            padding: "4px 10px",
+                            borderRadius: "6px",
+                            backgroundColor: "rgba(247, 147, 26, 0.15)",
+                            border: "1px solid rgba(247, 147, 26, 0.3)",
+                            fontSize: "13px",
+                            fontWeight: 600,
+                            color: "#F7931A",
+                            fontFamily: "monospace",
+                            letterSpacing: "0.5px",
+                          })}
+                        >
+                          #{veBTCTokenId?.toString() ?? "?"}
+                        </span>
+                      )}
                       <Tag color={isAlive ? "green" : "red"} closeable={false}>
                         {isAlive ? "Active" : "Inactive"}
                       </Tag>

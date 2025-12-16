@@ -143,17 +143,43 @@ function VeBTCLockCard({
                 minWidth: 0,
               })}
             >
-              <LabelMedium
-                color={
-                  profile?.display_name || profile?.description || profile?.profile_picture_url
-                    ? theme.colors.positive
-                    : theme.colors.negative
-                }
+              <div
+                className={css({
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  flexWrap: "wrap",
+                })}
               >
-                {profile?.display_name
-                  ? profile.display_name
-                  : `veBTC #${lock.tokenId.toString()}`}
-              </LabelMedium>
+                <LabelMedium
+                  color={
+                    profile?.display_name || profile?.description || profile?.profile_picture_url
+                      ? theme.colors.positive
+                      : theme.colors.negative
+                  }
+                >
+                  {profile?.display_name || `veBTC #${lock.tokenId.toString()}`}
+                </LabelMedium>
+                {profile?.display_name && (
+                  <span
+                    className={css({
+                      display: "inline-flex",
+                      alignItems: "center",
+                      padding: "2px 6px",
+                      borderRadius: "4px",
+                      backgroundColor: "rgba(247, 147, 26, 0.15)",
+                      border: "1px solid rgba(247, 147, 26, 0.3)",
+                      fontSize: "10px",
+                      fontWeight: 600,
+                      color: "#F7931A",
+                      fontFamily: "monospace",
+                      letterSpacing: "0.5px",
+                    })}
+                  >
+                    #{lock.tokenId.toString()}
+                  </span>
+                )}
+              </div>
               {profile?.description && (
                 <ParagraphSmall
                   color={theme.colors.contentSecondary}
@@ -767,7 +793,7 @@ export default function DashboardPage() {
                   <div
                     className={css({
                       padding: "24px 28px",
-                      background: theme.colors.backgroundSecondary,
+                      background: theme.colors.backgroundPrimary,
                       borderBottom: `1px solid ${theme.colors.borderOpaque}`,
                     })}
                   >

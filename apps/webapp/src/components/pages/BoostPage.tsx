@@ -823,19 +823,47 @@ export default function BoostPage() {
                                       minWidth: 0,
                                     })}
                                   >
-                                    <LabelSmall
-                                      color={
-                                        profile?.display_name || profile?.description || profile?.profile_picture_url
-                                          ? theme.colors.positive
-                                          : theme.colors.negative
-                                      }
+                                    <div
+                                      className={css({
+                                        display: "flex",
+                                        alignItems: "center",
+                                        gap: "6px",
+                                        flexWrap: "wrap",
+                                      })}
                                     >
-                                      {profile?.display_name
-                                        ? profile.display_name
-                                        : gauge.veBTCTokenId > 0n
-                                          ? `veBTC #${gauge.veBTCTokenId.toString()}`
-                                          : `${gauge.address.slice(0, 6)}...${gauge.address.slice(-4)}`}
-                                    </LabelSmall>
+                                      <LabelSmall
+                                        color={
+                                          profile?.display_name || profile?.description || profile?.profile_picture_url
+                                            ? theme.colors.positive
+                                            : theme.colors.negative
+                                        }
+                                      >
+                                        {profile?.display_name
+                                          ? profile.display_name
+                                          : gauge.veBTCTokenId > 0n
+                                            ? `veBTC #${gauge.veBTCTokenId.toString()}`
+                                            : `${gauge.address.slice(0, 6)}...${gauge.address.slice(-4)}`}
+                                      </LabelSmall>
+                                      {profile?.display_name && gauge.veBTCTokenId > 0n && (
+                                        <span
+                                          className={css({
+                                            display: "inline-flex",
+                                            alignItems: "center",
+                                            padding: "1px 5px",
+                                            borderRadius: "4px",
+                                            backgroundColor: "rgba(247, 147, 26, 0.15)",
+                                            border: "1px solid rgba(247, 147, 26, 0.3)",
+                                            fontSize: "9px",
+                                            fontWeight: 600,
+                                            color: "#F7931A",
+                                            fontFamily: "monospace",
+                                            letterSpacing: "0.5px",
+                                          })}
+                                        >
+                                          #{gauge.veBTCTokenId.toString()}
+                                        </span>
+                                      )}
+                                    </div>
                                     {profile?.description && (
                                       <ParagraphSmall
                                         color={theme.colors.contentSecondary}
