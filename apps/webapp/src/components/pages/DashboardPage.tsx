@@ -690,6 +690,135 @@ function ClaimableRewardRow({
   )
 }
 
+function ProjectedRewardRow({
+  tokenId,
+  allGaugeAddresses,
+  apyMap,
+  isLast,
+}: {
+  tokenId: bigint
+  allGaugeAddresses: Address[]
+  apyMap: Map<string, ReturnType<typeof useGaugeAPY>>
+  isLast: boolean
+}) {
+  const [css, theme] = useStyletron()
+  const { usedWeight } = useVoteState(tokenId)
+  const { allocations } = useVoteAllocations(tokenId, allGaugeAddresses)
+
+  // Calculate projected rewards and APY for this specific token
+  const { upcomingAPY, projectedIncentivesUSD } = useUpcomingVotingAPY(
+    allocations,
+    apyMap,
+    usedWeight,
+  )
+
+  if (projectedIncentivesUSD === 0) {
+    return null
+  }
+
+  return (
+    <div
+      className={css({
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: "16px",
+        padding: "20px 0",
+        borderBottom: isLast
+          ? "none"
+          : `1px solid ${theme.colors.borderOpaque}`,
+        "@media (max-width: 600px)": {
+          flexDirection: "column",
+          alignItems: "stretch",
+          gap: "16px",
+        },
+      })}
+    >
+      {/* Left side: Token ID badge */}
+      <div
+        className={css({
+          display: "flex",
+          alignItems: "center",
+          gap: "12px",
+          minWidth: "140px",
+        })}
+      >
+        <div
+          className={css({
+            width: "36px",
+            height: "36px",
+            borderRadius: "10px",
+            background: theme.colors.backgroundTertiary,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            border: `1px solid ${theme.colors.borderOpaque}`,
+          })}
+        >
+          <LabelSmall color={theme.colors.contentSecondary}>
+            #{tokenId.toString()}
+          </LabelSmall>
+        </div>
+        <LabelSmall color={theme.colors.contentSecondary}>veMEZO</LabelSmall>
+      </div>
+
+      {/* Center: Projected USD Value */}
+      <div
+        className={css({
+          display: "flex",
+          alignItems: "center",
+          gap: "12px",
+          flex: 1,
+          justifyContent: "center",
+          "@media (max-width: 600px)": {
+            justifyContent: "flex-start",
+          },
+        })}
+      >
+        <LabelLarge
+          color={theme.colors.contentSecondary}
+          overrides={{
+            Block: {
+              style: {
+                fontVariantNumeric: "tabular-nums",
+              },
+            },
+          }}
+        >
+          ≈ $
+          {projectedIncentivesUSD.toLocaleString(undefined, {
+            maximumFractionDigits: 2,
+          })}
+        </LabelLarge>
+        {upcomingAPY !== null && upcomingAPY > 0 && (
+          <span
+            className={css({
+              display: "inline-flex",
+              alignItems: "center",
+              padding: "2px 6px",
+              borderRadius: "4px",
+              backgroundColor: theme.colors.backgroundSecondary,
+              border: `1px solid ${theme.colors.borderOpaque}`,
+              fontSize: "10px",
+              fontWeight: 500,
+              color: theme.colors.contentSecondary,
+            })}
+          >
+            {formatAPY(upcomingAPY)} APY
+          </span>
+        )}
+      </div>
+
+      {/* Right side: Empty space to align with claim button */}
+      <div
+        className={css({
+          minWidth: "100px",
+        })}
+      />
+    </div>
+  )
+}
+
 export default function DashboardPage() {
   const [css, theme] = useStyletron()
   const { isConnected } = useAccount()
@@ -1170,23 +1299,54 @@ export default function DashboardPage() {
                     </div>
                   </div>
 
-                  {/* Reward rows - only show if there are claimable rewards */}
-                  {hasClaimableRewards && (
+                  {/* Reward rows */}
+                  {(hasClaimableRewards || hasFutureRewards) && (
                     <div className={css({ padding: "4px 28px 8px" })}>
-                      {Array.from(bribesGroupedByTokenId.entries()).map(
-                        ([tokenIdStr, bribes], index, arr) => (
-                          <ClaimableRewardRow
-                            key={tokenIdStr}
-                            tokenId={BigInt(tokenIdStr)}
-                            bribes={bribes}
-                            onClaim={() =>
-                              handleClaimBribes(BigInt(tokenIdStr))
-                            }
-                            isPending={isClaimPending}
-                            isConfirming={isClaimConfirming}
-                            isLast={index === arr.length - 1}
-                          />
-                        ),
+                      {/* Claimable rewards section */}
+                      {hasClaimableRewards && (
+                        <>
+                          {Array.from(bribesGroupedByTokenId.entries()).map(
+                            ([tokenIdStr, bribes], index, arr) => (
+                              <ClaimableRewardRow
+                                key={`claimable-${tokenIdStr}`}
+                                tokenId={BigInt(tokenIdStr)}
+                                bribes={bribes}
+                                onClaim={() =>
+                                  handleClaimBribes(BigInt(tokenIdStr))
+                                }
+                                isPending={isClaimPending}
+                                isConfirming={isClaimConfirming}
+                                isLast={
+                                  !hasFutureRewards && index === arr.length - 1
+                                }
+                              />
+                            ),
+                          )}
+                        </>
+                      )}
+
+                      {/* Projected rewards section */}
+                      {hasFutureRewards && (
+                        <>
+                          {veMEZOLocks.map((lock, index) => {
+                            const tokenIdStr = lock.tokenId.toString()
+
+                            // Skip if this token already has claimable rewards (avoid duplication)
+                            const hasClaimable =
+                              bribesGroupedByTokenId.has(tokenIdStr)
+                            if (hasClaimable) return null
+
+                            return (
+                              <ProjectedRewardRow
+                                key={`projected-${tokenIdStr}`}
+                                tokenId={lock.tokenId}
+                                allGaugeAddresses={allGaugeAddresses}
+                                apyMap={apyMap}
+                                isLast={index === veMEZOLocks.length - 1}
+                              />
+                            )
+                          })}
+                        </>
                       )}
                     </div>
                   )}
