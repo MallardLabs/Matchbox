@@ -610,6 +610,120 @@ export function useVoteAllocations(
   }
 }
 
+/**
+ * Get vote allocations for multiple veMEZO tokens at once and aggregate them.
+ * Returns both per-token allocations and aggregated allocations across all tokens.
+ */
+export function useAllVoteAllocations(
+  tokenIds: bigint[],
+  gaugeAddresses: Address[],
+): {
+  allocationsByToken: Map<string, VoteAllocation[]>
+  aggregatedAllocations: VoteAllocation[]
+  isLoading: boolean
+} {
+  const contracts = getContractConfig(CHAIN_ID.testnet)
+
+  // Query votes for all tokenId + gauge combinations
+  const { data, isLoading } = useReadContracts({
+    contracts: tokenIds.flatMap((tokenId) =>
+      gaugeAddresses.map((gaugeAddress) => ({
+        ...contracts.boostVoter,
+        functionName: "votes",
+        args: [tokenId, gaugeAddress],
+      })),
+    ),
+    query: {
+      enabled: tokenIds.length > 0 && gaugeAddresses.length > 0,
+    },
+  })
+
+  // Build allocations per token and aggregated
+  const allocationsByToken = useMemo(() => {
+    const map = new Map<string, VoteAllocation[]>()
+    tokenIds.forEach((tokenId, tokenIndex) => {
+      const tokenAllocations: VoteAllocation[] = []
+      gaugeAddresses.forEach((gaugeAddress, gaugeIndex) => {
+        const dataIndex = tokenIndex * gaugeAddresses.length + gaugeIndex
+        const weight = (data?.[dataIndex]?.result as bigint) ?? 0n
+        if (weight > 0n) {
+          tokenAllocations.push({ gaugeAddress, weight })
+        }
+      })
+      map.set(tokenId.toString(), tokenAllocations)
+    })
+    return map
+  }, [data, tokenIds, gaugeAddresses])
+
+  const aggregatedAllocations = useMemo(() => {
+    const aggregatedWeights = new Map<string, bigint>()
+    tokenIds.forEach((tokenId, tokenIndex) => {
+      gaugeAddresses.forEach((gaugeAddress, gaugeIndex) => {
+        const dataIndex = tokenIndex * gaugeAddresses.length + gaugeIndex
+        const weight = (data?.[dataIndex]?.result as bigint) ?? 0n
+        if (weight > 0n) {
+          const gaugeKey = gaugeAddress.toLowerCase()
+          const existing = aggregatedWeights.get(gaugeKey) ?? 0n
+          aggregatedWeights.set(gaugeKey, existing + weight)
+        }
+      })
+    })
+    return Array.from(aggregatedWeights.entries()).map(
+      ([gaugeKey, weight]) => ({
+        gaugeAddress: gaugeAddresses.find(
+          (g) => g.toLowerCase() === gaugeKey,
+        ) as Address,
+        weight,
+      }),
+    )
+  }, [data, tokenIds, gaugeAddresses])
+
+  return {
+    allocationsByToken,
+    aggregatedAllocations,
+    isLoading,
+  }
+}
+
+/**
+ * Get used weights for multiple veMEZO tokens at once.
+ * Returns both per-token weights and total across all tokens.
+ */
+export function useAllUsedWeights(tokenIds: bigint[]): {
+  usedWeightsByToken: Map<string, bigint>
+  totalUsedWeight: bigint
+  isLoading: boolean
+} {
+  const contracts = getContractConfig(CHAIN_ID.testnet)
+
+  const { data, isLoading } = useReadContracts({
+    contracts: tokenIds.map((tokenId) => ({
+      ...contracts.boostVoter,
+      functionName: "usedWeights",
+      args: [tokenId],
+    })),
+    query: {
+      enabled: tokenIds.length > 0,
+    },
+  })
+
+  const result = useMemo(() => {
+    const usedWeightsByToken = new Map<string, bigint>()
+    let totalUsedWeight = 0n
+    tokenIds.forEach((tokenId, i) => {
+      const weight = (data?.[i]?.result as bigint) ?? 0n
+      usedWeightsByToken.set(tokenId.toString(), weight)
+      totalUsedWeight += weight
+    })
+    return { usedWeightsByToken, totalUsedWeight }
+  }, [data, tokenIds])
+
+  return {
+    ...result,
+    isLoading,
+  }
+}
+
 export function useAddIncentives(): AddIncentivesResult {
   const contracts = getContractConfig(CHAIN_ID.testnet)
   const { writeContract, data: hash, isPending, error } = useWriteContract()

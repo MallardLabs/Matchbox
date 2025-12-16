@@ -18,6 +18,8 @@ import {
 import { useVeBTCLocks, useVeMEZOLocks } from "@/hooks/useLocks"
 import {
   type ClaimableBribe,
+  useAllUsedWeights,
+  useAllVoteAllocations,
   useClaimBribes,
   useClaimableBribes,
   useVoteAllocations,
@@ -541,6 +543,9 @@ function ClaimableRewardRow({
   isPending,
   isConfirming,
   isLast,
+  claimableUSD,
+  allGaugeAddresses,
+  apyMap,
 }: {
   tokenId: bigint
   bribes: ClaimableBribe[]
@@ -548,8 +553,17 @@ function ClaimableRewardRow({
   isPending: boolean
   isConfirming: boolean
   isLast: boolean
+  claimableUSD: number
+  allGaugeAddresses: Address[]
+  apyMap: Map<string, ReturnType<typeof useGaugeAPY>>
 }) {
   const [css, theme] = useStyletron()
+  const { usedWeight } = useVoteState(tokenId)
+  const { apy } = useVotingAPY(claimableUSD, usedWeight)
+
+  // Get vote allocations for upcoming APY
+  const { allocations } = useVoteAllocations(tokenId, allGaugeAddresses)
+  const { upcomingAPY } = useUpcomingVotingAPY(allocations, apyMap, usedWeight)
 
   // Group rewards by token across all bribes for this tokenId
   const rewardsByToken = useMemo(() => {
@@ -624,7 +638,72 @@ function ClaimableRewardRow({
             #{tokenId.toString()}
           </LabelSmall>
         </div>
-        <LabelSmall color={theme.colors.contentSecondary}>veMEZO</LabelSmall>
+        <div
+          className={css({
+            display: "flex",
+            flexDirection: "column",
+            gap: "2px",
+          })}
+        >
+          <LabelSmall color={theme.colors.contentSecondary}>veMEZO</LabelSmall>
+          {((apy !== null && apy > 0) ||
+            (upcomingAPY !== null && upcomingAPY > 0)) && (
+            <div
+              className={css({
+                display: "flex",
+                alignItems: "center",
+                gap: "4px",
+              })}
+            >
+              {apy !== null && apy > 0 && (
+                <span
+                  className={css({
+                    display: "inline-flex",
+                    alignItems: "center",
+                    padding: "1px 4px",
+                    borderRadius: "3px",
+                    backgroundColor: `${theme.colors.positive}15`,
+                    border: `1px solid ${theme.colors.positive}30`,
+                    fontSize: "9px",
+                    fontWeight: 600,
+                    color: theme.colors.positive,
+                  })}
+                >
+                  {formatAPY(apy)}
+                </span>
+              )}
+              {upcomingAPY !== null && upcomingAPY > 0 && (
+                <>
+                  {apy !== null && apy > 0 && (
+                    <span
+                      className={css({
+                        fontSize: "8px",
+                        color: theme.colors.contentTertiary,
+                      })}
+                    >
+                      →
+                    </span>
+                  )}
+                  <span
+                    className={css({
+                      display: "inline-flex",
+                      alignItems: "center",
+                      padding: "1px 4px",
+                      borderRadius: "3px",
+                      backgroundColor: theme.colors.backgroundSecondary,
+                      border: `1px solid ${theme.colors.borderOpaque}`,
+                      fontSize: "9px",
+                      fontWeight: 500,
+                      color: theme.colors.contentSecondary,
+                    })}
+                  >
+                    {formatAPY(upcomingAPY)}
+                  </span>
+                </>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Center: Rewards */}
@@ -759,7 +838,32 @@ function ProjectedRewardRow({
             #{tokenId.toString()}
           </LabelSmall>
         </div>
-        <LabelSmall color={theme.colors.contentSecondary}>veMEZO</LabelSmall>
+        <div
+          className={css({
+            display: "flex",
+            flexDirection: "column",
+            gap: "2px",
+          })}
+        >
+          <LabelSmall color={theme.colors.contentSecondary}>veMEZO</LabelSmall>
+          {upcomingAPY !== null && upcomingAPY > 0 && (
+            <span
+              className={css({
+                display: "inline-flex",
+                alignItems: "center",
+                padding: "1px 4px",
+                borderRadius: "3px",
+                backgroundColor: theme.colors.backgroundSecondary,
+                border: `1px solid ${theme.colors.borderOpaque}`,
+                fontSize: "9px",
+                fontWeight: 500,
+                color: theme.colors.contentSecondary,
+              })}
+            >
+              {formatAPY(upcomingAPY)} next
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Center: Projected USD Value */}
@@ -790,31 +894,24 @@ function ProjectedRewardRow({
             maximumFractionDigits: 2,
           })}
         </LabelLarge>
-        {upcomingAPY !== null && upcomingAPY > 0 && (
-          <span
-            className={css({
-              display: "inline-flex",
-              alignItems: "center",
-              padding: "2px 6px",
-              borderRadius: "4px",
-              backgroundColor: theme.colors.backgroundSecondary,
-              border: `1px solid ${theme.colors.borderOpaque}`,
-              fontSize: "10px",
-              fontWeight: 500,
-              color: theme.colors.contentSecondary,
-            })}
-          >
-            {formatAPY(upcomingAPY)} APY
-          </span>
-        )}
       </div>
 
-      {/* Right side: Empty space to align with claim button */}
-      <div
-        className={css({
-          minWidth: "100px",
-        })}
-      />
+      {/* Right side: Disabled Claim button */}
+      <Button
+        size="compact"
+        kind="secondary"
+        disabled
+        overrides={{
+          Root: {
+            style: {
+              minWidth: "100px",
+              opacity: 0.5,
+            },
+          },
+        }}
+      >
+        Pending
+      </Button>
     </div>
   )
 }
@@ -943,30 +1040,20 @@ export default function DashboardPage() {
     return allGauges.map((g) => g.address)
   }, [allGauges])
 
-  // Get vote allocations for the first veMEZO token (if any)
-  // We aggregate across all tokens later
-  const firstTokenId = veMEZOTokenIds[0]
-  const { allocations: firstTokenAllocations } = useVoteAllocations(
-    firstTokenId,
+  // Get aggregated vote allocations across all veMEZO tokens
+  const { aggregatedAllocations } = useAllVoteAllocations(
+    veMEZOTokenIds,
     allGaugeAddresses,
   )
 
-  // For simplicity, we use the first token's allocations
-  // In a full implementation, you'd aggregate across all veMEZO tokens
-  const aggregatedAllocations = useMemo(() => {
-    // If there are multiple veMEZO tokens, this would need to aggregate
-    // For now, we use the first token's allocations
-    return firstTokenAllocations
-  }, [firstTokenAllocations])
+  // Get total used weight across all veMEZO tokens
+  const { totalUsedWeight } = useAllUsedWeights(veMEZOTokenIds)
 
-  // Get total used weight from first veMEZO token for upcoming APY calculation
-  const { usedWeight: firstTokenUsedWeight } = useVoteState(firstTokenId)
-
-  // Calculate upcoming APY based on vote proportions
+  // Calculate upcoming APY based on aggregated vote proportions
   const { upcomingAPY, projectedIncentivesUSD } = useUpcomingVotingAPY(
     aggregatedAllocations,
     apyMap,
-    firstTokenUsedWeight,
+    totalUsedWeight,
   )
 
   const hasClaimableRewards = claimableBribes.length > 0
@@ -1319,6 +1406,11 @@ export default function DashboardPage() {
                                 isLast={
                                   !hasFutureRewards && index === arr.length - 1
                                 }
+                                claimableUSD={
+                                  claimableUSDByTokenId.get(tokenIdStr) ?? 0
+                                }
+                                allGaugeAddresses={allGaugeAddresses}
+                                apyMap={apyMap}
                               />
                             ),
                           )}
