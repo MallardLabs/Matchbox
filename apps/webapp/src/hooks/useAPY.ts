@@ -468,3 +468,67 @@ export function useVotingAPY(
   return { apy }
 }
 
+export type VoteAllocation = {
+  gaugeAddress: Address
+  weight: bigint
+}
+
+/**
+ * Calculate upcoming/projected APY based on user's vote proportion vs total votes
+ * This shows what the user will earn next epoch based on their current vote allocations.
+ * 
+ * Formula:
+ * For each gauge the user voted on:
+ *   userShare = userVoteWeight / totalGaugeWeight
+ *   userIncentives += gaugeIncentivesUSD * userShare
+ * 
+ * upcomingAPY = (userIncentives / usedWeightUSD) * 52 * 100
+ */
+export function useUpcomingVotingAPY(
+  voteAllocations: VoteAllocation[],
+  apyMap: Map<string, GaugeAPYData>,
+  usedWeight: bigint | undefined
+): { upcomingAPY: number | null; projectedIncentivesUSD: number } {
+  const result = useMemo(() => {
+    if (!usedWeight || usedWeight === 0n || voteAllocations.length === 0) {
+      return { upcomingAPY: null, projectedIncentivesUSD: 0 }
+    }
+
+    // Calculate user's proportional share of incentives across all voted gauges
+    let totalUserIncentivesUSD = 0
+
+    for (const allocation of voteAllocations) {
+      const gaugeKey = allocation.gaugeAddress.toLowerCase()
+      const gaugeData = apyMap.get(gaugeKey)
+      
+      if (gaugeData && gaugeData.totalVeMEZOWeight > 0n && gaugeData.totalIncentivesUSD > 0) {
+        // Calculate user's share of this gauge's incentives
+        const userShare = Number(allocation.weight) / Number(gaugeData.totalVeMEZOWeight)
+        const userIncentivesFromGauge = gaugeData.totalIncentivesUSD * userShare
+        totalUserIncentivesUSD += userIncentivesFromGauge
+      }
+    }
+
+    if (totalUserIncentivesUSD === 0) {
+      return { upcomingAPY: null, projectedIncentivesUSD: 0 }
+    }
+
+    // Convert used veMEZO weight to USD value
+    const usedVeMEZOAmount = Number(usedWeight) / 1e18
+    const usedVeMEZOValueUSD = usedVeMEZOAmount * MEZO_PRICE
+
+    if (usedVeMEZOValueUSD === 0) {
+      return { upcomingAPY: null, projectedIncentivesUSD: totalUserIncentivesUSD }
+    }
+
+    // Calculate APY: (weekly rewards / total position value) * 52 weeks * 100%
+    const weeklyReturn = totalUserIncentivesUSD / usedVeMEZOValueUSD
+    const annualReturn = weeklyReturn * EPOCHS_PER_YEAR
+    const apyPercent = annualReturn * 100
+
+    return { upcomingAPY: apyPercent, projectedIncentivesUSD: totalUserIncentivesUSD }
+  }, [voteAllocations, apyMap, usedWeight])
+
+  return result
+}
+

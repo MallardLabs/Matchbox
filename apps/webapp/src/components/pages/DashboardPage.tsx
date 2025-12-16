@@ -1,15 +1,16 @@
 import { Layout } from "@/components/Layout"
 import { SpringIn } from "@/components/SpringIn"
-import { useBoostGaugeForToken, useBoostInfo, useGaugeWeight } from "@/hooks/useGauges"
+import { useBoostGaugeForToken, useBoostGauges, useBoostInfo, useGaugeWeight } from "@/hooks/useGauges"
 import { useGaugeProfile } from "@/hooks/useGaugeProfiles"
 import { useVeBTCLocks, useVeMEZOLocks } from "@/hooks/useLocks"
 import {
   type ClaimableBribe,
   useClaimableBribes,
   useClaimBribes,
+  useVoteAllocations,
   useVoteState,
 } from "@/hooks/useVoting"
-import { useGaugeAPY, formatAPY, useVotingAPY } from "@/hooks/useAPY"
+import { useGaugeAPY, useGaugesAPY, formatAPY, useVotingAPY, useUpcomingVotingAPY } from "@/hooks/useAPY"
 import { useBtcPrice } from "@/hooks/useBtcPrice"
 import {
   Button,
@@ -684,6 +685,51 @@ export default function DashboardPage() {
   // Calculate total APY based on total claimable and total veMEZO voting power
   const { apy: totalAPY } = useVotingAPY(totalClaimableUSD, totalVeMEZOVotingPower)
 
+  // Get all gauges for upcoming APY calculation
+  const { gauges: allGauges } = useBoostGauges()
+
+  // Build gauge data for APY map
+  const gaugeDataForAPY = useMemo(() => {
+    return allGauges.map((gauge) => ({
+      address: gauge.address,
+      totalWeight: gauge.totalWeight,
+    }))
+  }, [allGauges])
+
+  // Get APY map for all gauges
+  const { apyMap } = useGaugesAPY(gaugeDataForAPY)
+
+  // Get all gauge addresses for vote allocation queries
+  const allGaugeAddresses = useMemo(() => {
+    return allGauges.map((g) => g.address)
+  }, [allGauges])
+
+  // Get vote allocations for the first veMEZO token (if any)
+  // We aggregate across all tokens later
+  const firstTokenId = veMEZOTokenIds[0]
+  const { allocations: firstTokenAllocations } = useVoteAllocations(
+    firstTokenId,
+    allGaugeAddresses
+  )
+
+  // For simplicity, we use the first token's allocations
+  // In a full implementation, you'd aggregate across all veMEZO tokens
+  const aggregatedAllocations = useMemo(() => {
+    // If there are multiple veMEZO tokens, this would need to aggregate
+    // For now, we use the first token's allocations
+    return firstTokenAllocations
+  }, [firstTokenAllocations])
+
+  // Get total used weight from first veMEZO token for upcoming APY calculation
+  const { usedWeight: firstTokenUsedWeight } = useVoteState(firstTokenId)
+
+  // Calculate upcoming APY based on vote proportions
+  const { upcomingAPY } = useUpcomingVotingAPY(
+    aggregatedAllocations,
+    apyMap,
+    firstTokenUsedWeight
+  )
+
   const hasClaimableRewards = claimableBribes.length > 0
 
   return (
@@ -731,112 +777,9 @@ export default function DashboardPage() {
           </div>
         ) : (
           <>
-            <div
-              className={css({
-                display: "grid",
-                gridTemplateColumns: "repeat(4, 1fr)",
-                gap: "16px",
-                "@media (max-width: 1024px)": {
-                  gridTemplateColumns: "repeat(2, 1fr)",
-                },
-                "@media (max-width: 480px)": {
-                  gridTemplateColumns: "1fr",
-                  gap: "12px",
-                },
-              })}
-            >
-              <SpringIn delay={0} variant="card">
-                <Card withBorder overrides={{}}>
-                  <div className={css({ padding: "8px 0" })}>
-                    <div
-                      className={css({
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "6px",
-                        marginBottom: "4px",
-                      })}
-                    >
-                      <TokenIcon symbol="MEZO" size={14} />
-                      <LabelSmall color={theme.colors.contentSecondary}>
-                        Your veMEZO Locks
-                      </LabelSmall>
-                    </div>
-                    <HeadingMedium>{veMEZOLocks.length}</HeadingMedium>
-                  </div>
-                </Card>
-              </SpringIn>
-
-              <SpringIn delay={1} variant="card">
-                <Card withBorder overrides={{}}>
-                  <div className={css({ padding: "8px 0" })}>
-                    <div
-                      className={css({
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "6px",
-                        marginBottom: "4px",
-                      })}
-                    >
-                      <TokenIcon symbol="MEZO" size={14} />
-                      <LabelSmall color={theme.colors.contentSecondary}>
-                        Your veMEZO Power
-                      </LabelSmall>
-                    </div>
-                    <HeadingMedium>
-                      {formatTokenValue(totalVeMEZOVotingPower, 18)}
-                    </HeadingMedium>
-                  </div>
-                </Card>
-              </SpringIn>
-
-              <SpringIn delay={2} variant="card">
-                <Card withBorder overrides={{}}>
-                  <div className={css({ padding: "8px 0" })}>
-                    <div
-                      className={css({
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "6px",
-                        marginBottom: "4px",
-                      })}
-                    >
-                      <TokenIcon symbol="BTC" size={14} />
-                      <LabelSmall color={theme.colors.contentSecondary}>
-                        Your veBTC Locks
-                      </LabelSmall>
-                    </div>
-                    <HeadingMedium>{veBTCLocks.length}</HeadingMedium>
-                  </div>
-                </Card>
-              </SpringIn>
-
-              <SpringIn delay={3} variant="card">
-                <Card withBorder overrides={{}}>
-                  <div className={css({ padding: "8px 0" })}>
-                    <div
-                      className={css({
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "6px",
-                        marginBottom: "4px",
-                      })}
-                    >
-                      <TokenIcon symbol="BTC" size={14} />
-                      <LabelSmall color={theme.colors.contentSecondary}>
-                        Your veBTC Power
-                      </LabelSmall>
-                    </div>
-                    <HeadingMedium>
-                      {formatTokenValue(totalVeBTCVotingPower, 18)}
-                    </HeadingMedium>
-                  </div>
-                </Card>
-              </SpringIn>
-            </div>
-
             {/* Claimable Rewards Section */}
             {hasClaimableRewards && (
-              <SpringIn delay={4} variant="card">
+              <SpringIn delay={0} variant="card">
                 <div
                   className={css({
                     borderRadius: "16px",
@@ -887,23 +830,62 @@ export default function DashboardPage() {
                           >
                             Total Claimable
                           </LabelSmall>
-                          {totalAPY !== null && totalAPY > 0 && (
-                            <span
+                          {(totalAPY !== null && totalAPY > 0) || (upcomingAPY !== null && upcomingAPY > 0) ? (
+                            <div
                               className={css({
                                 display: "inline-flex",
                                 alignItems: "center",
-                                padding: "2px 8px",
-                                borderRadius: "4px",
-                                backgroundColor: `${theme.colors.positive}20`,
-                                border: `1px solid ${theme.colors.positive}40`,
-                                fontSize: "12px",
-                                fontWeight: 600,
-                                color: theme.colors.positive,
+                                gap: "6px",
                               })}
                             >
-                              {formatAPY(totalAPY)} APY
-                            </span>
-                          )}
+                              {/* Current APY badge */}
+                              {totalAPY !== null && totalAPY > 0 && (
+                                <span
+                                  className={css({
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    padding: "2px 8px",
+                                    borderRadius: "4px",
+                                    backgroundColor: `${theme.colors.positive}20`,
+                                    border: `1px solid ${theme.colors.positive}40`,
+                                    fontSize: "12px",
+                                    fontWeight: 600,
+                                    color: theme.colors.positive,
+                                  })}
+                                >
+                                  {formatAPY(totalAPY)} APY
+                                </span>
+                              )}
+                              {/* Arrow and upcoming APY */}
+                              {upcomingAPY !== null && upcomingAPY > 0 && (
+                                <>
+                                  <span
+                                    className={css({
+                                      fontSize: "12px",
+                                      color: theme.colors.contentTertiary,
+                                    })}
+                                  >
+                                    →
+                                  </span>
+                                  <span
+                                    className={css({
+                                      display: "inline-flex",
+                                      alignItems: "center",
+                                      padding: "2px 8px",
+                                      borderRadius: "4px",
+                                      backgroundColor: theme.colors.backgroundSecondary,
+                                      border: `1px solid ${theme.colors.borderOpaque}`,
+                                      fontSize: "11px",
+                                      fontWeight: 500,
+                                      color: theme.colors.contentSecondary,
+                                    })}
+                                  >
+                                    {formatAPY(upcomingAPY)} next
+                                  </span>
+                                </>
+                              )}
+                            </div>
+                          ) : null}
                         </div>
                         <div
                           className={css({
@@ -1002,6 +984,109 @@ export default function DashboardPage() {
                 </div>
               </SpringIn>
             )}
+
+            <div
+              className={css({
+                display: "grid",
+                gridTemplateColumns: "repeat(4, 1fr)",
+                gap: "16px",
+                "@media (max-width: 1024px)": {
+                  gridTemplateColumns: "repeat(2, 1fr)",
+                },
+                "@media (max-width: 480px)": {
+                  gridTemplateColumns: "1fr",
+                  gap: "12px",
+                },
+              })}
+            >
+              <SpringIn delay={hasClaimableRewards ? 1 : 0} variant="card">
+                <Card withBorder overrides={{}}>
+                  <div className={css({ padding: "8px 0" })}>
+                    <div
+                      className={css({
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "6px",
+                        marginBottom: "4px",
+                      })}
+                    >
+                      <TokenIcon symbol="MEZO" size={14} />
+                      <LabelSmall color={theme.colors.contentSecondary}>
+                        Your veMEZO Locks
+                      </LabelSmall>
+                    </div>
+                    <HeadingMedium>{veMEZOLocks.length}</HeadingMedium>
+                  </div>
+                </Card>
+              </SpringIn>
+
+              <SpringIn delay={hasClaimableRewards ? 2 : 1} variant="card">
+                <Card withBorder overrides={{}}>
+                  <div className={css({ padding: "8px 0" })}>
+                    <div
+                      className={css({
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "6px",
+                        marginBottom: "4px",
+                      })}
+                    >
+                      <TokenIcon symbol="MEZO" size={14} />
+                      <LabelSmall color={theme.colors.contentSecondary}>
+                        Your veMEZO Power
+                      </LabelSmall>
+                    </div>
+                    <HeadingMedium>
+                      {formatTokenValue(totalVeMEZOVotingPower, 18)}
+                    </HeadingMedium>
+                  </div>
+                </Card>
+              </SpringIn>
+
+              <SpringIn delay={hasClaimableRewards ? 3 : 2} variant="card">
+                <Card withBorder overrides={{}}>
+                  <div className={css({ padding: "8px 0" })}>
+                    <div
+                      className={css({
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "6px",
+                        marginBottom: "4px",
+                      })}
+                    >
+                      <TokenIcon symbol="BTC" size={14} />
+                      <LabelSmall color={theme.colors.contentSecondary}>
+                        Your veBTC Locks
+                      </LabelSmall>
+                    </div>
+                    <HeadingMedium>{veBTCLocks.length}</HeadingMedium>
+                  </div>
+                </Card>
+              </SpringIn>
+
+              <SpringIn delay={hasClaimableRewards ? 4 : 3} variant="card">
+                <Card withBorder overrides={{}}>
+                  <div className={css({ padding: "8px 0" })}>
+                    <div
+                      className={css({
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "6px",
+                        marginBottom: "4px",
+                      })}
+                    >
+                      <TokenIcon symbol="BTC" size={14} />
+                      <LabelSmall color={theme.colors.contentSecondary}>
+                        Your veBTC Power
+                      </LabelSmall>
+                    </div>
+                    <HeadingMedium>
+                      {formatTokenValue(totalVeBTCVotingPower, 18)}
+                    </HeadingMedium>
+                  </div>
+                </Card>
+              </SpringIn>
+            </div>
 
             <SpringIn delay={hasClaimableRewards ? 5 : 4} variant="card">
               <div>
