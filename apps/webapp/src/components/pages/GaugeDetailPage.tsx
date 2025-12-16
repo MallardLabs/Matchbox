@@ -6,7 +6,7 @@ import { useBoostInfo } from "@/hooks/useGauges"
 import { useGaugeProfile } from "@/hooks/useGaugeProfiles"
 import { useBribeAddress, useBribeIncentives } from "@/hooks/useVoting"
 import { useGaugeAPY, formatAPY } from "@/hooks/useAPY"
-import { formatFixedPoint, formatMultiplier } from "@/utils/format"
+import { formatFixedPoint, formatMultiplier, formatTokenAmount } from "@/utils/format"
 import { CHAIN_ID, NON_STAKING_GAUGE_ABI } from "@repo/shared/contracts"
 import {
   Button,
@@ -24,7 +24,6 @@ import {
 import Link from "next/link"
 import { useRouter } from "next/router"
 import type { Address } from "viem"
-import { formatUnits } from "viem"
 import { useReadContract, useReadContracts } from "wagmi"
 
 const EXPLORER_URL =
@@ -328,7 +327,7 @@ export default function GaugeDetailPage() {
                     </LabelSmall>
                     <HeadingMedium>
                       {veBTCVotingPower
-                        ? formatUnits(veBTCVotingPower, 18).slice(0, 10)
+                        ? formatTokenAmount(veBTCVotingPower, 18)
                         : "-"}
                     </HeadingMedium>
                   </div>
@@ -347,7 +346,7 @@ export default function GaugeDetailPage() {
                       veMEZO Weight
                     </LabelSmall>
                     <HeadingMedium>
-                      {formatUnits(totalWeight, 18).slice(0, 10)}
+                      {formatTokenAmount(totalWeight, 18)}
                     </HeadingMedium>
                   </div>
                 </Card>

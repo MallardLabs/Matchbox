@@ -9,7 +9,8 @@ import {
   useClaimBribes,
   useVoteState,
 } from "@/hooks/useVoting"
-import { useGaugeAPY, formatAPY } from "@/hooks/useAPY"
+import { useGaugeAPY, formatAPY, useVotingAPY } from "@/hooks/useAPY"
+import { useBtcPrice } from "@/hooks/useBtcPrice"
 import {
   Button,
   Card,
@@ -28,6 +29,10 @@ import Link from "next/link"
 import { useEffect, useMemo } from "react"
 import { type Address, formatUnits } from "viem"
 import { useAccount } from "wagmi"
+
+// Price constants
+const MEZO_PRICE = 0.22
+const MEZO_TOKEN_ADDRESS = "0x7b7c000000000000000000000000000000000001".toLowerCase()
 
 // Format token values with appropriate precision based on magnitude
 function formatTokenValue(amount: bigint, decimals: number): string {
@@ -311,11 +316,14 @@ function VeBTCLockCard({
 
 function VeMEZOLockCard({
   lock,
+  claimableUSD,
 }: {
   lock: ReturnType<typeof useVeMEZOLocks>["locks"][0]
+  claimableUSD: number
 }) {
   const [css, theme] = useStyletron()
   const { usedWeight, canVoteInCurrentEpoch } = useVoteState(lock.tokenId)
+  const { apy } = useVotingAPY(claimableUSD, usedWeight)
 
   const unlockDate = new Date(Number(lock.end) * 1000)
   const isExpired = unlockDate < new Date()
@@ -333,6 +341,11 @@ function VeMEZOLockCard({
         >
           <div>
             <LabelMedium>veMEZO #{lock.tokenId.toString()}</LabelMedium>
+            {apy !== null && apy > 0 && (
+              <LabelSmall color={theme.colors.positive}>
+                {formatAPY(apy)} APY
+              </LabelSmall>
+            )}
           </div>
           <Tag
             color={lock.isPermanent ? "green" : isExpired ? "red" : "yellow"}
@@ -574,6 +587,7 @@ export default function DashboardPage() {
   const { isConnected } = useAccount()
   const { locks: veBTCLocks, isLoading: isLoadingVeBTC } = useVeBTCLocks()
   const { locks: veMEZOLocks, isLoading: isLoadingVeMEZO } = useVeMEZOLocks()
+  const { price: btcPrice } = useBtcPrice()
 
   const veMEZOTokenIds = useMemo(
     () => veMEZOLocks.map((lock) => lock.tokenId),
@@ -613,6 +627,37 @@ export default function DashboardPage() {
     return map
   }, [claimableBribes])
 
+  // Calculate total claimable USD value
+  const totalClaimableUSD = useMemo(() => {
+    let total = 0
+    for (const [tokenAddr, info] of totalClaimable.entries()) {
+      const tokenAmount = Number(info.amount) / Math.pow(10, info.decimals)
+      const isMezo = tokenAddr.toLowerCase() === MEZO_TOKEN_ADDRESS
+      const price = isMezo ? MEZO_PRICE : (btcPrice ?? 0)
+      total += tokenAmount * price
+    }
+    return total
+  }, [totalClaimable, btcPrice])
+
+  // Calculate claimable USD per tokenId
+  const claimableUSDByTokenId = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const bribe of claimableBribes) {
+      const tokenIdKey = bribe.tokenId.toString()
+      let usdValue = 0
+      for (const reward of bribe.rewards) {
+        const tokenAmount = Number(reward.earned) / Math.pow(10, reward.decimals)
+        const isMezo = reward.tokenAddress.toLowerCase() === MEZO_TOKEN_ADDRESS
+        const price = isMezo ? MEZO_PRICE : (btcPrice ?? 0)
+        usdValue += tokenAmount * price
+      }
+      const existing = map.get(tokenIdKey) ?? 0
+      map.set(tokenIdKey, existing + usdValue)
+    }
+    return map
+  }, [claimableBribes, btcPrice])
+
+
   const handleClaimBribes = (tokenId: bigint) => {
     const bribesForToken = bribesGroupedByTokenId.get(tokenId.toString()) ?? []
     if (bribesForToken.length === 0) return
@@ -635,6 +680,9 @@ export default function DashboardPage() {
     (acc, lock) => acc + lock.votingPower,
     0n,
   )
+
+  // Calculate total APY based on total claimable and total veMEZO voting power
+  const { apy: totalAPY } = useVotingAPY(totalClaimableUSD, totalVeMEZOVotingPower)
 
   const hasClaimableRewards = claimableBribes.length > 0
 
@@ -708,50 +756,6 @@ export default function DashboardPage() {
                         marginBottom: "4px",
                       })}
                     >
-                      <TokenIcon symbol="BTC" size={14} />
-                      <LabelSmall color={theme.colors.contentSecondary}>
-                        Your veBTC Locks
-                      </LabelSmall>
-                    </div>
-                    <HeadingMedium>{veBTCLocks.length}</HeadingMedium>
-                  </div>
-                </Card>
-              </SpringIn>
-
-              <SpringIn delay={1} variant="card">
-                <Card withBorder overrides={{}}>
-                  <div className={css({ padding: "8px 0" })}>
-                    <div
-                      className={css({
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "6px",
-                        marginBottom: "4px",
-                      })}
-                    >
-                      <TokenIcon symbol="BTC" size={14} />
-                      <LabelSmall color={theme.colors.contentSecondary}>
-                        Your veBTC Power
-                      </LabelSmall>
-                    </div>
-                    <HeadingMedium>
-                      {formatTokenValue(totalVeBTCVotingPower, 18)}
-                    </HeadingMedium>
-                  </div>
-                </Card>
-              </SpringIn>
-
-              <SpringIn delay={2} variant="card">
-                <Card withBorder overrides={{}}>
-                  <div className={css({ padding: "8px 0" })}>
-                    <div
-                      className={css({
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "6px",
-                        marginBottom: "4px",
-                      })}
-                    >
                       <TokenIcon symbol="MEZO" size={14} />
                       <LabelSmall color={theme.colors.contentSecondary}>
                         Your veMEZO Locks
@@ -762,7 +766,7 @@ export default function DashboardPage() {
                 </Card>
               </SpringIn>
 
-              <SpringIn delay={3} variant="card">
+              <SpringIn delay={1} variant="card">
                 <Card withBorder overrides={{}}>
                   <div className={css({ padding: "8px 0" })}>
                     <div
@@ -780,6 +784,50 @@ export default function DashboardPage() {
                     </div>
                     <HeadingMedium>
                       {formatTokenValue(totalVeMEZOVotingPower, 18)}
+                    </HeadingMedium>
+                  </div>
+                </Card>
+              </SpringIn>
+
+              <SpringIn delay={2} variant="card">
+                <Card withBorder overrides={{}}>
+                  <div className={css({ padding: "8px 0" })}>
+                    <div
+                      className={css({
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "6px",
+                        marginBottom: "4px",
+                      })}
+                    >
+                      <TokenIcon symbol="BTC" size={14} />
+                      <LabelSmall color={theme.colors.contentSecondary}>
+                        Your veBTC Locks
+                      </LabelSmall>
+                    </div>
+                    <HeadingMedium>{veBTCLocks.length}</HeadingMedium>
+                  </div>
+                </Card>
+              </SpringIn>
+
+              <SpringIn delay={3} variant="card">
+                <Card withBorder overrides={{}}>
+                  <div className={css({ padding: "8px 0" })}>
+                    <div
+                      className={css({
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "6px",
+                        marginBottom: "4px",
+                      })}
+                    >
+                      <TokenIcon symbol="BTC" size={14} />
+                      <LabelSmall color={theme.colors.contentSecondary}>
+                        Your veBTC Power
+                      </LabelSmall>
+                    </div>
+                    <HeadingMedium>
+                      {formatTokenValue(totalVeBTCVotingPower, 18)}
                     </HeadingMedium>
                   </div>
                 </Card>
@@ -818,20 +866,45 @@ export default function DashboardPage() {
                       })}
                     >
                       <div>
-                        <LabelSmall
-                          color={theme.colors.contentSecondary}
-                          overrides={{
-                            Block: {
-                              style: {
-                                textTransform: "uppercase",
-                                letterSpacing: "0.05em",
-                                marginBottom: "8px",
-                              },
-                            },
-                          }}
+                        <div
+                          className={css({
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "12px",
+                            marginBottom: "8px",
+                          })}
                         >
-                          Total Claimable
-                        </LabelSmall>
+                          <LabelSmall
+                            color={theme.colors.contentSecondary}
+                            overrides={{
+                              Block: {
+                                style: {
+                                  textTransform: "uppercase",
+                                  letterSpacing: "0.05em",
+                                },
+                              },
+                            }}
+                          >
+                            Total Claimable
+                          </LabelSmall>
+                          {totalAPY !== null && totalAPY > 0 && (
+                            <span
+                              className={css({
+                                display: "inline-flex",
+                                alignItems: "center",
+                                padding: "2px 8px",
+                                borderRadius: "4px",
+                                backgroundColor: `${theme.colors.positive}20`,
+                                border: `1px solid ${theme.colors.positive}40`,
+                                fontSize: "12px",
+                                fontWeight: 600,
+                                color: theme.colors.positive,
+                              })}
+                            >
+                              {formatAPY(totalAPY)} APY
+                            </span>
+                          )}
+                        </div>
                         <div
                           className={css({
                             display: "flex",
@@ -869,6 +942,18 @@ export default function DashboardPage() {
                             ),
                           )}
                         </div>
+                        {totalClaimableUSD > 0 && (
+                          <LabelSmall
+                            color={theme.colors.contentSecondary}
+                            overrides={{
+                              Block: {
+                                style: { marginTop: "8px" },
+                              },
+                            }}
+                          >
+                            ≈ ${totalClaimableUSD.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                          </LabelSmall>
+                        )}
                       </div>
 
                       <div
@@ -921,47 +1006,6 @@ export default function DashboardPage() {
             <SpringIn delay={hasClaimableRewards ? 5 : 4} variant="card">
               <div>
                 <HeadingMedium marginBottom="scale500">
-                  Your veBTC Locks
-                </HeadingMedium>
-                {veBTCLocks.length === 0 ? (
-                  <Card withBorder overrides={{}}>
-                    <div
-                      className={css({
-                        padding: "32px",
-                        textAlign: "center",
-                      })}
-                    >
-                      <ParagraphMedium color={theme.colors.contentSecondary}>
-                        No veBTC locks found
-                      </ParagraphMedium>
-                    </div>
-                  </Card>
-                ) : (
-                  <div
-                    className={css({
-                      display: "grid",
-                      gridTemplateColumns:
-                        "repeat(auto-fill, minmax(350px, 1fr))",
-                      gap: "16px",
-                      "@media (max-width: 480px)": {
-                        gridTemplateColumns: "1fr",
-                        gap: "12px",
-                      },
-                    })}
-                  >
-                    {veBTCLocks.map((lock, index) => (
-                      <SpringIn key={lock.tokenId.toString()} delay={(hasClaimableRewards ? 6 : 5) + index} variant="card">
-                        <VeBTCLockCard lock={lock} />
-                      </SpringIn>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </SpringIn>
-
-            <SpringIn delay={(hasClaimableRewards ? 6 : 5) + veBTCLocks.length} variant="card">
-              <div>
-                <HeadingMedium marginBottom="scale500">
                   Your veMEZO Locks
                 </HeadingMedium>
                 {veMEZOLocks.length === 0 ? (
@@ -991,8 +1035,52 @@ export default function DashboardPage() {
                     })}
                   >
                     {veMEZOLocks.map((lock, index) => (
-                      <SpringIn key={lock.tokenId.toString()} delay={(hasClaimableRewards ? 7 : 6) + veBTCLocks.length + index} variant="card">
-                        <VeMEZOLockCard lock={lock} />
+                      <SpringIn key={lock.tokenId.toString()} delay={(hasClaimableRewards ? 6 : 5) + index} variant="card">
+                        <VeMEZOLockCard 
+                          lock={lock} 
+                          claimableUSD={claimableUSDByTokenId.get(lock.tokenId.toString()) ?? 0}
+                        />
+                      </SpringIn>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </SpringIn>
+
+            <SpringIn delay={(hasClaimableRewards ? 6 : 5) + veMEZOLocks.length} variant="card">
+              <div>
+                <HeadingMedium marginBottom="scale500">
+                  Your veBTC Locks
+                </HeadingMedium>
+                {veBTCLocks.length === 0 ? (
+                  <Card withBorder overrides={{}}>
+                    <div
+                      className={css({
+                        padding: "32px",
+                        textAlign: "center",
+                      })}
+                    >
+                      <ParagraphMedium color={theme.colors.contentSecondary}>
+                        No veBTC locks found
+                      </ParagraphMedium>
+                    </div>
+                  </Card>
+                ) : (
+                  <div
+                    className={css({
+                      display: "grid",
+                      gridTemplateColumns:
+                        "repeat(auto-fill, minmax(350px, 1fr))",
+                      gap: "16px",
+                      "@media (max-width: 480px)": {
+                        gridTemplateColumns: "1fr",
+                        gap: "12px",
+                      },
+                    })}
+                  >
+                    {veBTCLocks.map((lock, index) => (
+                      <SpringIn key={lock.tokenId.toString()} delay={(hasClaimableRewards ? 7 : 6) + veMEZOLocks.length + index} variant="card">
+                        <VeBTCLockCard lock={lock} />
                       </SpringIn>
                     ))}
                   </div>

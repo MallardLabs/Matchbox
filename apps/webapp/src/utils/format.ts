@@ -44,3 +44,23 @@ export function formatBoostMultiplier(boost: bigint | undefined): string {
 export function formatMultiplier(multiplier: number): string {
   return `${multiplier.toFixed(2)}x`
 }
+
+/**
+ * Format a token amount with appropriate precision based on magnitude.
+ * Handles very small values properly without cutting them off.
+ */
+export function formatTokenAmount(amount: bigint, decimals = 18): string {
+  if (amount === 0n) return "0"
+  
+  const divisor = BigInt(10 ** decimals)
+  const value = Number(amount) / Number(divisor)
+  
+  if (value === 0) return "0"
+  if (value >= 1000000) return value.toLocaleString(undefined, { maximumFractionDigits: 0 })
+  if (value >= 1000) return value.toLocaleString(undefined, { maximumFractionDigits: 2 })
+  if (value >= 1) return value.toLocaleString(undefined, { maximumFractionDigits: 4 })
+  if (value >= 0.0001) return value.toLocaleString(undefined, { maximumFractionDigits: 6 })
+  if (value >= 0.00000001) return value.toLocaleString(undefined, { maximumFractionDigits: 8 })
+  // For extremely small values, use scientific notation
+  return value.toExponential(4)
+}

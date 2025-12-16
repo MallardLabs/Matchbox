@@ -436,3 +436,35 @@ export function formatAPY(apy: number | null): string {
   return `${apy.toFixed(2)}%`
 }
 
+/**
+ * Calculate APY for veMEZO voting based on used weights
+ * APY = (Total Claimable Rewards USD / (Used veMEZO Weight * MEZO Price)) * 52 * 100
+ */
+export function useVotingAPY(
+  totalClaimableUSD: number,
+  usedWeight: bigint | undefined
+): { apy: number | null } {
+  const apy = useMemo(() => {
+    if (!usedWeight || usedWeight === 0n || totalClaimableUSD === 0) {
+      return null
+    }
+
+    // Convert used veMEZO weight to a number (18 decimals)
+    const usedVeMEZOAmount = Number(usedWeight) / 1e18
+    
+    // Value of used veMEZO votes in USD
+    const usedVeMEZOValueUSD = usedVeMEZOAmount * MEZO_PRICE
+    
+    if (usedVeMEZOValueUSD === 0) return null
+
+    // APY = (weekly rewards / total position value) * 52 weeks * 100%
+    const weeklyReturn = totalClaimableUSD / usedVeMEZOValueUSD
+    const annualReturn = weeklyReturn * EPOCHS_PER_YEAR
+    const apyPercent = annualReturn * 100
+
+    return apyPercent
+  }, [totalClaimableUSD, usedWeight])
+
+  return { apy }
+}
+
