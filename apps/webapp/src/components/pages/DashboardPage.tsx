@@ -443,7 +443,7 @@ function VeMEZOLockCard({
                         fontWeight: apy === null || apy === 0 ? 600 : 500,
                         color:
                           apy === null || apy === 0
-                            ? theme.colors.positive
+                            ? theme.colors.contentSecondary
                             : theme.colors.contentSecondary,
                       })}
                     >
@@ -1007,7 +1007,7 @@ export default function DashboardPage() {
                                           : 500,
                                       color:
                                         totalAPY === null || totalAPY === 0
-                                          ? theme.colors.positive
+                                          ? theme.colors.contentSecondary
                                           : theme.colors.contentSecondary,
                                     })}
                                   >
