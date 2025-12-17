@@ -1,15 +1,13 @@
 import { mezoTestnet } from "@/config/wagmi"
-import { LinkExternal02, useStyletron } from "@mezo-org/mezo-clay"
+import { LinkExternal02 } from "@mezo-org/mezo-clay"
 import type { Address } from "viem"
 
-type AddressLinkProps = {
+interface AddressLinkProps {
   address: Address
   label?: string
 }
 
-export function AddressLink({ address, label }: AddressLinkProps) {
-  const [css, theme] = useStyletron()
-
+export function AddressLink({ address, label }: AddressLinkProps): JSX.Element {
   const explorerUrl = `${mezoTestnet.blockExplorers.default.url}/address/${address}`
   const shortAddress = `0x${address.slice(2, 6)}...${address.slice(-4)}`
 
@@ -18,22 +16,10 @@ export function AddressLink({ address, label }: AddressLinkProps) {
       href={explorerUrl}
       target="_blank"
       rel="noopener noreferrer"
-      className={css({
-        color: theme.colors.contentPrimary,
-        textDecoration: "none",
-        display: "inline-flex",
-        alignItems: "center",
-        gap: theme.sizing.scale100,
-        ":hover": {
-          textDecoration: "underline",
-        },
-      })}
+      className="inline-flex items-center gap-1 font-mono text-sm text-[var(--content-primary)] no-underline transition-colors hover:text-[#F7931A] hover:underline"
     >
       {label ?? shortAddress}
-      <LinkExternal02
-        color={theme.colors.contentPrimary}
-        size={theme.sizing.scale600}
-      />
+      <LinkExternal02 size={16} />
     </a>
   )
 }

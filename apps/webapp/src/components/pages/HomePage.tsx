@@ -1,177 +1,243 @@
 import { Layout } from "@/components/Layout"
 import { SpringIn } from "@/components/SpringIn"
 import { useTheme } from "@/contexts/ThemeContext"
-import {
-  Button,
-  HeadingSmall,
-  ParagraphLarge,
-  ParagraphSmall,
-  useStyletron,
-} from "@mezo-org/mezo-clay"
+import { Button } from "@mezo-org/mezo-clay"
 import Link from "next/link"
 import { useAccount } from "wagmi"
 
+function ArrowRightIcon(): JSX.Element {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <line x1="5" y1="12" x2="19" y2="12" />
+      <polyline points="12 5 19 12 12 19" />
+    </svg>
+  )
+}
+
+function TerminalIcon(): JSX.Element {
+  return (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <polyline points="4 17 10 11 4 5" />
+      <line x1="12" y1="19" x2="20" y2="19" />
+    </svg>
+  )
+}
+
 interface ActionCardProps {
   title: string
+  command: string
   description: string
   buttonText: string
   href: string
   variant?: "primary" | "secondary"
+  accentColor?: string
 }
 
 function ActionCard({
   title,
+  command,
   description,
   buttonText,
   href,
   variant = "primary",
-}: ActionCardProps) {
-  const [css, theme] = useStyletron()
-
+  accentColor = "#F7931A",
+}: ActionCardProps): JSX.Element {
   return (
-    <div
-      className={css({
-        display: "grid",
-        gridTemplateRows: "auto 1fr auto",
-        padding: "24px",
-        borderRadius: "16px",
-        border: `1px solid ${theme.colors.borderOpaque}`,
-        backgroundColor: theme.colors.backgroundPrimary,
-        height: "100%",
-      })}
-    >
-      <HeadingSmall marginBottom="scale300">{title}</HeadingSmall>
-      <ParagraphSmall
-        color={theme.colors.contentSecondary}
-        overrides={{
-          Block: {
-            style: {
-              lineHeight: "1.5",
-              marginBottom: "16px",
-            },
-          },
-        }}
-      >
+    <article className="group relative flex h-full flex-col rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5 transition-all duration-200 hover:border-[var(--border-focus)] hover:shadow-terminal-md md:p-6">
+      {/* Terminal-style header */}
+      <header className="mb-4">
+        <div className="mb-2 flex items-center gap-2">
+          <span
+            className="h-2 w-2 rounded-full"
+            style={{ backgroundColor: accentColor }}
+            aria-hidden="true"
+          />
+          <span className="text-2xs uppercase tracking-wider text-[var(--content-tertiary)]">
+            {title}
+          </span>
+        </div>
+        <div className="flex items-center gap-1 font-mono text-lg text-[var(--content-primary)]">
+          <span style={{ color: accentColor }} aria-hidden="true">
+            $
+          </span>
+          <span>{command}</span>
+          <span
+            className="ml-0.5 inline-block h-4 w-2 animate-cursor-blink"
+            style={{ backgroundColor: accentColor }}
+            aria-hidden="true"
+          />
+        </div>
+      </header>
+
+      {/* Description */}
+      <p className="mb-6 flex-1 text-sm leading-relaxed text-[var(--content-secondary)]">
         {description}
-      </ParagraphSmall>
+      </p>
+
+      {/* Action button */}
       <Link href={href} passHref legacyBehavior>
         <Button kind={variant} $as="a">
-          {buttonText}
+          <span className="flex items-center gap-2">
+            {buttonText}
+            <ArrowRightIcon />
+          </span>
         </Button>
       </Link>
-    </div>
+    </article>
   )
 }
 
-export default function HomePage() {
-  const [css, theme] = useStyletron()
+export default function HomePage(): JSX.Element {
   const { isConnected } = useAccount()
   const { theme: currentTheme } = useTheme()
 
   return (
     <Layout>
-      <div
-        className={css({
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          gap: "48px",
-          paddingTop: "48px",
-          "@media (max-width: 768px)": {
-            gap: "32px",
-            paddingTop: "24px",
-          },
-        })}
-      >
+      <div className="flex flex-col items-center gap-8 px-4 pt-6 md:gap-12 md:pt-12">
+        {/* Hero Section */}
         <SpringIn delay={0} variant="card">
-          <div
-            className={css({
-              textAlign: "center",
-              maxWidth: "600px",
-            })}
-          >
-            <div
-              className={css({
-                display: "flex",
-                justifyContent: "center",
-                marginBottom: "24px",
-              })}
-            >
+          <section className="max-w-2xl text-center">
+            <div className="mb-6 flex justify-center">
               <img
                 src="/matchbox.png"
                 alt="Matchbox"
-                className={css({
-                  height: "80px",
-                  width: "auto",
+                width={160}
+                height={64}
+                className="h-16 w-auto md:h-20"
+                style={{
                   imageRendering: "crisp-edges",
                   filter: currentTheme === "dark" ? "invert(1)" : "none",
-                })}
+                }}
               />
             </div>
-            <ParagraphLarge color={theme.colors.contentSecondary}>
+
+            {/* Terminal-style tagline */}
+            <div className="mb-4 inline-flex items-center gap-2 rounded-lg bg-[var(--surface-secondary)] px-4 py-2">
+              <TerminalIcon />
+              <span className="font-mono text-sm text-[var(--content-secondary)]">
+                veBTC + veMEZO voting protocol
+              </span>
+            </div>
+
+            <p className="mx-auto max-w-lg text-base leading-relaxed text-[var(--content-secondary)] md:text-lg">
               Boost your veBTC voting power with veMEZO or attract veMEZO
               capital to your gauge with incentives.
-            </ParagraphLarge>
-          </div>
+            </p>
+          </section>
         </SpringIn>
 
-        <div
-          className={css({
-            display: "grid",
-            gridTemplateColumns: "repeat(3, 1fr)",
-            gap: "20px",
-            width: "100%",
-            maxWidth: "900px",
-            "@media (max-width: 900px)": {
-              gridTemplateColumns: "1fr",
-              gap: "16px",
-            },
-          })}
-        >
+        {/* Action Cards Grid */}
+        <div className="grid w-full max-w-4xl gap-4 md:grid-cols-3 md:gap-5">
           <SpringIn delay={1} variant="card">
             <ActionCard
               title="veMEZO Holders"
+              command="vote --boost"
               description="Vote on veBTC gauges to boost their voting power and earn incentives in return."
               buttonText="Vote to Boost"
               href="/boost"
+              accentColor="#22C55E"
             />
           </SpringIn>
+
           <SpringIn delay={2} variant="card">
             <ActionCard
               title="veBTC Holders"
+              command="add --incentives"
               description="Add incentives to your gauge to attract veMEZO votes and boost your voting power."
               buttonText="Add Incentives"
               href="/incentives"
+              accentColor="#F7931A"
             />
           </SpringIn>
+
           <SpringIn delay={3} variant="card">
             <ActionCard
-              title="Track Performance"
+              title="Analytics"
+              command="status --all"
               description="Monitor your boosts, fees earned, and gauge performance over time."
               buttonText="View Dashboard"
               href="/dashboard"
               variant="secondary"
+              accentColor="#06B6D4"
             />
           </SpringIn>
         </div>
 
+        {/* Connect Prompt */}
         {!isConnected && (
           <SpringIn delay={4} variant="card">
-            <div
-              className={css({
-                backgroundColor: theme.colors.backgroundSecondary,
-                padding: "24px",
-                borderRadius: "12px",
-                textAlign: "center",
-              })}
-            >
-              <ParagraphSmall color={theme.colors.contentSecondary}>
-                Connect your wallet to get started
-              </ParagraphSmall>
+            <div className="flex items-center gap-3 rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface-secondary)] px-6 py-4">
+              <div
+                className="h-2 w-2 animate-pulse rounded-full bg-[#F7931A]"
+                aria-hidden="true"
+              />
+              <p className="font-mono text-sm text-[var(--content-secondary)]">
+                <span className="text-[#F7931A]" aria-hidden="true">
+                  $
+                </span>{" "}
+                connect --wallet to get started
+              </p>
             </div>
           </SpringIn>
         )}
+
+        {/* Stats Section (optional future enhancement) */}
+        <SpringIn delay={5} variant="card">
+          <footer className="mb-8 w-full max-w-4xl border-t border-[var(--border)] pt-8">
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-4 md:gap-6">
+              <StatCard label="Protocol" value="Matchbox" />
+              <StatCard label="Network" value="Mezo" />
+              <StatCard label="Status" value="Active" isActive />
+              <StatCard label="Version" value="v1.0" />
+            </div>
+          </footer>
+        </SpringIn>
       </div>
     </Layout>
+  )
+}
+
+interface StatCardProps {
+  label: string
+  value: string
+  isActive?: boolean
+}
+
+function StatCard({ label, value, isActive }: StatCardProps): JSX.Element {
+  return (
+    <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-4">
+      <p className="mb-1 text-2xs uppercase tracking-wider text-[var(--content-tertiary)]">
+        {label}
+      </p>
+      <p className="flex items-center gap-2 font-mono text-sm text-[var(--content-primary)]">
+        {isActive && (
+          <span
+            className="h-2 w-2 rounded-full bg-[#22C55E] shadow-[0_0_8px_rgba(34,197,94,0.5)]"
+            aria-hidden="true"
+          />
+        )}
+        {value}
+      </p>
+    </div>
   )
 }

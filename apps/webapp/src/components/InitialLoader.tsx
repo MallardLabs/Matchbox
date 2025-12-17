@@ -11,7 +11,7 @@ function getInitialTheme(): "light" | "dark" {
     : "light"
 }
 
-export function InitialLoader() {
+export function InitialLoader(): JSX.Element {
   const [isDark, setIsDark] = useState(false)
 
   useEffect(() => {
@@ -19,63 +19,102 @@ export function InitialLoader() {
   }, [])
 
   const colors = {
-    backgroundPrimary: isDark ? "#161616" : "#ffffff",
-    borderOpaque: isDark ? "#292929" : "#e8e8e8",
+    background: isDark ? "#0c0c0c" : "#fafaf9",
+    surface: isDark ? "#161616" : "#ffffff",
+    border: isDark ? "#2a2a2a" : "#e7e5e4",
+    accent: "#F7931A",
   }
 
   return (
     <div
       style={{
         minHeight: "100vh",
-        backgroundColor: colors.backgroundPrimary,
+        backgroundColor: colors.background,
+        fontFamily: '"IBM Plex Mono", monospace',
       }}
     >
-      {/* Header placeholder with glow effect */}
-      <div
+      {/* Header placeholder */}
+      <header
         style={{
-          height: "72px",
-          borderBottom: `1px solid ${colors.borderOpaque}`,
-          backgroundColor: colors.backgroundPrimary,
+          height: "56px",
+          borderBottom: `1px solid ${colors.border}`,
+          backgroundColor: colors.surface,
           position: "relative",
           overflow: "hidden",
         }}
       >
-        {/* Wide sweeping glow */}
+        {/* Animated scan line */}
         <div
           style={{
             position: "absolute",
             top: 0,
             bottom: 0,
-            width: "80%",
-            background: isDark
-              ? `linear-gradient(90deg, 
-                  transparent 0%, 
-                  rgba(255,255,255,0.02) 10%,
-                  rgba(255,255,255,0.06) 30%,
-                  rgba(255,255,255,0.1) 50%,
-                  rgba(255,255,255,0.06) 70%,
-                  rgba(255,255,255,0.02) 90%,
-                  transparent 100%)`
-              : `linear-gradient(90deg, 
-                  transparent 0%, 
-                  rgba(0,0,0,0.01) 10%,
-                  rgba(0,0,0,0.03) 30%,
-                  rgba(0,0,0,0.05) 50%,
-                  rgba(0,0,0,0.03) 70%,
-                  rgba(0,0,0,0.01) 90%,
-                  transparent 100%)`,
-            animation: "xpGlow 0.8s linear infinite",
+            width: "100px",
+            background: `linear-gradient(90deg,
+              transparent 0%,
+              ${colors.accent}15 50%,
+              transparent 100%)`,
+            animation: "scanLine 1.2s ease-in-out infinite",
           }}
         />
-      </div>
+      </header>
+
+      {/* Content area with terminal-style loading */}
+      <main
+        style={{
+          maxWidth: "1280px",
+          margin: "0 auto",
+          padding: "24px 16px",
+        }}
+      >
+        {/* Loading indicator */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+            color: isDark ? "#a8a29e" : "#57534e",
+            fontSize: "14px",
+          }}
+        >
+          <span style={{ color: colors.accent }}>$</span>
+          <span>loading</span>
+          <span
+            style={{
+              display: "inline-block",
+              width: "8px",
+              height: "16px",
+              backgroundColor: colors.accent,
+              animation: "blink 1s step-end infinite",
+            }}
+          />
+        </div>
+      </main>
 
       <style>{`
-        @keyframes xpGlow {
+        @keyframes scanLine {
           0% {
-            left: -80%;
+            left: -100px;
+            opacity: 0;
+          }
+          10% {
+            opacity: 1;
+          }
+          90% {
+            opacity: 1;
           }
           100% {
             left: 100%;
+            opacity: 0;
+          }
+        }
+
+        @keyframes blink {
+          0%, 100% {
+            opacity: 1;
+          }
+          50% {
+            opacity: 0;
           }
         }
       `}</style>

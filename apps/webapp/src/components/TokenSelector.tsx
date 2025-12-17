@@ -1,15 +1,9 @@
 import { type Token, useCustomToken, useTokenList } from "@/hooks/useTokenList"
-import {
-  Input,
-  LabelSmall,
-  ParagraphSmall,
-  Select,
-  useStyletron,
-} from "@mezo-org/mezo-clay"
+import { Input, Select } from "@mezo-org/mezo-clay"
 import { useEffect, useRef, useState } from "react"
 import { type Address, isAddress } from "viem"
 
-type TokenSelectorProps = {
+interface TokenSelectorProps {
   value: Token | undefined
   onChange: (token: Token | undefined) => void
   label?: string
@@ -23,13 +17,11 @@ export function TokenSelector({
   onChange,
   label,
   placeholder = "Select a token",
-}: TokenSelectorProps) {
-  const [css, theme] = useStyletron()
+}: TokenSelectorProps): JSX.Element {
   const { tokens: listTokens, isLoading: isLoadingList } = useTokenList()
   const [isCustomMode, setIsCustomMode] = useState(false)
   const [customAddress, setCustomAddress] = useState("")
 
-  // Store onChange in a ref to avoid it being a dependency in useEffect
   const onChangeRef = useRef(onChange)
   onChangeRef.current = onChange
 
@@ -92,12 +84,9 @@ export function TokenSelector({
   return (
     <div>
       {label && (
-        <LabelSmall
-          color={theme.colors.contentSecondary}
-          marginBottom="scale100"
-        >
+        <span className="mb-1 block text-xs text-[var(--content-secondary)]">
           {label}
-        </LabelSmall>
+        </span>
       )}
       <Select
         options={options}
@@ -108,40 +97,34 @@ export function TokenSelector({
       />
 
       {isCustomMode && (
-        <div className={css({ marginTop: "12px" })}>
-          <LabelSmall
-            color={theme.colors.contentSecondary}
-            marginBottom="scale100"
-          >
+        <div className="mt-3">
+          <span className="mb-1 block text-xs text-[var(--content-secondary)]">
             Token Address
-          </LabelSmall>
+          </span>
           <Input
             value={customAddress}
             onChange={handleCustomAddressChange}
             placeholder="0x..."
           />
           {customAddress && !isValidCustomAddress && (
-            <ParagraphSmall color={theme.colors.negative} marginTop="scale200">
+            <p className="mt-2 text-sm text-[var(--negative)]">
               Invalid address
-            </ParagraphSmall>
+            </p>
           )}
           {isValidCustomAddress && isLoadingCustom && (
-            <ParagraphSmall
-              color={theme.colors.contentSecondary}
-              marginTop="scale200"
-            >
+            <p className="mt-2 text-sm text-[var(--content-secondary)]">
               Loading token info...
-            </ParagraphSmall>
+            </p>
           )}
           {isValidCustomAddress && !isLoadingCustom && !customToken && (
-            <ParagraphSmall color={theme.colors.negative} marginTop="scale200">
+            <p className="mt-2 text-sm text-[var(--negative)]">
               Could not load token info. Make sure this is a valid ERC20 token.
-            </ParagraphSmall>
+            </p>
           )}
           {customToken && (
-            <ParagraphSmall color={theme.colors.positive} marginTop="scale200">
+            <p className="mt-2 text-sm text-[var(--positive)]">
               Found: {customToken.symbol} ({customToken.name})
-            </ParagraphSmall>
+            </p>
           )}
         </div>
       )}

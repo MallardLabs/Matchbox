@@ -1,6 +1,5 @@
+import "@/styles/globals.css"
 import "@mezo-org/mezo-clay/dist/mezo-clay.css"
-import "@/styles/fonts.css"
-import "@/styles/animations.css"
 import { InitialLoader } from "@/components/InitialLoader"
 import type { AppProps } from "next/app"
 import dynamic from "next/dynamic"

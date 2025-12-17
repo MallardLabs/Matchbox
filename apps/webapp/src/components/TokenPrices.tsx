@@ -1,17 +1,14 @@
 import { useBtcPrice } from "@/hooks/useBtcPrice"
-import { useStyletron } from "@mezo-org/mezo-clay"
 
 // Feature flags for token prices
-const SHOW_MEZO_PRICE = true // Set to true when MEZO price oracle is available
+const SHOW_MEZO_PRICE = true
 
-// Placeholder value for MEZO token price (used when SHOW_MEZO_PRICE is true but no oracle)
-// Set to null to show loading state, or a number to show a placeholder price
+// Placeholder value for MEZO token price
 const MEZO_PLACEHOLDER_PRICE: number | null = 0.22
 
 function formatPrice(price: number | null): string {
   if (price === null) return "—"
 
-  // Format with commas and 2 decimal places for large numbers
   if (price >= 1000) {
     return price.toLocaleString("en-US", {
       minimumFractionDigits: 2,
@@ -19,14 +16,13 @@ function formatPrice(price: number | null): string {
     })
   }
 
-  // For smaller prices, show more precision
   return price.toLocaleString("en-US", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 4,
   })
 }
 
-type TokenPriceItemProps = {
+interface TokenPriceItemProps {
   icon: string
   symbol: string
   price: number | null
@@ -40,42 +36,25 @@ function TokenPriceItem({
   price,
   isLoading,
   isUnavailable,
-}: TokenPriceItemProps) {
-  const [css, theme] = useStyletron()
-
+}: TokenPriceItemProps): JSX.Element {
   return (
     <div
-      className={css({
-        display: "flex",
-        alignItems: "center",
-        gap: "8px",
-        padding: "6px 12px",
-        borderRadius: "8px",
-        backgroundColor: theme.colors.backgroundSecondary,
-        transition: "background-color 0.2s ease",
-      })}
+      className="flex items-center gap-2 rounded-lg bg-[var(--surface-secondary)] px-3 py-1.5 transition-colors"
       title={isUnavailable ? `${symbol} price unavailable` : `${symbol} price`}
     >
       <img
         src={icon}
         alt={symbol}
-        className={css({
-          width: "20px",
-          height: "20px",
-          borderRadius: "50%",
-        })}
+        width={20}
+        height={20}
+        className="h-5 w-5 rounded-full"
       />
       <span
-        className={css({
-          fontFamily: "'Riforma LL', system-ui, sans-serif",
-          fontSize: "14px",
-          fontWeight: 500,
-          color:
-            isLoading || isUnavailable
-              ? theme.colors.contentTertiary
-              : theme.colors.contentPrimary,
-          whiteSpace: "nowrap",
-        })}
+        className={`whitespace-nowrap font-mono text-sm tabular-nums ${
+          isLoading || isUnavailable
+            ? "text-[var(--content-tertiary)]"
+            : "text-[var(--content-primary)]"
+        }`}
       >
         {isLoading ? "..." : isUnavailable ? "N/A" : `$${formatPrice(price)}`}
       </span>
@@ -83,22 +62,14 @@ function TokenPriceItem({
   )
 }
 
-export function TokenPrices() {
-  const [css] = useStyletron()
+export function TokenPrices(): JSX.Element {
   const { price: btcPrice, isLoading: btcLoading } = useBtcPrice()
 
-  // TODO: Replace with actual MEZO price hook when oracle is available
   const mezoPrice = MEZO_PLACEHOLDER_PRICE
   const mezoLoading = false
 
   return (
-    <div
-      className={css({
-        display: "flex",
-        alignItems: "center",
-        gap: "8px",
-      })}
-    >
+    <div className="flex items-center gap-2">
       <TokenPriceItem
         icon="/token icons/Bitcoin.svg"
         symbol="BTC"

@@ -11,19 +11,7 @@ import {
   formatMultiplier,
   formatTokenAmount,
 } from "@/utils/format"
-import {
-  Button,
-  Card,
-  HeadingLarge,
-  HeadingMedium,
-  LabelMedium,
-  LabelSmall,
-  ParagraphLarge,
-  ParagraphMedium,
-  Skeleton,
-  Tag,
-  useStyletron,
-} from "@mezo-org/mezo-clay"
+import { Button, Card, Skeleton, Tag } from "@mezo-org/mezo-clay"
 import { CHAIN_ID, NON_STAKING_GAUGE_ABI } from "@repo/shared/contracts"
 import Link from "next/link"
 import { useRouter } from "next/router"
@@ -34,8 +22,7 @@ import { useReadContract, useReadContracts } from "wagmi"
 const EXPLORER_URL =
   process.env.NEXT_PUBLIC_EXPLORER_URL || "https://explorer.test.mezo.org"
 
-export default function GaugeDetailPage() {
-  const [css, theme] = useStyletron()
+export default function GaugeDetailPage(): JSX.Element {
   const router = useRouter()
   const { address } = router.query
   const gaugeAddress = address as Address | undefined
@@ -161,10 +148,10 @@ export default function GaugeDetailPage() {
   if (!gaugeAddress) {
     return (
       <Layout>
-        <div className={css({ padding: "48px", textAlign: "center" })}>
-          <ParagraphMedium color={theme.colors.contentSecondary}>
+        <div className="p-12 text-center">
+          <p className="text-sm text-[var(--content-secondary)]">
             Invalid gauge address
-          </ParagraphMedium>
+          </p>
         </div>
       </Layout>
     )
@@ -172,13 +159,7 @@ export default function GaugeDetailPage() {
 
   return (
     <Layout>
-      <div
-        className={css({
-          display: "flex",
-          flexDirection: "column",
-          gap: "24px",
-        })}
-      >
+      <div className="flex flex-col gap-6">
         {/* Back button */}
         <Link href="/gauges" passHref legacyBehavior>
           <Button kind="tertiary" size="small" $as="a">
@@ -187,13 +168,7 @@ export default function GaugeDetailPage() {
         </Link>
 
         {isLoading ? (
-          <div
-            className={css({
-              display: "flex",
-              flexDirection: "column",
-              gap: "16px",
-            })}
-          >
+          <div className="flex flex-col gap-4">
             <Skeleton width="100%" height="200px" animation />
             <Skeleton width="100%" height="150px" animation />
           </div>
@@ -202,95 +177,39 @@ export default function GaugeDetailPage() {
             {/* Profile Header */}
             <SpringIn delay={0} variant="card">
               <Card withBorder overrides={{}}>
-                <div
-                  className={css({
-                    display: "flex",
-                    gap: "24px",
-                    alignItems: "flex-start",
-                    flexWrap: "wrap",
-                    "@media (max-width: 640px)": {
-                      flexDirection: "column",
-                      alignItems: "center",
-                      textAlign: "center",
-                    },
-                  })}
-                >
+                <div className="flex flex-wrap items-start gap-6 sm:flex-col sm:items-center sm:text-center md:flex-row md:items-start md:text-left">
                   {/* Profile Picture */}
-                  <div
-                    className={css({
-                      width: "120px",
-                      height: "120px",
-                      borderRadius: "50%",
-                      backgroundColor: theme.colors.backgroundSecondary,
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      overflow: "hidden",
-                      flexShrink: 0,
-                      border: `3px solid ${theme.colors.borderOpaque}`,
-                    })}
-                  >
+                  <div className="flex h-[120px] w-[120px] flex-shrink-0 items-center justify-center overflow-hidden rounded-full border-[3px] border-[var(--border)] bg-[var(--surface-secondary)]">
                     {profile?.profile_picture_url ? (
                       <img
                         src={profile.profile_picture_url}
                         alt={`Gauge ${veBTCTokenId?.toString() ?? gaugeAddress}`}
-                        className={css({
-                          width: "100%",
-                          height: "100%",
-                          objectFit: "cover",
-                        })}
+                        className="h-full w-full object-cover"
                       />
                     ) : (
-                      <HeadingMedium color={theme.colors.contentSecondary}>
+                      <h3 className="text-2xl font-semibold text-[var(--content-secondary)]">
                         #{veBTCTokenId?.toString() ?? "?"}
-                      </HeadingMedium>
+                      </h3>
                     )}
                   </div>
 
                   {/* Gauge Info */}
-                  <div
-                    className={css({
-                      flex: 1,
-                      minWidth: 0,
-                    })}
-                  >
-                    <div
-                      className={css({
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "12px",
-                        marginBottom: "8px",
-                        flexWrap: "wrap",
-                      })}
-                    >
-                      <HeadingLarge
-                        color={
+                  <div className="min-w-0 flex-1">
+                    <div className="mb-2 flex flex-wrap items-center gap-3">
+                      <h2
+                        className={`text-3xl font-semibold ${
                           profile?.display_name ||
                           profile?.description ||
                           profile?.profile_picture_url
-                            ? theme.colors.positive
-                            : theme.colors.negative
-                        }
+                            ? "text-[var(--positive)]"
+                            : "text-[var(--negative)]"
+                        }`}
                       >
                         {profile?.display_name ||
                           `veBTC #${veBTCTokenId?.toString() ?? "Unknown"}`}
-                      </HeadingLarge>
+                      </h2>
                       {profile?.display_name && (
-                        <span
-                          className={css({
-                            display: "inline-flex",
-                            alignItems: "center",
-                            padding: "4px 10px",
-                            borderRadius: "6px",
-                            backgroundColor: "rgba(247, 147, 26, 0.15)",
-                            border: "1px solid rgba(247, 147, 26, 0.3)",
-                            fontSize: "13px",
-                            fontWeight: 600,
-                            color: "#F7931A",
-                            fontFamily: "monospace",
-                            letterSpacing: "0.5px",
-                          })}
-                        >
+                        <span className="inline-flex items-center rounded-md border border-[rgba(247,147,26,0.3)] bg-[rgba(247,147,26,0.15)] px-2.5 py-1 font-mono text-xs font-semibold tracking-wide text-[#F7931A]">
                           #{veBTCTokenId?.toString() ?? "?"}
                         </span>
                       )}
@@ -299,28 +218,18 @@ export default function GaugeDetailPage() {
                       </Tag>
                     </div>
 
-                    <div className={css({ marginBottom: "16px" })}>
+                    <div className="mb-4">
                       <AddressLink address={gaugeAddress} />
                     </div>
 
                     {profile?.description ? (
-                      <ParagraphLarge
-                        color={theme.colors.contentPrimary}
-                        overrides={{
-                          Block: {
-                            style: {
-                              whiteSpace: "pre-wrap",
-                              wordBreak: "break-word",
-                            },
-                          },
-                        }}
-                      >
+                      <p className="whitespace-pre-wrap break-words text-base text-[var(--content-primary)]">
                         {profile.description}
-                      </ParagraphLarge>
+                      </p>
                     ) : (
-                      <ParagraphMedium color={theme.colors.contentSecondary}>
+                      <p className="text-sm text-[var(--content-secondary)]">
                         No description provided
-                      </ParagraphMedium>
+                      </p>
                     )}
                   </div>
                 </div>
@@ -328,24 +237,7 @@ export default function GaugeDetailPage() {
             </SpringIn>
 
             {/* Stats Grid */}
-            <div
-              className={css({
-                display: "grid",
-                gridTemplateColumns: "repeat(5, 1fr)",
-                gap: "16px",
-                alignItems: "stretch",
-                "@media (max-width: 1200px)": {
-                  gridTemplateColumns: "repeat(3, 1fr)",
-                },
-                "@media (max-width: 768px)": {
-                  gridTemplateColumns: "repeat(2, 1fr)",
-                },
-                "@media (max-width: 480px)": {
-                  gridTemplateColumns: "1fr",
-                  gap: "12px",
-                },
-              })}
-            >
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:gap-4 lg:grid-cols-5">
               <SpringIn delay={1} variant="card">
                 <Card
                   withBorder
@@ -353,15 +245,15 @@ export default function GaugeDetailPage() {
                     Root: { style: { height: "100%" } },
                   }}
                 >
-                  <div className={css({ padding: "8px 0" })}>
-                    <LabelSmall color={theme.colors.contentSecondary}>
+                  <div className="py-2">
+                    <p className="mb-1 text-2xs uppercase tracking-wider text-[var(--content-tertiary)]">
                       veBTC Weight
-                    </LabelSmall>
-                    <HeadingMedium>
+                    </p>
+                    <h3 className="font-mono text-2xl font-semibold tabular-nums text-[var(--content-primary)]">
                       {veBTCVotingPower
                         ? formatTokenAmount(veBTCVotingPower, 18)
                         : "-"}
-                    </HeadingMedium>
+                    </h3>
                   </div>
                 </Card>
               </SpringIn>
@@ -373,13 +265,13 @@ export default function GaugeDetailPage() {
                     Root: { style: { height: "100%" } },
                   }}
                 >
-                  <div className={css({ padding: "8px 0" })}>
-                    <LabelSmall color={theme.colors.contentSecondary}>
+                  <div className="py-2">
+                    <p className="mb-1 text-2xs uppercase tracking-wider text-[var(--content-tertiary)]">
                       veMEZO Weight
-                    </LabelSmall>
-                    <HeadingMedium>
+                    </p>
+                    <h3 className="font-mono text-2xl font-semibold tabular-nums text-[var(--content-primary)]">
                       {formatTokenAmount(totalWeight, 18)}
-                    </HeadingMedium>
+                    </h3>
                   </div>
                 </Card>
               </SpringIn>
@@ -391,13 +283,13 @@ export default function GaugeDetailPage() {
                     Root: { style: { height: "100%" } },
                   }}
                 >
-                  <div className={css({ padding: "8px 0" })}>
-                    <LabelSmall color={theme.colors.contentSecondary}>
+                  <div className="py-2">
+                    <p className="mb-1 text-2xs uppercase tracking-wider text-[var(--content-tertiary)]">
                       Current Boost
-                    </LabelSmall>
-                    <HeadingMedium>
+                    </p>
+                    <h3 className="font-mono text-2xl font-semibold tabular-nums text-[var(--content-primary)]">
                       {formatMultiplier(boostMultiplier)}
-                    </HeadingMedium>
+                    </h3>
                   </div>
                 </Card>
               </SpringIn>
@@ -409,22 +301,22 @@ export default function GaugeDetailPage() {
                     Root: { style: { height: "100%" } },
                   }}
                 >
-                  <div className={css({ padding: "8px 0" })}>
-                    <LabelSmall color={theme.colors.contentSecondary}>
+                  <div className="py-2">
+                    <p className="mb-1 text-2xs uppercase tracking-wider text-[var(--content-tertiary)]">
                       Voting APY
-                    </LabelSmall>
-                    <HeadingMedium
-                      color={
+                    </p>
+                    <h3
+                      className={`font-mono text-2xl font-semibold tabular-nums ${
                         apy && apy > 0
-                          ? theme.colors.positive
-                          : theme.colors.contentPrimary
-                      }
+                          ? "text-[var(--positive)]"
+                          : "text-[var(--content-primary)]"
+                      }`}
                     >
                       {isLoadingAPY ? "..." : formatAPY(apy)}
-                    </HeadingMedium>
-                    <LabelSmall color={theme.colors.contentSecondary}>
+                    </h3>
+                    <p className="mt-1 text-2xs text-[var(--content-tertiary)]">
                       ${totalIncentivesUSD.toFixed(2)}/week
-                    </LabelSmall>
+                    </p>
                   </div>
                 </Card>
               </SpringIn>
@@ -436,31 +328,25 @@ export default function GaugeDetailPage() {
                     Root: { style: { height: "100%" } },
                   }}
                 >
-                  <div className={css({ padding: "8px 0" })}>
-                    <LabelSmall color={theme.colors.contentSecondary}>
+                  <div className="py-2">
+                    <p className="mb-1 text-2xs uppercase tracking-wider text-[var(--content-tertiary)]">
                       Manager
-                    </LabelSmall>
+                    </p>
                     {beneficiary ? (
-                      <HeadingMedium>
+                      <h3 className="font-mono text-2xl font-semibold tabular-nums">
                         <a
                           href={`${EXPLORER_URL}/address/${beneficiary}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className={css({
-                            color: theme.colors.accent,
-                            textDecoration: "none",
-                            ":hover": {
-                              textDecoration: "underline",
-                            },
-                          })}
+                          className="text-[var(--accent)] no-underline transition-opacity hover:opacity-80 hover:underline"
                         >
                           {beneficiary.slice(0, 6)}...{beneficiary.slice(-4)}
                         </a>
-                      </HeadingMedium>
+                      </h3>
                     ) : (
-                      <HeadingMedium color={theme.colors.contentSecondary}>
+                      <h3 className="font-mono text-2xl font-semibold tabular-nums text-[var(--content-secondary)]">
                         -
-                      </HeadingMedium>
+                      </h3>
                     )}
                   </div>
                 </Card>
@@ -470,43 +356,29 @@ export default function GaugeDetailPage() {
             {/* Incentives */}
             <SpringIn delay={6} variant="card">
               <Card title="Current Epoch Incentives" withBorder overrides={{}}>
-                <div className={css({ padding: "16px 0" })}>
+                <div className="py-4">
                   {isLoadingIncentives ? (
                     <Skeleton width="100%" height="60px" animation />
                   ) : !hasBribe || incentives.length === 0 ? (
-                    <ParagraphMedium color={theme.colors.contentSecondary}>
+                    <p className="text-sm text-[var(--content-secondary)]">
                       No incentives available for this epoch
-                    </ParagraphMedium>
+                    </p>
                   ) : (
-                    <div
-                      className={css({
-                        display: "grid",
-                        gridTemplateColumns:
-                          "repeat(auto-fill, minmax(200px, 1fr))",
-                        gap: "16px",
-                      })}
-                    >
+                    <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-4">
                       {incentives.map((incentive) => (
                         <div
                           key={incentive.tokenAddress}
-                          className={css({
-                            padding: "16px",
-                            backgroundColor: theme.colors.backgroundSecondary,
-                            borderRadius: "8px",
-                          })}
+                          className="rounded-lg bg-[var(--surface-secondary)] p-4"
                         >
-                          <LabelSmall
-                            color={theme.colors.contentSecondary}
-                            marginBottom="scale200"
-                          >
+                          <p className="mb-2 text-2xs uppercase tracking-wider text-[var(--content-tertiary)]">
                             {incentive.symbol}
-                          </LabelSmall>
-                          <LabelMedium>
+                          </p>
+                          <p className="font-mono text-base font-medium tabular-nums text-[var(--content-primary)]">
                             {formatFixedPoint(
                               incentive.amount,
                               BigInt(incentive.decimals),
                             )}
-                          </LabelMedium>
+                          </p>
                         </div>
                       ))}
                     </div>

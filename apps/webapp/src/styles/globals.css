@@ -1,0 +1,488 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================
+   TERMINAL-THEMED DESIGN SYSTEM
+   Modern, clean, monospace aesthetic
+   ============================================ */
+
+/* CSS Custom Properties - Light Mode (Default) */
+:root {
+  /* Surfaces - slightly warm off-white for reduced eye strain */
+  --background: #fafaf9;
+  --surface: #ffffff;
+  --surface-secondary: #f5f5f4;
+  --surface-elevated: #ffffff;
+  --surface-inset: #f0f0ef;
+
+  /* Content/Text - strong contrast but not pure black */
+  --content-primary: #1c1917;
+  --content-secondary: #57534e;
+  --content-tertiary: #78716c;
+  --content-muted: #a8a29e;
+
+  /* Borders */
+  --border: #e7e5e4;
+  --border-focus: #f7931a;
+  --border-subtle: #f5f5f4;
+
+  /* Semantic colors */
+  --positive: #16a34a;
+  --positive-subtle: rgba(22, 163, 74, 0.1);
+  --negative: #dc2626;
+  --negative-subtle: rgba(220, 38, 38, 0.1);
+  --warning: #ca8a04;
+  --warning-subtle: rgba(202, 138, 4, 0.1);
+
+  /* Shadows */
+  --shadow-color: 0deg 0% 63%;
+  --shadow-elevation-low:
+    0.3px 0.5px 0.7px hsl(var(--shadow-color) / 0.1),
+    0.4px 0.8px 1px -1.2px hsl(var(--shadow-color) / 0.1),
+    1px 2px 2.5px -2.5px hsl(var(--shadow-color) / 0.1);
+  --shadow-elevation-medium:
+    0.3px 0.5px 0.7px hsl(var(--shadow-color) / 0.11),
+    0.8px 1.6px 2px -0.8px hsl(var(--shadow-color) / 0.11),
+    2.1px 4.1px 5.2px -1.7px hsl(var(--shadow-color) / 0.11),
+    5px 10px 12.6px -2.5px hsl(var(--shadow-color) / 0.11);
+}
+
+/* Dark Mode - charcoal grays, not pure black */
+.dark-mode {
+  --background: #0c0c0c;
+  --surface: #161616;
+  --surface-secondary: #1e1e1e;
+  --surface-elevated: #242424;
+  --surface-inset: #0a0a0a;
+
+  --content-primary: #fafaf9;
+  --content-secondary: #a8a29e;
+  --content-tertiary: #78716c;
+  --content-muted: #57534e;
+
+  --border: #2a2a2a;
+  --border-focus: #f7931a;
+  --border-subtle: #1e1e1e;
+
+  --positive: #22c55e;
+  --positive-subtle: rgba(34, 197, 94, 0.15);
+  --negative: #ef4444;
+  --negative-subtle: rgba(239, 68, 68, 0.15);
+  --warning: #eab308;
+  --warning-subtle: rgba(234, 179, 8, 0.15);
+
+  --shadow-color: 0deg 0% 5%;
+}
+
+/* ============================================
+   BASE STYLES
+   ============================================ */
+
+@layer base {
+  *,
+  *::before,
+  *::after {
+    font-family: "IBM Plex Mono", "JetBrains Mono", "Fira Code", "Consolas",
+      "Monaco", monospace;
+  }
+
+  html {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 16px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background-color: var(--background);
+    color: var(--content-primary);
+    overflow-x: hidden;
+    min-height: 100vh;
+  }
+
+  /* Selection styling */
+  ::selection {
+    background-color: rgba(247, 147, 26, 0.3);
+    color: inherit;
+  }
+
+  /* Focus styles for accessibility */
+  :focus-visible {
+    outline: 2px solid var(--border-focus);
+    outline-offset: 2px;
+  }
+
+  /* Scrollbar styling - terminal aesthetic */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: var(--surface-secondary);
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 4px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--content-muted);
+  }
+
+  /* Improved touch targets on mobile */
+  @media (max-width: 768px) {
+    button,
+    a,
+    [role="button"],
+    input[type="button"],
+    input[type="submit"] {
+      min-height: 44px;
+    }
+  }
+
+  /* Prevent iOS input zoom */
+  @media (max-width: 768px) {
+    input[type="text"],
+    input[type="number"],
+    input[type="email"],
+    input[type="password"],
+    textarea,
+    select {
+      font-size: 16px !important;
+    }
+  }
+}
+
+/* ============================================
+   COMPONENT UTILITIES
+   ============================================ */
+
+@layer components {
+  /* Terminal-style card */
+  .card {
+    @apply bg-surface border border-border rounded-xl;
+  }
+
+  .card-elevated {
+    @apply bg-surface-elevated border border-border rounded-xl shadow-terminal;
+  }
+
+  /* Terminal prompt styling */
+  .terminal-prompt::before {
+    content: "$ ";
+    @apply text-terminal-green opacity-70;
+  }
+
+  /* Monospace number formatting */
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Status indicators */
+  .status-dot {
+    @apply w-2 h-2 rounded-full;
+  }
+
+  .status-dot-active {
+    @apply bg-positive shadow-glow-positive;
+  }
+
+  .status-dot-warning {
+    @apply bg-warning;
+  }
+
+  .status-dot-error {
+    @apply bg-negative;
+  }
+
+  /* Interactive elements */
+  .interactive {
+    @apply transition-colors duration-150 ease-out;
+  }
+
+  .interactive:hover {
+    @apply bg-surface-secondary;
+  }
+
+  /* Button base styles */
+  .btn {
+    @apply inline-flex items-center justify-center;
+    @apply px-4 py-2.5 min-h-[44px];
+    @apply text-sm font-medium;
+    @apply rounded-lg border;
+    @apply transition-all duration-150 ease-out;
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-surface;
+  }
+
+  .btn-primary {
+    @apply bg-brand text-white border-transparent;
+    @apply hover:bg-brand-hover;
+    @apply active:scale-[0.98];
+  }
+
+  .btn-secondary {
+    @apply bg-surface text-content-primary border-border;
+    @apply hover:bg-surface-secondary hover:border-border;
+    @apply active:scale-[0.98];
+  }
+
+  .btn-ghost {
+    @apply bg-transparent text-content-secondary border-transparent;
+    @apply hover:bg-surface-secondary hover:text-content-primary;
+  }
+
+  /* Input styles */
+  .input {
+    @apply w-full px-3 py-2.5;
+    @apply bg-surface border border-border rounded-lg;
+    @apply text-content-primary placeholder:text-content-muted;
+    @apply transition-colors duration-150;
+    @apply focus:outline-none focus:border-border-focus focus:ring-1 focus:ring-border-focus;
+  }
+
+  /* Tag/Badge styles */
+  .tag {
+    @apply inline-flex items-center;
+    @apply px-2 py-0.5;
+    @apply text-xs font-medium rounded;
+  }
+
+  .tag-positive {
+    @apply bg-positive-subtle text-positive;
+  }
+
+  .tag-negative {
+    @apply bg-negative-subtle text-negative;
+  }
+
+  .tag-warning {
+    @apply bg-warning-subtle text-warning;
+  }
+
+  .tag-neutral {
+    @apply bg-surface-secondary text-content-secondary;
+  }
+}
+
+/* ============================================
+   UTILITY CLASSES
+   ============================================ */
+
+@layer utilities {
+  /* Text utilities */
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  /* Gradient text */
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-brand to-terminal-amber;
+  }
+
+  /* Glow effects */
+  .glow {
+    box-shadow: 0 0 20px rgba(247, 147, 26, 0.3);
+  }
+
+  .glow-sm {
+    box-shadow: 0 0 10px rgba(247, 147, 26, 0.2);
+  }
+
+  /* Terminal cursor */
+  .cursor-blink::after {
+    content: "_";
+    @apply animate-cursor-blink text-brand;
+  }
+
+  /* Hide scrollbar but keep functionality */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Animation delays for staggered effects */
+  .delay-0 {
+    animation-delay: 0ms;
+  }
+  .delay-1 {
+    animation-delay: 50ms;
+  }
+  .delay-2 {
+    animation-delay: 100ms;
+  }
+  .delay-3 {
+    animation-delay: 150ms;
+  }
+  .delay-4 {
+    animation-delay: 200ms;
+  }
+  .delay-5 {
+    animation-delay: 250ms;
+  }
+  .delay-6 {
+    animation-delay: 300ms;
+  }
+  .delay-7 {
+    animation-delay: 350ms;
+  }
+  .delay-8 {
+    animation-delay: 400ms;
+  }
+  .delay-9 {
+    animation-delay: 450ms;
+  }
+  .delay-10 {
+    animation-delay: 500ms;
+  }
+
+  /* Dynamic delay using CSS variable */
+  [style*="--delay"] {
+    animation-delay: calc(var(--delay) * 50ms);
+  }
+}
+
+/* ============================================
+   SPRING ANIMATIONS (preserved from existing)
+   ============================================ */
+
+.spring-fly-in {
+  animation: springFlyIn 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  opacity: 0;
+}
+
+.spring-fly-in-card {
+  animation: springFlyInCard 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  opacity: 0;
+}
+
+@keyframes springFlyIn {
+  0% {
+    opacity: 0;
+    transform: scale(1.35);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes springFlyInCard {
+  0% {
+    opacity: 0;
+    transform: scale(1.4);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Staggered animation delays (compatibility with existing SpringIn component) */
+.spring-delay-0 {
+  animation-delay: 0ms;
+}
+.spring-delay-1 {
+  animation-delay: 50ms;
+}
+.spring-delay-2 {
+  animation-delay: 100ms;
+}
+.spring-delay-3 {
+  animation-delay: 150ms;
+}
+.spring-delay-4 {
+  animation-delay: 200ms;
+}
+.spring-delay-5 {
+  animation-delay: 250ms;
+}
+.spring-delay-6 {
+  animation-delay: 300ms;
+}
+.spring-delay-7 {
+  animation-delay: 350ms;
+}
+.spring-delay-8 {
+  animation-delay: 400ms;
+}
+.spring-delay-9 {
+  animation-delay: 450ms;
+}
+.spring-delay-10 {
+  animation-delay: 500ms;
+}
+
+[style*="--spring-delay"] {
+  animation-delay: calc(var(--spring-delay) * 50ms);
+}
+
+/* ============================================
+   MEZO-CLAY OVERRIDES
+   Clean integration with the design system
+   ============================================ */
+
+/* Override mezo-clay fonts - completely replace Riforma with IBM Plex Mono */
+[data-baseweb],
+[data-baseweb] *,
+[class*="css-"] {
+  font-family: "IBM Plex Mono", monospace !important;
+}
+
+/* Block any Riforma font declarations from mezo-clay */
+@font-face {
+  font-family: "RiformaLLWeb-Light";
+  src: local("IBM Plex Mono");
+}
+@font-face {
+  font-family: "RiformaLLWeb-Regular";
+  src: local("IBM Plex Mono");
+}
+@font-face {
+  font-family: "RiformaLLWeb-Medium";
+  src: local("IBM Plex Mono");
+}
+@font-face {
+  font-family: "RiformaLLWeb-Bold";
+  src: local("IBM Plex Mono");
+}
+@font-face {
+  font-family: "RiformaLLWeb-Heavy";
+  src: local("IBM Plex Mono");
+}
+@font-face {
+  font-family: "RiformaMonoLLWeb-Regular";
+  src: local("IBM Plex Mono");
+}
+
+/* Card overrides */
+[data-baseweb="card"] {
+  background-color: var(--surface) !important;
+  border-color: var(--border) !important;
+}
+
+/* Button touch target enforcement */
+[data-baseweb="button"] {
+  min-height: 44px;
+}
+
+/* Input styling */
+[data-baseweb="input"] {
+  background-color: var(--surface) !important;
+  border-color: var(--border) !important;
+}
+
+[data-baseweb="input"]:focus-within {
+  border-color: var(--border-focus) !important;
+}

@@ -18,12 +18,7 @@ import {
   Card,
   ChevronDown,
   ChevronUp,
-  HeadingLarge,
   Input,
-  LabelMedium,
-  LabelSmall,
-  ParagraphMedium,
-  ParagraphSmall,
   Select,
   Skeleton,
   TableBuilder,
@@ -53,8 +48,8 @@ type GaugeWithAllocation = BoostGauge & {
   votingPct: number
 }
 
-export default function BoostPage() {
-  const [css, theme] = useStyletron()
+export default function BoostPage(): JSX.Element {
+  const [, theme] = useStyletron()
   const { isConnected } = useAccount()
   const { locks: veMEZOLocks, isLoading: isLoadingLocks } = useVeMEZOLocks()
   const { gauges, isLoading: isLoadingGauges } = useBoostGauges()
@@ -125,7 +120,7 @@ export default function BoostPage() {
     [gaugeSortColumn],
   )
 
-  const getGaugeSortIndicator = (column: GaugeSortColumn) => {
+  const getGaugeSortIndicator = (column: GaugeSortColumn): JSX.Element => {
     if (gaugeSortColumn === column) {
       return gaugeSortDirection === "asc" ? (
         <ChevronUp size={16} />
@@ -135,7 +130,7 @@ export default function BoostPage() {
     }
     // Show neutral chevron to indicate sortable
     return (
-      <span className={css({ opacity: 0.3 })}>
+      <span className="opacity-30">
         <ChevronDown size={16} />
       </span>
     )
@@ -147,20 +142,10 @@ export default function BoostPage() {
   }: {
     column: GaugeSortColumn
     children: React.ReactNode
-  }) => (
+  }): JSX.Element => (
     <button
       type="button"
-      className={css({
-        cursor: "pointer",
-        display: "inline-flex",
-        alignItems: "center",
-        gap: "4px",
-        background: "none",
-        border: "none",
-        padding: 0,
-        font: "inherit",
-        color: "inherit",
-      })}
+      className="inline-flex cursor-pointer items-center gap-1 border-none bg-transparent p-0 font-inherit text-inherit"
       onClick={() => handleGaugeSort(column)}
     >
       {children}
@@ -277,45 +262,29 @@ export default function BoostPage() {
 
   return (
     <Layout>
-      <div
-        className={css({
-          display: "flex",
-          flexDirection: "column",
-          gap: "24px",
-        })}
-      >
-        <div>
-          <HeadingLarge marginBottom="scale300">
-            Boost veBTC with veMEZO
-          </HeadingLarge>
-          <ParagraphMedium color={theme.colors.contentSecondary}>
+      <div className="flex flex-col gap-6">
+        {/* Page Header */}
+        <header>
+          <h1 className="mb-2 text-2xl font-semibold text-[var(--content-primary)]">
+            <span className="text-[#F7931A]">$</span> boost --vote
+          </h1>
+          <p className="text-sm text-[var(--content-secondary)]">
             Use your veMEZO voting power to boost veBTC gauges and earn bribes
-          </ParagraphMedium>
-        </div>
+          </p>
+        </header>
 
         {!isConnected ? (
           <SpringIn delay={0} variant="card">
             <Card withBorder overrides={{}}>
-              <div
-                className={css({
-                  padding: "48px",
-                  textAlign: "center",
-                })}
-              >
-                <ParagraphMedium color={theme.colors.contentSecondary}>
+              <div className="p-12 text-center">
+                <p className="text-sm text-[var(--content-secondary)]">
                   Connect your wallet to vote with veMEZO
-                </ParagraphMedium>
+                </p>
               </div>
             </Card>
           </SpringIn>
         ) : isLoading ? (
-          <div
-            className={css({
-              display: "flex",
-              flexDirection: "column",
-              gap: "16px",
-            })}
-          >
+          <div className="flex flex-col gap-4">
             <Skeleton width="100%" height="150px" animation />
             <Skeleton width="100%" height="150px" animation />
           </div>
@@ -325,22 +294,13 @@ export default function BoostPage() {
             {veMEZOLocks.length > 0 && (
               <SpringIn delay={0} variant="card">
                 <Card title="Vote on Gauge" withBorder overrides={{}}>
-                  <div className={css({ padding: "16px 0" })}>
-                    <div
-                      className={css({
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: "16px",
-                      })}
-                    >
+                  <div className="py-4">
+                    <div className="flex flex-col gap-4">
                       {/* veMEZO Lock Selection */}
                       <div>
-                        <LabelSmall
-                          color={theme.colors.contentSecondary}
-                          marginBottom="scale200"
-                        >
+                        <p className="mb-2 text-xs text-[var(--content-secondary)]">
                           Select veMEZO Lock
-                        </LabelSmall>
+                        </p>
                         <Select
                           options={veMEZOLocks.map((lock, i) => ({
                             label: `veMEZO #${lock.tokenId.toString()} - ${formatUnits(lock.votingPower, 18).slice(0, 8)} voting power`,
@@ -362,53 +322,34 @@ export default function BoostPage() {
                       </div>
 
                       {selectedLock && (
-                        <div
-                          className={css({
-                            padding: "16px",
-                            backgroundColor: theme.colors.backgroundSecondary,
-                            borderRadius: "8px",
-                          })}
-                        >
-                          <div
-                            className={css({
-                              display: "grid",
-                              gridTemplateColumns: "1fr 1fr 1fr",
-                              gap: "16px",
-                              "@media (max-width: 768px)": {
-                                gridTemplateColumns: "1fr 1fr",
-                              },
-                              "@media (max-width: 480px)": {
-                                gridTemplateColumns: "1fr",
-                                gap: "12px",
-                              },
-                            })}
-                          >
+                        <div className="rounded-lg bg-[var(--surface-secondary)] p-4">
+                          <div className="grid grid-cols-3 gap-4 max-md:grid-cols-2 max-sm:grid-cols-1 max-sm:gap-3">
                             <div>
-                              <LabelSmall color={theme.colors.contentSecondary}>
+                              <p className="text-xs text-[var(--content-secondary)]">
                                 Total Voting Power
-                              </LabelSmall>
-                              <LabelMedium>
+                              </p>
+                              <p className="font-mono text-sm font-medium tabular-nums text-[var(--content-primary)]">
                                 {formatUnits(
                                   selectedLock.votingPower,
                                   18,
                                 ).slice(0, 10)}
-                              </LabelMedium>
+                              </p>
                             </div>
                             <div>
-                              <LabelSmall color={theme.colors.contentSecondary}>
+                              <p className="text-xs text-[var(--content-secondary)]">
                                 Used
-                              </LabelSmall>
-                              <LabelMedium>
+                              </p>
+                              <p className="font-mono text-sm font-medium tabular-nums text-[var(--content-primary)]">
                                 {usedWeight
                                   ? formatUnits(usedWeight, 18).slice(0, 10)
                                   : "0"}
-                              </LabelMedium>
+                              </p>
                             </div>
                             <div>
-                              <LabelSmall color={theme.colors.contentSecondary}>
+                              <p className="text-xs text-[var(--content-secondary)]">
                                 Remaining
-                              </LabelSmall>
-                              <LabelMedium>
+                              </p>
+                              <p className="font-mono text-sm font-medium tabular-nums text-[var(--content-primary)]">
                                 {formatUnits(
                                   selectedLock.votingPower > (usedWeight ?? 0n)
                                     ? selectedLock.votingPower -
@@ -416,38 +357,29 @@ export default function BoostPage() {
                                     : 0n,
                                   18,
                                 ).slice(0, 10)}
-                              </LabelMedium>
+                              </p>
                             </div>
                           </div>
                           {hasVotedThisEpoch && (
-                            <div className={css({ marginTop: "12px" })}>
+                            <div className="mt-3">
                               <Tag color="yellow" closeable={false}>
                                 Already voted this epoch
                               </Tag>
                             </div>
                           )}
                           {!isInVotingWindow && !hasVotedThisEpoch && (
-                            <div className={css({ marginTop: "12px" })}>
+                            <div className="mt-3">
                               <Tag color="yellow" closeable={false}>
                                 Outside voting window
                               </Tag>
                             </div>
                           )}
                           {currentAllocations.length > 0 && (
-                            <div className={css({ marginTop: "12px" })}>
-                              <LabelSmall
-                                color={theme.colors.contentSecondary}
-                                marginBottom="scale200"
-                              >
+                            <div className="mt-3">
+                              <p className="mb-2 text-xs text-[var(--content-secondary)]">
                                 Current Vote Allocations
-                              </LabelSmall>
-                              <div
-                                className={css({
-                                  display: "flex",
-                                  flexDirection: "column",
-                                  gap: "8px",
-                                })}
-                              >
+                              </p>
+                              <div className="flex flex-col gap-2">
                                 {currentAllocations.map((allocation) => {
                                   const gauge = gauges.find(
                                     (g) =>
@@ -457,26 +389,22 @@ export default function BoostPage() {
                                   return (
                                     <div
                                       key={allocation.gaugeAddress}
-                                      className={css({
-                                        display: "flex",
-                                        justifyContent: "space-between",
-                                        alignItems: "center",
-                                      })}
+                                      className="flex items-center justify-between"
                                     >
-                                      <LabelSmall>
+                                      <span className="text-xs">
                                         <AddressLink
                                           address={allocation.gaugeAddress}
                                         />
                                         {gauge &&
                                           gauge.veBTCTokenId > 0n &&
                                           ` (veBTC #${gauge.veBTCTokenId.toString()})`}
-                                      </LabelSmall>
-                                      <LabelMedium>
+                                      </span>
+                                      <span className="font-mono text-sm font-medium tabular-nums text-[var(--content-primary)]">
                                         {formatUnits(
                                           allocation.weight,
                                           18,
                                         ).slice(0, 10)}
-                                      </LabelMedium>
+                                      </span>
                                     </div>
                                   )
                                 })}
@@ -488,42 +416,27 @@ export default function BoostPage() {
 
                       {/* Gauge Allocation */}
                       <div>
-                        <div
-                          className={css({
-                            display: "flex",
-                            justifyContent: "space-between",
-                            alignItems: "center",
-                            marginBottom: "scale400",
-                          })}
-                        >
-                          <LabelSmall color={theme.colors.contentSecondary}>
+                        <div className="mb-4 flex items-center justify-between">
+                          <p className="text-xs text-[var(--content-secondary)]">
                             Allocate Voting Power to Gauges
-                          </LabelSmall>
-                          <LabelSmall
-                            color={
+                          </p>
+                          <p
+                            className={`text-xs ${
                               totalAllocation > 100
-                                ? theme.colors.negative
-                                : theme.colors.contentSecondary
-                            }
+                                ? "text-[var(--negative)]"
+                                : "text-[var(--content-secondary)]"
+                            }`}
                           >
                             Total: {totalAllocation}%
                             {totalAllocation > 100 && " (exceeds 100%)"}
-                          </LabelSmall>
+                          </p>
                         </div>
 
                         {/* Status filter */}
-                        <div
-                          className={css({
-                            display: "flex",
-                            gap: "8px",
-                            alignItems: "center",
-                            marginBottom: "scale400",
-                            flexWrap: "wrap",
-                          })}
-                        >
-                          <LabelSmall color={theme.colors.contentSecondary}>
+                        <div className="mb-4 flex flex-wrap items-center gap-2">
+                          <span className="text-xs text-[var(--content-secondary)]">
                             Filter:
-                          </LabelSmall>
+                          </span>
                           <Tag
                             closeable={false}
                             onClick={() => setGaugeStatusFilter("all")}
@@ -554,24 +467,11 @@ export default function BoostPage() {
                         </div>
 
                         {gauges.length === 0 ? (
-                          <ParagraphMedium
-                            color={theme.colors.contentSecondary}
-                          >
+                          <p className="text-sm text-[var(--content-secondary)]">
                             No gauges available to vote on
-                          </ParagraphMedium>
+                          </p>
                         ) : (
-                          <div
-                            className={css({
-                              overflowX: "auto",
-                              WebkitOverflowScrolling: "touch",
-                              margin: "0 -16px",
-                              padding: "0 16px",
-                              "@media (max-width: 768px)": {
-                                margin: "0 -12px",
-                                padding: "0 12px",
-                              },
-                            })}
-                          >
+                          <div className="-mx-4 overflow-x-auto px-4 md:-mx-3 md:px-3">
                             <TableBuilder
                               data={filteredAndSortedGauges}
                               overrides={{
@@ -611,135 +511,54 @@ export default function BoostPage() {
                                   return (
                                     <Link
                                       href={`/gauges/${gauge.address}`}
-                                      className={css({
-                                        display: "flex",
-                                        alignItems: "center",
-                                        gap: "12px",
-                                        textDecoration: "none",
-                                        color: "inherit",
-                                        ":hover": {
-                                          opacity: 0.8,
-                                        },
-                                      })}
+                                      className="flex items-center gap-3 text-inherit no-underline transition-opacity hover:opacity-80"
                                     >
                                       {/* Profile Picture */}
-                                      <div
-                                        className={css({
-                                          width: "36px",
-                                          height: "36px",
-                                          borderRadius: "50%",
-                                          backgroundColor:
-                                            theme.colors.backgroundSecondary,
-                                          display: "flex",
-                                          alignItems: "center",
-                                          justifyContent: "center",
-                                          overflow: "hidden",
-                                          flexShrink: 0,
-                                          border: `1px solid ${theme.colors.borderOpaque}`,
-                                        })}
-                                      >
+                                      <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center overflow-hidden rounded-full border border-[var(--border)] bg-[var(--surface-secondary)]">
                                         {profile?.profile_picture_url ? (
                                           <img
                                             src={profile.profile_picture_url}
                                             alt={`Gauge #${gauge.veBTCTokenId.toString()}`}
-                                            className={css({
-                                              width: "100%",
-                                              height: "100%",
-                                              objectFit: "cover",
-                                            })}
+                                            className="h-full w-full object-cover"
                                           />
                                         ) : (
-                                          <LabelSmall
-                                            color={
-                                              theme.colors.contentSecondary
-                                            }
-                                            overrides={{
-                                              Block: {
-                                                style: { fontSize: "10px" },
-                                              },
-                                            }}
-                                          >
+                                          <span className="text-2xs text-[var(--content-secondary)]">
                                             #
                                             {gauge.veBTCTokenId > 0n
                                               ? gauge.veBTCTokenId.toString()
                                               : "?"}
-                                          </LabelSmall>
+                                          </span>
                                         )}
                                       </div>
                                       {/* Gauge Info */}
-                                      <div
-                                        className={css({
-                                          display: "flex",
-                                          flexDirection: "column",
-                                          gap: "2px",
-                                          minWidth: 0,
-                                        })}
-                                      >
-                                        <div
-                                          className={css({
-                                            display: "flex",
-                                            alignItems: "center",
-                                            gap: "6px",
-                                            flexWrap: "wrap",
-                                          })}
-                                        >
-                                          <LabelSmall
-                                            color={
+                                      <div className="flex min-w-0 flex-col gap-0.5">
+                                        <div className="flex flex-wrap items-center gap-1.5">
+                                          <span
+                                            className={`text-xs font-medium ${
                                               profile?.display_name ||
                                               profile?.description ||
                                               profile?.profile_picture_url
-                                                ? theme.colors.positive
-                                                : theme.colors.negative
-                                            }
+                                                ? "text-[var(--positive)]"
+                                                : "text-[var(--negative)]"
+                                            }`}
                                           >
                                             {profile?.display_name
                                               ? profile.display_name
                                               : gauge.veBTCTokenId > 0n
                                                 ? `veBTC #${gauge.veBTCTokenId.toString()}`
                                                 : `${gauge.address.slice(0, 6)}...${gauge.address.slice(-4)}`}
-                                          </LabelSmall>
+                                          </span>
                                           {profile?.display_name &&
                                             gauge.veBTCTokenId > 0n && (
-                                              <span
-                                                className={css({
-                                                  display: "inline-flex",
-                                                  alignItems: "center",
-                                                  padding: "1px 5px",
-                                                  borderRadius: "4px",
-                                                  backgroundColor:
-                                                    "rgba(247, 147, 26, 0.15)",
-                                                  border:
-                                                    "1px solid rgba(247, 147, 26, 0.3)",
-                                                  fontSize: "9px",
-                                                  fontWeight: 600,
-                                                  color: "#F7931A",
-                                                  fontFamily: "monospace",
-                                                  letterSpacing: "0.5px",
-                                                })}
-                                              >
+                                              <span className="inline-flex items-center rounded border border-[rgba(247,147,26,0.3)] bg-[rgba(247,147,26,0.15)] px-1.5 py-0.5 font-mono text-2xs font-semibold tracking-wide text-[#F7931A]">
                                                 #{gauge.veBTCTokenId.toString()}
                                               </span>
                                             )}
                                         </div>
                                         {profile?.description && (
-                                          <ParagraphSmall
-                                            color={
-                                              theme.colors.contentSecondary
-                                            }
-                                            overrides={{
-                                              Block: {
-                                                style: {
-                                                  overflow: "hidden",
-                                                  textOverflow: "ellipsis",
-                                                  whiteSpace: "nowrap",
-                                                  maxWidth: "150px",
-                                                  margin: 0,
-                                                },
-                                              },
-                                            }}
-                                          >
+                                          <span className="max-w-[150px] truncate text-2xs text-[var(--content-secondary)]">
                                             {profile.description}
-                                          </ParagraphSmall>
+                                          </span>
                                         )}
                                       </div>
                                     </Link>
@@ -753,14 +572,16 @@ export default function BoostPage() {
                                   </GaugeSortableHeader>
                                 }
                               >
-                                {(gauge: GaugeWithAllocation) =>
-                                  gauge.veBTCWeight !== undefined
-                                    ? formatUnits(gauge.veBTCWeight, 18).slice(
-                                        0,
-                                        10,
-                                      )
-                                    : "-"
-                                }
+                                {(gauge: GaugeWithAllocation) => (
+                                  <span className="font-mono text-sm tabular-nums">
+                                    {gauge.veBTCWeight !== undefined
+                                      ? formatUnits(
+                                          gauge.veBTCWeight,
+                                          18,
+                                        ).slice(0, 10)
+                                      : "-"}
+                                  </span>
+                                )}
                               </TableBuilderColumn>
                               <TableBuilderColumn
                                 header={
@@ -769,12 +590,14 @@ export default function BoostPage() {
                                   </GaugeSortableHeader>
                                 }
                               >
-                                {(gauge: GaugeWithAllocation) =>
-                                  formatUnits(gauge.totalWeight, 18).slice(
-                                    0,
-                                    10,
-                                  )
-                                }
+                                {(gauge: GaugeWithAllocation) => (
+                                  <span className="font-mono text-sm tabular-nums">
+                                    {formatUnits(gauge.totalWeight, 18).slice(
+                                      0,
+                                      10,
+                                    )}
+                                  </span>
+                                )}
                               </TableBuilderColumn>
                               <TableBuilderColumn
                                 header={
@@ -783,9 +606,11 @@ export default function BoostPage() {
                                   </GaugeSortableHeader>
                                 }
                               >
-                                {(gauge: GaugeWithAllocation) =>
-                                  formatMultiplier(gauge.boostMultiplier)
-                                }
+                                {(gauge: GaugeWithAllocation) => (
+                                  <span className="font-mono text-sm tabular-nums">
+                                    {formatMultiplier(gauge.boostMultiplier)}
+                                  </span>
+                                )}
                               </TableBuilderColumn>
                               <TableBuilderColumn
                                 header={
@@ -800,23 +625,21 @@ export default function BoostPage() {
                                   )
                                   if (isLoadingAPY) {
                                     return (
-                                      <LabelSmall
-                                        color={theme.colors.contentSecondary}
-                                      >
+                                      <span className="text-xs text-[var(--content-secondary)]">
                                         ...
-                                      </LabelSmall>
+                                      </span>
                                     )
                                   }
                                   return (
-                                    <LabelSmall
-                                      color={
+                                    <span
+                                      className={`font-mono text-sm font-medium ${
                                         apyData?.apy && apyData.apy > 0
-                                          ? theme.colors.positive
-                                          : theme.colors.contentSecondary
-                                      }
+                                          ? "text-[var(--positive)]"
+                                          : "text-[var(--content-secondary)]"
+                                      }`}
                                     >
                                       {formatAPY(apyData?.apy ?? null)}
-                                    </LabelSmall>
+                                    </span>
                                   )
                                 }}
                               </TableBuilderColumn>
@@ -827,13 +650,15 @@ export default function BoostPage() {
                                   </GaugeSortableHeader>
                                 }
                               >
-                                {(gauge: GaugeWithAllocation) =>
-                                  gauge.optimalAdditionalVeMEZO !== undefined
-                                    ? formatFixedPoint(
-                                        gauge.optimalAdditionalVeMEZO,
-                                      )
-                                    : "-"
-                                }
+                                {(gauge: GaugeWithAllocation) => (
+                                  <span className="font-mono text-sm tabular-nums">
+                                    {gauge.optimalAdditionalVeMEZO !== undefined
+                                      ? formatFixedPoint(
+                                          gauge.optimalAdditionalVeMEZO,
+                                        )
+                                      : "-"}
+                                  </span>
+                                )}
                               </TableBuilderColumn>
                               <TableBuilderColumn header="Status">
                                 {(gauge: GaugeWithAllocation) => (
@@ -853,13 +678,7 @@ export default function BoostPage() {
                                   const hasVote =
                                     currentVote !== undefined && currentVote > 0
                                   return (
-                                    <div
-                                      className={css({
-                                        display: "flex",
-                                        alignItems: "center",
-                                        gap: "4px",
-                                      })}
-                                    >
+                                    <div className="flex items-center gap-1">
                                       <Input
                                         value={currentVote?.toString() ?? ""}
                                         onChange={(e) =>
@@ -878,7 +697,9 @@ export default function BoostPage() {
                                           },
                                         }}
                                       />
-                                      <LabelMedium>%</LabelMedium>
+                                      <span className="font-mono text-sm font-medium text-[var(--content-primary)]">
+                                        %
+                                      </span>
                                     </div>
                                   )
                                 }}
@@ -889,18 +710,7 @@ export default function BoostPage() {
                       </div>
 
                       {/* Vote Buttons */}
-                      <div
-                        className={css({
-                          display: "flex",
-                          gap: "16px",
-                          marginTop: "8px",
-                          flexWrap: "wrap",
-                          "@media (max-width: 480px)": {
-                            flexDirection: "column",
-                            gap: "12px",
-                          },
-                        })}
-                      >
+                      <div className="mt-2 flex flex-wrap gap-4 max-sm:flex-col max-sm:gap-3">
                         <Button
                           kind="primary"
                           onClick={handleVote}
@@ -935,16 +745,11 @@ export default function BoostPage() {
             {veMEZOLocks.length === 0 && (
               <SpringIn delay={0} variant="card">
                 <Card withBorder overrides={{}}>
-                  <div
-                    className={css({
-                      padding: "48px",
-                      textAlign: "center",
-                    })}
-                  >
-                    <ParagraphMedium color={theme.colors.contentSecondary}>
+                  <div className="p-12 text-center">
+                    <p className="text-sm text-[var(--content-secondary)]">
                       You need MEZO tokens to create a veMEZO lock and vote on
                       gauges.
-                    </ParagraphMedium>
+                    </p>
                   </div>
                 </Card>
               </SpringIn>

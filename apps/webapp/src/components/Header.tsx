@@ -1,5 +1,5 @@
 import { useTheme } from "@/contexts/ThemeContext"
-import { Button, LabelMedium, useStyletron } from "@mezo-org/mezo-clay"
+import { Button } from "@mezo-org/mezo-clay"
 import NextLink from "next/link"
 import { useRouter } from "next/router"
 import { useEffect, useState } from "react"
@@ -7,17 +7,18 @@ import { useAccount, useConnect, useDisconnect } from "wagmi"
 import { injected } from "wagmi/connectors"
 import { TokenPrices } from "./TokenPrices"
 
-function SunIcon({ color }: { color: string }) {
+function SunIcon(): JSX.Element {
   return (
     <svg
       width="18"
       height="18"
       viewBox="0 0 24 24"
       fill="none"
-      stroke={color}
+      stroke="currentColor"
       strokeWidth="2"
       strokeLinecap="round"
       strokeLinejoin="round"
+      aria-hidden="true"
     >
       <circle cx="12" cy="12" r="5" />
       <line x1="12" y1="1" x2="12" y2="3" />
@@ -32,34 +33,36 @@ function SunIcon({ color }: { color: string }) {
   )
 }
 
-function MoonIcon({ color }: { color: string }) {
+function MoonIcon(): JSX.Element {
   return (
     <svg
       width="18"
       height="18"
       viewBox="0 0 24 24"
       fill="none"
-      stroke={color}
+      stroke="currentColor"
       strokeWidth="2"
       strokeLinecap="round"
       strokeLinejoin="round"
+      aria-hidden="true"
     >
       <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
     </svg>
   )
 }
 
-function MenuIcon({ color }: { color: string }) {
+function MenuIcon(): JSX.Element {
   return (
     <svg
       width="24"
       height="24"
       viewBox="0 0 24 24"
       fill="none"
-      stroke={color}
+      stroke="currentColor"
       strokeWidth="2"
       strokeLinecap="round"
       strokeLinejoin="round"
+      aria-hidden="true"
     >
       <line x1="3" y1="12" x2="21" y2="12" />
       <line x1="3" y1="6" x2="21" y2="6" />
@@ -68,17 +71,18 @@ function MenuIcon({ color }: { color: string }) {
   )
 }
 
-function CloseIcon({ color }: { color: string }) {
+function CloseIcon(): JSX.Element {
   return (
     <svg
       width="24"
       height="24"
       viewBox="0 0 24 24"
       fill="none"
-      stroke={color}
+      stroke="currentColor"
       strokeWidth="2"
       strokeLinecap="round"
       strokeLinejoin="round"
+      aria-hidden="true"
     >
       <line x1="18" y1="6" x2="6" y2="18" />
       <line x1="6" y1="6" x2="18" y2="18" />
@@ -86,8 +90,33 @@ function CloseIcon({ color }: { color: string }) {
   )
 }
 
-export function Header() {
-  const [css, theme] = useStyletron()
+function TerminalIcon(): JSX.Element {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <polyline points="4 17 10 11 4 5" />
+      <line x1="12" y1="19" x2="20" y2="19" />
+    </svg>
+  )
+}
+
+const navItems = [
+  { href: "/dashboard", label: "dashboard" },
+  { href: "/gauges", label: "gauges" },
+  { href: "/boost", label: "boost" },
+  { href: "/incentives", label: "incentives" },
+]
+
+export function Header(): JSX.Element {
   const router = useRouter()
   const { address, isConnected } = useAccount()
   const { connect } = useConnect()
@@ -95,12 +124,10 @@ export function Header() {
   const { theme: currentTheme, toggleTheme } = useTheme()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
-  // Close mobile menu on route change
   useEffect(() => {
     setMobileMenuOpen(false)
   }, [router.pathname])
 
-  // Prevent body scroll when mobile menu is open
   useEffect(() => {
     if (mobileMenuOpen) {
       document.body.style.overflow = "hidden"
@@ -116,281 +143,162 @@ export function Header() {
     connect({ connector: injected() })
   }
 
-  const navItems = [
-    { href: "/dashboard", label: "Dashboard" },
-    { href: "/gauges", label: "Gauges" },
-    { href: "/boost", label: "Boost" },
-    { href: "/incentives", label: "Incentives" },
-  ]
-
   return (
     <>
-      <header
-        className={css({
-          display: "grid",
-          gridTemplateColumns: "1fr auto 1fr",
-          alignItems: "center",
-          padding: "16px 24px",
-          borderBottom: `1px solid ${theme.colors.borderOpaque}`,
-          backgroundColor: theme.colors.backgroundPrimary,
-          position: "relative",
-          zIndex: 100,
-          "@media (max-width: 768px)": {
-            gridTemplateColumns: "auto 1fr auto",
-            padding: "12px 16px",
-          },
-        })}
-      >
-        {/* Logo */}
-        <div
-          className={css({
-            display: "flex",
-            alignItems: "center",
-          })}
-        >
-          <NextLink href="/" style={{ textDecoration: "none" }}>
-            <div
-              className={css({
-                display: "flex",
-                alignItems: "center",
-                height: "40px",
-                "@media (max-width: 768px)": {
-                  height: "32px",
-                },
-              })}
-            >
-              <img
-                src="/matchbox.png"
-                alt="Matchbox"
-                className={css({
-                  height: "100%",
-                  width: "auto",
-                  imageRendering: "crisp-edges",
-                  filter: currentTheme === "dark" ? "invert(1)" : "none",
-                })}
-              />
-            </div>
+      <header className="sticky top-0 z-50 border-b border-[var(--border)] bg-[var(--surface)]/95 backdrop-blur-sm">
+        <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4 md:h-16 md:px-6 lg:px-8">
+          {/* Logo */}
+          <NextLink
+            href="/"
+            className="flex items-center gap-2 text-[var(--content-primary)] no-underline transition-opacity hover:opacity-80"
+          >
+            <img
+              src="/matchbox.png"
+              alt=""
+              width={120}
+              height={32}
+              className="h-7 w-auto dark-mode:invert md:h-8"
+              style={{
+                imageRendering: "crisp-edges",
+                filter: currentTheme === "dark" ? "invert(1)" : "none",
+              }}
+            />
           </NextLink>
-        </div>
 
-        {/* Desktop Navigation */}
-        <nav
-          className={css({
-            display: "flex",
-            gap: "24px",
-            justifyContent: "center",
-            "@media (max-width: 768px)": {
-              display: "none",
-            },
-          })}
-        >
-          {navItems.map((item) => (
-            <NextLink
-              key={item.href}
-              href={item.href}
-              style={{ textDecoration: "none" }}
+          {/* Desktop Navigation */}
+          <nav
+            className="hidden items-center gap-1 md:flex"
+            aria-label="Main navigation"
+          >
+            {navItems.map((item) => {
+              const isActive = router.pathname === item.href
+              return (
+                <NextLink
+                  key={item.href}
+                  href={item.href}
+                  className={`
+                    relative px-3 py-2 text-sm transition-colors
+                    ${
+                      isActive
+                        ? "text-[var(--content-primary)]"
+                        : "text-[var(--content-secondary)] hover:text-[var(--content-primary)]"
+                    }
+                  `}
+                  style={{ textDecoration: "none" }}
+                >
+                  {isActive && (
+                    <span className="mr-1 text-[#F7931A]" aria-hidden="true">
+                      &gt;
+                    </span>
+                  )}
+                  {item.label}
+                  {isActive && (
+                    <span
+                      className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#F7931A]"
+                      aria-hidden="true"
+                    />
+                  )}
+                </NextLink>
+              )
+            })}
+          </nav>
+
+          {/* Desktop Actions */}
+          <div className="hidden items-center gap-3 md:flex">
+            <TokenPrices />
+
+            <button
+              type="button"
+              onClick={toggleTheme}
+              className="flex h-10 w-10 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--content-secondary)] transition-colors hover:bg-[var(--surface-secondary)] hover:text-[var(--content-primary)]"
+              aria-label={`Switch to ${currentTheme === "light" ? "dark" : "light"} mode`}
             >
-              <LabelMedium
-                color={
-                  router.pathname === item.href
-                    ? theme.colors.contentPrimary
-                    : theme.colors.contentSecondary
-                }
-                overrides={{
-                  Block: {
-                    style: {
-                      cursor: "pointer",
-                      ":hover": {
-                        color: theme.colors.contentPrimary,
-                      },
-                    },
-                  },
-                }}
-              >
-                {item.label}
-              </LabelMedium>
-            </NextLink>
-          ))}
-        </nav>
+              {currentTheme === "light" ? <MoonIcon /> : <SunIcon />}
+            </button>
 
-        {/* Desktop Actions */}
-        <div
-          className={css({
-            display: "flex",
-            justifyContent: "flex-end",
-            alignItems: "center",
-            gap: "12px",
-            "@media (max-width: 768px)": {
-              display: "none",
-            },
-          })}
-        >
-          <TokenPrices />
-          <Button
-            kind="secondary"
-            onClick={toggleTheme}
-            overrides={{
-              BaseButton: {
-                style: {
-                  minWidth: "44px",
-                  width: "44px",
-                  height: "44px",
-                  padding: "0",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                },
-              },
-            }}
-            aria-label={`Switch to ${currentTheme === "light" ? "dark" : "light"} mode`}
-          >
-            {currentTheme === "light" ? (
-              <MoonIcon color={theme.colors.contentPrimary} />
+            {isConnected && address ? (
+              <Button kind="secondary" onClick={() => disconnect()}>
+                <span className="font-mono text-xs tabular-nums">
+                  {address.slice(0, 6)}...{address.slice(-4)}
+                </span>
+              </Button>
             ) : (
-              <SunIcon color={theme.colors.contentPrimary} />
+              <Button kind="primary" onClick={handleConnect}>
+                <span className="flex items-center gap-2">
+                  <TerminalIcon />
+                  connect
+                </span>
+              </Button>
             )}
-          </Button>
-          {isConnected && address ? (
-            <Button kind="secondary" onClick={() => disconnect()}>
-              {address.slice(0, 6)}...{address.slice(-4)}
-            </Button>
-          ) : (
-            <Button kind="primary" onClick={handleConnect}>
-              Connect Wallet
-            </Button>
-          )}
-        </div>
+          </div>
 
-        {/* Mobile Menu Button */}
-        <div
-          className={css({
-            display: "none",
-            "@media (max-width: 768px)": {
-              display: "flex",
-              justifyContent: "flex-end",
-              alignItems: "center",
-              gap: "8px",
-            },
-          })}
-        >
-          <button
-            type="button"
-            onClick={toggleTheme}
-            className={css({
-              background: "none",
-              border: "none",
-              padding: "8px",
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            })}
-            aria-label={`Switch to ${currentTheme === "light" ? "dark" : "light"} mode`}
-          >
-            {currentTheme === "light" ? (
-              <MoonIcon color={theme.colors.contentPrimary} />
-            ) : (
-              <SunIcon color={theme.colors.contentPrimary} />
-            )}
-          </button>
-          <button
-            type="button"
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className={css({
-              background: "none",
-              border: "none",
-              padding: "8px",
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            })}
-            aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
-          >
-            {mobileMenuOpen ? (
-              <CloseIcon color={theme.colors.contentPrimary} />
-            ) : (
-              <MenuIcon color={theme.colors.contentPrimary} />
-            )}
-          </button>
+          {/* Mobile Actions */}
+          <div className="flex items-center gap-2 md:hidden">
+            <button
+              type="button"
+              onClick={toggleTheme}
+              className="flex h-11 w-11 items-center justify-center rounded-lg text-[var(--content-secondary)] transition-colors hover:bg-[var(--surface-secondary)] hover:text-[var(--content-primary)]"
+              aria-label={`Switch to ${currentTheme === "light" ? "dark" : "light"} mode`}
+            >
+              {currentTheme === "light" ? <MoonIcon /> : <SunIcon />}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="flex h-11 w-11 items-center justify-center rounded-lg text-[var(--content-secondary)] transition-colors hover:bg-[var(--surface-secondary)] hover:text-[var(--content-primary)]"
+              aria-expanded={mobileMenuOpen}
+              aria-controls="mobile-menu"
+              aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
+            >
+              {mobileMenuOpen ? <CloseIcon /> : <MenuIcon />}
+            </button>
+          </div>
         </div>
       </header>
 
       {/* Mobile Menu Overlay */}
       {mobileMenuOpen && (
         <div
-          className={css({
-            position: "fixed",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: theme.colors.backgroundPrimary,
-            zIndex: 99,
-            paddingTop: "70px",
-            display: "none",
-            "@media (max-width: 768px)": {
-              display: "flex",
-              flexDirection: "column",
-            },
-          })}
+          id="mobile-menu"
+          className="fixed inset-0 top-14 z-40 flex flex-col bg-[var(--surface)] md:hidden"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Mobile navigation menu"
         >
           <nav
-            className={css({
-              display: "flex",
-              flexDirection: "column",
-              padding: "24px",
-              gap: "8px",
-            })}
+            className="flex flex-col gap-1 p-4"
+            aria-label="Mobile navigation"
           >
-            {navItems.map((item) => (
-              <NextLink
-                key={item.href}
-                href={item.href}
-                style={{ textDecoration: "none" }}
-              >
-                <div
-                  className={css({
-                    padding: "16px",
-                    borderRadius: "12px",
-                    backgroundColor:
-                      router.pathname === item.href
-                        ? theme.colors.backgroundSecondary
-                        : "transparent",
-                    transition: "background-color 0.2s ease",
-                    ":hover": {
-                      backgroundColor: theme.colors.backgroundSecondary,
-                    },
-                  })}
-                >
-                  <LabelMedium
-                    color={
-                      router.pathname === item.href
-                        ? theme.colors.contentPrimary
-                        : theme.colors.contentSecondary
+            {navItems.map((item) => {
+              const isActive = router.pathname === item.href
+              return (
+                <NextLink
+                  key={item.href}
+                  href={item.href}
+                  className={`
+                    flex items-center rounded-lg px-4 py-3 text-lg transition-colors
+                    ${
+                      isActive
+                        ? "bg-[var(--surface-secondary)] text-[var(--content-primary)]"
+                        : "text-[var(--content-secondary)] hover:bg-[var(--surface-secondary)] hover:text-[var(--content-primary)]"
                     }
-                    overrides={{
-                      Block: {
-                        style: {
-                          fontSize: "18px",
-                        },
-                      },
-                    }}
-                  >
-                    {item.label}
-                  </LabelMedium>
-                </div>
-              </NextLink>
-            ))}
+                  `}
+                  style={{ textDecoration: "none" }}
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  {isActive && (
+                    <span className="mr-2 text-[#F7931A]" aria-hidden="true">
+                      &gt;
+                    </span>
+                  )}
+                  {item.label}
+                </NextLink>
+              )
+            })}
           </nav>
 
-          <div
-            className={css({
-              padding: "24px",
-              marginTop: "auto",
-              borderTop: `1px solid ${theme.colors.borderOpaque}`,
-            })}
-          >
+          <div className="mt-auto border-t border-[var(--border)] p-4">
             {isConnected && address ? (
               <Button
                 kind="secondary"
@@ -406,7 +314,9 @@ export function Header() {
                   },
                 }}
               >
-                Disconnect ({address.slice(0, 6)}...{address.slice(-4)})
+                <span className="font-mono text-xs">
+                  disconnect ({address.slice(0, 6)}...{address.slice(-4)})
+                </span>
               </Button>
             ) : (
               <Button
@@ -423,7 +333,10 @@ export function Header() {
                   },
                 }}
               >
-                Connect Wallet
+                <span className="flex items-center justify-center gap-2">
+                  <TerminalIcon />
+                  connect wallet
+                </span>
               </Button>
             )}
           </div>

@@ -28,16 +28,10 @@ import {
 import {
   Button,
   Card,
-  HeadingLarge,
-  HeadingMedium,
-  LabelLarge,
-  LabelMedium,
-  LabelSmall,
   ParagraphMedium,
   ParagraphSmall,
   Skeleton,
   Tag,
-  useStyletron,
 } from "@mezo-org/mezo-clay"
 import Link from "next/link"
 import { useEffect, useMemo } from "react"
@@ -74,7 +68,10 @@ const TOKEN_ICONS: Record<string, string> = {
   MEZO: "/token icons/Mezo.svg",
 }
 
-function TokenIcon({ symbol, size = 16 }: { symbol: string; size?: number }) {
+function TokenIcon({
+  symbol,
+  size = 16,
+}: { symbol: string; size?: number }): JSX.Element | null {
   const iconPath = TOKEN_ICONS[symbol.toUpperCase()]
   if (!iconPath) return null
 
@@ -84,19 +81,14 @@ function TokenIcon({ symbol, size = 16 }: { symbol: string; size?: number }) {
       alt={symbol}
       width={size}
       height={size}
-      style={{
-        display: "inline-block",
-        verticalAlign: "middle",
-        flexShrink: 0,
-      }}
+      className="inline-block flex-shrink-0 align-middle"
     />
   )
 }
 
 function VeBTCLockCard({
   lock,
-}: { lock: ReturnType<typeof useVeBTCLocks>["locks"][0] }) {
-  const [css, theme] = useStyletron()
+}: { lock: ReturnType<typeof useVeBTCLocks>["locks"][0] }): JSX.Element {
   const { hasGauge, gaugeAddress } = useBoostGaugeForToken(lock.tokenId)
   const { boostMultiplier } = useBoostInfo(lock.tokenId)
   const { profile } = useGaugeProfile(gaugeAddress)
@@ -111,112 +103,47 @@ function VeBTCLockCard({
 
   return (
     <Card withBorder overrides={{ Root: { style: { height: "100%" } } }}>
-      <div className={css({ padding: "8px 0" })}>
+      <div className="py-2">
         {/* Header with Profile Picture, Name, and Status */}
-        <div
-          className={css({
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "flex-start",
-            marginBottom: "16px",
-          })}
-        >
-          <div
-            className={css({
-              display: "flex",
-              alignItems: "center",
-              gap: "12px",
-            })}
-          >
+        <div className="mb-4 flex items-start justify-between">
+          <div className="flex items-center gap-3">
             {/* Profile Picture */}
-            <div
-              className={css({
-                width: "48px",
-                height: "48px",
-                borderRadius: "50%",
-                backgroundColor: theme.colors.backgroundSecondary,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                overflow: "hidden",
-                flexShrink: 0,
-                border: `1px solid ${theme.colors.borderOpaque}`,
-              })}
-            >
+            <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center overflow-hidden rounded-full border border-[var(--border)] bg-[var(--surface-secondary)]">
               {profile?.profile_picture_url ? (
                 <img
                   src={profile.profile_picture_url}
                   alt={`veBTC #${lock.tokenId.toString()}`}
-                  className={css({
-                    width: "100%",
-                    height: "100%",
-                    objectFit: "cover",
-                  })}
+                  className="h-full w-full object-cover"
                 />
               ) : (
-                <LabelSmall
-                  color={theme.colors.contentSecondary}
-                  overrides={{
-                    Block: {
-                      style: { fontSize: "12px" },
-                    },
-                  }}
-                >
+                <span className="text-xs text-[var(--content-secondary)]">
                   #{lock.tokenId.toString()}
-                </LabelSmall>
+                </span>
               )}
             </div>
             {/* Name and Description */}
-            <div
-              className={css({
-                display: "flex",
-                flexDirection: "column",
-                gap: "2px",
-                minWidth: 0,
-              })}
-            >
-              <div
-                className={css({
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "8px",
-                  flexWrap: "wrap",
-                })}
-              >
-                <LabelMedium
-                  color={
+            <div className="flex min-w-0 flex-col gap-0.5">
+              <div className="flex flex-wrap items-center gap-2">
+                <span
+                  className={`text-sm font-medium ${
                     profile?.display_name ||
                     profile?.description ||
                     profile?.profile_picture_url
-                      ? theme.colors.positive
-                      : theme.colors.negative
-                  }
+                      ? "text-[var(--positive)]"
+                      : "text-[var(--negative)]"
+                  }`}
                 >
                   {profile?.display_name || `veBTC #${lock.tokenId.toString()}`}
-                </LabelMedium>
+                </span>
                 {profile?.display_name && (
-                  <span
-                    className={css({
-                      display: "inline-flex",
-                      alignItems: "center",
-                      padding: "2px 6px",
-                      borderRadius: "4px",
-                      backgroundColor: "rgba(247, 147, 26, 0.15)",
-                      border: "1px solid rgba(247, 147, 26, 0.3)",
-                      fontSize: "10px",
-                      fontWeight: 600,
-                      color: "#F7931A",
-                      fontFamily: "monospace",
-                      letterSpacing: "0.5px",
-                    })}
-                  >
+                  <span className="inline-flex items-center rounded bg-[rgba(247,147,26,0.15)] border border-[rgba(247,147,26,0.3)] px-1.5 py-0.5 font-mono text-2xs font-semibold tracking-wide text-[#F7931A]">
                     #{lock.tokenId.toString()}
                   </span>
                 )}
               </div>
               {profile?.description && (
                 <ParagraphSmall
-                  color={theme.colors.contentSecondary}
+                  color="var(--content-secondary)"
                   overrides={{
                     Block: {
                       style: {
@@ -241,106 +168,75 @@ function VeBTCLockCard({
           </Tag>
         </div>
 
-        <div
-          className={css({
-            display: "grid",
-            gridTemplateColumns: "repeat(2, 1fr)",
-            gap: "16px",
-            "@media (max-width: 480px)": {
-              gap: "12px",
-            },
-          })}
-        >
+        <div className="grid grid-cols-2 gap-4 max-[480px]:gap-3">
           <div>
-            <LabelSmall color={theme.colors.contentSecondary}>
+            <p className="mb-1 text-2xs uppercase tracking-wider text-[var(--content-secondary)]">
               Locked Amount
-            </LabelSmall>
-            <div
-              className={css({
-                display: "flex",
-                alignItems: "center",
-                gap: "6px",
-              })}
-            >
+            </p>
+            <div className="flex items-center gap-1.5">
               <TokenIcon symbol="BTC" size={18} />
-              <LabelMedium>{formatTokenValue(lock.amount, 18)} BTC</LabelMedium>
+              <span className="font-mono text-sm font-medium text-[var(--content-primary)] tabular-nums">
+                {formatTokenValue(lock.amount, 18)} BTC
+              </span>
             </div>
           </div>
           <div>
-            <LabelSmall color={theme.colors.contentSecondary}>
+            <p className="mb-1 text-2xs uppercase tracking-wider text-[var(--content-secondary)]">
               Voting Power
-            </LabelSmall>
-            <LabelMedium>{formatTokenValue(lock.votingPower, 18)}</LabelMedium>
+            </p>
+            <span className="font-mono text-sm font-medium text-[var(--content-primary)] tabular-nums">
+              {formatTokenValue(lock.votingPower, 18)}
+            </span>
           </div>
           <div>
-            <LabelSmall color={theme.colors.contentSecondary}>
+            <p className="mb-1 text-2xs uppercase tracking-wider text-[var(--content-secondary)]">
               Current Boost
-            </LabelSmall>
-            <LabelMedium
-              color={
+            </p>
+            <span
+              className={`font-mono text-sm font-medium tabular-nums ${
                 boostMultiplier > 1
-                  ? theme.colors.positive
-                  : theme.colors.contentPrimary
-              }
+                  ? "text-[var(--positive)]"
+                  : "text-[var(--content-primary)]"
+              }`}
             >
               {boostMultiplier.toFixed(2)}x
-            </LabelMedium>
+            </span>
           </div>
           <div>
-            <LabelSmall color={theme.colors.contentSecondary}>Gauge</LabelSmall>
+            <p className="mb-1 text-2xs uppercase tracking-wider text-[var(--content-secondary)]">
+              Gauge
+            </p>
             {hasGauge && gaugeAddress ? (
               <>
                 <Link
                   href={`/gauges/${gaugeAddress}`}
-                  className={css({
-                    textDecoration: "none",
-                    color: theme.colors.accent,
-                    ":hover": {
-                      textDecoration: "underline",
-                    },
-                  })}
+                  className="text-[var(--accent)] no-underline hover:underline"
                 >
-                  <LabelMedium color={theme.colors.accent}>
+                  <span className="text-sm font-medium text-[var(--accent)]">
                     View Gauge →
-                  </LabelMedium>
+                  </span>
                 </Link>
                 {!isLoadingAPY && apy !== null && apy > 0 && (
-                  <div
-                    className={css({
-                      marginTop: "4px",
-                      display: "inline-flex",
-                      alignItems: "center",
-                      padding: "2px 6px",
-                      borderRadius: "4px",
-                      backgroundColor: `${theme.colors.positive}15`,
-                      border: `1px solid ${theme.colors.positive}30`,
-                    })}
-                  >
-                    <LabelSmall color={theme.colors.positive}>
-                      {formatAPY(apy)} next epoch
-                    </LabelSmall>
+                  <div className="mt-1 inline-flex items-center rounded border border-[var(--positive-subtle)] bg-[var(--positive-subtle)] px-1.5 py-0.5">
+                    <span className="text-xs font-medium text-[var(--positive)]">
+                      {formatAPY(apy)} APY
+                    </span>
                   </div>
                 )}
               </>
             ) : (
-              <LabelMedium color={theme.colors.contentSecondary}>
+              <span className="text-sm text-[var(--content-secondary)]">
                 No Gauge
-              </LabelMedium>
+              </span>
             )}
           </div>
         </div>
 
         {!lock.isPermanent && !isExpired && (
-          <div
-            className={css({
-              marginTop: "16px",
-              paddingTop: "16px",
-              borderTop: `1px solid ${theme.colors.borderOpaque}`,
-            })}
-          >
-            <LabelSmall color={theme.colors.contentSecondary}>
+          <div className="mt-4 border-t border-[var(--border)] pt-4">
+            <p className="text-xs text-[var(--content-secondary)]">
               Unlocks: {unlockDate.toLocaleDateString()}
-            </LabelSmall>
+            </p>
           </div>
         )}
       </div>
@@ -358,8 +254,7 @@ function VeMEZOLockCard({
   claimableUSD: number
   allGaugeAddresses: Address[]
   apyMap: Map<string, ReturnType<typeof useGaugeAPY>>
-}) {
-  const [css, theme] = useStyletron()
+}): JSX.Element {
   const { usedWeight, canVoteInCurrentEpoch } = useVoteState(lock.tokenId)
   const { apy } = useVotingAPY(claimableUSD, usedWeight)
 
@@ -374,42 +269,18 @@ function VeMEZOLockCard({
 
   return (
     <Card withBorder overrides={{ Root: { style: { height: "100%" } } }}>
-      <div className={css({ padding: "8px 0" })}>
-        <div
-          className={css({
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "flex-start",
-            marginBottom: "16px",
-          })}
-        >
+      <div className="py-2">
+        <div className="mb-4 flex items-start justify-between">
           <div>
-            <LabelMedium>veMEZO #{lock.tokenId.toString()}</LabelMedium>
-            {(apy !== null && apy > 0) ||
-            (upcomingAPY !== null && upcomingAPY > 0) ? (
-              <div
-                className={css({
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "6px",
-                  marginTop: "4px",
-                })}
-              >
+            <span className="text-sm font-medium text-[var(--content-primary)]">
+              veMEZO #{lock.tokenId.toString()}
+            </span>
+            {((apy !== null && apy > 0) ||
+              (upcomingAPY !== null && upcomingAPY > 0)) && (
+              <div className="mt-1 flex items-center gap-1.5">
                 {/* Current APY */}
                 {apy !== null && apy > 0 && (
-                  <span
-                    className={css({
-                      display: "inline-flex",
-                      alignItems: "center",
-                      padding: "2px 6px",
-                      borderRadius: "4px",
-                      backgroundColor: `${theme.colors.positive}15`,
-                      border: `1px solid ${theme.colors.positive}30`,
-                      fontSize: "11px",
-                      fontWeight: 600,
-                      color: theme.colors.positive,
-                    })}
-                  >
+                  <span className="inline-flex items-center rounded border border-[rgba(var(--positive-rgb),0.3)] bg-[rgba(var(--positive-rgb),0.15)] px-1.5 py-0.5 text-[11px] font-semibold text-[var(--positive)]">
                     {formatAPY(apy)} APY
                   </span>
                 )}
@@ -417,37 +288,16 @@ function VeMEZOLockCard({
                 {upcomingAPY !== null && upcomingAPY > 0 && (
                   <>
                     {apy !== null && apy > 0 && (
-                      <span
-                        className={css({
-                          fontSize: "10px",
-                          color: theme.colors.contentTertiary,
-                        })}
-                      >
+                      <span className="text-2xs text-[var(--content-tertiary)]">
                         →
                       </span>
                     )}
                     <span
-                      className={css({
-                        display: "inline-flex",
-                        alignItems: "center",
-                        padding: "2px 6px",
-                        borderRadius: "4px",
-                        backgroundColor:
-                          apy === null || apy === 0
-                            ? `${theme.colors.positive}15`
-                            : theme.colors.backgroundSecondary,
-                        border: `1px solid ${
-                          apy === null || apy === 0
-                            ? `${theme.colors.positive}30`
-                            : theme.colors.borderOpaque
-                        }`,
-                        fontSize: apy === null || apy === 0 ? "11px" : "10px",
-                        fontWeight: apy === null || apy === 0 ? 600 : 500,
-                        color:
-                          apy === null || apy === 0
-                            ? theme.colors.contentSecondary
-                            : theme.colors.contentSecondary,
-                      })}
+                      className={`inline-flex items-center rounded border px-1.5 py-0.5 font-medium ${
+                        apy === null || apy === 0
+                          ? "border-[rgba(var(--positive-rgb),0.3)] bg-[rgba(var(--positive-rgb),0.15)] text-[11px] font-semibold"
+                          : "border-[var(--border)] bg-[var(--surface-secondary)] text-2xs"
+                      } text-[var(--content-secondary)]`}
                     >
                       {formatAPY(upcomingAPY)}{" "}
                       {apy === null || apy === 0 ? "next" : "next"}
@@ -455,7 +305,7 @@ function VeMEZOLockCard({
                   </>
                 )}
               </div>
-            ) : null}
+            )}
           </div>
           <Tag
             color={lock.isPermanent ? "green" : isExpired ? "red" : "yellow"}
@@ -464,71 +314,55 @@ function VeMEZOLockCard({
           </Tag>
         </div>
 
-        <div
-          className={css({
-            display: "grid",
-            gridTemplateColumns: "repeat(2, 1fr)",
-            gap: "16px",
-          })}
-        >
+        <div className="grid grid-cols-2 gap-4">
           <div>
-            <LabelSmall color={theme.colors.contentSecondary}>
+            <p className="mb-1 text-2xs uppercase tracking-wider text-[var(--content-secondary)]">
               Locked Amount
-            </LabelSmall>
-            <div
-              className={css({
-                display: "flex",
-                alignItems: "center",
-                gap: "6px",
-              })}
-            >
+            </p>
+            <div className="flex items-center gap-1.5">
               <TokenIcon symbol="MEZO" size={18} />
-              <LabelMedium>
+              <span className="font-mono text-sm font-medium text-[var(--content-primary)] tabular-nums">
                 {formatTokenValue(lock.amount, 18)} MEZO
-              </LabelMedium>
+              </span>
             </div>
           </div>
           <div>
-            <LabelSmall color={theme.colors.contentSecondary}>
+            <p className="mb-1 text-2xs uppercase tracking-wider text-[var(--content-secondary)]">
               Voting Power
-            </LabelSmall>
-            <LabelMedium>{formatTokenValue(lock.votingPower, 18)}</LabelMedium>
+            </p>
+            <span className="font-mono text-sm font-medium text-[var(--content-primary)] tabular-nums">
+              {formatTokenValue(lock.votingPower, 18)}
+            </span>
           </div>
           <div>
-            <LabelSmall color={theme.colors.contentSecondary}>
+            <p className="mb-1 text-2xs uppercase tracking-wider text-[var(--content-secondary)]">
               Used Weight
-            </LabelSmall>
-            <LabelMedium>
+            </p>
+            <span className="font-mono text-sm font-medium text-[var(--content-primary)] tabular-nums">
               {usedWeight ? formatTokenValue(usedWeight, 18) : "0"}
-            </LabelMedium>
+            </span>
           </div>
           <div>
-            <LabelSmall color={theme.colors.contentSecondary}>
+            <p className="mb-1 text-2xs uppercase tracking-wider text-[var(--content-secondary)]">
               Can Vote
-            </LabelSmall>
-            <LabelMedium
-              color={
+            </p>
+            <span
+              className={`text-sm font-medium ${
                 canVoteInCurrentEpoch
-                  ? theme.colors.positive
-                  : theme.colors.warning
-              }
+                  ? "text-[var(--positive)]"
+                  : "text-[var(--warning)]"
+              }`}
             >
               {canVoteInCurrentEpoch ? "Yes" : "Next Epoch"}
-            </LabelMedium>
+            </span>
           </div>
         </div>
 
         {!lock.isPermanent && !isExpired && (
-          <div
-            className={css({
-              marginTop: "16px",
-              paddingTop: "16px",
-              borderTop: `1px solid ${theme.colors.borderOpaque}`,
-            })}
-          >
-            <LabelSmall color={theme.colors.contentSecondary}>
+          <div className="mt-4 border-t border-[var(--border)] pt-4">
+            <p className="text-xs text-[var(--content-secondary)]">
               Unlocks: {unlockDate.toLocaleDateString()}
-            </LabelSmall>
+            </p>
           </div>
         )}
       </div>
@@ -556,14 +390,17 @@ function ClaimableRewardRow({
   claimableUSD: number
   allGaugeAddresses: Address[]
   apyMap: Map<string, ReturnType<typeof useGaugeAPY>>
-}) {
-  const [css, theme] = useStyletron()
+}): JSX.Element | null {
   const { usedWeight } = useVoteState(tokenId)
   const { apy } = useVotingAPY(claimableUSD, usedWeight)
 
-  // Get vote allocations for upcoming APY
+  // Get vote allocations for upcoming APY and projected rewards
   const { allocations } = useVoteAllocations(tokenId, allGaugeAddresses)
-  const { upcomingAPY } = useUpcomingVotingAPY(allocations, apyMap, usedWeight)
+  const { upcomingAPY, projectedIncentivesUSD } = useUpcomingVotingAPY(
+    allocations,
+    apyMap,
+    usedWeight,
+  )
 
   // Group rewards by token across all bribes for this tokenId
   const rewardsByToken = useMemo(() => {
@@ -597,106 +434,37 @@ function ClaimableRewardRow({
 
   return (
     <div
-      className={css({
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        gap: "16px",
-        padding: "20px 0",
-        borderBottom: isLast
-          ? "none"
-          : `1px solid ${theme.colors.borderOpaque}`,
-        "@media (max-width: 600px)": {
-          flexDirection: "column",
-          alignItems: "stretch",
-          gap: "16px",
-        },
-      })}
+      className={`flex items-center justify-between gap-4 py-5 max-[600px]:flex-col max-[600px]:items-stretch max-[600px]:gap-4 ${
+        isLast ? "" : "border-b border-[var(--border)]"
+      }`}
     >
       {/* Left side: Token ID badge */}
-      <div
-        className={css({
-          display: "flex",
-          alignItems: "center",
-          gap: "12px",
-          minWidth: "140px",
-        })}
-      >
-        <div
-          className={css({
-            width: "36px",
-            height: "36px",
-            borderRadius: "10px",
-            background: theme.colors.backgroundTertiary,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            border: `1px solid ${theme.colors.borderOpaque}`,
-          })}
-        >
-          <LabelSmall color={theme.colors.contentSecondary}>
+      <div className="flex min-w-[140px] items-center gap-3">
+        <div className="flex h-9 w-9 items-center justify-center rounded-[10px] border border-[var(--border)] bg-[var(--surface-tertiary)]">
+          <span className="text-xs text-[var(--content-secondary)]">
             #{tokenId.toString()}
-          </LabelSmall>
+          </span>
         </div>
-        <div
-          className={css({
-            display: "flex",
-            flexDirection: "column",
-            gap: "2px",
-          })}
-        >
-          <LabelSmall color={theme.colors.contentSecondary}>veMEZO</LabelSmall>
+        <div className="flex flex-col gap-0.5">
+          <span className="text-xs text-[var(--content-secondary)]">
+            veMEZO
+          </span>
           {((apy !== null && apy > 0) ||
             (upcomingAPY !== null && upcomingAPY > 0)) && (
-            <div
-              className={css({
-                display: "flex",
-                alignItems: "center",
-                gap: "4px",
-              })}
-            >
+            <div className="flex items-center gap-1">
               {apy !== null && apy > 0 && (
-                <span
-                  className={css({
-                    display: "inline-flex",
-                    alignItems: "center",
-                    padding: "1px 4px",
-                    borderRadius: "3px",
-                    backgroundColor: `${theme.colors.positive}15`,
-                    border: `1px solid ${theme.colors.positive}30`,
-                    fontSize: "9px",
-                    fontWeight: 600,
-                    color: theme.colors.positive,
-                  })}
-                >
+                <span className="inline-flex items-center rounded-sm border border-[rgba(var(--positive-rgb),0.3)] bg-[rgba(var(--positive-rgb),0.15)] px-1 py-0.5 text-[9px] font-semibold text-[var(--positive)]">
                   {formatAPY(apy)}
                 </span>
               )}
               {upcomingAPY !== null && upcomingAPY > 0 && (
                 <>
                   {apy !== null && apy > 0 && (
-                    <span
-                      className={css({
-                        fontSize: "8px",
-                        color: theme.colors.contentTertiary,
-                      })}
-                    >
+                    <span className="text-[8px] text-[var(--content-tertiary)]">
                       →
                     </span>
                   )}
-                  <span
-                    className={css({
-                      display: "inline-flex",
-                      alignItems: "center",
-                      padding: "1px 4px",
-                      borderRadius: "3px",
-                      backgroundColor: theme.colors.backgroundSecondary,
-                      border: `1px solid ${theme.colors.borderOpaque}`,
-                      fontSize: "9px",
-                      fontWeight: 500,
-                      color: theme.colors.contentSecondary,
-                    })}
-                  >
+                  <span className="inline-flex items-center rounded-sm border border-[var(--border)] bg-[var(--surface-secondary)] px-1 py-0.5 text-[9px] font-medium text-[var(--content-secondary)]">
                     {formatAPY(upcomingAPY)}
                   </span>
                 </>
@@ -706,46 +474,34 @@ function ClaimableRewardRow({
         </div>
       </div>
 
-      {/* Center: Rewards */}
-      <div
-        className={css({
-          display: "flex",
-          alignItems: "center",
-          gap: "20px",
-          flex: 1,
-          justifyContent: "center",
-          flexWrap: "wrap",
-          "@media (max-width: 600px)": {
-            justifyContent: "flex-start",
-          },
-        })}
-      >
+      {/* Center: Claimable + Pending Rewards */}
+      <div className="flex flex-1 flex-wrap items-center justify-center gap-5 max-[600px]:justify-start">
+        {/* Claimable rewards */}
         {rewardsByToken.map((reward) => (
-          <div
-            key={reward.symbol}
-            className={css({
-              display: "flex",
-              alignItems: "center",
-              gap: "6px",
-            })}
-          >
+          <div key={reward.symbol} className="flex items-center gap-1.5">
             <TokenIcon symbol={reward.symbol} size={20} />
-            <LabelLarge
-              overrides={{
-                Block: {
-                  style: {
-                    fontVariantNumeric: "tabular-nums",
-                  },
-                },
-              }}
-            >
+            <span className="font-mono text-base font-medium tabular-nums text-[var(--content-primary)]">
               {formatTokenValue(reward.amount, reward.decimals)}
-            </LabelLarge>
-            <LabelSmall color={theme.colors.contentSecondary}>
+            </span>
+            <span className="text-xs text-[var(--content-secondary)]">
               {reward.symbol}
-            </LabelSmall>
+            </span>
           </div>
         ))}
+        {/* Pending rewards (projected for next epoch) */}
+        {projectedIncentivesUSD > 0 && (
+          <div className="flex items-center gap-1.5 rounded border border-dashed border-[var(--border)] px-2 py-1">
+            <span className="text-2xs uppercase tracking-wider text-[var(--content-tertiary)]">
+              Pending
+            </span>
+            <span className="font-mono text-sm tabular-nums text-[var(--content-secondary)]">
+              ≈ $
+              {projectedIncentivesUSD.toLocaleString(undefined, {
+                maximumFractionDigits: 2,
+              })}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Right side: Claim button */}
@@ -779,8 +535,7 @@ function ProjectedRewardRow({
   allGaugeAddresses: Address[]
   apyMap: Map<string, ReturnType<typeof useGaugeAPY>>
   isLast: boolean
-}) {
-  const [css, theme] = useStyletron()
+}): JSX.Element | null {
   const { usedWeight } = useVoteState(tokenId)
   const { allocations } = useVoteAllocations(tokenId, allGaugeAddresses)
 
@@ -797,69 +552,23 @@ function ProjectedRewardRow({
 
   return (
     <div
-      className={css({
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        gap: "16px",
-        padding: "20px 0",
-        borderBottom: isLast
-          ? "none"
-          : `1px solid ${theme.colors.borderOpaque}`,
-        "@media (max-width: 600px)": {
-          flexDirection: "column",
-          alignItems: "stretch",
-          gap: "16px",
-        },
-      })}
+      className={`flex items-center justify-between gap-4 py-5 max-[600px]:flex-col max-[600px]:items-stretch max-[600px]:gap-4 ${
+        isLast ? "" : "border-b border-[var(--border)]"
+      }`}
     >
       {/* Left side: Token ID badge */}
-      <div
-        className={css({
-          display: "flex",
-          alignItems: "center",
-          gap: "12px",
-          minWidth: "140px",
-        })}
-      >
-        <div
-          className={css({
-            width: "36px",
-            height: "36px",
-            borderRadius: "10px",
-            background: theme.colors.backgroundTertiary,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            border: `1px solid ${theme.colors.borderOpaque}`,
-          })}
-        >
-          <LabelSmall color={theme.colors.contentSecondary}>
+      <div className="flex min-w-[140px] items-center gap-3">
+        <div className="flex h-9 w-9 items-center justify-center rounded-[10px] border border-[var(--border)] bg-[var(--surface-tertiary)]">
+          <span className="text-xs text-[var(--content-secondary)]">
             #{tokenId.toString()}
-          </LabelSmall>
+          </span>
         </div>
-        <div
-          className={css({
-            display: "flex",
-            flexDirection: "column",
-            gap: "2px",
-          })}
-        >
-          <LabelSmall color={theme.colors.contentSecondary}>veMEZO</LabelSmall>
+        <div className="flex flex-col gap-0.5">
+          <span className="text-xs text-[var(--content-secondary)]">
+            veMEZO
+          </span>
           {upcomingAPY !== null && upcomingAPY > 0 && (
-            <span
-              className={css({
-                display: "inline-flex",
-                alignItems: "center",
-                padding: "1px 4px",
-                borderRadius: "3px",
-                backgroundColor: theme.colors.backgroundSecondary,
-                border: `1px solid ${theme.colors.borderOpaque}`,
-                fontSize: "9px",
-                fontWeight: 500,
-                color: theme.colors.contentSecondary,
-              })}
-            >
+            <span className="inline-flex items-center rounded-sm border border-[var(--border)] bg-[var(--surface-secondary)] px-1 py-0.5 text-[9px] font-medium text-[var(--content-secondary)]">
               {formatAPY(upcomingAPY)} next
             </span>
           )}
@@ -867,33 +576,13 @@ function ProjectedRewardRow({
       </div>
 
       {/* Center: Projected USD Value */}
-      <div
-        className={css({
-          display: "flex",
-          alignItems: "center",
-          gap: "12px",
-          flex: 1,
-          justifyContent: "center",
-          "@media (max-width: 600px)": {
-            justifyContent: "flex-start",
-          },
-        })}
-      >
-        <LabelLarge
-          color={theme.colors.contentSecondary}
-          overrides={{
-            Block: {
-              style: {
-                fontVariantNumeric: "tabular-nums",
-              },
-            },
-          }}
-        >
+      <div className="flex flex-1 items-center justify-center gap-3 max-[600px]:justify-start">
+        <span className="font-mono text-base font-medium tabular-nums text-[var(--content-secondary)]">
           ≈ $
           {projectedIncentivesUSD.toLocaleString(undefined, {
             maximumFractionDigits: 2,
           })}
-        </LabelLarge>
+        </span>
       </div>
 
       {/* Right side: Disabled Claim button */}
@@ -916,8 +605,7 @@ function ProjectedRewardRow({
   )
 }
 
-export default function DashboardPage() {
-  const [css, theme] = useStyletron()
+export default function DashboardPage(): JSX.Element {
   const { isConnected } = useAccount()
   const { locks: veBTCLocks, isLoading: isLoadingVeBTC } = useVeBTCLocks()
   const { locks: veMEZOLocks, isLoading: isLoadingVeMEZO } = useVeMEZOLocks()
@@ -1061,43 +749,28 @@ export default function DashboardPage() {
 
   return (
     <Layout>
-      <div
-        className={css({
-          display: "flex",
-          flexDirection: "column",
-          gap: "24px",
-        })}
-      >
-        <div>
-          <HeadingLarge marginBottom="scale300">Dashboard</HeadingLarge>
-          <ParagraphMedium color={theme.colors.contentSecondary}>
+      <div className="flex flex-col gap-6">
+        <header>
+          <h1 className="mb-2 text-2xl font-semibold text-[var(--content-primary)]">
+            <span className="text-[#F7931A]">$</span> dashboard --status
+          </h1>
+          <ParagraphMedium color="var(--content-secondary)">
             Track your veBTC and veMEZO positions
           </ParagraphMedium>
-        </div>
+        </header>
 
         {!isConnected ? (
           <SpringIn delay={0} variant="card">
             <Card withBorder overrides={{}}>
-              <div
-                className={css({
-                  padding: "48px",
-                  textAlign: "center",
-                })}
-              >
-                <ParagraphMedium color={theme.colors.contentSecondary}>
+              <div className="py-12 text-center">
+                <ParagraphMedium color="var(--content-secondary)">
                   Connect your wallet to view your dashboard
                 </ParagraphMedium>
               </div>
             </Card>
           </SpringIn>
         ) : isLoading ? (
-          <div
-            className={css({
-              display: "flex",
-              flexDirection: "column",
-              gap: "16px",
-            })}
-          >
+          <div className="flex flex-col gap-4">
             <Skeleton width="100%" height="100px" animation />
             <Skeleton width="100%" height="200px" animation />
             <Skeleton width="100%" height="200px" animation />
@@ -1107,80 +780,21 @@ export default function DashboardPage() {
             {/* Claimable Rewards Section */}
             {showRewardsSection && (
               <SpringIn delay={0} variant="card">
-                <div
-                  className={css({
-                    borderRadius: "16px",
-                    overflow: "hidden",
-                    border: `1px solid ${theme.colors.borderOpaque}`,
-                    background: theme.colors.backgroundPrimary,
-                  })}
-                >
+                <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
                   {/* Header with total rewards */}
-                  <div
-                    className={css({
-                      padding: "24px 28px",
-                      background: theme.colors.backgroundPrimary,
-                      borderBottom: `1px solid ${theme.colors.borderOpaque}`,
-                    })}
-                  >
-                    <div
-                      className={css({
-                        display: "flex",
-                        alignItems: "flex-start",
-                        justifyContent: "space-between",
-                        gap: "24px",
-                        "@media (max-width: 600px)": {
-                          flexDirection: "column",
-                          gap: "20px",
-                        },
-                      })}
-                    >
+                  <div className="border-b border-[var(--border)] bg-[var(--surface)] px-7 py-6">
+                    <div className="flex items-start justify-between gap-6 max-[600px]:flex-col max-[600px]:gap-5">
                       <div>
-                        <div
-                          className={css({
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "12px",
-                            marginBottom: "8px",
-                          })}
-                        >
-                          <LabelSmall
-                            color={theme.colors.contentSecondary}
-                            overrides={{
-                              Block: {
-                                style: {
-                                  textTransform: "uppercase",
-                                  letterSpacing: "0.05em",
-                                },
-                              },
-                            }}
-                          >
+                        <div className="mb-2 flex items-center gap-3">
+                          <p className="text-2xs uppercase tracking-wider text-[var(--content-secondary)]">
                             Total Claimable
-                          </LabelSmall>
-                          {(totalAPY !== null && totalAPY > 0) ||
-                          (upcomingAPY !== null && upcomingAPY > 0) ? (
-                            <div
-                              className={css({
-                                display: "inline-flex",
-                                alignItems: "center",
-                                gap: "6px",
-                              })}
-                            >
+                          </p>
+                          {((totalAPY !== null && totalAPY > 0) ||
+                            (upcomingAPY !== null && upcomingAPY > 0)) && (
+                            <div className="inline-flex items-center gap-1.5">
                               {/* Current APY badge */}
                               {totalAPY !== null && totalAPY > 0 && (
-                                <span
-                                  className={css({
-                                    display: "inline-flex",
-                                    alignItems: "center",
-                                    padding: "2px 8px",
-                                    borderRadius: "4px",
-                                    backgroundColor: `${theme.colors.positive}20`,
-                                    border: `1px solid ${theme.colors.positive}40`,
-                                    fontSize: "12px",
-                                    fontWeight: 600,
-                                    color: theme.colors.positive,
-                                  })}
-                                >
+                                <span className="inline-flex items-center rounded border border-[rgba(var(--positive-rgb),0.4)] bg-[rgba(var(--positive-rgb),0.2)] px-2 py-0.5 text-xs font-semibold text-[var(--positive)]">
                                   {formatAPY(totalAPY)} APY
                                 </span>
                               )}
@@ -1188,43 +802,16 @@ export default function DashboardPage() {
                               {upcomingAPY !== null && upcomingAPY > 0 && (
                                 <>
                                   {totalAPY !== null && totalAPY > 0 && (
-                                    <span
-                                      className={css({
-                                        fontSize: "12px",
-                                        color: theme.colors.contentTertiary,
-                                      })}
-                                    >
+                                    <span className="text-xs text-[var(--content-tertiary)]">
                                       →
                                     </span>
                                   )}
                                   <span
-                                    className={css({
-                                      display: "inline-flex",
-                                      alignItems: "center",
-                                      padding: "2px 8px",
-                                      borderRadius: "4px",
-                                      backgroundColor:
-                                        totalAPY === null || totalAPY === 0
-                                          ? `${theme.colors.positive}20`
-                                          : theme.colors.backgroundSecondary,
-                                      border: `1px solid ${
-                                        totalAPY === null || totalAPY === 0
-                                          ? `${theme.colors.positive}40`
-                                          : theme.colors.borderOpaque
-                                      }`,
-                                      fontSize:
-                                        totalAPY === null || totalAPY === 0
-                                          ? "12px"
-                                          : "11px",
-                                      fontWeight:
-                                        totalAPY === null || totalAPY === 0
-                                          ? 600
-                                          : 500,
-                                      color:
-                                        totalAPY === null || totalAPY === 0
-                                          ? theme.colors.contentSecondary
-                                          : theme.colors.contentSecondary,
-                                    })}
+                                    className={`inline-flex items-center rounded border px-2 py-0.5 font-medium ${
+                                      totalAPY === null || totalAPY === 0
+                                        ? "border-[rgba(var(--positive-rgb),0.4)] bg-[rgba(var(--positive-rgb),0.2)] text-xs font-semibold"
+                                        : "border-[var(--border)] bg-[var(--surface-secondary)] text-[11px]"
+                                    } text-[var(--content-secondary)]`}
                                   >
                                     {formatAPY(upcomingAPY)}{" "}
                                     {totalAPY === null || totalAPY === 0
@@ -1234,67 +821,39 @@ export default function DashboardPage() {
                                 </>
                               )}
                             </div>
-                          ) : null}
+                          )}
                         </div>
                         {/* Current claimable rewards */}
                         {hasClaimableRewards && (
                           <>
-                            <div
-                              className={css({
-                                display: "flex",
-                                alignItems: "baseline",
-                                gap: "16px",
-                                flexWrap: "wrap",
-                              })}
-                            >
+                            <div className="flex flex-wrap items-baseline gap-4">
                               {Array.from(totalClaimable.entries()).map(
                                 ([tokenAddr, info]) => (
                                   <div
                                     key={tokenAddr}
-                                    className={css({
-                                      display: "flex",
-                                      alignItems: "center",
-                                      gap: "10px",
-                                    })}
+                                    className="flex items-center gap-2.5"
                                   >
                                     <TokenIcon symbol={info.symbol} size={28} />
-                                    <HeadingLarge
-                                      overrides={{
-                                        Block: {
-                                          style: {
-                                            fontVariantNumeric: "tabular-nums",
-                                          },
-                                        },
-                                      }}
-                                    >
+                                    <span className="font-mono text-3xl font-semibold tabular-nums text-[var(--content-primary)]">
                                       {formatTokenValue(
                                         info.amount,
                                         info.decimals,
                                       )}
-                                    </HeadingLarge>
-                                    <LabelMedium
-                                      color={theme.colors.contentSecondary}
-                                    >
+                                    </span>
+                                    <span className="text-sm text-[var(--content-secondary)]">
                                       {info.symbol}
-                                    </LabelMedium>
+                                    </span>
                                   </div>
                                 ),
                               )}
                             </div>
                             {totalClaimableUSD > 0 && (
-                              <LabelSmall
-                                color={theme.colors.contentSecondary}
-                                overrides={{
-                                  Block: {
-                                    style: { marginTop: "8px" },
-                                  },
-                                }}
-                              >
+                              <p className="mt-2 text-xs text-[var(--content-secondary)]">
                                 ≈ $
                                 {totalClaimableUSD.toLocaleString(undefined, {
                                   maximumFractionDigits: 2,
                                 })}
-                              </LabelSmall>
+                              </p>
                             )}
                           </>
                         )}
@@ -1302,84 +861,38 @@ export default function DashboardPage() {
                         {/* Projected future rewards */}
                         {hasFutureRewards && (
                           <div
-                            className={css({
-                              marginTop: hasClaimableRewards ? "16px" : "0",
-                              paddingTop: hasClaimableRewards ? "16px" : "0",
-                              borderTop: hasClaimableRewards
-                                ? `1px solid ${theme.colors.borderOpaque}`
-                                : "none",
-                            })}
+                            className={
+                              hasClaimableRewards
+                                ? "mt-4 border-t border-[var(--border)] pt-4"
+                                : ""
+                            }
                           >
-                            <LabelSmall
-                              color={theme.colors.contentSecondary}
-                              overrides={{
-                                Block: {
-                                  style: {
-                                    textTransform: "uppercase",
-                                    letterSpacing: "0.05em",
-                                    marginBottom: "8px",
-                                  },
-                                },
-                              }}
-                            >
+                            <p className="mb-2 text-2xs uppercase tracking-wider text-[var(--content-secondary)]">
                               Projected Next Epoch
-                            </LabelSmall>
-                            <div
-                              className={css({
-                                display: "flex",
-                                alignItems: "center",
-                                gap: "8px",
-                              })}
-                            >
-                              <HeadingMedium
-                                color={theme.colors.contentSecondary}
-                                overrides={{
-                                  Block: {
-                                    style: {
-                                      fontVariantNumeric: "tabular-nums",
-                                    },
-                                  },
-                                }}
-                              >
+                            </p>
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono text-xl font-semibold tabular-nums text-[var(--content-secondary)]">
                                 ≈ $
                                 {projectedIncentivesUSD.toLocaleString(
                                   undefined,
                                   { maximumFractionDigits: 2 },
                                 )}
-                              </HeadingMedium>
+                              </span>
                             </div>
                           </div>
                         )}
                       </div>
 
                       {hasClaimableRewards && (
-                        <div
-                          className={css({
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "8px",
-                            padding: "8px 14px",
-                            borderRadius: "20px",
-                            background: `${theme.colors.positive}15`,
-                            border: `1px solid ${theme.colors.positive}30`,
-                          })}
-                        >
-                          <div
-                            className={css({
-                              width: "8px",
-                              height: "8px",
-                              borderRadius: "50%",
-                              backgroundColor: theme.colors.positive,
-                              boxShadow: `0 0 8px ${theme.colors.positive}`,
-                            })}
-                          />
-                          <LabelSmall color={theme.colors.positive}>
+                        <div className="flex items-center gap-2 rounded-full border border-[rgba(var(--positive-rgb),0.3)] bg-[rgba(var(--positive-rgb),0.15)] px-3.5 py-2">
+                          <div className="h-2 w-2 rounded-full bg-[var(--positive)] shadow-[0_0_8px_var(--positive)]" />
+                          <span className="text-xs text-[var(--positive)]">
                             {bribesGroupedByTokenId.size}{" "}
                             {bribesGroupedByTokenId.size === 1
                               ? "position"
                               : "positions"}{" "}
                             ready
-                          </LabelSmall>
+                          </span>
                         </div>
                       )}
                     </div>
@@ -1387,7 +900,7 @@ export default function DashboardPage() {
 
                   {/* Reward rows */}
                   {(hasClaimableRewards || hasFutureRewards) && (
-                    <div className={css({ padding: "4px 28px 8px" })}>
+                    <div className="px-7 py-1 pb-2">
                       {/* Claimable rewards section */}
                       {hasClaimableRewards && (
                         <>
@@ -1445,104 +958,67 @@ export default function DashboardPage() {
               </SpringIn>
             )}
 
-            <div
-              className={css({
-                display: "grid",
-                gridTemplateColumns: "repeat(4, 1fr)",
-                gap: "16px",
-                "@media (max-width: 1024px)": {
-                  gridTemplateColumns: "repeat(2, 1fr)",
-                },
-                "@media (max-width: 480px)": {
-                  gridTemplateColumns: "1fr",
-                  gap: "12px",
-                },
-              })}
-            >
+            <div className="grid grid-cols-4 gap-4 max-[1024px]:grid-cols-2 max-[480px]:grid-cols-1 max-[480px]:gap-3">
               <SpringIn delay={showRewardsSection ? 1 : 0} variant="card">
                 <Card withBorder overrides={{}}>
-                  <div className={css({ padding: "8px 0" })}>
-                    <div
-                      className={css({
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "6px",
-                        marginBottom: "4px",
-                      })}
-                    >
+                  <div className="py-2">
+                    <div className="mb-1 flex items-center gap-1.5">
                       <TokenIcon symbol="MEZO" size={14} />
-                      <LabelSmall color={theme.colors.contentSecondary}>
+                      <p className="text-2xs uppercase tracking-wider text-[var(--content-secondary)]">
                         Your veMEZO Locks
-                      </LabelSmall>
+                      </p>
                     </div>
-                    <HeadingMedium>{veMEZOLocks.length}</HeadingMedium>
+                    <span className="font-mono text-xl font-semibold text-[var(--content-primary)]">
+                      {veMEZOLocks.length}
+                    </span>
                   </div>
                 </Card>
               </SpringIn>
 
               <SpringIn delay={showRewardsSection ? 2 : 1} variant="card">
                 <Card withBorder overrides={{}}>
-                  <div className={css({ padding: "8px 0" })}>
-                    <div
-                      className={css({
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "6px",
-                        marginBottom: "4px",
-                      })}
-                    >
+                  <div className="py-2">
+                    <div className="mb-1 flex items-center gap-1.5">
                       <TokenIcon symbol="MEZO" size={14} />
-                      <LabelSmall color={theme.colors.contentSecondary}>
+                      <p className="text-2xs uppercase tracking-wider text-[var(--content-secondary)]">
                         Your veMEZO Power
-                      </LabelSmall>
+                      </p>
                     </div>
-                    <HeadingMedium>
+                    <span className="font-mono text-xl font-semibold tabular-nums text-[var(--content-primary)]">
                       {formatTokenValue(totalVeMEZOVotingPower, 18)}
-                    </HeadingMedium>
+                    </span>
                   </div>
                 </Card>
               </SpringIn>
 
               <SpringIn delay={showRewardsSection ? 3 : 2} variant="card">
                 <Card withBorder overrides={{}}>
-                  <div className={css({ padding: "8px 0" })}>
-                    <div
-                      className={css({
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "6px",
-                        marginBottom: "4px",
-                      })}
-                    >
+                  <div className="py-2">
+                    <div className="mb-1 flex items-center gap-1.5">
                       <TokenIcon symbol="BTC" size={14} />
-                      <LabelSmall color={theme.colors.contentSecondary}>
+                      <p className="text-2xs uppercase tracking-wider text-[var(--content-secondary)]">
                         Your veBTC Locks
-                      </LabelSmall>
+                      </p>
                     </div>
-                    <HeadingMedium>{veBTCLocks.length}</HeadingMedium>
+                    <span className="font-mono text-xl font-semibold text-[var(--content-primary)]">
+                      {veBTCLocks.length}
+                    </span>
                   </div>
                 </Card>
               </SpringIn>
 
               <SpringIn delay={showRewardsSection ? 4 : 3} variant="card">
                 <Card withBorder overrides={{}}>
-                  <div className={css({ padding: "8px 0" })}>
-                    <div
-                      className={css({
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "6px",
-                        marginBottom: "4px",
-                      })}
-                    >
+                  <div className="py-2">
+                    <div className="mb-1 flex items-center gap-1.5">
                       <TokenIcon symbol="BTC" size={14} />
-                      <LabelSmall color={theme.colors.contentSecondary}>
+                      <p className="text-2xs uppercase tracking-wider text-[var(--content-secondary)]">
                         Your veBTC Power
-                      </LabelSmall>
+                      </p>
                     </div>
-                    <HeadingMedium>
+                    <span className="font-mono text-xl font-semibold tabular-nums text-[var(--content-primary)]">
                       {formatTokenValue(totalVeBTCVotingPower, 18)}
-                    </HeadingMedium>
+                    </span>
                   </div>
                 </Card>
               </SpringIn>
@@ -1550,35 +1026,19 @@ export default function DashboardPage() {
 
             <SpringIn delay={showRewardsSection ? 5 : 4} variant="card">
               <div>
-                <HeadingMedium marginBottom="scale500">
+                <h2 className="mb-4 text-xl font-semibold text-[var(--content-primary)]">
                   Your veMEZO Locks
-                </HeadingMedium>
+                </h2>
                 {veMEZOLocks.length === 0 ? (
                   <Card withBorder overrides={{}}>
-                    <div
-                      className={css({
-                        padding: "32px",
-                        textAlign: "center",
-                      })}
-                    >
-                      <ParagraphMedium color={theme.colors.contentSecondary}>
+                    <div className="py-8 text-center">
+                      <ParagraphMedium color="var(--content-secondary)">
                         No veMEZO locks found
                       </ParagraphMedium>
                     </div>
                   </Card>
                 ) : (
-                  <div
-                    className={css({
-                      display: "grid",
-                      gridTemplateColumns:
-                        "repeat(auto-fill, minmax(350px, 1fr))",
-                      gap: "16px",
-                      "@media (max-width: 480px)": {
-                        gridTemplateColumns: "1fr",
-                        gap: "12px",
-                      },
-                    })}
-                  >
+                  <div className="grid grid-cols-3 gap-4 max-[1024px]:grid-cols-2 max-[640px]:grid-cols-1 max-[480px]:gap-3">
                     {veMEZOLocks.map((lock, index) => (
                       <SpringIn
                         key={lock.tokenId.toString()}
@@ -1607,35 +1067,19 @@ export default function DashboardPage() {
               variant="card"
             >
               <div>
-                <HeadingMedium marginBottom="scale500">
+                <h2 className="mb-4 text-xl font-semibold text-[var(--content-primary)]">
                   Your veBTC Locks
-                </HeadingMedium>
+                </h2>
                 {veBTCLocks.length === 0 ? (
                   <Card withBorder overrides={{}}>
-                    <div
-                      className={css({
-                        padding: "32px",
-                        textAlign: "center",
-                      })}
-                    >
-                      <ParagraphMedium color={theme.colors.contentSecondary}>
+                    <div className="py-8 text-center">
+                      <ParagraphMedium color="var(--content-secondary)">
                         No veBTC locks found
                       </ParagraphMedium>
                     </div>
                   </Card>
                 ) : (
-                  <div
-                    className={css({
-                      display: "grid",
-                      gridTemplateColumns:
-                        "repeat(auto-fill, minmax(350px, 1fr))",
-                      gap: "16px",
-                      "@media (max-width: 480px)": {
-                        gridTemplateColumns: "1fr",
-                        gap: "12px",
-                      },
-                    })}
-                  >
+                  <div className="grid grid-cols-3 gap-4 max-[1024px]:grid-cols-2 max-[640px]:grid-cols-1 max-[480px]:gap-3">
                     {veBTCLocks.map((lock, index) => (
                       <SpringIn
                         key={lock.tokenId.toString()}

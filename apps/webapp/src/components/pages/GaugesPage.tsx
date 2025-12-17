@@ -9,11 +9,6 @@ import {
   Card,
   ChevronDown,
   ChevronUp,
-  HeadingLarge,
-  HeadingMedium,
-  LabelSmall,
-  ParagraphMedium,
-  ParagraphSmall,
   Skeleton,
   TableBuilder,
   TableBuilderColumn,
@@ -35,8 +30,8 @@ type SortColumn =
 type SortDirection = "asc" | "desc"
 type StatusFilter = "all" | "active" | "inactive"
 
-export default function GaugesPage() {
-  const [css, theme] = useStyletron()
+export default function GaugesPage(): JSX.Element {
+  const [, theme] = useStyletron()
   const { gauges, isLoading, totalGauges } = useBoostGauges()
   const {
     boostVoterTotalWeight,
@@ -44,10 +39,8 @@ export default function GaugesPage() {
     veBTCTotalVotingPower,
   } = useVoterTotals()
 
-  // Fetch all gauge profiles from Supabase (pre-fetches all for faster loading)
   const { profiles: gaugeProfiles } = useAllGaugeProfiles()
 
-  // Fetch APY data for all gauges
   const gaugesForAPY = useMemo(
     () =>
       gauges.map((g) => ({ address: g.address, totalWeight: g.totalWeight })),
@@ -79,9 +72,8 @@ export default function GaugesPage() {
         <ChevronDown size={16} />
       )
     }
-    // Show neutral chevron to indicate sortable
     return (
-      <span className={css({ opacity: 0.3 })}>
+      <span className="opacity-30">
         <ChevronDown size={16} />
       </span>
     )
@@ -96,17 +88,7 @@ export default function GaugesPage() {
   }) => (
     <button
       type="button"
-      className={css({
-        cursor: "pointer",
-        display: "inline-flex",
-        alignItems: "center",
-        gap: "4px",
-        background: "none",
-        border: "none",
-        padding: 0,
-        font: "inherit",
-        color: "inherit",
-      })}
+      className="inline-flex cursor-pointer items-center gap-1 border-none bg-transparent p-0 font-inherit text-inherit"
       onClick={() => handleSort(column)}
     >
       {children}
@@ -117,14 +99,12 @@ export default function GaugesPage() {
   const filteredAndSortedGauges = useMemo(() => {
     let result = [...gauges]
 
-    // Filter by status
     if (statusFilter === "active") {
       result = result.filter((g) => g.isAlive)
     } else if (statusFilter === "inactive") {
       result = result.filter((g) => !g.isAlive)
     }
 
-    // Sort
     if (sortColumn) {
       result.sort((a, b) => {
         let comparison: number
@@ -170,137 +150,98 @@ export default function GaugesPage() {
 
   return (
     <Layout>
-      <div
-        className={css({
-          display: "flex",
-          flexDirection: "column",
-          gap: "24px",
-        })}
-      >
-        <div>
-          <HeadingLarge marginBottom="scale300">
-            veBTC Boost Gauges
-          </HeadingLarge>
-          <ParagraphMedium color={theme.colors.contentSecondary}>
+      <div className="flex flex-col gap-6">
+        {/* Page Header */}
+        <header>
+          <h1 className="mb-2 text-2xl font-semibold text-[var(--content-primary)]">
+            <span className="mr-2 text-[#F7931A]">$</span>
+            gauges --list
+          </h1>
+          <p className="text-sm text-[var(--content-secondary)]">
             Vote with your veMEZO to boost veBTC locks and earn incentives
-          </ParagraphMedium>
-        </div>
+          </p>
+        </header>
 
-        <div
-          className={css({
-            display: "grid",
-            gridTemplateColumns: "repeat(4, 1fr)",
-            gap: "16px",
-            "@media (max-width: 1024px)": {
-              gridTemplateColumns: "repeat(2, 1fr)",
-            },
-            "@media (max-width: 480px)": {
-              gridTemplateColumns: "1fr",
-              gap: "12px",
-            },
-          })}
-        >
+        {/* Stats Grid */}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:gap-4 lg:grid-cols-4">
           <SpringIn delay={0} variant="card">
-            <Card withBorder overrides={{}}>
-              <div className={css({ padding: "8px 0" })}>
-                <LabelSmall color={theme.colors.contentSecondary}>
-                  Total Gauges
-                </LabelSmall>
-                <HeadingMedium>{totalGauges}</HeadingMedium>
-              </div>
-            </Card>
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
+              <p className="mb-1 text-2xs uppercase tracking-wider text-[var(--content-tertiary)]">
+                Total Gauges
+              </p>
+              <p className="font-mono text-2xl font-semibold text-[var(--content-primary)]">
+                {totalGauges}
+              </p>
+            </div>
           </SpringIn>
 
           <SpringIn delay={1} variant="card">
-            <Card withBorder overrides={{}}>
-              <div className={css({ padding: "8px 0" })}>
-                <LabelSmall color={theme.colors.contentSecondary}>
-                  Total veMEZO Votes
-                </LabelSmall>
-                <HeadingMedium>
-                  {boostVoterTotalWeight
-                    ? `${formatUnits(boostVoterTotalWeight, 18).slice(0, 10)}`
-                    : "0"}
-                </HeadingMedium>
-              </div>
-            </Card>
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
+              <p className="mb-1 text-2xs uppercase tracking-wider text-[var(--content-tertiary)]">
+                Total veMEZO Votes
+              </p>
+              <p className="font-mono text-2xl font-semibold tabular-nums text-[var(--content-primary)]">
+                {boostVoterTotalWeight
+                  ? `${formatUnits(boostVoterTotalWeight, 18).slice(0, 10)}`
+                  : "0"}
+              </p>
+            </div>
           </SpringIn>
 
           <SpringIn delay={2} variant="card">
-            <Card withBorder overrides={{}}>
-              <div className={css({ padding: "8px 0" })}>
-                <LabelSmall color={theme.colors.contentSecondary}>
-                  Total veMEZO Power
-                </LabelSmall>
-                <HeadingMedium>
-                  {veMEZOTotalVotingPower
-                    ? `${formatUnits(veMEZOTotalVotingPower, 18).slice(0, 10)}`
-                    : "0"}
-                </HeadingMedium>
-              </div>
-            </Card>
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
+              <p className="mb-1 text-2xs uppercase tracking-wider text-[var(--content-tertiary)]">
+                Total veMEZO Power
+              </p>
+              <p className="font-mono text-2xl font-semibold tabular-nums text-[var(--content-primary)]">
+                {veMEZOTotalVotingPower
+                  ? `${formatUnits(veMEZOTotalVotingPower, 18).slice(0, 10)}`
+                  : "0"}
+              </p>
+            </div>
           </SpringIn>
 
           <SpringIn delay={3} variant="card">
-            <Card withBorder overrides={{}}>
-              <div className={css({ padding: "8px 0" })}>
-                <LabelSmall color={theme.colors.contentSecondary}>
-                  Total veBTC Power
-                </LabelSmall>
-                <HeadingMedium>
-                  {veBTCTotalVotingPower
-                    ? `${formatUnits(veBTCTotalVotingPower, 18).slice(0, 10)}`
-                    : "0"}
-                </HeadingMedium>
-              </div>
-            </Card>
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
+              <p className="mb-1 text-2xs uppercase tracking-wider text-[var(--content-tertiary)]">
+                Total veBTC Power
+              </p>
+              <p className="font-mono text-2xl font-semibold tabular-nums text-[var(--content-primary)]">
+                {veBTCTotalVotingPower
+                  ? `${formatUnits(veBTCTotalVotingPower, 18).slice(0, 10)}`
+                  : "0"}
+              </p>
+            </div>
           </SpringIn>
         </div>
 
+        {/* Gauges Table */}
         {isLoading ? (
-          <div
-            className={css({
-              display: "flex",
-              flexDirection: "column",
-              gap: "16px",
-            })}
-          >
+          <div className="flex flex-col gap-4">
             <Skeleton width="100%" height="100px" animation />
             <Skeleton width="100%" height="100px" animation />
             <Skeleton width="100%" height="100px" animation />
           </div>
         ) : gauges.length === 0 ? (
           <SpringIn delay={4} variant="card">
-            <Card withBorder overrides={{}}>
-              <div
-                className={css({
-                  padding: "48px",
-                  textAlign: "center",
-                })}
-              >
-                <ParagraphMedium color={theme.colors.contentSecondary}>
-                  No boost gauges found. veBTC holders can create gauges to
-                  attract veMEZO votes.
-                </ParagraphMedium>
-              </div>
-            </Card>
+            <div className="rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface)] p-12 text-center">
+              <p className="font-mono text-sm text-[var(--content-secondary)]">
+                <span className="text-[#F7931A]">$</span> no gauges found
+              </p>
+              <p className="mt-2 text-xs text-[var(--content-tertiary)]">
+                veBTC holders can create gauges to attract veMEZO votes
+              </p>
+            </div>
           </SpringIn>
         ) : (
           <SpringIn delay={4} variant="card">
             <Card title="Gauges" withBorder overrides={{}}>
-              <div className={css({ padding: "16px 0" })}>
-                <div
-                  className={css({
-                    display: "flex",
-                    gap: "8px",
-                    alignItems: "center",
-                    marginBottom: "16px",
-                    flexWrap: "wrap",
-                  })}
-                >
-                  <LabelSmall color={theme.colors.contentSecondary}>
-                    Filter by status:
-                  </LabelSmall>
+              <div className="py-4">
+                {/* Filter Buttons */}
+                <div className="mb-4 flex flex-wrap items-center gap-2">
+                  <span className="text-xs text-[var(--content-secondary)]">
+                    Filter:
+                  </span>
                   <Tag
                     closeable={false}
                     onClick={() => setStatusFilter("all")}
@@ -324,18 +265,8 @@ export default function GaugesPage() {
                   </Tag>
                 </div>
 
-                <div
-                  className={css({
-                    overflowX: "auto",
-                    WebkitOverflowScrolling: "touch",
-                    margin: "0 -16px",
-                    padding: "0 16px",
-                    "@media (max-width: 768px)": {
-                      margin: "0 -12px",
-                      padding: "0 12px",
-                    },
-                  })}
-                >
+                {/* Table Container */}
+                <div className="-mx-4 overflow-x-auto px-4 md:-mx-3 md:px-3">
                   <TableBuilder
                     data={filteredAndSortedGauges}
                     overrides={{
@@ -373,131 +304,54 @@ export default function GaugesPage() {
                         return (
                           <Link
                             href={`/gauges/${gauge.address}`}
-                            className={css({
-                              display: "flex",
-                              alignItems: "center",
-                              gap: "12px",
-                              textDecoration: "none",
-                              color: "inherit",
-                              ":hover": {
-                                opacity: 0.8,
-                              },
-                            })}
+                            className="flex items-center gap-3 text-inherit no-underline transition-opacity hover:opacity-80"
                           >
                             {/* Profile Picture */}
-                            <div
-                              className={css({
-                                width: "36px",
-                                height: "36px",
-                                borderRadius: "50%",
-                                backgroundColor:
-                                  theme.colors.backgroundSecondary,
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                overflow: "hidden",
-                                flexShrink: 0,
-                                border: `1px solid ${theme.colors.borderOpaque}`,
-                              })}
-                            >
+                            <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center overflow-hidden rounded-full border border-[var(--border)] bg-[var(--surface-secondary)]">
                               {profile?.profile_picture_url ? (
                                 <img
                                   src={profile.profile_picture_url}
                                   alt={`Gauge #${gauge.veBTCTokenId.toString()}`}
-                                  className={css({
-                                    width: "100%",
-                                    height: "100%",
-                                    objectFit: "cover",
-                                  })}
+                                  className="h-full w-full object-cover"
                                 />
                               ) : (
-                                <LabelSmall
-                                  color={theme.colors.contentSecondary}
-                                  overrides={{
-                                    Block: {
-                                      style: { fontSize: "10px" },
-                                    },
-                                  }}
-                                >
+                                <span className="text-2xs text-[var(--content-secondary)]">
                                   #
                                   {gauge.veBTCTokenId > 0n
                                     ? gauge.veBTCTokenId.toString()
                                     : "?"}
-                                </LabelSmall>
+                                </span>
                               )}
                             </div>
                             {/* Gauge Info */}
-                            <div
-                              className={css({
-                                display: "flex",
-                                flexDirection: "column",
-                                gap: "2px",
-                                minWidth: 0,
-                              })}
-                            >
-                              <div
-                                className={css({
-                                  display: "flex",
-                                  alignItems: "center",
-                                  gap: "6px",
-                                  flexWrap: "wrap",
-                                })}
-                              >
-                                <LabelSmall
-                                  color={
+                            <div className="flex min-w-0 flex-col gap-0.5">
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <span
+                                  className={`text-xs font-medium ${
                                     profile?.display_name ||
                                     profile?.description ||
                                     profile?.profile_picture_url
-                                      ? theme.colors.positive
-                                      : theme.colors.negative
-                                  }
+                                      ? "text-[var(--positive)]"
+                                      : "text-[var(--negative)]"
+                                  }`}
                                 >
                                   {profile?.display_name
                                     ? profile.display_name
                                     : gauge.veBTCTokenId > 0n
                                       ? `veBTC #${gauge.veBTCTokenId.toString()}`
                                       : `${gauge.address.slice(0, 6)}...${gauge.address.slice(-4)}`}
-                                </LabelSmall>
+                                </span>
                                 {profile?.display_name &&
                                   gauge.veBTCTokenId > 0n && (
-                                    <span
-                                      className={css({
-                                        display: "inline-flex",
-                                        alignItems: "center",
-                                        padding: "1px 5px",
-                                        borderRadius: "4px",
-                                        backgroundColor:
-                                          "rgba(247, 147, 26, 0.15)",
-                                        border:
-                                          "1px solid rgba(247, 147, 26, 0.3)",
-                                        fontSize: "9px",
-                                        fontWeight: 600,
-                                        color: "#F7931A",
-                                        fontFamily: "monospace",
-                                        letterSpacing: "0.5px",
-                                      })}
-                                    >
+                                    <span className="rounded bg-[rgba(247,147,26,0.15)] px-1.5 py-0.5 font-mono text-2xs font-semibold tracking-wide text-[#F7931A]">
                                       #{gauge.veBTCTokenId.toString()}
                                     </span>
                                   )}
                               </div>
                               {profile?.description && (
-                                <ParagraphSmall
-                                  color={theme.colors.contentSecondary}
-                                  overrides={{
-                                    Block: {
-                                      style: {
-                                        overflow: "hidden",
-                                        textOverflow: "ellipsis",
-                                        whiteSpace: "nowrap",
-                                        maxWidth: "200px",
-                                        margin: 0,
-                                      },
-                                    },
-                                  }}
-                                >
+                                <span className="max-w-[200px] truncate text-2xs text-[var(--content-secondary)]">
                                   {profile.description}
-                                </ParagraphSmall>
+                                </span>
                               )}
                             </div>
                           </Link>
@@ -511,11 +365,13 @@ export default function GaugesPage() {
                         </SortableHeader>
                       }
                     >
-                      {(gauge: BoostGauge) =>
-                        gauge.veBTCWeight !== undefined
-                          ? formatUnits(gauge.veBTCWeight, 18).slice(0, 10)
-                          : "-"
-                      }
+                      {(gauge: BoostGauge) => (
+                        <span className="font-mono text-sm tabular-nums">
+                          {gauge.veBTCWeight !== undefined
+                            ? formatUnits(gauge.veBTCWeight, 18).slice(0, 10)
+                            : "-"}
+                        </span>
+                      )}
                     </TableBuilderColumn>
                     <TableBuilderColumn
                       header={
@@ -524,18 +380,22 @@ export default function GaugesPage() {
                         </SortableHeader>
                       }
                     >
-                      {(gauge: BoostGauge) =>
-                        formatUnits(gauge.totalWeight, 18).slice(0, 10)
-                      }
+                      {(gauge: BoostGauge) => (
+                        <span className="font-mono text-sm tabular-nums">
+                          {formatUnits(gauge.totalWeight, 18).slice(0, 10)}
+                        </span>
+                      )}
                     </TableBuilderColumn>
                     <TableBuilderColumn
                       header={
                         <SortableHeader column="boost">Boost</SortableHeader>
                       }
                     >
-                      {(gauge: BoostGauge) =>
-                        formatMultiplier(gauge.boostMultiplier)
-                      }
+                      {(gauge: BoostGauge) => (
+                        <span className="font-mono text-sm tabular-nums">
+                          {formatMultiplier(gauge.boostMultiplier)}
+                        </span>
+                      )}
                     </TableBuilderColumn>
                     <TableBuilderColumn
                       header={<SortableHeader column="apy">APY</SortableHeader>}
@@ -544,21 +404,21 @@ export default function GaugesPage() {
                         const apyData = apyMap.get(gauge.address.toLowerCase())
                         if (isLoadingAPY) {
                           return (
-                            <LabelSmall color={theme.colors.contentSecondary}>
-                              Loading...
-                            </LabelSmall>
+                            <span className="text-xs text-[var(--content-secondary)]">
+                              ...
+                            </span>
                           )
                         }
                         return (
-                          <LabelSmall
-                            color={
+                          <span
+                            className={`font-mono text-sm font-medium ${
                               apyData?.apy && apyData.apy > 0
-                                ? theme.colors.positive
-                                : theme.colors.contentSecondary
-                            }
+                                ? "text-[var(--positive)]"
+                                : "text-[var(--content-secondary)]"
+                            }`}
                           >
                             {formatAPY(apyData?.apy ?? null)}
-                          </LabelSmall>
+                          </span>
                         )
                       }}
                     </TableBuilderColumn>
@@ -569,11 +429,13 @@ export default function GaugesPage() {
                         </SortableHeader>
                       }
                     >
-                      {(gauge: BoostGauge) =>
-                        gauge.optimalAdditionalVeMEZO !== undefined
-                          ? formatFixedPoint(gauge.optimalAdditionalVeMEZO)
-                          : "-"
-                      }
+                      {(gauge: BoostGauge) => (
+                        <span className="font-mono text-sm tabular-nums">
+                          {gauge.optimalAdditionalVeMEZO !== undefined
+                            ? formatFixedPoint(gauge.optimalAdditionalVeMEZO)
+                            : "-"}
+                        </span>
+                      )}
                     </TableBuilderColumn>
                     <TableBuilderColumn header="Status">
                       {(gauge: BoostGauge) => (

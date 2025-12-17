@@ -1,4 +1,3 @@
-import { useStyletron } from "@mezo-org/mezo-clay"
 import type { ReactNode } from "react"
 import { Header } from "./Header"
 
@@ -6,30 +5,11 @@ type LayoutProps = {
   children: ReactNode
 }
 
-export function Layout({ children }: LayoutProps) {
-  const [css, theme] = useStyletron()
-
+export function Layout({ children }: LayoutProps): JSX.Element {
   return (
-    <div
-      className={css({
-        minHeight: "100vh",
-        backgroundColor: theme.colors.backgroundPrimary,
-      })}
-    >
+    <div className="flex min-h-screen flex-col bg-[var(--background)]">
       <Header />
-      <main
-        className={css({
-          maxWidth: "1200px",
-          margin: "0 auto",
-          padding: "24px",
-          "@media (max-width: 768px)": {
-            padding: "16px",
-          },
-          "@media (max-width: 480px)": {
-            padding: "12px",
-          },
-        })}
-      >
+      <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 md:px-6 md:py-8 lg:px-8">
         {children}
       </main>
     </div>

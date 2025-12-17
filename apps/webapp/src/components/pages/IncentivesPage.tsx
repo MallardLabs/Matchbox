@@ -22,16 +22,12 @@ import {
 import {
   Button,
   Card,
-  HeadingLarge,
   Input,
-  LabelMedium,
-  LabelSmall,
   ParagraphMedium,
   ParagraphSmall,
   Select,
   Skeleton,
   Textarea,
-  useStyletron,
 } from "@mezo-org/mezo-clay"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { formatUnits, parseUnits } from "viem"
@@ -40,8 +36,7 @@ import { useAccount } from "wagmi"
 const EXPLORER_URL =
   process.env.NEXT_PUBLIC_EXPLORER_URL || "https://explorer.test.mezo.org"
 
-export default function IncentivesPage() {
-  const [css, theme] = useStyletron()
+export default function IncentivesPage(): JSX.Element {
   const { isConnected, address: walletAddress } = useAccount()
   const { locks: veBTCLocks, isLoading: isLoadingLocks } = useVeBTCLocks()
 
@@ -238,57 +233,38 @@ export default function IncentivesPage() {
 
   return (
     <Layout>
-      <div
-        className={css({
-          display: "flex",
-          flexDirection: "column",
-          gap: "24px",
-        })}
-      >
-        <div>
-          <HeadingLarge marginBottom="scale300">Manage Incentives</HeadingLarge>
-          <ParagraphMedium color={theme.colors.contentSecondary}>
+      <div className="flex flex-col gap-6">
+        {/* Page Header */}
+        <header>
+          <h1 className="mb-2 text-2xl font-semibold text-[var(--content-primary)]">
+            <span className="text-[#F7931A]">$</span> incentives --manage
+          </h1>
+          <p className="text-sm text-[var(--content-secondary)]">
             Create a boost gauge for your veBTC and add incentives to attract
             veMEZO votes
-          </ParagraphMedium>
-        </div>
+          </p>
+        </header>
 
         {!isConnected ? (
           <SpringIn delay={0} variant="card">
             <Card withBorder overrides={{}}>
-              <div
-                className={css({
-                  padding: "48px",
-                  textAlign: "center",
-                })}
-              >
-                <ParagraphMedium color={theme.colors.contentSecondary}>
+              <div className="p-12 text-center">
+                <ParagraphMedium color="var(--content-secondary)">
                   Connect your wallet to manage incentives
                 </ParagraphMedium>
               </div>
             </Card>
           </SpringIn>
         ) : isLoading ? (
-          <div
-            className={css({
-              display: "flex",
-              flexDirection: "column",
-              gap: "16px",
-            })}
-          >
+          <div className="flex flex-col gap-4">
             <Skeleton width="100%" height="150px" animation />
             <Skeleton width="100%" height="150px" animation />
           </div>
         ) : veBTCLocks.length === 0 ? (
           <SpringIn delay={0} variant="card">
             <Card withBorder overrides={{}}>
-              <div
-                className={css({
-                  padding: "48px",
-                  textAlign: "center",
-                })}
-              >
-                <ParagraphMedium color={theme.colors.contentSecondary}>
+              <div className="p-12 text-center">
+                <ParagraphMedium color="var(--content-secondary)">
                   You don&apos;t have any veBTC locks. Lock BTC to get veBTC and
                   create a boost gauge.
                 </ParagraphMedium>
@@ -299,7 +275,7 @@ export default function IncentivesPage() {
           <>
             <SpringIn delay={0} variant="card">
               <Card title="Select veBTC Lock" withBorder overrides={{}}>
-                <div className={css({ padding: "16px 0" })}>
+                <div className="py-4">
                   <Select
                     options={veBTCLocks.map((lock, i) => ({
                       label: `veBTC #${lock.tokenId.toString()} - ${formatUnits(lock.amount, 18).slice(0, 8)} BTC locked`,
@@ -320,82 +296,54 @@ export default function IncentivesPage() {
                   />
 
                   {selectedLock && (
-                    <div
-                      className={css({
-                        marginTop: "16px",
-                        padding: "16px",
-                        backgroundColor: theme.colors.backgroundSecondary,
-                        borderRadius: "8px",
-                      })}
-                    >
-                      <div
-                        className={css({
-                          display: "grid",
-                          gridTemplateColumns: "repeat(4, 1fr)",
-                          gap: "16px",
-                          "@media (max-width: 1024px)": {
-                            gridTemplateColumns: "repeat(2, 1fr)",
-                          },
-                          "@media (max-width: 480px)": {
-                            gridTemplateColumns: "1fr",
-                            gap: "12px",
-                          },
-                        })}
-                      >
+                    <div className="mt-4 rounded-lg bg-[var(--surface-secondary)] p-4">
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 lg:gap-4">
                         <div>
-                          <LabelSmall color={theme.colors.contentSecondary}>
+                          <p className="mb-1 text-2xs uppercase tracking-wider text-[var(--content-tertiary)]">
                             Locked Amount
-                          </LabelSmall>
-                          <LabelMedium>
+                          </p>
+                          <p className="font-mono text-sm font-medium tabular-nums text-[var(--content-primary)]">
                             {formatUnits(selectedLock.amount, 18).slice(0, 10)}{" "}
                             BTC
-                          </LabelMedium>
+                          </p>
                         </div>
                         <div>
-                          <LabelSmall color={theme.colors.contentSecondary}>
+                          <p className="mb-1 text-2xs uppercase tracking-wider text-[var(--content-tertiary)]">
                             Voting Power
-                          </LabelSmall>
-                          <LabelMedium>
+                          </p>
+                          <p className="font-mono text-sm font-medium tabular-nums text-[var(--content-primary)]">
                             {formatUnits(selectedLock.votingPower, 18).slice(
                               0,
                               10,
                             )}
-                          </LabelMedium>
+                          </p>
                         </div>
                         <div>
-                          <LabelSmall color={theme.colors.contentSecondary}>
+                          <p className="mb-1 text-2xs uppercase tracking-wider text-[var(--content-tertiary)]">
                             Current Boost
-                          </LabelSmall>
-                          <LabelMedium>
+                          </p>
+                          <p className="font-mono text-sm font-medium tabular-nums text-[var(--content-primary)]">
                             {boostMultiplier.toFixed(2)}x
-                          </LabelMedium>
+                          </p>
                         </div>
                         <div>
-                          <LabelSmall color={theme.colors.contentSecondary}>
+                          <p className="mb-1 text-2xs uppercase tracking-wider text-[var(--content-tertiary)]">
                             Gauge
-                          </LabelSmall>
+                          </p>
                           {hasGauge && gaugeAddress ? (
                             <a
                               href={`${EXPLORER_URL}/address/${gaugeAddress}`}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className={css({
-                                fontFamily: "monospace",
-                                fontSize: "14px",
-                                color: theme.colors.accent,
-                                textDecoration: "none",
-                                ":hover": {
-                                  textDecoration: "underline",
-                                },
-                              })}
+                              className="font-mono text-sm text-[var(--accent)] no-underline hover:underline"
                             >
                               {gaugeAddress.slice(0, 6)}...
                               {gaugeAddress.slice(-4)}
                             </a>
                           ) : (
-                            <LabelMedium color={theme.colors.contentSecondary}>
+                            <p className="text-sm text-[var(--content-secondary)]">
                               None
-                            </LabelMedium>
+                            </p>
                           )}
                         </div>
                       </div>
@@ -404,36 +352,25 @@ export default function IncentivesPage() {
                       {hasGauge &&
                         !isLoadingIncentives &&
                         incentives.length > 0 && (
-                          <div className={css({ marginTop: "16px" })}>
-                            <LabelSmall
-                              color={theme.colors.contentSecondary}
-                              marginBottom="scale200"
-                            >
+                          <div className="mt-4">
+                            <p className="mb-2 text-2xs uppercase tracking-wider text-[var(--content-tertiary)]">
                               Current Epoch Incentives
-                            </LabelSmall>
-                            <div
-                              className={css({
-                                display: "flex",
-                                flexDirection: "column",
-                                gap: "8px",
-                              })}
-                            >
+                            </p>
+                            <div className="flex flex-col gap-2">
                               {incentives.map((incentive) => (
                                 <div
                                   key={incentive.tokenAddress}
-                                  className={css({
-                                    display: "flex",
-                                    justifyContent: "space-between",
-                                    alignItems: "center",
-                                  })}
+                                  className="flex items-center justify-between"
                                 >
-                                  <LabelMedium>{incentive.symbol}</LabelMedium>
-                                  <LabelMedium>
+                                  <span className="text-sm font-medium text-[var(--content-primary)]">
+                                    {incentive.symbol}
+                                  </span>
+                                  <span className="font-mono text-sm font-medium tabular-nums text-[var(--content-primary)]">
                                     {formatUnits(
                                       incentive.amount,
                                       incentive.decimals,
                                     ).slice(0, 10)}
-                                  </LabelMedium>
+                                  </span>
                                 </div>
                               ))}
                             </div>
@@ -449,13 +386,9 @@ export default function IncentivesPage() {
               (!hasGauge && !isLoadingGauge ? (
                 <SpringIn delay={1} variant="card">
                   <Card title="Create Boost Gauge" withBorder overrides={{}}>
-                    <div
-                      className={css({
-                        padding: "16px 0",
-                      })}
-                    >
+                    <div className="py-4">
                       <ParagraphMedium
-                        color={theme.colors.contentSecondary}
+                        color="var(--content-secondary)"
                         marginBottom="scale500"
                       >
                         Create a boost gauge for this veBTC lock to start
@@ -470,7 +403,7 @@ export default function IncentivesPage() {
                       </Button>
                       {createError && (
                         <ParagraphSmall
-                          color={theme.colors.negative}
+                          color="var(--negative)"
                           marginTop="scale300"
                         >
                           Error: {createError.message}
@@ -484,15 +417,8 @@ export default function IncentivesPage() {
                   {/* Gauge Profile Card */}
                   <SpringIn delay={1} variant="card">
                     <Card title="Gauge Profile" withBorder overrides={{}}>
-                      <div
-                        className={css({
-                          padding: "16px 0",
-                          display: "flex",
-                          flexDirection: "column",
-                          gap: "16px",
-                        })}
-                      >
-                        <ParagraphMedium color={theme.colors.contentSecondary}>
+                      <div className="flex flex-col gap-4 py-4">
+                        <ParagraphMedium color="var(--content-secondary)">
                           Customize your gauge&apos;s profile to help veMEZO
                           voters identify your gauge.
                         </ParagraphMedium>
@@ -503,49 +429,21 @@ export default function IncentivesPage() {
                           <>
                             {/* Profile Picture */}
                             <div>
-                              <LabelSmall
-                                color={theme.colors.contentSecondary}
-                                marginBottom="scale200"
-                              >
+                              <p className="mb-2 text-2xs uppercase tracking-wider text-[var(--content-tertiary)]">
                                 Profile Picture
-                              </LabelSmall>
-                              <div
-                                className={css({
-                                  display: "flex",
-                                  alignItems: "center",
-                                  gap: "16px",
-                                })}
-                              >
-                                <div
-                                  className={css({
-                                    width: "80px",
-                                    height: "80px",
-                                    borderRadius: "50%",
-                                    backgroundColor:
-                                      theme.colors.backgroundSecondary,
-                                    display: "flex",
-                                    alignItems: "center",
-                                    justifyContent: "center",
-                                    overflow: "hidden",
-                                    border: `2px solid ${theme.colors.borderOpaque}`,
-                                  })}
-                                >
+                              </p>
+                              <div className="flex items-center gap-4">
+                                <div className="flex h-20 w-20 flex-shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-[var(--border)] bg-[var(--surface-secondary)]">
                                   {profilePicturePreview ? (
                                     <img
                                       src={profilePicturePreview}
                                       alt="Gauge profile"
-                                      className={css({
-                                        width: "100%",
-                                        height: "100%",
-                                        objectFit: "cover",
-                                      })}
+                                      className="h-full w-full object-cover"
                                     />
                                   ) : (
-                                    <LabelSmall
-                                      color={theme.colors.contentSecondary}
-                                    >
+                                    <span className="text-xs text-[var(--content-secondary)]">
                                       No image
-                                    </LabelSmall>
+                                    </span>
                                   )}
                                 </div>
                                 <div>
@@ -554,7 +452,7 @@ export default function IncentivesPage() {
                                     ref={fileInputRef}
                                     accept="image/*"
                                     onChange={handleFileSelect}
-                                    className={css({ display: "none" })}
+                                    className="hidden"
                                   />
                                   <Button
                                     kind="secondary"
@@ -568,7 +466,7 @@ export default function IncentivesPage() {
                                       : "Upload Picture"}
                                   </Button>
                                   <ParagraphSmall
-                                    color={theme.colors.contentSecondary}
+                                    color="var(--content-secondary)"
                                     marginTop="scale200"
                                   >
                                     Recommended: Square image, at least
@@ -580,14 +478,12 @@ export default function IncentivesPage() {
 
                             {/* Display Name */}
                             <div>
-                              <LabelSmall
-                                color={theme.colors.contentSecondary}
-                                marginBottom="scale100"
-                                as="label"
+                              <label
                                 htmlFor="gauge-display-name"
+                                className="mb-1 block text-2xs uppercase tracking-wider text-[var(--content-tertiary)]"
                               >
                                 Display Name
-                              </LabelSmall>
+                              </label>
                               <Input
                                 id="gauge-display-name"
                                 value={profileDisplayName}
@@ -597,7 +493,7 @@ export default function IncentivesPage() {
                                 placeholder={`veBTC #${selectedLock?.tokenId?.toString() ?? ""}`}
                               />
                               <ParagraphSmall
-                                color={theme.colors.contentSecondary}
+                                color="var(--content-secondary)"
                                 marginTop="scale100"
                               >
                                 Leave empty to use the default name (veBTC #
@@ -607,14 +503,12 @@ export default function IncentivesPage() {
 
                             {/* Description */}
                             <div>
-                              <LabelSmall
-                                color={theme.colors.contentSecondary}
-                                marginBottom="scale100"
-                                as="label"
+                              <label
                                 htmlFor="gauge-description"
+                                className="mb-1 block text-2xs uppercase tracking-wider text-[var(--content-tertiary)]"
                               >
                                 Description
-                              </LabelSmall>
+                              </label>
                               <Textarea
                                 id="gauge-description"
                                 value={profileDescription}
@@ -654,15 +548,8 @@ export default function IncentivesPage() {
                   {/* Add Incentives Card */}
                   <SpringIn delay={2} variant="card">
                     <Card title="Add Incentives" withBorder overrides={{}}>
-                      <div
-                        className={css({
-                          padding: "16px 0",
-                          display: "flex",
-                          flexDirection: "column",
-                          gap: "16px",
-                        })}
-                      >
-                        <ParagraphMedium color={theme.colors.contentSecondary}>
+                      <div className="flex flex-col gap-4 py-4">
+                        <ParagraphMedium color="var(--content-secondary)">
                           Add token incentives to attract veMEZO holders to vote
                           for your gauge.
                         </ParagraphMedium>
@@ -674,21 +561,19 @@ export default function IncentivesPage() {
                           placeholder="Select a token"
                         />
                         {incentiveToken && isTokenAllowlisted === false && (
-                          <ParagraphSmall color={theme.colors.negative}>
+                          <ParagraphSmall color="var(--negative)">
                             This token is not allowlisted for incentives. Only
                             allowlisted tokens can be used as bribes.
                           </ParagraphSmall>
                         )}
                         <div>
-                          <LabelSmall
-                            color={theme.colors.contentSecondary}
-                            marginBottom="scale100"
-                            as="label"
+                          <label
                             htmlFor="incentive-amount"
+                            className="mb-1 block text-2xs uppercase tracking-wider text-[var(--content-tertiary)]"
                           >
                             Amount
                             {incentiveToken && ` (${incentiveToken.symbol})`}
-                          </LabelSmall>
+                          </label>
                           <Input
                             id="incentive-amount"
                             value={incentiveAmount}
@@ -730,7 +615,7 @@ export default function IncentivesPage() {
                         )}
                         {addIncentivesError && (
                           <ParagraphSmall
-                            color={theme.colors.negative}
+                            color="var(--negative)"
                             marginTop="scale300"
                           >
                             Error: {addIncentivesError.message}
