@@ -217,9 +217,9 @@ function VeBTCLockCard({
                   </span>
                 </Link>
                 {!isLoadingAPY && apy !== null && apy > 0 && (
-                  <div className="mt-1 inline-flex items-center rounded border border-[var(--positive)] bg-[var(--positive)] px-1.5 py-0.5 opacity-15">
-                    <span className="text-xs text-[var(--positive)]">
-                      {formatAPY(apy)} next epoch
+                  <div className="mt-1 inline-flex items-center rounded border border-[var(--positive-subtle)] bg-[var(--positive-subtle)] px-1.5 py-0.5">
+                    <span className="text-xs font-medium text-[var(--positive)]">
+                      {formatAPY(apy)} APY
                     </span>
                   </div>
                 )}
@@ -394,9 +394,13 @@ function ClaimableRewardRow({
   const { usedWeight } = useVoteState(tokenId)
   const { apy } = useVotingAPY(claimableUSD, usedWeight)
 
-  // Get vote allocations for upcoming APY
+  // Get vote allocations for upcoming APY and projected rewards
   const { allocations } = useVoteAllocations(tokenId, allGaugeAddresses)
-  const { upcomingAPY } = useUpcomingVotingAPY(allocations, apyMap, usedWeight)
+  const { upcomingAPY, projectedIncentivesUSD } = useUpcomingVotingAPY(
+    allocations,
+    apyMap,
+    usedWeight,
+  )
 
   // Group rewards by token across all bribes for this tokenId
   const rewardsByToken = useMemo(() => {
@@ -470,8 +474,9 @@ function ClaimableRewardRow({
         </div>
       </div>
 
-      {/* Center: Rewards */}
+      {/* Center: Claimable + Pending Rewards */}
       <div className="flex flex-1 flex-wrap items-center justify-center gap-5 max-[600px]:justify-start">
+        {/* Claimable rewards */}
         {rewardsByToken.map((reward) => (
           <div key={reward.symbol} className="flex items-center gap-1.5">
             <TokenIcon symbol={reward.symbol} size={20} />
@@ -483,6 +488,20 @@ function ClaimableRewardRow({
             </span>
           </div>
         ))}
+        {/* Pending rewards (projected for next epoch) */}
+        {projectedIncentivesUSD > 0 && (
+          <div className="flex items-center gap-1.5 rounded border border-dashed border-[var(--border)] px-2 py-1">
+            <span className="text-2xs uppercase tracking-wider text-[var(--content-tertiary)]">
+              Pending
+            </span>
+            <span className="font-mono text-sm tabular-nums text-[var(--content-secondary)]">
+              ≈ $
+              {projectedIncentivesUSD.toLocaleString(undefined, {
+                maximumFractionDigits: 2,
+              })}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Right side: Claim button */}
@@ -1019,7 +1038,7 @@ export default function DashboardPage(): JSX.Element {
                     </div>
                   </Card>
                 ) : (
-                  <div className="grid grid-cols-[repeat(auto-fill,minmax(350px,1fr))] gap-4 max-[480px]:grid-cols-1 max-[480px]:gap-3">
+                  <div className="grid grid-cols-3 gap-4 max-[1024px]:grid-cols-2 max-[640px]:grid-cols-1 max-[480px]:gap-3">
                     {veMEZOLocks.map((lock, index) => (
                       <SpringIn
                         key={lock.tokenId.toString()}
@@ -1060,7 +1079,7 @@ export default function DashboardPage(): JSX.Element {
                     </div>
                   </Card>
                 ) : (
-                  <div className="grid grid-cols-[repeat(auto-fill,minmax(350px,1fr))] gap-4 max-[480px]:grid-cols-1 max-[480px]:gap-3">
+                  <div className="grid grid-cols-3 gap-4 max-[1024px]:grid-cols-2 max-[640px]:grid-cols-1 max-[480px]:gap-3">
                     {veBTCLocks.map((lock, index) => (
                       <SpringIn
                         key={lock.tokenId.toString()}

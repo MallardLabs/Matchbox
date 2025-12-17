@@ -89,7 +89,7 @@
 
   html {
     font-family: "IBM Plex Mono", monospace;
-    font-size: 14px;
+    font-size: 16px;
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
@@ -433,9 +433,37 @@
    Clean integration with the design system
    ============================================ */
 
-/* Override mezo-clay to use our CSS variables */
-[data-baseweb] {
+/* Override mezo-clay fonts - completely replace Riforma with IBM Plex Mono */
+[data-baseweb],
+[data-baseweb] *,
+[class*="css-"] {
   font-family: "IBM Plex Mono", monospace !important;
+}
+
+/* Block any Riforma font declarations from mezo-clay */
+@font-face {
+  font-family: "RiformaLLWeb-Light";
+  src: local("IBM Plex Mono");
+}
+@font-face {
+  font-family: "RiformaLLWeb-Regular";
+  src: local("IBM Plex Mono");
+}
+@font-face {
+  font-family: "RiformaLLWeb-Medium";
+  src: local("IBM Plex Mono");
+}
+@font-face {
+  font-family: "RiformaLLWeb-Bold";
+  src: local("IBM Plex Mono");
+}
+@font-face {
+  font-family: "RiformaLLWeb-Heavy";
+  src: local("IBM Plex Mono");
+}
+@font-face {
+  font-family: "RiformaMonoLLWeb-Regular";
+  src: local("IBM Plex Mono");
 }
 
 /* Card overrides */
