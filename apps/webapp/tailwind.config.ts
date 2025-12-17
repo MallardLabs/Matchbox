@@ -69,17 +69,17 @@ const config: Config = {
         ],
       },
       fontSize: {
-        // Terminal-optimized type scale
-        "2xs": ["0.625rem", { lineHeight: "1rem" }], // 10px
-        xs: ["0.75rem", { lineHeight: "1.125rem" }], // 12px
-        sm: ["0.8125rem", { lineHeight: "1.25rem" }], // 13px
-        base: ["0.875rem", { lineHeight: "1.375rem" }], // 14px
-        lg: ["1rem", { lineHeight: "1.5rem" }], // 16px
-        xl: ["1.125rem", { lineHeight: "1.625rem" }], // 18px
-        "2xl": ["1.25rem", { lineHeight: "1.75rem" }], // 20px
-        "3xl": ["1.5rem", { lineHeight: "2rem" }], // 24px
-        "4xl": ["2rem", { lineHeight: "2.5rem" }], // 32px
-        "5xl": ["2.5rem", { lineHeight: "3rem" }], // 40px
+        // Terminal-optimized type scale (bumped up for readability)
+        "2xs": ["0.75rem", { lineHeight: "1.125rem" }], // 12px
+        xs: ["0.8125rem", { lineHeight: "1.25rem" }], // 13px
+        sm: ["0.875rem", { lineHeight: "1.375rem" }], // 14px
+        base: ["1rem", { lineHeight: "1.5rem" }], // 16px
+        lg: ["1.125rem", { lineHeight: "1.625rem" }], // 18px
+        xl: ["1.25rem", { lineHeight: "1.75rem" }], // 20px
+        "2xl": ["1.5rem", { lineHeight: "2rem" }], // 24px
+        "3xl": ["1.875rem", { lineHeight: "2.25rem" }], // 30px
+        "4xl": ["2.25rem", { lineHeight: "2.75rem" }], // 36px
+        "5xl": ["3rem", { lineHeight: "3.5rem" }], // 48px
       },
       borderRadius: {
         sm: "4px",
