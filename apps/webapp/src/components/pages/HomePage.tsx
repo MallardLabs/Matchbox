@@ -63,7 +63,13 @@ function ActionCard({
   accentColor = "#F7931A",
 }: ActionCardProps): JSX.Element {
   return (
-    <article className="group relative flex h-full flex-col rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5 transition-all duration-200 hover:border-[var(--border-focus)] hover:shadow-terminal-md md:p-6">
+    <article className="group relative flex h-full flex-col rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5 transition-all duration-200 hover:shadow-terminal-md md:p-6">
+      {/* Hover border overlay with accent color */}
+      <div 
+        className="pointer-events-none absolute inset-0 rounded-xl border-2 opacity-0 transition-opacity duration-200 group-hover:opacity-100"
+        style={{ borderColor: accentColor }}
+        aria-hidden="true"
+      />
       {/* Terminal-style header */}
       <header className="mb-4">
         <div className="mb-2 flex items-center gap-2">
