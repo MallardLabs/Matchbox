@@ -232,10 +232,10 @@ function VeBTCLockCard({
           </div>
         </div>
 
-        {!lock.isPermanent && !isExpired && (
+        {(lock.isPermanent || !isExpired) && (
           <div className="mt-4 border-t border-[var(--border)] pt-4">
             <p className="text-xs text-[var(--content-secondary)]">
-              Unlocks: {unlockDate.toLocaleDateString()}
+              Unlocks: {lock.isPermanent ? "Never" : unlockDate.toLocaleDateString()}
             </p>
           </div>
         )}
@@ -351,10 +351,10 @@ function VeMEZOLockCard({
           </div>
         </div>
 
-        {!lock.isPermanent && !isExpired && (
+        {(lock.isPermanent || !isExpired) && (
           <div className="mt-4 border-t border-[var(--border)] pt-4">
             <p className="text-xs text-[var(--content-secondary)]">
-              Unlocks: {unlockDate.toLocaleDateString()}
+              Unlocks: {lock.isPermanent ? "Never" : unlockDate.toLocaleDateString()}
             </p>
           </div>
         )}
