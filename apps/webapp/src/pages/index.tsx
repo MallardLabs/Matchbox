@@ -1,5 +1,6 @@
 import { InitialLoader } from "@/components/InitialLoader"
 import dynamic from "next/dynamic"
+import Head from "next/head"
 
 const HomePage = dynamic(() => import("@/components/pages/HomePage"), {
   ssr: false,
@@ -7,5 +8,36 @@ const HomePage = dynamic(() => import("@/components/pages/HomePage"), {
 })
 
 export default function Home() {
-  return <HomePage />
+  const baseUrl =
+    process.env.NEXT_PUBLIC_SITE_URL ?? "https://matchbox.mezo.org"
+  const ogImageUrl = `${baseUrl}/api/og`
+  const title = "MatchBox - Boost Voting for Mezo"
+  const description =
+    "Vote with your veMEZO to boost gauges and earn rewards on Mezo."
+
+  return (
+    <>
+      <Head>
+        <title>{title}</title>
+        <meta name="description" content={description} />
+
+        {/* Open Graph */}
+        <meta property="og:type" content="website" />
+        <meta property="og:url" content={baseUrl} />
+        <meta property="og:title" content={title} />
+        <meta property="og:description" content={description} />
+        <meta property="og:image" content={ogImageUrl} />
+        <meta property="og:image:width" content="1200" />
+        <meta property="og:image:height" content="630" />
+
+        {/* Twitter */}
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:url" content={baseUrl} />
+        <meta name="twitter:title" content={title} />
+        <meta name="twitter:description" content={description} />
+        <meta name="twitter:image" content={ogImageUrl} />
+      </Head>
+      <HomePage />
+    </>
+  )
 }

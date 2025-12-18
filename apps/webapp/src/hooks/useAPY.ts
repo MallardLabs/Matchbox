@@ -349,7 +349,10 @@ export function useGaugesAPY(
     if (!rewardTokensData) return []
     return rewardTokensData
       .map((r) => r.result as Address | undefined)
-      .filter((addr): addr is Address => !!addr && addr !== "0x0000000000000000000000000000000000000000")
+      .filter(
+        (addr): addr is Address =>
+          !!addr && addr !== "0x0000000000000000000000000000000000000000",
+      )
   }, [rewardTokensData])
 
   const currentEpochStart = getEpochStart(Math.floor(Date.now() / 1000))
@@ -406,7 +409,8 @@ export function useGaugesAPY(
       }),
       query: {
         // Only run when we have actual token addresses resolved
-        enabled: rewardTokenQueries.length > 0 && resolvedTokenAddresses.length > 0,
+        enabled:
+          rewardTokenQueries.length > 0 && resolvedTokenAddresses.length > 0,
       },
     })
 
@@ -429,7 +433,7 @@ export function useGaugesAPY(
     // Calculate incentives per gauge (both total USD and by token)
     const gaugeIncentives = new Map<string, number>()
     const gaugeTokenIncentives = new Map<string, TokenIncentive[]>()
-    
+
     rewardTokenQueries.forEach((query, i) => {
       const tokenAddress = rewardTokensData?.[i]?.result as Address | undefined
       const amount = tokenRewardsData?.[i * 2]?.result as bigint | undefined
@@ -450,11 +454,11 @@ export function useGaugesAPY(
         const gaugeKey = query.gaugeAddress.toLowerCase()
         const current = gaugeIncentives.get(gaugeKey) ?? 0
         gaugeIncentives.set(gaugeKey, current + usdValue)
-        
+
         // Track by token
         const existingTokens = gaugeTokenIncentives.get(gaugeKey) ?? []
         const existingToken = existingTokens.find(
-          (t) => t.tokenAddress === tokenKey
+          (t) => t.tokenAddress === tokenKey,
         )
         if (existingToken) {
           existingToken.amount += amount
@@ -480,7 +484,7 @@ export function useGaugesAPY(
       const incentivesByToken = gaugeTokenIncentives.get(gaugeKey) ?? []
 
       let apy: number | null = null
-      
+
       // No incentives = no APY
       if (totalIncentivesUSD > 0) {
         // Has incentives but no votes = infinite APY (first voter gets all rewards)
@@ -596,10 +600,18 @@ export function useUpcomingVotingAPY(
   voteAllocations: VoteAllocation[],
   apyMap: Map<string, GaugeAPYData>,
   usedWeight: bigint | undefined,
-): { upcomingAPY: number | null; projectedIncentivesUSD: number; projectedRewardsByToken: ProjectedTokenReward[] } {
+): {
+  upcomingAPY: number | null
+  projectedIncentivesUSD: number
+  projectedRewardsByToken: ProjectedTokenReward[]
+} {
   const result = useMemo(() => {
     if (!usedWeight || usedWeight === 0n || voteAllocations.length === 0) {
-      return { upcomingAPY: null, projectedIncentivesUSD: 0, projectedRewardsByToken: [] }
+      return {
+        upcomingAPY: null,
+        projectedIncentivesUSD: 0,
+        projectedRewardsByToken: [],
+      }
     }
 
     // Calculate user's proportional share of incentives across all voted gauges
@@ -620,14 +632,14 @@ export function useUpcomingVotingAPY(
           Number(allocation.weight) / Number(gaugeData.totalVeMEZOWeight)
         const userIncentivesFromGauge = gaugeData.totalIncentivesUSD * userShare
         totalUserIncentivesUSD += userIncentivesFromGauge
-        
+
         // Calculate user's share of each token from this gauge
         for (const tokenIncentive of gaugeData.incentivesByToken) {
           const userTokenAmount = BigInt(
-            Math.floor(Number(tokenIncentive.amount) * userShare)
+            Math.floor(Number(tokenIncentive.amount) * userShare),
           )
           const userTokenUSD = tokenIncentive.usdValue * userShare
-          
+
           const existing = tokenRewardsMap.get(tokenIncentive.tokenAddress)
           if (existing) {
             existing.amount += userTokenAmount
@@ -646,7 +658,11 @@ export function useUpcomingVotingAPY(
     }
 
     if (totalUserIncentivesUSD === 0) {
-      return { upcomingAPY: null, projectedIncentivesUSD: 0, projectedRewardsByToken: [] }
+      return {
+        upcomingAPY: null,
+        projectedIncentivesUSD: 0,
+        projectedRewardsByToken: [],
+      }
     }
 
     // Convert used veMEZO weight to USD value

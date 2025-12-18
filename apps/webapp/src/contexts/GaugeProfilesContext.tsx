@@ -42,7 +42,11 @@ export function GaugeProfilesProvider({
     const now = Date.now()
 
     // Return cached data if still valid and not forcing refresh
-    if (!force && globalProfiles.size > 0 && now - globalLastFetch < CACHE_TTL) {
+    if (
+      !force &&
+      globalProfiles.size > 0 &&
+      now - globalLastFetch < CACHE_TTL
+    ) {
       if (mountedRef.current) {
         setProfiles(new Map(globalProfiles))
         setIsLoading(false)
@@ -159,4 +163,3 @@ export function useAllGaugeProfilesFromContext() {
   const { profiles, isLoading, refetch } = useGaugeProfilesContext()
   return { profiles, isLoading, refetch }
 }
-

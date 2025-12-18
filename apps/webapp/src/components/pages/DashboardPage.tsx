@@ -217,7 +217,9 @@ function VeBTCLockCard({
                       View Gauge →
                     </span>
                   </Link>
-                  {!isLoadingAPY && apy !== null && (apy > 0 || apy === Infinity) ? (
+                  {!isLoadingAPY &&
+                  apy !== null &&
+                  (apy > 0 || apy === Number.POSITIVE_INFINITY) ? (
                     <div className="mt-1 flex w-fit items-center rounded border border-[var(--positive-subtle)] bg-[var(--positive-subtle)] px-1.5 py-0.5">
                       <span className="text-xs font-medium text-[var(--positive)]">
                         {formatAPY(apy)} APY
@@ -242,7 +244,8 @@ function VeBTCLockCard({
         {(lock.isPermanent || !isExpired) && (
           <div className="mt-4 border-t border-[var(--border)] pt-4">
             <p className="text-xs text-[var(--content-secondary)]">
-              Unlocks: {lock.isPermanent ? "Never" : unlockDate.toLocaleDateString()}
+              Unlocks:{" "}
+              {lock.isPermanent ? "Never" : unlockDate.toLocaleDateString()}
             </p>
           </div>
         )}
@@ -282,8 +285,8 @@ function VeMEZOLockCard({
             <span className="text-sm font-medium text-[var(--content-primary)]">
               veMEZO #{lock.tokenId.toString()}
             </span>
-            {((apy !== null && apy > 0) ||
-              (upcomingAPY !== null && upcomingAPY > 0)) ? (
+            {(apy !== null && apy > 0) ||
+            (upcomingAPY !== null && upcomingAPY > 0) ? (
               <div className="mt-1 flex items-center gap-1.5">
                 {/* Current APY */}
                 {apy !== null && apy > 0 && (
@@ -363,7 +366,8 @@ function VeMEZOLockCard({
         {(lock.isPermanent || !isExpired) && (
           <div className="mt-4 border-t border-[var(--border)] pt-4">
             <p className="text-xs text-[var(--content-secondary)]">
-              Unlocks: {lock.isPermanent ? "Never" : unlockDate.toLocaleDateString()}
+              Unlocks:{" "}
+              {lock.isPermanent ? "Never" : unlockDate.toLocaleDateString()}
             </p>
           </div>
         )}
@@ -400,11 +404,8 @@ function ClaimableRewardRow({
 
   // Get vote allocations for upcoming APY and projected rewards
   const { allocations } = useVoteAllocations(tokenId, allGaugeAddresses)
-  const { upcomingAPY, projectedIncentivesUSD, projectedRewardsByToken } = useUpcomingVotingAPY(
-    allocations,
-    apyMap,
-    usedWeight,
-  )
+  const { upcomingAPY, projectedIncentivesUSD, projectedRewardsByToken } =
+    useUpcomingVotingAPY(allocations, apyMap, usedWeight)
 
   // Group rewards by token across all bribes for this tokenId
   const rewardsByToken = useMemo(() => {
@@ -500,14 +501,20 @@ function ClaimableRewardRow({
           {/* Show stacked token icons as preview */}
           <div className="flex items-center -space-x-1">
             {rewardsByToken.slice(0, 3).map((reward) => (
-              <div key={reward.symbol} className="rounded-full border-2 border-[var(--surface)] bg-[var(--surface)]">
+              <div
+                key={reward.symbol}
+                className="rounded-full border-2 border-[var(--surface)] bg-[var(--surface)]"
+              >
                 <TokenIcon symbol={reward.symbol} size={20} />
               </div>
             ))}
           </div>
           {/* Show total USD */}
           <span className="font-mono text-lg font-semibold tabular-nums text-[var(--content-primary)]">
-            ${claimableUSD.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+            $
+            {claimableUSD.toLocaleString(undefined, {
+              maximumFractionDigits: 2,
+            })}
           </span>
         </div>
 
@@ -547,11 +554,13 @@ function ClaimableRewardRow({
             </span>
             <div className="flex flex-col gap-2">
               {rewardsByToken.map((reward) => {
-                const tokenAmount = Number(reward.amount) / Math.pow(10, reward.decimals)
-                const isMezo = reward.tokenAddress.toLowerCase() === MEZO_TOKEN_ADDRESS
+                const tokenAmount =
+                  Number(reward.amount) / Math.pow(10, reward.decimals)
+                const isMezo =
+                  reward.tokenAddress.toLowerCase() === MEZO_TOKEN_ADDRESS
                 const price = isMezo ? MEZO_PRICE : (btcPrice ?? 0)
                 const usdValue = tokenAmount * price
-                
+
                 return (
                   <div
                     key={reward.symbol}
@@ -569,7 +578,10 @@ function ClaimableRewardRow({
                       </span>
                       {usdValue > 0 && (
                         <span className="text-xs text-[var(--content-tertiary)]">
-                          ≈ ${usdValue.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                          ≈ $
+                          {usdValue.toLocaleString(undefined, {
+                            maximumFractionDigits: 2,
+                          })}
                         </span>
                       )}
                     </div>
@@ -578,7 +590,7 @@ function ClaimableRewardRow({
               })}
             </div>
           </div>
-          
+
           {/* Pending rewards section */}
           {hasPendingRewards && projectedRewardsByToken.length > 0 && (
             <div>
@@ -603,7 +615,10 @@ function ClaimableRewardRow({
                       </span>
                       {reward.usdValue > 0 && (
                         <span className="text-xs text-[var(--content-tertiary)]">
-                          ≈ ${reward.usdValue.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                          ≈ $
+                          {reward.usdValue.toLocaleString(undefined, {
+                            maximumFractionDigits: 2,
+                          })}
                         </span>
                       )}
                     </div>
@@ -634,11 +649,8 @@ function ProjectedRewardRow({
   const [isExpanded, setIsExpanded] = useState(false)
 
   // Calculate projected rewards and APY for this specific token
-  const { upcomingAPY, projectedIncentivesUSD, projectedRewardsByToken } = useUpcomingVotingAPY(
-    allocations,
-    apyMap,
-    usedWeight,
-  )
+  const { upcomingAPY, projectedIncentivesUSD, projectedRewardsByToken } =
+    useUpcomingVotingAPY(allocations, apyMap, usedWeight)
 
   if (projectedIncentivesUSD === 0) {
     return null
@@ -687,13 +699,19 @@ function ProjectedRewardRow({
           {/* Show stacked token icons as preview */}
           <div className="flex items-center -space-x-1">
             {projectedRewardsByToken.slice(0, 3).map((reward) => (
-              <div key={reward.tokenAddress} className="rounded-full border-2 border-[var(--surface)] bg-[var(--surface)] opacity-60">
+              <div
+                key={reward.tokenAddress}
+                className="rounded-full border-2 border-[var(--surface)] bg-[var(--surface)] opacity-60"
+              >
                 <TokenIcon symbol={reward.symbol} size={20} />
               </div>
             ))}
           </div>
           <span className="font-mono text-lg font-semibold tabular-nums text-[var(--content-secondary)]">
-            ≈ ${projectedIncentivesUSD.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+            ≈ $
+            {projectedIncentivesUSD.toLocaleString(undefined, {
+              maximumFractionDigits: 2,
+            })}
           </span>
         </div>
 
@@ -745,7 +763,10 @@ function ProjectedRewardRow({
                     </span>
                     {reward.usdValue > 0 && (
                       <span className="text-xs text-[var(--content-tertiary)]">
-                        ≈ ${reward.usdValue.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                        ≈ $
+                        {reward.usdValue.toLocaleString(undefined, {
+                          maximumFractionDigits: 2,
+                        })}
                       </span>
                     )}
                   </div>
@@ -954,7 +975,9 @@ export default function DashboardPage(): JSX.Element {
                               {upcomingAPY !== null && upcomingAPY > 0 && (
                                 <>
                                   {totalAPY !== null && totalAPY > 0 && (
-                                    <span className="text-xs text-[var(--content-tertiary)]">→</span>
+                                    <span className="text-xs text-[var(--content-tertiary)]">
+                                      →
+                                    </span>
                                   )}
                                   <span
                                     className={`inline-flex items-center rounded-full border px-2.5 py-1 font-medium ${
@@ -970,26 +993,35 @@ export default function DashboardPage(): JSX.Element {
                             </div>
                           )}
                         </div>
-                        
+
                         {/* Total USD Value - prominent display */}
                         {hasClaimableRewards && totalClaimableUSD > 0 && (
                           <div className="mb-5">
                             <span className="font-mono text-4xl font-bold tabular-nums text-[var(--content-primary)]">
-                              ${totalClaimableUSD.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              $
+                              {totalClaimableUSD.toLocaleString(undefined, {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              })}
                             </span>
                           </div>
                         )}
-                        
+
                         {/* Asset breakdown */}
                         {hasClaimableRewards && (
                           <div className="flex flex-wrap gap-3">
                             {Array.from(totalClaimable.entries()).map(
                               ([tokenAddr, info]) => {
-                                const tokenAmount = Number(info.amount) / Math.pow(10, info.decimals)
-                                const isMezo = tokenAddr.toLowerCase() === MEZO_TOKEN_ADDRESS
-                                const price = isMezo ? MEZO_PRICE : (btcPrice ?? 0)
+                                const tokenAmount =
+                                  Number(info.amount) /
+                                  Math.pow(10, info.decimals)
+                                const isMezo =
+                                  tokenAddr.toLowerCase() === MEZO_TOKEN_ADDRESS
+                                const price = isMezo
+                                  ? MEZO_PRICE
+                                  : (btcPrice ?? 0)
                                 const usdValue = tokenAmount * price
-                                
+
                                 return (
                                   <div
                                     key={tokenAddr}
@@ -999,7 +1031,10 @@ export default function DashboardPage(): JSX.Element {
                                     <div className="flex flex-col">
                                       <div className="flex items-baseline gap-1.5">
                                         <span className="font-mono text-base font-semibold tabular-nums text-[var(--content-primary)]">
-                                          {formatTokenValue(info.amount, info.decimals)}
+                                          {formatTokenValue(
+                                            info.amount,
+                                            info.decimals,
+                                          )}
                                         </span>
                                         <span className="text-xs text-[var(--content-secondary)]">
                                           {info.symbol}
@@ -1007,7 +1042,10 @@ export default function DashboardPage(): JSX.Element {
                                       </div>
                                       {usdValue > 0 && (
                                         <span className="text-xs text-[var(--content-tertiary)]">
-                                          ${usdValue.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                                          $
+                                          {usdValue.toLocaleString(undefined, {
+                                            maximumFractionDigits: 2,
+                                          })}
                                         </span>
                                       )}
                                     </div>
@@ -1020,13 +1058,23 @@ export default function DashboardPage(): JSX.Element {
 
                         {/* Projected future rewards */}
                         {hasFutureRewards && (
-                          <div className={hasClaimableRewards ? "mt-5 border-t border-[var(--border)] pt-5" : ""}>
+                          <div
+                            className={
+                              hasClaimableRewards
+                                ? "mt-5 border-t border-[var(--border)] pt-5"
+                                : ""
+                            }
+                          >
                             <div className="flex items-center gap-3">
                               <p className="text-2xs font-medium uppercase tracking-wider text-[var(--content-tertiary)]">
                                 Pending Rewards
                               </p>
                               <span className="font-mono text-lg font-semibold tabular-nums text-[var(--content-secondary)]">
-                                +${projectedIncentivesUSD.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                                +$
+                                {projectedIncentivesUSD.toLocaleString(
+                                  undefined,
+                                  { maximumFractionDigits: 2 },
+                                )}
                               </span>
                             </div>
                           </div>
@@ -1038,7 +1086,9 @@ export default function DashboardPage(): JSX.Element {
                           <div className="h-2.5 w-2.5 animate-pulse rounded-full bg-[var(--positive)] shadow-[0_0_10px_var(--positive)]" />
                           <span className="text-sm font-medium text-[var(--positive)]">
                             {bribesGroupedByTokenId.size}{" "}
-                            {bribesGroupedByTokenId.size === 1 ? "position" : "positions"}{" "}
+                            {bribesGroupedByTokenId.size === 1
+                              ? "position"
+                              : "positions"}{" "}
                             ready
                           </span>
                         </div>
@@ -1057,9 +1107,8 @@ export default function DashboardPage(): JSX.Element {
                         }> = []
                         veMEZOLocks.forEach((lock, index) => {
                           const tokenIdStr = lock.tokenId.toString()
-                          const hasClaimable = bribesGroupedByTokenId.has(
-                            tokenIdStr,
-                          )
+                          const hasClaimable =
+                            bribesGroupedByTokenId.has(tokenIdStr)
                           if (!hasClaimable) {
                             tokensWithPendingOnly.push({
                               tokenId: lock.tokenId,
@@ -1070,8 +1119,10 @@ export default function DashboardPage(): JSX.Element {
 
                         // Calculate total rows to determine last one
                         const totalClaimableRows = bribesGroupedByTokenId.size
-                        const totalPendingOnlyRows = tokensWithPendingOnly.length
-                        const totalRows = totalClaimableRows + totalPendingOnlyRows
+                        const totalPendingOnlyRows =
+                          tokensWithPendingOnly.length
+                        const totalRows =
+                          totalClaimableRows + totalPendingOnlyRows
 
                         let currentRowIndex = 0
 
@@ -1080,34 +1131,31 @@ export default function DashboardPage(): JSX.Element {
                             {/* Claimable rewards section */}
                             {hasClaimableRewards && (
                               <>
-                                {Array.from(bribesGroupedByTokenId.entries()).map(
-                                  ([tokenIdStr, bribes]) => {
-                                    currentRowIndex++
-                                    return (
-                                      <ClaimableRewardRow
-                                        key={`claimable-${tokenIdStr}`}
-                                        tokenId={BigInt(tokenIdStr)}
-                                        bribes={bribes}
-                                        onClaim={() =>
-                                          handleClaimBribes(BigInt(tokenIdStr))
-                                        }
-                                        isPending={isClaimPending}
-                                        isConfirming={isClaimConfirming}
-                                        isLast={
-                                          currentRowIndex === totalRows
-                                        }
-                                        claimableUSD={
-                                          claimableUSDByTokenId.get(
-                                            tokenIdStr,
-                                          ) ?? 0
-                                        }
-                                        allGaugeAddresses={allGaugeAddresses}
-                                        apyMap={apyMap}
-                                        btcPrice={btcPrice}
-                                      />
-                                    )
-                                  },
-                                )}
+                                {Array.from(
+                                  bribesGroupedByTokenId.entries(),
+                                ).map(([tokenIdStr, bribes]) => {
+                                  currentRowIndex++
+                                  return (
+                                    <ClaimableRewardRow
+                                      key={`claimable-${tokenIdStr}`}
+                                      tokenId={BigInt(tokenIdStr)}
+                                      bribes={bribes}
+                                      onClaim={() =>
+                                        handleClaimBribes(BigInt(tokenIdStr))
+                                      }
+                                      isPending={isClaimPending}
+                                      isConfirming={isClaimConfirming}
+                                      isLast={currentRowIndex === totalRows}
+                                      claimableUSD={
+                                        claimableUSDByTokenId.get(tokenIdStr) ??
+                                        0
+                                      }
+                                      allGaugeAddresses={allGaugeAddresses}
+                                      apyMap={apyMap}
+                                      btcPrice={btcPrice}
+                                    />
+                                  )
+                                })}
                               </>
                             )}
 

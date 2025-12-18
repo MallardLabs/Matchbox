@@ -12,7 +12,11 @@ import type { Address } from "viem"
  * Uses the centralized GaugeProfilesContext for efficient data fetching.
  */
 export function useGaugeProfiles(gaugeAddresses: Address[]) {
-  const { profiles: allProfiles, isLoading, refetch } = useAllGaugeProfilesFromContext()
+  const {
+    profiles: allProfiles,
+    isLoading,
+    refetch,
+  } = useAllGaugeProfilesFromContext()
 
   const profiles = useMemo(() => {
     const result = new Map<string, GaugeProfile>()

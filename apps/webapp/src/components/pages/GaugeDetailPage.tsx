@@ -1,16 +1,16 @@
 import { AddressLink } from "@/components/AddressLink"
 import { Layout } from "@/components/Layout"
-import { TokenIcon } from "@/components/TokenIcon"
 import { SpringIn } from "@/components/SpringIn"
+import { TokenIcon } from "@/components/TokenIcon"
 import { getContractConfig } from "@/config/contracts"
 import { formatAPY, useGaugeAPY } from "@/hooks/useAPY"
 import { useBtcPrice } from "@/hooks/useBtcPrice"
 import { useGaugeHistory, useGaugeProfile } from "@/hooks/useGaugeProfiles"
 import { useBoostInfo } from "@/hooks/useGauges"
 import {
+  type BribeIncentive,
   useBribeAddress,
   useBribeIncentives,
-  type BribeIncentive,
 } from "@/hooks/useVoting"
 import {
   formatFixedPoint,
@@ -22,7 +22,7 @@ import { CHAIN_ID, NON_STAKING_GAUGE_ABI } from "@repo/shared/contracts"
 import Link from "next/link"
 import { useRouter } from "next/router"
 import { useMemo } from "react"
-import { formatUnits, type Address } from "viem"
+import { type Address, formatUnits } from "viem"
 import { useReadContract, useReadContracts } from "wagmi"
 
 const MEZO_PRICE = 0.22
@@ -284,13 +284,15 @@ export default function GaugeDetailPage(): JSX.Element {
 
   // Calculate total incentives
   const totalIncentivesUSD = useMemo(
-    () =>
-      incentivesWithUSD.reduce((sum, inc) => sum + (inc.usdValue ?? 0), 0),
+    () => incentivesWithUSD.reduce((sum, inc) => sum + (inc.usdValue ?? 0), 0),
     [incentivesWithUSD],
   )
 
   // Calculate APY for this gauge
-  const { apy, isLoading: isLoadingAPY } = useGaugeAPY(gaugeAddress, totalWeight)
+  const { apy, isLoading: isLoadingAPY } = useGaugeAPY(
+    gaugeAddress,
+    totalWeight,
+  )
 
   // Check if profile has meaningful content
   const hasProfileContent =
