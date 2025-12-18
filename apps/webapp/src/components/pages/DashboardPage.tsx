@@ -103,7 +103,7 @@ function VeBTCLockCard({
 
   return (
     <Card withBorder overrides={{ Root: { style: { height: "100%" } } }}>
-      <div className="py-2">
+      <div className="flex h-full flex-col py-2">
         {/* Header with Profile Picture, Name, and Status */}
         <div className="mb-4 flex items-start justify-between">
           <div className="flex items-center gap-3">
@@ -168,67 +168,74 @@ function VeBTCLockCard({
           </Tag>
         </div>
 
-        <div className="grid grid-cols-2 gap-4 max-[480px]:gap-3">
-          <div>
-            <p className="mb-1 text-2xs uppercase tracking-wider text-[var(--content-secondary)]">
-              Locked Amount
-            </p>
-            <div className="flex items-center gap-1.5">
-              <TokenIcon symbol="BTC" size={18} />
+        <div className="flex-1">
+          <div className="grid grid-cols-2 gap-4 max-[480px]:gap-3">
+            <div>
+              <p className="mb-1 text-2xs uppercase tracking-wider text-[var(--content-secondary)]">
+                Locked Amount
+              </p>
+              <div className="flex items-center gap-1.5">
+                <TokenIcon symbol="BTC" size={18} />
+                <span className="font-mono text-sm font-medium text-[var(--content-primary)] tabular-nums">
+                  {formatTokenValue(lock.amount, 18)} BTC
+                </span>
+              </div>
+            </div>
+            <div>
+              <p className="mb-1 text-2xs uppercase tracking-wider text-[var(--content-secondary)]">
+                Voting Power
+              </p>
               <span className="font-mono text-sm font-medium text-[var(--content-primary)] tabular-nums">
-                {formatTokenValue(lock.amount, 18)} BTC
+                {formatTokenValue(lock.votingPower, 18)}
               </span>
             </div>
-          </div>
-          <div>
-            <p className="mb-1 text-2xs uppercase tracking-wider text-[var(--content-secondary)]">
-              Voting Power
-            </p>
-            <span className="font-mono text-sm font-medium text-[var(--content-primary)] tabular-nums">
-              {formatTokenValue(lock.votingPower, 18)}
-            </span>
-          </div>
-          <div>
-            <p className="mb-1 text-2xs uppercase tracking-wider text-[var(--content-secondary)]">
-              Current Boost
-            </p>
-            <span
-              className={`font-mono text-sm font-medium tabular-nums ${
-                boostMultiplier > 1
-                  ? "text-[var(--positive)]"
-                  : "text-[var(--content-primary)]"
-              }`}
-            >
-              {boostMultiplier.toFixed(2)}x
-            </span>
-          </div>
-          <div>
-            <p className="mb-1 text-2xs uppercase tracking-wider text-[var(--content-secondary)]">
-              Gauge
-            </p>
-            {hasGauge && gaugeAddress ? (
-              <>
-                <Link
-                  href={`/gauges/${gaugeAddress}`}
-                  className="text-[var(--accent)] no-underline hover:underline"
-                >
-                  <span className="text-sm font-medium text-[var(--accent)]">
-                    View Gauge →
-                  </span>
-                </Link>
-                {!isLoadingAPY && apy !== null && apy > 0 && (
-                  <div className="mt-1 inline-flex items-center rounded border border-[var(--positive-subtle)] bg-[var(--positive-subtle)] px-1.5 py-0.5">
-                    <span className="text-xs font-medium text-[var(--positive)]">
-                      {formatAPY(apy)} APY
-                    </span>
-                  </div>
-                )}
-              </>
-            ) : (
-              <span className="text-sm text-[var(--content-secondary)]">
-                No Gauge
+            <div>
+              <p className="mb-1 text-2xs uppercase tracking-wider text-[var(--content-secondary)]">
+                Current Boost
+              </p>
+              <span
+                className={`font-mono text-sm font-medium tabular-nums ${
+                  boostMultiplier > 1
+                    ? "text-[var(--positive)]"
+                    : "text-[var(--content-primary)]"
+                }`}
+              >
+                {boostMultiplier.toFixed(2)}x
               </span>
-            )}
+            </div>
+            <div>
+              <p className="mb-1 text-2xs uppercase tracking-wider text-[var(--content-secondary)]">
+                Gauge
+              </p>
+              {hasGauge && gaugeAddress ? (
+                <>
+                  <Link
+                    href={`/gauges/${gaugeAddress}`}
+                    className="text-[var(--accent)] no-underline hover:underline"
+                  >
+                    <span className="text-sm font-medium text-[var(--accent)]">
+                      View Gauge →
+                    </span>
+                  </Link>
+                  {!isLoadingAPY && apy !== null && (apy > 0 || apy === Infinity) ? (
+                    <div className="mt-1 inline-flex items-center rounded border border-[var(--positive-subtle)] bg-[var(--positive-subtle)] px-1.5 py-0.5">
+                      <span className="text-xs font-medium text-[var(--positive)]">
+                        {formatAPY(apy)} APY
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="mt-1 h-[26px]" />
+                  )}
+                </>
+              ) : (
+                <>
+                  <span className="text-sm text-[var(--content-secondary)]">
+                    No Gauge
+                  </span>
+                  <div className="mt-1 h-[26px]" />
+                </>
+              )}
+            </div>
           </div>
         </div>
 
@@ -276,7 +283,7 @@ function VeMEZOLockCard({
               veMEZO #{lock.tokenId.toString()}
             </span>
             {((apy !== null && apy > 0) ||
-              (upcomingAPY !== null && upcomingAPY > 0)) && (
+              (upcomingAPY !== null && upcomingAPY > 0)) ? (
               <div className="mt-1 flex items-center gap-1.5">
                 {/* Current APY */}
                 {apy !== null && apy > 0 && (
@@ -298,6 +305,8 @@ function VeMEZOLockCard({
                   </>
                 )}
               </div>
+            ) : (
+              <div className="mt-1 h-[26px]" />
             )}
           </div>
           <Tag
