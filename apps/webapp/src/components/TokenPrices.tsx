@@ -70,12 +70,6 @@ export function TokenPrices(): JSX.Element {
 
   return (
     <div className="flex items-center gap-2">
-      <TokenPriceItem
-        icon="/token icons/Bitcoin.svg"
-        symbol="BTC"
-        price={btcPrice}
-        isLoading={btcLoading}
-      />
       {SHOW_MEZO_PRICE && (
         <TokenPriceItem
           icon="/token icons/Mezo.svg"
@@ -85,6 +79,12 @@ export function TokenPrices(): JSX.Element {
           isUnavailable={mezoPrice === null && !mezoLoading}
         />
       )}
+      <TokenPriceItem
+        icon="/token icons/Bitcoin.svg"
+        symbol="BTC"
+        price={btcPrice}
+        isLoading={btcLoading}
+      />
     </div>
   )
 }

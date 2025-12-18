@@ -218,7 +218,8 @@ export function Header(): JSX.Element {
 
             {isConnected && address ? (
               <Button kind="secondary" onClick={() => disconnect()}>
-                <span className="font-mono text-xs tabular-nums">
+                <span className="flex items-center gap-2 font-mono text-xs tabular-nums">
+                  <span className="h-2 w-2 rounded-full bg-[#22C55E] shadow-[0_0_6px_rgba(34,197,94,0.5)]" />
                   {address.slice(0, 6)}...{address.slice(-4)}
                 </span>
               </Button>
@@ -314,7 +315,8 @@ export function Header(): JSX.Element {
                   },
                 }}
               >
-                <span className="font-mono text-xs">
+                <span className="flex items-center justify-center gap-2 font-mono text-xs">
+                  <span className="h-2 w-2 rounded-full bg-[#22C55E] shadow-[0_0_6px_rgba(34,197,94,0.5)]" />
                   disconnect ({address.slice(0, 6)}...{address.slice(-4)})
                 </span>
               </Button>
