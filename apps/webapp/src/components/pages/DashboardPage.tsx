@@ -218,7 +218,7 @@ function VeBTCLockCard({
                     </span>
                   </Link>
                   {!isLoadingAPY && apy !== null && (apy > 0 || apy === Infinity) ? (
-                    <div className="mt-1 inline-flex items-center rounded border border-[var(--positive-subtle)] bg-[var(--positive-subtle)] px-1.5 py-0.5">
+                    <div className="mt-1 flex w-fit items-center rounded border border-[var(--positive-subtle)] bg-[var(--positive-subtle)] px-1.5 py-0.5">
                       <span className="text-xs font-medium text-[var(--positive)]">
                         {formatAPY(apy)} APY
                       </span>
