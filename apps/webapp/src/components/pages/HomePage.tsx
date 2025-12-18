@@ -140,7 +140,7 @@ export default function HomePage(): JSX.Element {
             </div>
 
             <p className="mx-auto max-w-lg text-base leading-relaxed text-[var(--content-secondary)] md:text-lg">
-              Earn with bribes with your veMEZO, or pay to get boosted !
+              Earn with bribes with your veMEZO, or pay to get boosted--
             </p>
           </section>
         </SpringIn>
