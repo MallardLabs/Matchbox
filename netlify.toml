@@ -8,10 +8,28 @@
   SECRETS_SCAN_OMIT_KEYS = "NEXT_PUBLIC_SUPABASE_URL,NEXT_PUBLIC_SUPABASE_ANON_KEY"
 
 # Proxy /docs/* to the docs site (hosted separately on Netlify)
-# Update the URL below to your docs site's Netlify URL after deploying matchdocs
 [[redirects]]
   from = "/docs/*"
   to = "https://matchdocs.netlify.app/docs/:splat"
+  status = 200
+  force = true
+
+# Proxy static assets for docs site
+[[redirects]]
+  from = "/_astro/*"
+  to = "https://matchdocs.netlify.app/_astro/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/pagefind/*"
+  to = "https://matchdocs.netlify.app/pagefind/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/favicon.svg"
+  to = "https://matchdocs.netlify.app/favicon.svg"
   status = 200
   force = true
 
