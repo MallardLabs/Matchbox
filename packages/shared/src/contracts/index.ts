@@ -1,8 +1,8 @@
 import { type Address, getAddress } from "viem"
 
 export const CHAIN_ID = {
-  testnet: 31612,
-  mainnet: 31611,
+  testnet: 31611,
+  mainnet: 31612,
 } as const
 
 export type SupportedChainId = (typeof CHAIN_ID)[keyof typeof CHAIN_ID]

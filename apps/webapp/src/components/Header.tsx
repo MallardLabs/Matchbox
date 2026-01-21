@@ -3,53 +3,10 @@ import { Button } from "@mezo-org/mezo-clay"
 import NextLink from "next/link"
 import { useRouter } from "next/router"
 import { useEffect, useState } from "react"
-import { useAccount, useConnect, useDisconnect } from "wagmi"
+import { useAccount, useConnect } from "wagmi"
 import { injected } from "wagmi/connectors"
-import { TokenPrices } from "./TokenPrices"
-
-function SunIcon(): JSX.Element {
-  return (
-    <svg
-      width="18"
-      height="18"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <circle cx="12" cy="12" r="5" />
-      <line x1="12" y1="1" x2="12" y2="3" />
-      <line x1="12" y1="21" x2="12" y2="23" />
-      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
-      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
-      <line x1="1" y1="12" x2="3" y2="12" />
-      <line x1="21" y1="12" x2="23" y2="12" />
-      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
-      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
-    </svg>
-  )
-}
-
-function MoonIcon(): JSX.Element {
-  return (
-    <svg
-      width="18"
-      height="18"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-    </svg>
-  )
-}
+import { HeaderTicker } from "./HeaderTicker"
+import { WalletDrawer } from "./WalletDrawer"
 
 function MenuIcon(): JSX.Element {
   return (
@@ -131,6 +88,25 @@ function DocIcon(): JSX.Element {
   )
 }
 
+function SettingsIcon(): JSX.Element {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+    </svg>
+  )
+}
+
 const navItems = [
   { href: "/dashboard", label: "dashboard" },
   { href: "/gauges", label: "gauges" },
@@ -142,9 +118,9 @@ export function Header(): JSX.Element {
   const router = useRouter()
   const { address, isConnected } = useAccount()
   const { connect } = useConnect()
-  const { disconnect } = useDisconnect()
-  const { theme: currentTheme, toggleTheme } = useTheme()
+  const { theme: currentTheme } = useTheme()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [walletDrawerOpen, setWalletDrawerOpen] = useState(false)
 
   useEffect(() => {
     setMobileMenuOpen(false)
@@ -227,7 +203,7 @@ export function Header(): JSX.Element {
 
           {/* Desktop Actions */}
           <div className="hidden items-center gap-3 md:flex">
-            <TokenPrices />
+            <HeaderTicker />
 
             <a
               href="https://matchbox.mallard.sh/docs"
@@ -239,19 +215,10 @@ export function Header(): JSX.Element {
               <DocIcon />
             </a>
 
-            <button
-              type="button"
-              onClick={toggleTheme}
-              className="flex h-10 w-10 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--content-secondary)] transition-colors hover:bg-[var(--surface-secondary)] hover:text-[var(--content-primary)]"
-              aria-label={`Switch to ${currentTheme === "light" ? "dark" : "light"} mode`}
-            >
-              {currentTheme === "light" ? <MoonIcon /> : <SunIcon />}
-            </button>
-
             {isConnected && address ? (
               <Button
                 kind="secondary"
-                onClick={() => disconnect()}
+                onClick={() => setWalletDrawerOpen(true)}
                 overrides={{
                   BaseButton: {
                     style: {
@@ -263,6 +230,7 @@ export function Header(): JSX.Element {
                 <span className="flex items-center gap-2 font-mono text-xs tabular-nums">
                   <span className="h-2 w-2 rounded-full bg-[#22C55E] shadow-[0_0_6px_rgba(34,197,94,0.5)]" />
                   {address.slice(0, 6)}...{address.slice(-4)}
+                  <SettingsIcon />
                 </span>
               </Button>
             ) : (
@@ -285,6 +253,11 @@ export function Header(): JSX.Element {
             )}
           </div>
 
+          <WalletDrawer
+            isOpen={walletDrawerOpen}
+            onClose={() => setWalletDrawerOpen(false)}
+          />
+
           {/* Mobile Actions */}
           <div className="flex items-center gap-2 md:hidden">
             <a
@@ -296,15 +269,6 @@ export function Header(): JSX.Element {
             >
               <DocIcon />
             </a>
-
-            <button
-              type="button"
-              onClick={toggleTheme}
-              className="flex h-11 w-11 items-center justify-center rounded-lg text-[var(--content-secondary)] transition-colors hover:bg-[var(--surface-secondary)] hover:text-[var(--content-primary)]"
-              aria-label={`Switch to ${currentTheme === "light" ? "dark" : "light"} mode`}
-            >
-              {currentTheme === "light" ? <MoonIcon /> : <SunIcon />}
-            </button>
 
             <button
               type="button"
@@ -366,8 +330,8 @@ export function Header(): JSX.Element {
               <Button
                 kind="secondary"
                 onClick={() => {
-                  disconnect()
                   setMobileMenuOpen(false)
+                  setWalletDrawerOpen(true)
                 }}
                 overrides={{
                   BaseButton: {
@@ -379,7 +343,8 @@ export function Header(): JSX.Element {
               >
                 <span className="flex items-center justify-center gap-2 font-mono text-xs">
                   <span className="h-2 w-2 rounded-full bg-[#22C55E] shadow-[0_0_6px_rgba(34,197,94,0.5)]" />
-                  disconnect ({address.slice(0, 6)}...{address.slice(-4)})
+                  {address.slice(0, 6)}...{address.slice(-4)}
+                  <SettingsIcon />
                 </span>
               </Button>
             ) : (

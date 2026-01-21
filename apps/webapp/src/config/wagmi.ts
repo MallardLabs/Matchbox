@@ -3,6 +3,27 @@ import { defineChain } from "viem"
 import { http, type Config, createConfig } from "wagmi"
 import { injected } from "wagmi/connectors"
 
+export const mezoMainnet = defineChain({
+  id: CHAIN_ID.mainnet,
+  name: "Mezo Mainnet",
+  nativeCurrency: {
+    decimals: 18,
+    name: "Bitcoin",
+    symbol: "BTC",
+  },
+  rpcUrls: {
+    default: {
+      http: ["https://rpc-http.mezo.boar.network"],
+    },
+  },
+  blockExplorers: {
+    default: {
+      name: "Mezo Explorer",
+      url: "https://explorer.mezo.org",
+    },
+  },
+})
+
 export const mezoTestnet = defineChain({
   id: CHAIN_ID.testnet,
   name: "Mezo Testnet",
@@ -25,9 +46,10 @@ export const mezoTestnet = defineChain({
 })
 
 export const wagmiConfig: Config = createConfig({
-  chains: [mezoTestnet],
+  chains: [mezoMainnet, mezoTestnet],
   connectors: [injected()],
   transports: {
+    [mezoMainnet.id]: http(),
     [mezoTestnet.id]: http(),
   },
 })

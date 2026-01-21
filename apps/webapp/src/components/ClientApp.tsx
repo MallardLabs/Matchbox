@@ -1,5 +1,6 @@
 import { wagmiConfig } from "@/config/wagmi"
 import { GaugeProfilesProvider } from "@/contexts/GaugeProfilesContext"
+import { NetworkProvider } from "@/contexts/NetworkContext"
 import {
   ThemeProvider,
   getThemeObject,
@@ -30,9 +31,11 @@ export function ClientApp({ Component, pageProps }: ClientAppProps) {
     <WagmiProvider config={wagmiConfig}>
       <QueryClientProvider client={queryClient}>
         <ThemeProvider>
-          <GaugeProfilesProvider>
-            <ThemedApp Component={Component} pageProps={pageProps} />
-          </GaugeProfilesProvider>
+          <NetworkProvider>
+            <GaugeProfilesProvider>
+              <ThemedApp Component={Component} pageProps={pageProps} />
+            </GaugeProfilesProvider>
+          </NetworkProvider>
         </ThemeProvider>
       </QueryClientProvider>
     </WagmiProvider>
