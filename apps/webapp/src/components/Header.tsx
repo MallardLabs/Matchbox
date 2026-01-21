@@ -109,6 +109,28 @@ function TerminalIcon(): JSX.Element {
   )
 }
 
+function DocIcon(): JSX.Element {
+  return (
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <polyline points="14 2 14 8 20 8" />
+      <line x1="16" y1="13" x2="8" y2="13" />
+      <line x1="16" y1="17" x2="8" y2="17" />
+      <line x1="10" y1="9" x2="8" y2="9" />
+    </svg>
+  )
+}
+
 const navItems = [
   { href: "/dashboard", label: "dashboard" },
   { href: "/gauges", label: "gauges" },
@@ -207,6 +229,16 @@ export function Header(): JSX.Element {
           <div className="hidden items-center gap-3 md:flex">
             <TokenPrices />
 
+            <a
+              href="https://matchbox.mallard.sh/docs"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex h-10 w-10 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--content-secondary)] transition-colors hover:bg-[var(--surface-secondary)] hover:text-[var(--content-primary)]"
+              aria-label="View documentation"
+            >
+              <DocIcon />
+            </a>
+
             <button
               type="button"
               onClick={toggleTheme}
@@ -217,14 +249,34 @@ export function Header(): JSX.Element {
             </button>
 
             {isConnected && address ? (
-              <Button kind="secondary" onClick={() => disconnect()}>
+              <Button
+                kind="secondary"
+                onClick={() => disconnect()}
+                overrides={{
+                  BaseButton: {
+                    style: {
+                      height: "40px",
+                    },
+                  },
+                }}
+              >
                 <span className="flex items-center gap-2 font-mono text-xs tabular-nums">
                   <span className="h-2 w-2 rounded-full bg-[#22C55E] shadow-[0_0_6px_rgba(34,197,94,0.5)]" />
                   {address.slice(0, 6)}...{address.slice(-4)}
                 </span>
               </Button>
             ) : (
-              <Button kind="primary" onClick={handleConnect}>
+              <Button
+                kind="primary"
+                onClick={handleConnect}
+                overrides={{
+                  BaseButton: {
+                    style: {
+                      height: "40px",
+                    },
+                  },
+                }}
+              >
                 <span className="flex items-center gap-2">
                   <TerminalIcon />
                   connect
@@ -235,6 +287,16 @@ export function Header(): JSX.Element {
 
           {/* Mobile Actions */}
           <div className="flex items-center gap-2 md:hidden">
+            <a
+              href="https://matchbox.mallard.sh/docs"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex h-11 w-11 items-center justify-center rounded-lg text-[var(--content-secondary)] transition-colors hover:bg-[var(--surface-secondary)] hover:text-[var(--content-primary)]"
+              aria-label="View documentation"
+            >
+              <DocIcon />
+            </a>
+
             <button
               type="button"
               onClick={toggleTheme}
