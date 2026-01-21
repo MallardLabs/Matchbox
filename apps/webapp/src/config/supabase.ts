@@ -51,3 +51,12 @@ export type GaugeHistory = {
   unique_voters: number | null
   recorded_at: string
 }
+
+export type ProfileTransfer = {
+  id: number
+  owner_address: string
+  from_gauge_address: string
+  to_gauge_address: string
+  epoch_start: number
+  transferred_at: string
+}

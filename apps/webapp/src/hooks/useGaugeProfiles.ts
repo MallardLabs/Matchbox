@@ -1,4 +1,9 @@
-import type { GaugeHistory, GaugeProfile, SocialLinks } from "@/config/supabase"
+import type {
+  GaugeHistory,
+  GaugeProfile,
+  ProfileTransfer,
+  SocialLinks,
+} from "@/config/supabase"
 import { supabase } from "@/config/supabase"
 import {
   useAllGaugeProfilesFromContext,
@@ -234,5 +239,209 @@ export function useUploadProfilePicture() {
     uploadPicture,
     isLoading,
     error,
+  }
+}
+
+// Constants for epoch calculation
+const EPOCH_DURATION = 7 * 24 * 60 * 60 // 7 days in seconds
+
+function getEpochStart(timestamp: number): number {
+  return Math.floor(timestamp / EPOCH_DURATION) * EPOCH_DURATION
+}
+
+/**
+ * Check if an owner can transfer a profile this epoch.
+ * Returns the current epoch info and whether a transfer is available.
+ */
+export function useCanTransferProfile(ownerAddress: Address | undefined) {
+  const [canTransfer, setCanTransfer] = useState(true)
+  const [lastTransfer, setLastTransfer] = useState<ProfileTransfer | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
+  const [epochStart, setEpochStart] = useState<number>(0)
+  const [nextEpoch, setNextEpoch] = useState<number>(0)
+
+  const checkTransferAvailability = useCallback(async () => {
+    if (!ownerAddress) {
+      setCanTransfer(false)
+      setLastTransfer(null)
+      return
+    }
+
+    setIsLoading(true)
+
+    const now = Math.floor(Date.now() / 1000)
+    const currentEpoch = getEpochStart(now)
+    setEpochStart(currentEpoch)
+    setNextEpoch(currentEpoch + EPOCH_DURATION)
+
+    const { data, error } = await supabase
+      .from("profile_transfers")
+      .select("*")
+      .eq("owner_address", ownerAddress.toLowerCase())
+      .eq("epoch_start", currentEpoch)
+      .single()
+
+    if (error && error.code !== "PGRST116") {
+      // PGRST116 = no rows found
+      console.error("Error checking transfer availability:", error)
+    }
+
+    if (data) {
+      setCanTransfer(false)
+      setLastTransfer(data as ProfileTransfer)
+    } else {
+      setCanTransfer(true)
+      setLastTransfer(null)
+    }
+
+    setIsLoading(false)
+  }, [ownerAddress])
+
+  useEffect(() => {
+    checkTransferAvailability()
+  }, [checkTransferAvailability])
+
+  return {
+    canTransfer,
+    lastTransfer,
+    epochStart,
+    nextEpoch,
+    isLoading,
+    refetch: checkTransferAvailability,
+  }
+}
+
+export type TransferGaugeProfileParams = {
+  fromGaugeAddress: Address
+  toGaugeAddress: Address
+  ownerAddress: Address
+  toVeBTCTokenId: bigint
+}
+
+export type TransferResult = {
+  success: boolean
+  message?: string
+  error?: string
+  from_gauge?: string
+  to_gauge?: string
+  epoch_start?: number
+  transferred_at?: string
+  next_epoch?: number
+}
+
+/**
+ * Hook to transfer a gauge profile from one gauge to another.
+ * Can only be done once per epoch per owner.
+ */
+export function useTransferGaugeProfile() {
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<Error | null>(null)
+  const { refetch } = useAllGaugeProfilesFromContext()
+
+  const transferProfile = useCallback(
+    async ({
+      fromGaugeAddress,
+      toGaugeAddress,
+      ownerAddress,
+      toVeBTCTokenId,
+    }: TransferGaugeProfileParams): Promise<TransferResult> => {
+      setIsLoading(true)
+      setError(null)
+
+      try {
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+        if (!supabaseUrl) {
+          throw new Error("Supabase URL not configured")
+        }
+
+        const response = await fetch(
+          `${supabaseUrl}/functions/v1/transfer-gauge-profile`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`,
+            },
+            body: JSON.stringify({
+              fromGaugeAddress: fromGaugeAddress.toLowerCase(),
+              toGaugeAddress: toGaugeAddress.toLowerCase(),
+              ownerAddress: ownerAddress.toLowerCase(),
+              toVeBTCTokenId: toVeBTCTokenId.toString(),
+            }),
+          },
+        )
+
+        const result: TransferResult = await response.json()
+
+        if (!response.ok || !result.success) {
+          const errorMessage = result.error || "Transfer failed"
+          setError(new Error(errorMessage))
+          setIsLoading(false)
+          return result
+        }
+
+        // Refetch all profiles to update the cache
+        await refetch()
+
+        setIsLoading(false)
+        return result
+      } catch (err) {
+        const errorMessage =
+          err instanceof Error ? err.message : "Unknown error occurred"
+        setError(new Error(errorMessage))
+        setIsLoading(false)
+        return { success: false, error: errorMessage }
+      }
+    },
+    [refetch],
+  )
+
+  return {
+    transferProfile,
+    isLoading,
+    error,
+  }
+}
+
+/**
+ * Get transfer history for an owner.
+ */
+export function useTransferHistory(ownerAddress: Address | undefined) {
+  const [transfers, setTransfers] = useState<ProfileTransfer[]>([])
+  const [isLoading, setIsLoading] = useState(false)
+
+  const fetchHistory = useCallback(async () => {
+    if (!ownerAddress) {
+      setTransfers([])
+      return
+    }
+
+    setIsLoading(true)
+
+    const { data, error } = await supabase
+      .from("profile_transfers")
+      .select("*")
+      .eq("owner_address", ownerAddress.toLowerCase())
+      .order("transferred_at", { ascending: false })
+      .limit(10)
+
+    if (error) {
+      console.error("Error fetching transfer history:", error)
+      setTransfers([])
+    } else {
+      setTransfers((data as ProfileTransfer[]) ?? [])
+    }
+
+    setIsLoading(false)
+  }, [ownerAddress])
+
+  useEffect(() => {
+    fetchHistory()
+  }, [fetchHistory])
+
+  return {
+    transfers,
+    isLoading,
+    refetch: fetchHistory,
   }
 }

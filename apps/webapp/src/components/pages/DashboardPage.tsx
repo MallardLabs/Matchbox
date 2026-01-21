@@ -1,5 +1,6 @@
 import { Layout } from "@/components/Layout"
 import { SpringIn } from "@/components/SpringIn"
+import { TransferProfileModal } from "@/components/TransferProfileModal"
 import {
   formatAPY,
   useGaugeAPY,
@@ -8,7 +9,7 @@ import {
   useVotingAPY,
 } from "@/hooks/useAPY"
 import { useBtcPrice } from "@/hooks/useBtcPrice"
-import { useGaugeProfile } from "@/hooks/useGaugeProfiles"
+import { useAllGaugeProfiles, useGaugeProfile } from "@/hooks/useGaugeProfiles"
 import {
   useBoostGaugeForToken,
   useBoostGauges,
@@ -781,10 +782,11 @@ function ProjectedRewardRow({
 }
 
 export default function DashboardPage(): JSX.Element {
-  const { isConnected } = useAccount()
+  const { isConnected, address } = useAccount()
   const { locks: veBTCLocks, isLoading: isLoadingVeBTC } = useVeBTCLocks()
   const { locks: veMEZOLocks, isLoading: isLoadingVeMEZO } = useVeMEZOLocks()
   const { price: btcPrice } = useBtcPrice()
+  const [isTransferModalOpen, setIsTransferModalOpen] = useState(false)
 
   const veMEZOTokenIds = useMemo(
     () => veMEZOLocks.map((lock) => lock.tokenId),
@@ -921,6 +923,41 @@ export default function DashboardPage(): JSX.Element {
   const hasClaimableRewards = claimableBribes.length > 0
   const hasFutureRewards = projectedIncentivesUSD > 0
   const showRewardsSection = hasClaimableRewards || hasFutureRewards
+
+  // Get all gauge profiles for transfer modal
+  const { profiles: allGaugeProfiles, refetch: refetchProfiles } =
+    useAllGaugeProfiles()
+
+  // Build owned gauges list for the transfer modal
+  // This maps veBTC locks to their corresponding gauges
+  const ownedGauges = useMemo(() => {
+    const result: Array<{
+      tokenId: bigint
+      gaugeAddress: Address
+      profile: ReturnType<typeof allGaugeProfiles.get> | null
+    }> = []
+
+    for (const lock of veBTCLocks) {
+      // Find the gauge that this veBTC token is mapped to
+      const matchingGauge = allGauges.find(
+        (g) => g.veBTCTokenId === lock.tokenId,
+      )
+      if (matchingGauge) {
+        const profile = allGaugeProfiles.get(
+          matchingGauge.address.toLowerCase(),
+        )
+        result.push({
+          tokenId: lock.tokenId,
+          gaugeAddress: matchingGauge.address,
+          profile: profile ?? null,
+        })
+      }
+    }
+
+    return result
+  }, [veBTCLocks, allGauges, allGaugeProfiles])
+
+  const canShowTransferButton = ownedGauges.length >= 2
 
   return (
     <Layout>
@@ -1290,9 +1327,20 @@ export default function DashboardPage(): JSX.Element {
               variant="card"
             >
               <div>
-                <h2 className="mb-4 text-xl font-semibold text-[var(--content-primary)]">
-                  Your veBTC Locks
-                </h2>
+                <div className="mb-4 flex items-center justify-between">
+                  <h2 className="text-xl font-semibold text-[var(--content-primary)]">
+                    Your veBTC Locks
+                  </h2>
+                  {canShowTransferButton && (
+                    <Button
+                      kind="secondary"
+                      size="small"
+                      onClick={() => setIsTransferModalOpen(true)}
+                    >
+                      Transfer Profile
+                    </Button>
+                  )}
+                </div>
                 {veBTCLocks.length === 0 ? (
                   <Card withBorder overrides={{}}>
                     <div className="py-8 text-center">
@@ -1323,6 +1371,14 @@ export default function DashboardPage(): JSX.Element {
           </>
         )}
       </div>
+
+      {/* Transfer Profile Modal */}
+      <TransferProfileModal
+        isOpen={isTransferModalOpen}
+        onClose={() => setIsTransferModalOpen(false)}
+        ownedGauges={ownedGauges}
+        onTransferComplete={refetchProfiles}
+      />
     </Layout>
   )
 }
