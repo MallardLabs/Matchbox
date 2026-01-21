@@ -1,7 +1,7 @@
 import { useBtcPrice } from "@/hooks/useBtcPrice"
 import { useEpochCountdown } from "@/hooks/useEpochCountdown"
 import { useRpcHealth } from "@/hooks/useRpcHealth"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 
 const CYCLE_INTERVAL_MS = 4000 // 4 seconds per metric
 const MEZO_PLACEHOLDER_PRICE = 0.22
@@ -12,6 +12,7 @@ type TickerMetric = {
   value: string
   icon?: string
   statusColor?: string
+  isClockIcon?: boolean
 }
 
 function formatPrice(price: number | null): string {
@@ -107,13 +108,13 @@ export function HeaderTicker(): JSX.Element {
   const metrics: TickerMetric[] = [
     {
       id: "mezo",
-      label: "$MEZO",
+      label: "MEZO",
       value: `$${formatPrice(MEZO_PLACEHOLDER_PRICE)}`,
       icon: "/token icons/Mezo.svg",
     },
     {
       id: "btc",
-      label: "$BTC",
+      label: "BTC",
       value: btcLoading ? "..." : `$${formatPrice(btcPrice)}`,
       icon: "/token icons/Bitcoin.svg",
     },
@@ -121,6 +122,7 @@ export function HeaderTicker(): JSX.Element {
       id: "epoch",
       label: "Epoch",
       value: timeRemaining,
+      isClockIcon: true,
     },
     {
       id: "rpc",
@@ -157,13 +159,34 @@ export function HeaderTicker(): JSX.Element {
       ? (metrics[prevIndex % metrics.length] as TickerMetric)
       : null
 
+  const [isHovered, setIsHovered] = useState(false)
+  const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  const handleMouseEnter = () => {
+    if (hoverTimeoutRef.current) {
+      clearTimeout(hoverTimeoutRef.current)
+    }
+    setIsHovered(true)
+  }
+
+  const handleMouseLeave = () => {
+    // Small delay before closing to prevent flickering
+    hoverTimeoutRef.current = setTimeout(() => {
+      setIsHovered(false)
+    }, 150)
+  }
+
   return (
-    <div className="flex items-center">
+    <div
+      className="relative flex items-center"
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+    >
       {/* Orange accent bar */}
       <div className="mr-3 h-6 w-0.5 bg-[#F7931A]" />
 
       {/* Ticker container - fixed width to prevent layout shift */}
-      <div className="relative h-5 w-[180px] overflow-hidden">
+      <div className="relative h-5 w-[200px] cursor-pointer overflow-hidden">
         {/* Previous item sliding out */}
         {isTransitioning && prevMetric && (
           <TickerItem metric={prevMetric} animationClass="ticker-slide-out" />
@@ -174,6 +197,75 @@ export function HeaderTicker(): JSX.Element {
           metric={currentMetric}
           animationClass={isTransitioning ? "ticker-slide-in" : ""}
         />
+      </div>
+
+      {/* Hover dropdown */}
+      <div
+        className={`absolute -left-1 top-full z-50 min-w-[200px] overflow-hidden border border-[var(--border)] bg-[var(--surface)] shadow-lg ${
+          isHovered
+            ? "ticker-dropdown-enter"
+            : "ticker-dropdown-exit pointer-events-none"
+        }`}
+      >
+        <div className="flex flex-col">
+          {metrics.map((metric, index) => (
+            <div
+              key={metric.id}
+              className={`flex items-center gap-3 px-4 py-2.5 ${
+                index < metrics.length - 1
+                  ? "border-b border-[var(--border)]"
+                  : ""
+              }`}
+            >
+              {/* Icon container - consistent 24px width for alignment */}
+              <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center">
+                {metric.icon && (
+                  <img
+                    src={metric.icon}
+                    alt=""
+                    width={24}
+                    height={24}
+                    className="h-6 w-6 rounded-full"
+                  />
+                )}
+                {metric.isClockIcon && (
+                  <svg
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="text-[var(--content-secondary)]"
+                    aria-hidden="true"
+                  >
+                    <circle cx="12" cy="12" r="10" />
+                    <polyline points="12 6 12 12 16 14" />
+                  </svg>
+                )}
+                {metric.statusColor && !metric.icon && !metric.isClockIcon && (
+                  <span
+                    className="h-2.5 w-2.5 rounded-full"
+                    style={{
+                      backgroundColor: metric.statusColor,
+                      boxShadow: `0 0 6px ${metric.statusColor}`,
+                    }}
+                  />
+                )}
+              </div>
+              <div className="flex flex-col">
+                <span className="font-mono text-xs text-[var(--content-secondary)]">
+                  {metric.label}
+                </span>
+                <span className="font-mono text-sm tabular-nums text-[#F7931A]">
+                  {metric.value}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   )

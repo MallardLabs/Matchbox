@@ -521,3 +521,34 @@
 .ticker-slide-in {
   animation: ticker-slide-up-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
+
+/* Dropdown slide animations */
+@keyframes ticker-dropdown-enter {
+  0% {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes ticker-dropdown-exit {
+  0% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+}
+
+.ticker-dropdown-enter {
+  animation: ticker-dropdown-enter 0.15s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.ticker-dropdown-exit {
+  animation: ticker-dropdown-exit 0.15s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
