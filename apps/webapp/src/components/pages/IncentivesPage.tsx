@@ -1,4 +1,8 @@
 import { Layout } from "@/components/Layout"
+import {
+  LockCarouselSelector,
+  type VeBTCLockData,
+} from "@/components/LockCarouselSelector"
 import { SpringIn } from "@/components/SpringIn"
 import { TokenIcon } from "@/components/TokenIcon"
 import { TokenSelector } from "@/components/TokenSelector"
@@ -6,11 +10,16 @@ import type { SocialLinks } from "@/config/supabase"
 import { formatAPY, useGaugeAPY } from "@/hooks/useAPY"
 import { useBtcPrice } from "@/hooks/useBtcPrice"
 import {
+  useAllGaugeProfiles,
   useGaugeProfile,
   useUploadProfilePicture,
   useUpsertGaugeProfile,
 } from "@/hooks/useGaugeProfiles"
-import { useBoostGaugeForToken, useBoostInfo } from "@/hooks/useGauges"
+import {
+  useBatchGaugeData,
+  useBoostGaugeForToken,
+  useBoostInfo,
+} from "@/hooks/useGauges"
 import { useVeBTCLocks } from "@/hooks/useLocks"
 import { useMezoPrice } from "@/hooks/useMezoPrice"
 import type { Token } from "@/hooks/useTokenList"
@@ -31,7 +40,6 @@ import {
   Input,
   ParagraphMedium,
   ParagraphSmall,
-  Select,
   Skeleton,
   Tag,
   Textarea,
@@ -160,6 +168,16 @@ export default function IncentivesPage(): JSX.Element {
   const selectedLock =
     selectedLockIndex !== undefined ? veBTCLocks[selectedLockIndex] : undefined
 
+  // Batch fetch gauge data for all veBTC locks (for rich carousel cards)
+  const allTokenIds = useMemo(
+    () => veBTCLocks.map((lock) => lock.tokenId),
+    [veBTCLocks],
+  )
+  const { gaugeDataMap } = useBatchGaugeData(allTokenIds)
+
+  // Fetch all gauge profiles (for rich carousel cards)
+  const { profiles: allProfiles } = useAllGaugeProfiles()
+
   const {
     gaugeAddress,
     hasGauge,
@@ -254,6 +272,35 @@ export default function IncentivesPage(): JSX.Element {
     gaugeAddress,
     0n, // We don't need totalWeight for just showing the APY
   )
+
+  // Create enriched veBTC locks with profile and gauge data for the carousel
+  const enrichedVeBTCLocks: VeBTCLockData[] = useMemo(() => {
+    return veBTCLocks.map((lock, index) => {
+      // Get batch gauge data for this lock
+      const batchData = gaugeDataMap.get(lock.tokenId.toString())
+      const lockGaugeAddress = batchData?.gaugeAddress
+      const lockHasGauge = batchData?.hasGauge ?? false
+      const lockBoostMultiplier = batchData?.boostMultiplier ?? 1
+
+      // Get profile from the all profiles map if this lock has a gauge
+      const profile = lockGaugeAddress
+        ? allProfiles.get(lockGaugeAddress.toLowerCase())
+        : undefined
+
+      // For the selected lock, use the more detailed APY data
+      const lockAPY = index === selectedLockIndex ? apy : undefined
+
+      return {
+        ...lock,
+        profilePictureUrl: profile?.profile_picture_url ?? null,
+        displayName: profile?.display_name ?? null,
+        description: profile?.description ?? null,
+        hasGauge: lockHasGauge,
+        boostMultiplier: lockBoostMultiplier,
+        gaugeAPY: lockAPY ?? null,
+      }
+    })
+  }, [veBTCLocks, gaugeDataMap, allProfiles, selectedLockIndex, apy])
 
   // Get boostVoter address for approval (addBribes transfers tokens via boostVoter)
   const boostVoterAddress = useBoostVoterAddress()
@@ -497,33 +544,16 @@ export default function IncentivesPage(): JSX.Element {
           </SpringIn>
         ) : (
           <>
-            {/* veBTC Lock Selector */}
+            {/* veBTC Lock Selector Carousel */}
             <SpringIn delay={0} variant="card">
               <Card withBorder overrides={{}}>
                 <div className="py-4">
-                  <div className="mb-4 flex items-center gap-2">
-                    <div className="h-2 w-2 rounded-full bg-[#F7931A]" />
-                    <span className="text-xs font-medium uppercase tracking-wider text-[var(--content-tertiary)]">
-                      Select Gauge
-                    </span>
-                  </div>
-                  <Select
-                    options={veBTCLocks.map((lock, i) => ({
-                      label: `veBTC #${lock.tokenId.toString()} - ${formatUnits(lock.amount, 18).slice(0, 8)} BTC locked`,
-                      id: i.toString(),
-                    }))}
-                    value={
-                      selectedLockIndex !== undefined
-                        ? [{ id: selectedLockIndex.toString() }]
-                        : []
-                    }
-                    onChange={(params) => {
-                      const selected = params.value[0]
-                      setSelectedLockIndex(
-                        selected ? Number(selected.id) : undefined,
-                      )
-                    }}
-                    placeholder="Select your veBTC lock to manage"
+                  <LockCarouselSelector
+                    locks={enrichedVeBTCLocks}
+                    selectedIndex={selectedLockIndex}
+                    onSelect={setSelectedLockIndex}
+                    lockType="veBTC"
+                    label="Select Gauge"
                   />
 
                   {selectedLock && (

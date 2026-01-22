@@ -458,3 +458,67 @@ export function useGaugeWeight(gaugeAddress: Address | undefined) {
     isLoading,
   }
 }
+
+// Batch hook to fetch gauge addresses and boost info for multiple veBTC token IDs
+export type BatchGaugeData = {
+  tokenId: bigint
+  gaugeAddress: Address | undefined
+  hasGauge: boolean
+  boostMultiplier: number
+}
+
+export function useBatchGaugeData(tokenIds: bigint[]) {
+  const contracts = getContractConfig(CHAIN_ID.testnet)
+
+  // Fetch gauge addresses for all token IDs
+  const { data: gaugeAddressesData, isLoading: isLoadingGauges } =
+    useReadContracts({
+      contracts: tokenIds.map((tokenId) => ({
+        ...contracts.boostVoter,
+        functionName: "boostableTokenIdToGauge",
+        args: [tokenId],
+      })),
+      query: {
+        enabled: tokenIds.length > 0,
+      },
+    })
+
+  // Fetch boost multipliers for all token IDs
+  const { data: boostData, isLoading: isLoadingBoost } = useReadContracts({
+    contracts: tokenIds.map((tokenId) => ({
+      ...contracts.boostVoter,
+      functionName: "getBoost",
+      args: [tokenId],
+    })),
+    query: {
+      enabled: tokenIds.length > 0,
+    },
+  })
+
+  const gaugeDataMap = useMemo(() => {
+    const map = new Map<string, BatchGaugeData>()
+    tokenIds.forEach((tokenId, i) => {
+      const gaugeAddress = gaugeAddressesData?.[i]?.result as
+        | Address
+        | undefined
+      const hasGauge =
+        gaugeAddress !== undefined &&
+        gaugeAddress !== "0x0000000000000000000000000000000000000000"
+      const boost = boostData?.[i]?.result as bigint | undefined
+      const boostMultiplier = boost !== undefined ? Number(boost) / 1e18 : 1
+
+      map.set(tokenId.toString(), {
+        tokenId,
+        gaugeAddress: hasGauge ? gaugeAddress : undefined,
+        hasGauge,
+        boostMultiplier,
+      })
+    })
+    return map
+  }, [tokenIds, gaugeAddressesData, boostData])
+
+  return {
+    gaugeDataMap,
+    isLoading: isLoadingGauges || isLoadingBoost,
+  }
+}

@@ -109,9 +109,8 @@ function SettingsIcon(): JSX.Element {
 
 const navItems = [
   { href: "/dashboard", label: "dashboard" },
-  { href: "/boost", label: "boost" },
-  { href: "/incentives", label: "incentives" },
-  { href: "/gauges", label: "gauges" },
+  { href: "/boost", label: "veMEZO" },
+  { href: "/incentives", label: "veBTC" },
 ]
 
 export function Header(): JSX.Element {

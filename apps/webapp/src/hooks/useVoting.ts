@@ -103,6 +103,102 @@ export function useVoteState(tokenId: bigint | undefined): VoteStateResult {
   }
 }
 
+// Batch version of useVoteState for multiple veMEZO token IDs
+export type BatchVoteState = {
+  tokenId: bigint
+  usedWeight: bigint | undefined
+  canVoteInCurrentEpoch: boolean
+}
+
+export function useBatchVoteState(tokenIds: bigint[]): {
+  voteStateMap: Map<string, BatchVoteState>
+  isLoading: boolean
+} {
+  const contracts = getContractConfig(CHAIN_ID.testnet)
+  const now = useMemo(() => {
+    const timestamp = Math.floor(Date.now() / 1000)
+    return BigInt(Math.floor(timestamp / 60) * 60)
+  }, [])
+
+  // Fetch epochNext (shared for all tokens)
+  const { data: epochNextData, isLoading: isLoadingEpochNext } =
+    useReadContract({
+      ...contracts.boostVoter,
+      functionName: "epochNext",
+      args: [now],
+    })
+
+  const epochNext = epochNextData as bigint | undefined
+  const epochStart = epochNext !== undefined ? epochNext - 604800n : undefined
+
+  // Batch fetch lastVoted for all tokens
+  const { data: lastVotedData, isLoading: isLoadingLastVoted } =
+    useReadContracts({
+      contracts: tokenIds.map((tokenId) => ({
+        ...contracts.boostVoter,
+        functionName: "lastVoted",
+        args: [tokenId],
+      })),
+      query: {
+        enabled: tokenIds.length > 0,
+      },
+    })
+
+  // Batch fetch usedWeights for all tokens
+  const { data: usedWeightsData, isLoading: isLoadingUsedWeights } =
+    useReadContracts({
+      contracts: tokenIds.map((tokenId) => ({
+        ...contracts.boostVoter,
+        functionName: "usedWeights",
+        args: [tokenId],
+      })),
+      query: {
+        enabled: tokenIds.length > 0,
+      },
+    })
+
+  // Calculate voting window
+  const currentTime = BigInt(Math.floor(Date.now() / 1000))
+  const epochVoteStart =
+    epochStart !== undefined ? epochStart + 3600n : undefined
+  const epochVoteEnd = epochNext !== undefined ? epochNext - 3600n : undefined
+  const isInVotingWindow =
+    epochVoteStart !== undefined && epochVoteEnd !== undefined
+      ? currentTime > epochVoteStart && currentTime <= epochVoteEnd
+      : true
+
+  const voteStateMap = useMemo(() => {
+    const map = new Map<string, BatchVoteState>()
+
+    tokenIds.forEach((tokenId, i) => {
+      const lastVoted = lastVotedData?.[i]?.result as bigint | undefined
+      const usedWeight = usedWeightsData?.[i]?.result as bigint | undefined
+
+      // Determine if voted this epoch
+      const hasVotedThisEpoch =
+        lastVoted !== undefined && epochStart !== undefined
+          ? lastVoted >= epochStart
+          : undefined
+
+      const canVoteInCurrentEpoch =
+        hasVotedThisEpoch === false && isInVotingWindow
+
+      map.set(tokenId.toString(), {
+        tokenId,
+        usedWeight,
+        canVoteInCurrentEpoch,
+      })
+    })
+
+    return map
+  }, [tokenIds, lastVotedData, usedWeightsData, epochStart, isInVotingWindow])
+
+  return {
+    voteStateMap,
+    isLoading: isLoadingEpochNext || isLoadingLastVoted || isLoadingUsedWeights,
+  }
+}
+
 type WriteHookResult = {
   hash: Hex | undefined
   isPending: boolean

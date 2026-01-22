@@ -155,6 +155,18 @@ export default function HomePage(): JSX.Element {
         <div className="grid w-full max-w-4xl gap-4 md:grid-cols-3 md:gap-5">
           <SpringIn delay={1} variant="card">
             <ActionCard
+              title="Analytics"
+              command="status --all"
+              description="Monitor your boosts, fees earned, and gauge performance over time."
+              buttonText="View Dashboard"
+              href="/dashboard"
+              variant="secondary"
+              accentColor="#22C55E"
+            />
+          </SpringIn>
+
+          <SpringIn delay={2} variant="card">
+            <ActionCard
               title="veMEZO Holders"
               command="vote --boost"
               description="Vote on veBTC gauges to boost their voting power and earn incentives in return."
@@ -164,7 +176,7 @@ export default function HomePage(): JSX.Element {
             />
           </SpringIn>
 
-          <SpringIn delay={2} variant="card">
+          <SpringIn delay={3} variant="card">
             <ActionCard
               title="veBTC Holders"
               command="gauge --manage"
@@ -172,18 +184,6 @@ export default function HomePage(): JSX.Element {
               buttonText="Manage Gauge"
               href="/incentives"
               accentColor="#F7931A"
-            />
-          </SpringIn>
-
-          <SpringIn delay={3} variant="card">
-            <ActionCard
-              title="Analytics"
-              command="status --all"
-              description="Monitor your boosts, fees earned, and gauge performance over time."
-              buttonText="View Dashboard"
-              href="/dashboard"
-              variant="secondary"
-              accentColor="#22C55E"
             />
           </SpringIn>
         </div>

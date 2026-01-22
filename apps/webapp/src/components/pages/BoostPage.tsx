@@ -1,5 +1,9 @@
 import { AddressLink } from "@/components/AddressLink"
 import { Layout } from "@/components/Layout"
+import {
+  LockCarouselSelector,
+  type VeMEZOLockData,
+} from "@/components/LockCarouselSelector"
 import { SpringIn } from "@/components/SpringIn"
 import { calculateProjectedAPY, formatAPY, useGaugesAPY } from "@/hooks/useAPY"
 import { useAllGaugeProfiles } from "@/hooks/useGaugeProfiles"
@@ -8,6 +12,8 @@ import { useBoostGauges } from "@/hooks/useGauges"
 import { useVeMEZOLocks } from "@/hooks/useLocks"
 import { useMezoPrice } from "@/hooks/useMezoPrice"
 import {
+  useAllVoteAllocations,
+  useBatchVoteState,
   useResetVote,
   useVoteAllocations,
   useVoteOnGauge,
@@ -20,7 +26,6 @@ import {
   ChevronDown,
   ChevronUp,
   Input,
-  Select,
   Skeleton,
   TableBuilder,
   TableBuilderColumn,
@@ -81,6 +86,19 @@ export default function BoostPage(): JSX.Element {
   const selectedLock =
     selectedLockIndex !== undefined ? veMEZOLocks[selectedLockIndex] : undefined
 
+  // Batch fetch vote state for all veMEZO locks (for rich carousel cards)
+  const allVeMEZOTokenIds = useMemo(
+    () => veMEZOLocks.map((lock) => lock.tokenId),
+    [veMEZOLocks],
+  )
+  const { voteStateMap } = useBatchVoteState(allVeMEZOTokenIds)
+
+  // Batch fetch vote allocations for all locks to calculate APY for each
+  const { allocationsByToken } = useAllVoteAllocations(
+    allVeMEZOTokenIds,
+    gaugeAddresses,
+  )
+
   const {
     canVoteInCurrentEpoch,
     hasVotedThisEpoch,
@@ -91,6 +109,63 @@ export default function BoostPage(): JSX.Element {
     selectedLock?.tokenId,
     gaugeAddresses,
   )
+
+  // Create enriched veMEZO locks with voting data for the carousel
+  const enrichedVeMEZOLocks: VeMEZOLockData[] = useMemo(() => {
+    return veMEZOLocks.map((lock) => {
+      // Get batch vote state for this lock
+      const batchVoteState = voteStateMap.get(lock.tokenId.toString())
+      const lockUsedWeight = batchVoteState?.usedWeight
+
+      // Calculate APY for this lock based on its allocations
+      const lockAllocations =
+        allocationsByToken.get(lock.tokenId.toString()) ?? []
+      let lockAPY: number | null = null
+
+      if (
+        lockUsedWeight &&
+        lockUsedWeight > 0n &&
+        lockAllocations.length > 0 &&
+        mezoPrice
+      ) {
+        let totalUserIncentivesUSD = 0
+        for (const allocation of lockAllocations) {
+          const gaugeKey = allocation.gaugeAddress.toLowerCase()
+          const gaugeData = apyMap.get(gaugeKey)
+          if (
+            gaugeData &&
+            gaugeData.totalVeMEZOWeight > 0n &&
+            gaugeData.totalIncentivesUSD > 0
+          ) {
+            const userShare =
+              Number(allocation.weight) / Number(gaugeData.totalVeMEZOWeight)
+            totalUserIncentivesUSD += gaugeData.totalIncentivesUSD * userShare
+          }
+        }
+        if (totalUserIncentivesUSD > 0) {
+          const usedVeMEZOAmount = Number(lockUsedWeight) / 1e18
+          const usedVeMEZOValueUSD = usedVeMEZOAmount * mezoPrice
+          if (usedVeMEZOValueUSD > 0) {
+            const weeklyReturn = totalUserIncentivesUSD / usedVeMEZOValueUSD
+            lockAPY = weeklyReturn * 52 * 100
+          }
+        }
+      }
+
+      const result: VeMEZOLockData = {
+        ...lock,
+        currentAPY: lockAPY,
+        upcomingAPY: lockAPY,
+      }
+      if (batchVoteState?.canVoteInCurrentEpoch !== undefined) {
+        result.canVote = batchVoteState.canVoteInCurrentEpoch
+      }
+      if (lockUsedWeight !== undefined) {
+        result.usedWeight = lockUsedWeight
+      }
+      return result
+    })
+  }, [veMEZOLocks, voteStateMap, allocationsByToken, apyMap, mezoPrice])
   const {
     vote,
     isPending: isVoting,
@@ -103,8 +178,7 @@ export default function BoostPage(): JSX.Element {
   } = useResetVote()
 
   // Gauge table sorting and filtering state
-  const [gaugeSortColumn, setGaugeSortColumn] =
-    useState<GaugeSortColumn>("apy")
+  const [gaugeSortColumn, setGaugeSortColumn] = useState<GaugeSortColumn>("apy")
   const [gaugeSortDirection, setGaugeSortDirection] =
     useState<SortDirection>("desc")
   const [gaugeStatusFilter, setGaugeStatusFilter] =
@@ -302,30 +376,14 @@ export default function BoostPage(): JSX.Element {
                 <Card title="Vote on Gauge" withBorder overrides={{}}>
                   <div className="py-4">
                     <div className="flex flex-col gap-4">
-                      {/* veMEZO Lock Selection */}
-                      <div>
-                        <p className="mb-2 text-xs text-[var(--content-secondary)]">
-                          Select veMEZO Lock
-                        </p>
-                        <Select
-                          options={veMEZOLocks.map((lock, i) => ({
-                            label: `veMEZO #${lock.tokenId.toString()} - ${formatUnits(lock.votingPower, 18).slice(0, 8)} voting power`,
-                            id: i.toString(),
-                          }))}
-                          value={
-                            selectedLockIndex !== undefined
-                              ? [{ id: selectedLockIndex.toString() }]
-                              : []
-                          }
-                          onChange={(params) => {
-                            const selected = params.value[0]
-                            setSelectedLockIndex(
-                              selected ? Number(selected.id) : undefined,
-                            )
-                          }}
-                          placeholder="Select your veMEZO lock"
-                        />
-                      </div>
+                      {/* veMEZO Lock Selection Carousel */}
+                      <LockCarouselSelector
+                        locks={enrichedVeMEZOLocks}
+                        selectedIndex={selectedLockIndex}
+                        onSelect={setSelectedLockIndex}
+                        lockType="veMEZO"
+                        label="Select veMEZO Lock"
+                      />
 
                       {selectedLock && (
                         <div className="rounded-lg bg-[var(--surface-secondary)] p-4">

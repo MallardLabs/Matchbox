@@ -588,6 +588,58 @@
 }
 
 /* ============================================
+   CAROUSEL SELECTOR ANIMATIONS
+   Smooth scrolling and selection animations
+   ============================================ */
+
+.carousel-scroll-container {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.carousel-scroll-container::-webkit-scrollbar {
+  display: none;
+}
+
+.carousel-card {
+  animation: carousel-card-enter 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation-delay: calc(var(--card-index, 0) * 50ms);
+}
+
+@keyframes carousel-card-enter {
+  0% {
+    opacity: 0;
+    transform: scale(0.95) translateY(10px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* Card hover effect */
+.carousel-card:hover [data-baseweb="card"] {
+  transform: scale(1.02);
+}
+
+/* Selection pulse animation */
+@keyframes carousel-selection-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(247, 147, 26, 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 8px rgba(247, 147, 26, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(247, 147, 26, 0);
+  }
+}
+
+.carousel-card-selected {
+  animation: carousel-selection-pulse 0.6s ease-out;
+}
+
+/* ============================================
    SUNSET BACKGROUND ANIMATION
    Sunset-style gradient with pulsing effect
    ============================================ */
@@ -715,4 +767,52 @@
     rgba(247, 147, 26, 0.08) 0%,
     transparent 100%
   );
+}
+
+/* ============================================
+   CAROUSEL MAGNIFICATION EFFECT
+   Mac Dock-style hover magnification
+   ============================================ */
+
+.carousel-card-magnify {
+  transition: transform 0.15s cubic-bezier(0.25, 0.1, 0.25, 1);
+  transform-origin: center bottom;
+}
+
+/* Disable magnification on touch devices */
+@media (hover: none) {
+  .carousel-card-magnify {
+    transform: scale(1) !important;
+  }
+}
+
+/* Selection prompt pulsing animation */
+@keyframes carousel-prompt-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.carousel-prompt-pulse {
+  animation: carousel-prompt-pulse 2s ease-in-out infinite;
+}
+
+/* Smooth fade-in for content sections */
+@keyframes carousel-content-fade-in {
+  0% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.carousel-content-fade-in {
+  animation: carousel-content-fade-in 0.3s ease-out forwards;
 }
