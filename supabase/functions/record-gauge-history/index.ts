@@ -37,8 +37,41 @@ const mezoTestnet: Chain = {
 
 // Constants
 const EPOCH_DURATION = 7 * 24 * 60 * 60 // 7 days in seconds
-const MEZO_PRICE = 0.22 // Hardcoded for now, could fetch from oracle
+// MEZO pricing config - mirrors packages/shared/src/pricing/index.ts
+// Toggle to use Pyth oracle (requires fetching price from Pyth Hermes API)
+const USE_PYTH_ORACLE = false
+const MEZO_FALLBACK_PRICE = 0.22
 const MEZO_TOKEN_ADDRESS = "0x7b7c000000000000000000000000000000000001"
+// Pyth price feed ID for MEZO - TODO: replace with actual feed ID
+const MEZO_PYTH_PRICE_FEED_ID =
+  "0x0000000000000000000000000000000000000000000000000000000000000000"
+
+// Fetch MEZO price from Pyth Hermes API (for server-side use)
+async function fetchMezoPriceFromPyth(): Promise<number | null> {
+  if (!USE_PYTH_ORACLE) {
+    return MEZO_FALLBACK_PRICE
+  }
+
+  try {
+    const response = await fetch(
+      `https://hermes.pyth.network/api/latest_price_feeds?ids[]=${MEZO_PYTH_PRICE_FEED_ID}`,
+    )
+    if (!response.ok) {
+      console.warn("Failed to fetch Pyth price:", response.statusText)
+      return null
+    }
+    const data = await response.json()
+    if (data.length > 0 && data[0].price) {
+      const priceData = data[0].price
+      const price = Number(priceData.price) * Math.pow(10, priceData.expo)
+      return price
+    }
+    return null
+  } catch (e) {
+    console.warn("Error fetching Pyth price:", e)
+    return null
+  }
+}
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
 
 // Types
@@ -92,7 +125,17 @@ Deno.serve(async (req) => {
     // Get current epoch start
     const now = Math.floor(Date.now() / 1000)
     const epochStart = getEpochStart(now)
-    console.log(`Epoch: ${epochStart}`)
+    console.log(`Epoch start: ${epochStart} (${new Date(Number(epochStart) * 1000).toISOString()})`)
+
+    // Fetch MEZO price (from Pyth or fallback)
+    const mezoPrice = await fetchMezoPriceFromPyth()
+    if (mezoPrice === null) {
+      return new Response(
+        JSON.stringify({ error: "Failed to fetch MEZO price from oracle" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      )
+    }
+    console.log(`MEZO price: $${mezoPrice} (source: ${USE_PYTH_ORACLE ? "Pyth" : "fallback"})`)
 
     // 1. Get gauge count
     const gaugeCount = await publicClient.readContract({
@@ -112,7 +155,7 @@ Deno.serve(async (req) => {
 
     // 2. Batch fetch all gauge addresses using multicall
     const gaugeIndexes = Array.from({ length: Number(gaugeCount) }, (_, i) => BigInt(i))
-    
+
     const gaugeAddressResults = await publicClient.multicall({
       contracts: gaugeIndexes.map((i) => ({
         address: boostVoterAddress,
@@ -177,8 +220,8 @@ Deno.serve(async (req) => {
       // Build list of reward token calls
       const rewardTokenCalls: { bribeIndex: number; tokenIndex: bigint; bribeAddress: Address }[] = []
       bribeInfoList.forEach((b, bribeIdx) => {
-        const length = lengthResults[bribeIdx].status === "success" 
-          ? (lengthResults[bribeIdx].result as bigint) 
+        const length = lengthResults[bribeIdx].status === "success"
+          ? (lengthResults[bribeIdx].result as bigint)
           : 0n
         for (let i = 0n; i < length; i++) {
           rewardTokenCalls.push({ bribeIndex: bribeIdx, tokenIndex: i, bribeAddress: b.bribeAddress })
@@ -226,7 +269,7 @@ Deno.serve(async (req) => {
             if (amount > 0n) {
               const gaugeIdx = bribeInfoList[c.bribeIndex].gaugeIndex
               const isMezo = c.tokenAddress.toLowerCase() === MEZO_TOKEN_ADDRESS
-              const price = isMezo ? MEZO_PRICE : 100000 // MEZO or assume BTC ~100k
+              const price = isMezo ? mezoPrice : 100000 // MEZO or assume BTC ~100k
               const tokenAmount = Number(formatUnits(amount, 18))
               const usdValue = tokenAmount * price
 
@@ -289,8 +332,8 @@ Deno.serve(async (req) => {
         // Get mapped gauges for all token IDs
         const tokenIds = tokenIdCalls.map((c, idx) => ({
           ...c,
-          tokenId: tokenIdResults[idx].status === "success" 
-            ? (tokenIdResults[idx].result as bigint) 
+          tokenId: tokenIdResults[idx].status === "success"
+            ? (tokenIdResults[idx].result as bigint)
             : 0n,
         })).filter((t) => t.tokenId > 0n)
 
@@ -310,10 +353,10 @@ Deno.serve(async (req) => {
             const mappedGauge = mappedGaugeResults[idx].status === "success"
               ? (mappedGaugeResults[idx].result as Address)
               : ZERO_ADDRESS
-            
+
             const gaugeIdx = beneficiaryInfo[t.beneficiaryIdx].gaugeIndex
             const expectedGauge = beneficiaryInfo[t.beneficiaryIdx].gaugeAddress
-            
+
             if (mappedGauge.toLowerCase() === expectedGauge.toLowerCase()) {
               gaugeToTokenId.set(gaugeIdx, t.tokenId)
             }
@@ -362,8 +405,8 @@ Deno.serve(async (req) => {
 
     // 6. Build gauge data
     const gaugeDataList: GaugeData[] = gaugeAddresses.map((gaugeAddress, i) => {
-      const vemezoWeight = weightsResults[i].status === "success" 
-        ? (weightsResults[i].result as bigint) 
+      const vemezoWeight = weightsResults[i].status === "success"
+        ? (weightsResults[i].result as bigint)
         : 0n
 
       const totalIncentivesUSD = gaugeIncentives.get(i) || null
@@ -373,7 +416,7 @@ Deno.serve(async (req) => {
       let apy: number | null = null
       if (totalIncentivesUSD && totalIncentivesUSD > 0 && vemezoWeight > 0n) {
         const totalVeMEZOAmount = Number(vemezoWeight) / 1e18
-        const totalVeMEZOValueUSD = totalVeMEZOAmount * MEZO_PRICE
+        const totalVeMEZOValueUSD = totalVeMEZOAmount * mezoPrice
         if (totalVeMEZOValueUSD > 0) {
           const weeklyReturn = totalIncentivesUSD / totalVeMEZOValueUSD
           apy = weeklyReturn * 52 * 100

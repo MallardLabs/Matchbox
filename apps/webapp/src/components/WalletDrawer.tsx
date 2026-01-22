@@ -1,13 +1,12 @@
 import { useNetwork } from "@/contexts/NetworkContext"
 import { useTheme } from "@/contexts/ThemeContext"
 import { useBtcPrice } from "@/hooks/useBtcPrice"
+import { useMezoPrice } from "@/hooks/useMezoPrice"
 import { CHAIN_ID, CONTRACTS, ERC20_ABI } from "@repo/shared/contracts"
 import { useEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { formatUnits } from "viem"
 import { useAccount, useBalance, useDisconnect, useReadContracts } from "wagmi"
-
-const MEZO_PRICE_USD = 0.22
 
 function PowerIcon(): JSX.Element {
   return (
@@ -114,6 +113,7 @@ export function WalletDrawer({
   const { theme, toggleTheme } = useTheme()
   const { chainId, networkName, switchNetwork, isMainnet } = useNetwork()
   const { price: btcPrice } = useBtcPrice()
+  const { price: mezoPriceUsd } = useMezoPrice()
   const drawerRef = useRef<HTMLDivElement>(null)
   const [mounted, setMounted] = useState(false)
   const [isVisible, setIsVisible] = useState(false)
@@ -160,7 +160,7 @@ export function WalletDrawer({
   const mezoAmount = mezoBalance ? Number(formatUnits(mezoBalance, 18)) : 0
 
   const btcValueUsd = btcAmount * (btcPrice ?? 0)
-  const mezoValueUsd = mezoAmount * MEZO_PRICE_USD
+  const mezoValueUsd = mezoAmount * (mezoPriceUsd ?? 0)
   const totalValueUsd = btcValueUsd + mezoValueUsd
 
   useEffect(() => {

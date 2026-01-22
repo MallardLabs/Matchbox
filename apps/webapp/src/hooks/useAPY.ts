@@ -1,16 +1,10 @@
 import { getContractConfig } from "@/config/contracts"
-import { CHAIN_ID } from "@repo/shared/contracts"
+import { CHAIN_ID, isMezoToken } from "@repo/shared"
 import { useMemo } from "react"
 import type { Address } from "viem"
 import { useReadContracts } from "wagmi"
 import { useBtcPrice } from "./useBtcPrice"
-
-// MEZO token price - same as in TokenPrices component
-const MEZO_PRICE = 0.22
-
-// MEZO token address (only token that uses MEZO price, everything else is BTC-based on this L2)
-const MEZO_TOKEN_ADDRESS =
-  "0x7b7c000000000000000000000000000000000001".toLowerCase()
+import { useMezoPrice } from "./useMezoPrice"
 
 // Epoch duration in seconds (7 days)
 const EPOCH_DURATION = 7 * 24 * 60 * 60
@@ -46,6 +40,7 @@ export function useGaugeAPY(
   totalWeight: bigint | undefined,
 ): GaugeAPYData {
   const { price: btcPrice } = useBtcPrice()
+  const { price: mezoPrice } = useMezoPrice()
   const contracts = getContractConfig(CHAIN_ID.testnet)
 
   // Get bribe address for the gauge
@@ -181,19 +176,18 @@ export function useGaugeAPY(
 
       if (amount && amount > 0n) {
         const tokenAmount = Number(amount) / Math.pow(10, decimals ?? 18)
-        const tokenKey = tokenAddress.toLowerCase()
 
         // Get price for this token
         // On this Bitcoin L2, assume everything except MEZO is BTC-denominated
-        const isMezo = tokenKey === MEZO_TOKEN_ADDRESS
-        const price = isMezo ? MEZO_PRICE : (btcPrice ?? 0)
+        const isMezo = isMezoToken(tokenAddress)
+        const price = isMezo ? (mezoPrice ?? 0) : (btcPrice ?? 0)
 
         total += tokenAmount * price
       }
     })
 
     return total
-  }, [tokenDataResults, tokenAddresses, btcPrice])
+  }, [tokenDataResults, tokenAddresses, btcPrice, mezoPrice])
 
   // Calculate APY
   const apy = useMemo(() => {
@@ -211,7 +205,7 @@ export function useGaugeAPY(
     const totalVeMEZOAmount = Number(totalWeight) / 1e18
 
     // Value of veMEZO votes in USD
-    const totalVeMEZOValueUSD = totalVeMEZOAmount * MEZO_PRICE
+    const totalVeMEZOValueUSD = totalVeMEZOAmount * (mezoPrice ?? 0)
 
     if (totalVeMEZOValueUSD === 0) return Number.POSITIVE_INFINITY
 
@@ -221,7 +215,7 @@ export function useGaugeAPY(
     const apyPercent = annualReturn * 100
 
     return apyPercent
-  }, [totalWeight, totalIncentivesUSD])
+  }, [totalWeight, totalIncentivesUSD, mezoPrice])
 
   const isLoading =
     isLoadingBribe || isLoadingLength || isLoadingTokens || isLoadingRewards
@@ -246,6 +240,7 @@ export function useGaugesAPY(
   isLoading: boolean
 } {
   const { price: btcPrice } = useBtcPrice()
+  const { price: mezoPrice } = useMezoPrice()
   const contracts = getContractConfig(CHAIN_ID.testnet)
 
   const gaugeAddresses = gauges.map((g) => g.address)
@@ -447,8 +442,8 @@ export function useGaugesAPY(
 
         // Get price for this token
         // On this Bitcoin L2, assume everything except MEZO is BTC-denominated
-        const isMezo = tokenKey === MEZO_TOKEN_ADDRESS
-        const price = isMezo ? MEZO_PRICE : (btcPrice ?? 0)
+        const isMezo = isMezoToken(tokenAddress)
+        const price = isMezo ? (mezoPrice ?? 0) : (btcPrice ?? 0)
 
         const usdValue = tokenAmount * price
         const gaugeKey = query.gaugeAddress.toLowerCase()
@@ -492,7 +487,7 @@ export function useGaugesAPY(
           apy = Number.POSITIVE_INFINITY
         } else {
           const totalVeMEZOAmount = Number(totalWeight) / 1e18
-          const totalVeMEZOValueUSD = totalVeMEZOAmount * MEZO_PRICE
+          const totalVeMEZOValueUSD = totalVeMEZOAmount * (mezoPrice ?? 0)
 
           if (totalVeMEZOValueUSD > 0) {
             const weeklyReturn = totalIncentivesUSD / totalVeMEZOValueUSD
@@ -548,6 +543,8 @@ export function useVotingAPY(
   totalClaimableUSD: number,
   usedWeight: bigint | undefined,
 ): { apy: number | null } {
+  const { price: mezoPrice } = useMezoPrice()
+
   const apy = useMemo(() => {
     if (!usedWeight || usedWeight === 0n || totalClaimableUSD === 0) {
       return null
@@ -557,7 +554,7 @@ export function useVotingAPY(
     const usedVeMEZOAmount = Number(usedWeight) / 1e18
 
     // Value of used veMEZO votes in USD
-    const usedVeMEZOValueUSD = usedVeMEZOAmount * MEZO_PRICE
+    const usedVeMEZOValueUSD = usedVeMEZOAmount * (mezoPrice ?? 0)
 
     if (usedVeMEZOValueUSD === 0) return null
 
@@ -567,7 +564,7 @@ export function useVotingAPY(
     const apyPercent = annualReturn * 100
 
     return apyPercent
-  }, [totalClaimableUSD, usedWeight])
+  }, [totalClaimableUSD, usedWeight, mezoPrice])
 
   return { apy }
 }
@@ -605,6 +602,8 @@ export function useUpcomingVotingAPY(
   projectedIncentivesUSD: number
   projectedRewardsByToken: ProjectedTokenReward[]
 } {
+  const { price: mezoPrice } = useMezoPrice()
+
   const result = useMemo(() => {
     if (!usedWeight || usedWeight === 0n || voteAllocations.length === 0) {
       return {
@@ -667,7 +666,7 @@ export function useUpcomingVotingAPY(
 
     // Convert used veMEZO weight to USD value
     const usedVeMEZOAmount = Number(usedWeight) / 1e18
-    const usedVeMEZOValueUSD = usedVeMEZOAmount * MEZO_PRICE
+    const usedVeMEZOValueUSD = usedVeMEZOAmount * (mezoPrice ?? 0)
 
     const projectedRewardsByToken = Array.from(tokenRewardsMap.values())
 
@@ -689,7 +688,7 @@ export function useUpcomingVotingAPY(
       projectedIncentivesUSD: totalUserIncentivesUSD,
       projectedRewardsByToken,
     }
-  }, [voteAllocations, apyMap, usedWeight])
+  }, [voteAllocations, apyMap, usedWeight, mezoPrice])
 
   return result
 }

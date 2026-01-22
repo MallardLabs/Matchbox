@@ -9,6 +9,7 @@ import {
   useVotingAPY,
 } from "@/hooks/useAPY"
 import { useBtcPrice } from "@/hooks/useBtcPrice"
+import { useMezoPrice } from "@/hooks/useMezoPrice"
 import { useAllGaugeProfiles, useGaugeProfile } from "@/hooks/useGaugeProfiles"
 import {
   useBoostGaugeForToken,
@@ -39,10 +40,7 @@ import { useEffect, useMemo, useState } from "react"
 import { type Address, formatUnits } from "viem"
 import { useAccount } from "wagmi"
 
-// Price constants
-const MEZO_PRICE = 0.22
-const MEZO_TOKEN_ADDRESS =
-  "0x7b7c000000000000000000000000000000000001".toLowerCase()
+import { isMezoToken } from "@repo/shared"
 
 // Format token values with appropriate precision based on magnitude
 function formatTokenValue(amount: bigint, decimals: number): string {
@@ -126,13 +124,12 @@ function VeBTCLockCard({
             <div className="flex min-w-0 flex-col gap-0.5">
               <div className="flex flex-wrap items-center gap-2">
                 <span
-                  className={`text-sm font-medium ${
-                    profile?.display_name ||
-                    profile?.description ||
-                    profile?.profile_picture_url
+                  className={`text-sm font-medium ${profile?.display_name ||
+                      profile?.description ||
+                      profile?.profile_picture_url
                       ? "text-[var(--positive)]"
                       : "text-[var(--negative)]"
-                  }`}
+                    }`}
                 >
                   {profile?.display_name || `veBTC #${lock.tokenId.toString()}`}
                 </span>
@@ -195,11 +192,10 @@ function VeBTCLockCard({
                 Current Boost
               </p>
               <span
-                className={`font-mono text-sm font-medium tabular-nums ${
-                  boostMultiplier > 1
+                className={`font-mono text-sm font-medium tabular-nums ${boostMultiplier > 1
                     ? "text-[var(--positive)]"
                     : "text-[var(--content-primary)]"
-                }`}
+                  }`}
               >
                 {boostMultiplier.toFixed(2)}x
               </span>
@@ -219,8 +215,8 @@ function VeBTCLockCard({
                     </span>
                   </Link>
                   {!isLoadingAPY &&
-                  apy !== null &&
-                  (apy > 0 || apy === Number.POSITIVE_INFINITY) ? (
+                    apy !== null &&
+                    (apy > 0 || apy === Number.POSITIVE_INFINITY) ? (
                     <div className="mt-1 flex w-fit items-center rounded border border-[var(--positive-subtle)] bg-[var(--positive-subtle)] px-1.5 py-0.5">
                       <span className="text-xs font-medium text-[var(--positive)]">
                         {formatAPY(apy)} APY
@@ -287,7 +283,7 @@ function VeMEZOLockCard({
               veMEZO #{lock.tokenId.toString()}
             </span>
             {(apy !== null && apy > 0) ||
-            (upcomingAPY !== null && upcomingAPY > 0) ? (
+              (upcomingAPY !== null && upcomingAPY > 0) ? (
               <div className="mt-1 flex items-center gap-1.5">
                 {/* Current APY */}
                 {apy !== null && apy > 0 && (
@@ -353,11 +349,10 @@ function VeMEZOLockCard({
               Can Vote
             </p>
             <span
-              className={`text-sm font-medium ${
-                canVoteInCurrentEpoch
+              className={`text-sm font-medium ${canVoteInCurrentEpoch
                   ? "text-[var(--positive)]"
                   : "text-[var(--warning)]"
-              }`}
+                }`}
             >
               {canVoteInCurrentEpoch ? "Yes" : "Next Epoch"}
             </span>
@@ -388,6 +383,7 @@ function ClaimableRewardRow({
   allGaugeAddresses,
   apyMap,
   btcPrice,
+  mezoPrice,
 }: {
   tokenId: bigint
   bribes: ClaimableBribe[]
@@ -399,6 +395,7 @@ function ClaimableRewardRow({
   allGaugeAddresses: Address[]
   apyMap: Map<string, ReturnType<typeof useGaugeAPY>>
   btcPrice: number | null
+  mezoPrice: number | null
 }): JSX.Element | null {
   const { usedWeight } = useVoteState(tokenId)
   const { apy } = useVotingAPY(claimableUSD, usedWeight)
@@ -445,9 +442,8 @@ function ClaimableRewardRow({
     <div>
       {/* Main row */}
       <div
-        className={`flex items-center justify-between gap-4 py-4 max-[600px]:flex-col max-[600px]:items-stretch max-[600px]:gap-4 ${
-          isLast && !isExpanded ? "" : "border-b border-[var(--border)]"
-        }`}
+        className={`flex items-center justify-between gap-4 py-4 max-[600px]:flex-col max-[600px]:items-stretch max-[600px]:gap-4 ${isLast && !isExpanded ? "" : "border-b border-[var(--border)]"
+          }`}
       >
         {/* Left side: Collapsible chevron and Token ID badge */}
         <button
@@ -457,9 +453,8 @@ function ClaimableRewardRow({
           aria-label={isExpanded ? "Collapse details" : "Expand details"}
         >
           <span
-            className={`inline-block text-sm text-[var(--content-secondary)] transition-transform duration-200 ${
-              isExpanded ? "rotate-90" : ""
-            }`}
+            className={`inline-block text-sm text-[var(--content-secondary)] transition-transform duration-200 ${isExpanded ? "rotate-90" : ""
+              }`}
           >
             ▸
           </span>
@@ -474,26 +469,26 @@ function ClaimableRewardRow({
             </span>
             {((apy !== null && apy > 0) ||
               (upcomingAPY !== null && upcomingAPY > 0)) && (
-              <div className="flex items-center gap-1">
-                {apy !== null && apy > 0 && (
-                  <span className="inline-flex items-center rounded-sm border border-[rgba(var(--positive-rgb),0.3)] bg-[rgba(var(--positive-rgb),0.15)] px-1 py-0.5 text-[9px] font-semibold text-[var(--positive)]">
-                    {formatAPY(apy)}
-                  </span>
-                )}
-                {upcomingAPY !== null && upcomingAPY > 0 && (
-                  <>
-                    {apy !== null && apy > 0 && (
-                      <span className="text-[8px] text-[var(--content-tertiary)]">
-                        →
-                      </span>
-                    )}
-                    <span className="inline-flex items-center rounded-sm border border-[var(--border)] bg-[var(--surface-secondary)] px-1 py-0.5 text-[9px] font-medium text-[var(--content-secondary)]">
-                      {formatAPY(upcomingAPY)}
+                <div className="flex items-center gap-1">
+                  {apy !== null && apy > 0 && (
+                    <span className="inline-flex items-center rounded-sm border border-[rgba(var(--positive-rgb),0.3)] bg-[rgba(var(--positive-rgb),0.15)] px-1 py-0.5 text-[9px] font-semibold text-[var(--positive)]">
+                      {formatAPY(apy)}
                     </span>
-                  </>
-                )}
-              </div>
-            )}
+                  )}
+                  {upcomingAPY !== null && upcomingAPY > 0 && (
+                    <>
+                      {apy !== null && apy > 0 && (
+                        <span className="text-[8px] text-[var(--content-tertiary)]">
+                          →
+                        </span>
+                      )}
+                      <span className="inline-flex items-center rounded-sm border border-[var(--border)] bg-[var(--surface-secondary)] px-1 py-0.5 text-[9px] font-medium text-[var(--content-secondary)]">
+                        {formatAPY(upcomingAPY)}
+                      </span>
+                    </>
+                  )}
+                </div>
+              )}
           </div>
         </button>
 
@@ -544,9 +539,8 @@ function ClaimableRewardRow({
       {/* Collapsible details section */}
       {isExpanded && (
         <div
-          className={`bg-[var(--surface-secondary)] px-6 py-4 ${
-            isLast ? "" : "border-b border-[var(--border)]"
-          }`}
+          className={`bg-[var(--surface-secondary)] px-6 py-4 ${isLast ? "" : "border-b border-[var(--border)]"
+            }`}
         >
           {/* Claimable rewards breakdown */}
           <div className={hasPendingRewards ? "mb-4" : ""}>
@@ -557,9 +551,8 @@ function ClaimableRewardRow({
               {rewardsByToken.map((reward) => {
                 const tokenAmount =
                   Number(reward.amount) / Math.pow(10, reward.decimals)
-                const isMezo =
-                  reward.tokenAddress.toLowerCase() === MEZO_TOKEN_ADDRESS
-                const price = isMezo ? MEZO_PRICE : (btcPrice ?? 0)
+                const isMezo = isMezoToken(reward.tokenAddress)
+                const price = isMezo ? (mezoPrice ?? 0) : (btcPrice ?? 0)
                 const usdValue = tokenAmount * price
 
                 return (
@@ -660,9 +653,8 @@ function ProjectedRewardRow({
   return (
     <div>
       <div
-        className={`flex items-center justify-between gap-4 py-4 max-[600px]:flex-col max-[600px]:items-stretch max-[600px]:gap-4 ${
-          isLast && !isExpanded ? "" : "border-b border-[var(--border)]"
-        }`}
+        className={`flex items-center justify-between gap-4 py-4 max-[600px]:flex-col max-[600px]:items-stretch max-[600px]:gap-4 ${isLast && !isExpanded ? "" : "border-b border-[var(--border)]"
+          }`}
       >
         {/* Left side: Collapsible chevron and Token ID badge */}
         <button
@@ -672,9 +664,8 @@ function ProjectedRewardRow({
           aria-label={isExpanded ? "Collapse details" : "Expand details"}
         >
           <span
-            className={`inline-block text-sm text-[var(--content-secondary)] transition-transform duration-200 ${
-              isExpanded ? "rotate-90" : ""
-            }`}
+            className={`inline-block text-sm text-[var(--content-secondary)] transition-transform duration-200 ${isExpanded ? "rotate-90" : ""
+              }`}
           >
             ▸
           </span>
@@ -737,9 +728,8 @@ function ProjectedRewardRow({
       {/* Collapsible details section */}
       {isExpanded && (
         <div
-          className={`bg-[var(--surface-secondary)] px-6 py-4 ${
-            isLast ? "" : "border-b border-[var(--border)]"
-          }`}
+          className={`bg-[var(--surface-secondary)] px-6 py-4 ${isLast ? "" : "border-b border-[var(--border)]"
+            }`}
         >
           {/* Pending rewards breakdown */}
           <div>
@@ -787,6 +777,7 @@ export default function DashboardPage(): JSX.Element {
   const { locks: veMEZOLocks, isLoading: isLoadingVeMEZO } = useVeMEZOLocks()
   const { price: btcPrice } = useBtcPrice()
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false)
+  const { price: mezoPrice } = useMezoPrice()
 
   const veMEZOTokenIds = useMemo(
     () => veMEZOLocks.map((lock) => lock.tokenId),
@@ -830,12 +821,12 @@ export default function DashboardPage(): JSX.Element {
     let total = 0
     for (const [tokenAddr, info] of totalClaimable.entries()) {
       const tokenAmount = Number(info.amount) / Math.pow(10, info.decimals)
-      const isMezo = tokenAddr.toLowerCase() === MEZO_TOKEN_ADDRESS
-      const price = isMezo ? MEZO_PRICE : (btcPrice ?? 0)
+      const isMezo = isMezoToken(tokenAddr)
+      const price = isMezo ? (mezoPrice ?? 0) : (btcPrice ?? 0)
       total += tokenAmount * price
     }
     return total
-  }, [totalClaimable, btcPrice])
+  }, [totalClaimable, btcPrice, mezoPrice])
 
   // Calculate claimable USD per tokenId
   const claimableUSDByTokenId = useMemo(() => {
@@ -846,15 +837,15 @@ export default function DashboardPage(): JSX.Element {
       for (const reward of bribe.rewards) {
         const tokenAmount =
           Number(reward.earned) / Math.pow(10, reward.decimals)
-        const isMezo = reward.tokenAddress.toLowerCase() === MEZO_TOKEN_ADDRESS
-        const price = isMezo ? MEZO_PRICE : (btcPrice ?? 0)
+        const isMezo = isMezoToken(reward.tokenAddress)
+        const price = isMezo ? (mezoPrice ?? 0) : (btcPrice ?? 0)
         usdValue += tokenAmount * price
       }
       const existing = map.get(tokenIdKey) ?? 0
       map.set(tokenIdKey, existing + usdValue)
     }
     return map
-  }, [claimableBribes, btcPrice])
+  }, [claimableBribes, btcPrice, mezoPrice])
 
   const handleClaimBribes = (tokenId: bigint) => {
     const bribesForToken = bribesGroupedByTokenId.get(tokenId.toString()) ?? []
@@ -1003,32 +994,31 @@ export default function DashboardPage(): JSX.Element {
                           </p>
                           {((totalAPY !== null && totalAPY > 0) ||
                             (upcomingAPY !== null && upcomingAPY > 0)) && (
-                            <div className="inline-flex items-center gap-1.5">
-                              {totalAPY !== null && totalAPY > 0 && (
-                                <span className="inline-flex items-center rounded-full border border-[rgba(var(--positive-rgb),0.4)] bg-[rgba(var(--positive-rgb),0.15)] px-2.5 py-1 text-xs font-semibold text-[var(--positive)]">
-                                  {formatAPY(totalAPY)} APY
-                                </span>
-                              )}
-                              {upcomingAPY !== null && upcomingAPY > 0 && (
-                                <>
-                                  {totalAPY !== null && totalAPY > 0 && (
-                                    <span className="text-xs text-[var(--content-tertiary)]">
-                                      →
-                                    </span>
-                                  )}
-                                  <span
-                                    className={`inline-flex items-center rounded-full border px-2.5 py-1 font-medium ${
-                                      totalAPY === null || totalAPY === 0
-                                        ? "border-[rgba(var(--positive-rgb),0.4)] bg-[rgba(var(--positive-rgb),0.15)] text-xs font-semibold text-[var(--positive)]"
-                                        : "border-[var(--border)] bg-[var(--surface)] text-[11px] text-[var(--content-secondary)]"
-                                    }`}
-                                  >
-                                    {formatAPY(upcomingAPY)}
+                              <div className="inline-flex items-center gap-1.5">
+                                {totalAPY !== null && totalAPY > 0 && (
+                                  <span className="inline-flex items-center rounded-full border border-[rgba(var(--positive-rgb),0.4)] bg-[rgba(var(--positive-rgb),0.15)] px-2.5 py-1 text-xs font-semibold text-[var(--positive)]">
+                                    {formatAPY(totalAPY)} APY
                                   </span>
-                                </>
-                              )}
-                            </div>
-                          )}
+                                )}
+                                {upcomingAPY !== null && upcomingAPY > 0 && (
+                                  <>
+                                    {totalAPY !== null && totalAPY > 0 && (
+                                      <span className="text-xs text-[var(--content-tertiary)]">
+                                        →
+                                      </span>
+                                    )}
+                                    <span
+                                      className={`inline-flex items-center rounded-full border px-2.5 py-1 font-medium ${totalAPY === null || totalAPY === 0
+                                          ? "border-[rgba(var(--positive-rgb),0.4)] bg-[rgba(var(--positive-rgb),0.15)] text-xs font-semibold text-[var(--positive)]"
+                                          : "border-[var(--border)] bg-[var(--surface)] text-[11px] text-[var(--content-secondary)]"
+                                        }`}
+                                    >
+                                      {formatAPY(upcomingAPY)}
+                                    </span>
+                                  </>
+                                )}
+                              </div>
+                            )}
                         </div>
 
                         {/* Total USD Value - prominent display */}
@@ -1052,10 +1042,9 @@ export default function DashboardPage(): JSX.Element {
                                 const tokenAmount =
                                   Number(info.amount) /
                                   Math.pow(10, info.decimals)
-                                const isMezo =
-                                  tokenAddr.toLowerCase() === MEZO_TOKEN_ADDRESS
+                                const isMezo = isMezoToken(tokenAddr)
                                 const price = isMezo
-                                  ? MEZO_PRICE
+                                  ? (mezoPrice ?? 0)
                                   : (btcPrice ?? 0)
                                 const usdValue = tokenAmount * price
 
@@ -1190,6 +1179,7 @@ export default function DashboardPage(): JSX.Element {
                                       allGaugeAddresses={allGaugeAddresses}
                                       apyMap={apyMap}
                                       btcPrice={btcPrice}
+                                      mezoPrice={mezoPrice}
                                     />
                                   )
                                 })}
