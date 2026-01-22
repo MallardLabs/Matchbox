@@ -282,7 +282,11 @@ export function WalletDrawer({
             <div className="mt-1 h-8 w-32 animate-pulse rounded bg-[var(--border)]" />
           ) : (
             <div className="text-3xl font-semibold text-[var(--content-primary)]">
-              ${totalValueUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              $
+              {totalValueUsd.toLocaleString(undefined, {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}
             </div>
           )}
         </div>
@@ -328,7 +332,11 @@ export function WalletDrawer({
                         {token.balance} {token.symbol}
                       </div>
                       <div className="text-xs text-[var(--content-secondary)]">
-                        ${token.valueUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        $
+                        {token.valueUsd.toLocaleString(undefined, {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}
                       </div>
                     </>
                   )}

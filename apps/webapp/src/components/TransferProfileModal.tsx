@@ -1,16 +1,12 @@
-import { getContractConfig } from "@/config/contracts"
 import type { GaugeProfile } from "@/config/supabase"
 import {
   useCanTransferProfile,
-  useGaugeProfile,
   useTransferGaugeProfile,
 } from "@/hooks/useGaugeProfiles"
-import { useBoostGaugeForToken } from "@/hooks/useGauges"
 import { Button, Modal, ModalBody, ModalHeader } from "@mezo-org/mezo-clay"
-import { CHAIN_ID } from "@repo/shared/contracts"
 import { useCallback, useMemo, useState } from "react"
 import type { Address } from "viem"
-import { useAccount, useReadContract } from "wagmi"
+import { useAccount } from "wagmi"
 
 type OwnedGauge = {
   tokenId: bigint
@@ -98,7 +94,8 @@ function GaugeOption({
                 : "text-[var(--content-secondary)]"
             }`}
           >
-            {gauge.profile?.display_name || `veBTC #${gauge.tokenId.toString()}`}
+            {gauge.profile?.display_name ||
+              `veBTC #${gauge.tokenId.toString()}`}
           </span>
           {gauge.profile?.display_name && (
             <span className="rounded bg-[rgba(247,147,26,0.15)] px-1.5 py-0.5 font-mono text-2xs text-[#F7931A]">
@@ -165,13 +162,13 @@ export function TransferProfileModal({
   )
   const [transferError, setTransferError] = useState<string | null>(null)
 
-  const { canTransfer, nextEpoch, isLoading: isLoadingCanTransfer } =
-    useCanTransferProfile(address)
   const {
-    transferProfile,
-    isLoading: isTransferring,
-    error: transferHookError,
-  } = useTransferGaugeProfile()
+    canTransfer,
+    nextEpoch,
+    isLoading: isLoadingCanTransfer,
+  } = useCanTransferProfile(address)
+  const { transferProfile, isLoading: isTransferring } =
+    useTransferGaugeProfile()
 
   // Get source and destination gauge info
   const sourceGauge = useMemo(
@@ -328,7 +325,8 @@ export function TransferProfileModal({
       return (
         <div>
           <p className="mb-4 text-sm text-[var(--content-secondary)]">
-            Select the gauge you want to transfer the profile <strong>from</strong>:
+            Select the gauge you want to transfer the profile{" "}
+            <strong>from</strong>:
           </p>
           <div className="flex max-h-[400px] flex-col gap-3 overflow-y-auto">
             {gaugesWithProfiles.map((gauge) => (
@@ -357,7 +355,8 @@ export function TransferProfileModal({
             ← Back
           </button>
           <p className="mb-4 text-sm text-[var(--content-secondary)]">
-            Select the gauge you want to transfer the profile <strong>to</strong>:
+            Select the gauge you want to transfer the profile{" "}
+            <strong>to</strong>:
           </p>
           <div className="flex max-h-[400px] flex-col gap-3 overflow-y-auto">
             {availableDestinations.map((gauge) => (
@@ -443,8 +442,8 @@ export function TransferProfileModal({
             <p className="text-sm text-[var(--warning)]">
               <strong>Note:</strong> This will copy all profile data (name,
               description, picture, social links, strategies) to the destination
-              gauge and clear the source gauge's profile. This action can only be
-              done once per epoch.
+              gauge and clear the source gauge's profile. This action can only
+              be done once per epoch.
             </p>
           </div>
 

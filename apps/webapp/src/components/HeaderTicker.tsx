@@ -72,7 +72,11 @@ function TickerItem({
 
 export function HeaderTicker(): JSX.Element {
   const { price: btcPrice, isLoading: btcLoading } = useBtcPrice()
-  const { price: mezoPrice, isLoading: mezoLoading, isError: mezoError } = useMezoPrice()
+  const {
+    price: mezoPrice,
+    isLoading: mezoLoading,
+    isError: mezoError,
+  } = useMezoPrice()
   const { timeRemaining } = useEpochCountdown()
   const { status: rpcStatus } = useRpcHealth()
 
@@ -110,7 +114,11 @@ export function HeaderTicker(): JSX.Element {
     {
       id: "mezo",
       label: "MEZO",
-      value: mezoLoading ? "..." : mezoError ? "N/A" : `$${formatPrice(mezoPrice)}`,
+      value: mezoLoading
+        ? "..."
+        : mezoError
+          ? "N/A"
+          : `$${formatPrice(mezoPrice)}`,
       icon: "/token icons/Mezo.svg",
     },
     {

@@ -5,7 +5,6 @@ import { TokenSelector } from "@/components/TokenSelector"
 import type { SocialLinks } from "@/config/supabase"
 import { formatAPY, useGaugeAPY } from "@/hooks/useAPY"
 import { useBtcPrice } from "@/hooks/useBtcPrice"
-import { useMezoPrice } from "@/hooks/useMezoPrice"
 import {
   useGaugeProfile,
   useUploadProfilePicture,
@@ -13,6 +12,7 @@ import {
 } from "@/hooks/useGaugeProfiles"
 import { useBoostGaugeForToken, useBoostInfo } from "@/hooks/useGauges"
 import { useVeBTCLocks } from "@/hooks/useLocks"
+import { useMezoPrice } from "@/hooks/useMezoPrice"
 import type { Token } from "@/hooks/useTokenList"
 import {
   type BribeIncentive,

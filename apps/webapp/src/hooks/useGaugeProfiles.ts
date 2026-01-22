@@ -288,7 +288,7 @@ export function useCanTransferProfile(ownerAddress: Address | undefined) {
 
     if (data) {
       setCanTransfer(false)
-      setLastTransfer(data as ProfileTransfer)
+      setLastTransfer(data as unknown as ProfileTransfer)
     } else {
       setCanTransfer(true)
       setLastTransfer(null)
@@ -429,7 +429,7 @@ export function useTransferHistory(ownerAddress: Address | undefined) {
       console.error("Error fetching transfer history:", error)
       setTransfers([])
     } else {
-      setTransfers((data as ProfileTransfer[]) ?? [])
+      setTransfers((data as unknown as ProfileTransfer[]) ?? [])
     }
 
     setIsLoading(false)

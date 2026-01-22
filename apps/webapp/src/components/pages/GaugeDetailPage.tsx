@@ -5,9 +5,9 @@ import { TokenIcon } from "@/components/TokenIcon"
 import { getContractConfig } from "@/config/contracts"
 import { formatAPY, useGaugeAPY } from "@/hooks/useAPY"
 import { useBtcPrice } from "@/hooks/useBtcPrice"
-import { useMezoPrice } from "@/hooks/useMezoPrice"
 import { useGaugeHistory, useGaugeProfile } from "@/hooks/useGaugeProfiles"
 import { useBoostInfo } from "@/hooks/useGauges"
+import { useMezoPrice } from "@/hooks/useMezoPrice"
 import {
   type BribeIncentive,
   useBribeAddress,
