@@ -116,7 +116,7 @@ export function HeaderTicker(): JSX.Element {
       label: "MEZO",
       value: mezoLoading
         ? "..."
-        : mezoError
+        : mezoError || mezoPrice === null
           ? "N/A"
           : `$${formatPrice(mezoPrice)}`,
       icon: "/token icons/Mezo.svg",
