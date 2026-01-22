@@ -6,6 +6,8 @@
   # Skip secrets scanning for these intentionally public Next.js env vars
   # NEXT_PUBLIC_* variables are designed to be exposed to the client
   SECRETS_SCAN_OMIT_KEYS = "NEXT_PUBLIC_SUPABASE_URL,NEXT_PUBLIC_SUPABASE_ANON_KEY"
+  # Site URL for OG meta tags - must be set for social embeds to work
+  NEXT_PUBLIC_SITE_URL = "https://matchbox.mallard.sh"
 
 # Proxy /docs/* to the docs site (hosted separately on Netlify)
 [[redirects]]
