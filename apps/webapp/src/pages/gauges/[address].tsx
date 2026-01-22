@@ -50,7 +50,7 @@ export const getServerSideProps: GetServerSideProps<GaugePageProps> = async (
 
 export default function GaugeDetail({ address, profile }: GaugePageProps) {
   const baseUrl = getBaseUrl()
-  const ogImageUrl = getOgImageUrl()
+  const ogImageUrl = getOgImageUrl(address)
   const pageUrl = `${baseUrl}/gauges/${address}`
 
   const displayName = profile?.display_name ?? `Gauge ${address.slice(0, 8)}...`
