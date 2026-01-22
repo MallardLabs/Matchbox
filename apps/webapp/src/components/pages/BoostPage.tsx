@@ -104,7 +104,7 @@ export default function BoostPage(): JSX.Element {
 
   // Gauge table sorting and filtering state
   const [gaugeSortColumn, setGaugeSortColumn] =
-    useState<GaugeSortColumn>("optimalVeMEZO")
+    useState<GaugeSortColumn>("apy")
   const [gaugeSortDirection, setGaugeSortDirection] =
     useState<SortDirection>("desc")
   const [gaugeStatusFilter, setGaugeStatusFilter] =
