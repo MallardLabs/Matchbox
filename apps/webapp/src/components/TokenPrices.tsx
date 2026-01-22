@@ -1,10 +1,7 @@
 import { useBtcPrice } from "@/hooks/useBtcPrice"
+import { useMezoPrice } from "@/hooks/useMezoPrice"
 
-// Feature flags for token prices
 const SHOW_MEZO_PRICE = true
-
-// Placeholder value for MEZO token price
-const MEZO_PLACEHOLDER_PRICE: number | null = 0.22
 
 function formatPrice(price: number | null): string {
   if (price === null) return "—"
@@ -64,9 +61,11 @@ function TokenPriceItem({
 
 export function TokenPrices(): JSX.Element {
   const { price: btcPrice, isLoading: btcLoading } = useBtcPrice()
-
-  const mezoPrice = MEZO_PLACEHOLDER_PRICE
-  const mezoLoading = false
+  const {
+    price: mezoPrice,
+    isLoading: mezoLoading,
+    isError: mezoError,
+  } = useMezoPrice()
 
   return (
     <div className="flex items-center gap-2">
@@ -76,7 +75,7 @@ export function TokenPrices(): JSX.Element {
           symbol="MEZO"
           price={mezoPrice}
           isLoading={mezoLoading}
-          isUnavailable={mezoPrice === null && !mezoLoading}
+          isUnavailable={mezoError || (mezoPrice === null && !mezoLoading)}
         />
       )}
       <TokenPriceItem

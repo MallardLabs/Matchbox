@@ -1,10 +1,10 @@
 import { useBtcPrice } from "@/hooks/useBtcPrice"
 import { useEpochCountdown } from "@/hooks/useEpochCountdown"
+import { useMezoPrice } from "@/hooks/useMezoPrice"
 import { useRpcHealth } from "@/hooks/useRpcHealth"
 import { useEffect, useRef, useState } from "react"
 
 const CYCLE_INTERVAL_MS = 4000 // 4 seconds per metric
-const MEZO_PLACEHOLDER_PRICE = 0.22
 
 type TickerMetric = {
   id: string
@@ -72,6 +72,7 @@ function TickerItem({
 
 export function HeaderTicker(): JSX.Element {
   const { price: btcPrice, isLoading: btcLoading } = useBtcPrice()
+  const { price: mezoPrice, isLoading: mezoLoading, isError: mezoError } = useMezoPrice()
   const { timeRemaining } = useEpochCountdown()
   const { status: rpcStatus } = useRpcHealth()
 
@@ -109,7 +110,7 @@ export function HeaderTicker(): JSX.Element {
     {
       id: "mezo",
       label: "MEZO",
-      value: `$${formatPrice(MEZO_PLACEHOLDER_PRICE)}`,
+      value: mezoLoading ? "..." : mezoError ? "N/A" : `$${formatPrice(mezoPrice)}`,
       icon: "/token icons/Mezo.svg",
     },
     {

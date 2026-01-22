@@ -5,6 +5,7 @@ import { TokenSelector } from "@/components/TokenSelector"
 import type { SocialLinks } from "@/config/supabase"
 import { formatAPY, useGaugeAPY } from "@/hooks/useAPY"
 import { useBtcPrice } from "@/hooks/useBtcPrice"
+import { useMezoPrice } from "@/hooks/useMezoPrice"
 import {
   useGaugeProfile,
   useUploadProfilePicture,
@@ -40,9 +41,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { formatUnits, parseUnits } from "viem"
 import { useAccount } from "wagmi"
 
-const MEZO_PRICE = 0.22
-const MEZO_TOKEN_ADDRESS =
-  "0x7b7c000000000000000000000000000000000001".toLowerCase()
+import { isMezoToken } from "@repo/shared"
 
 type IncentiveWithUSD = BribeIncentive & { usdValue: number | null }
 
@@ -57,14 +56,14 @@ function formatUsdValue(value: number | null): string {
 function getIncentiveUsdValue(
   incentive: BribeIncentive,
   btcPrice: number | null,
+  mezoPrice: number | null,
 ): number | null {
   const amount = Number.parseFloat(
     formatUnits(incentive.amount, incentive.decimals),
   )
   if (!Number.isFinite(amount)) return null
 
-  const tokenKey = incentive.tokenAddress.toLowerCase()
-  const price = tokenKey === MEZO_TOKEN_ADDRESS ? MEZO_PRICE : btcPrice
+  const price = isMezoToken(incentive.tokenAddress) ? mezoPrice : btcPrice
   if (!price) return null
 
   return amount * price
@@ -234,13 +233,14 @@ export default function IncentivesPage(): JSX.Element {
     refetch: refetchIncentives,
   } = useBribeIncentives(bribeAddress)
   const { price: btcPrice } = useBtcPrice()
+  const { price: mezoPrice } = useMezoPrice()
   const incentivesWithUSD: IncentiveWithUSD[] = useMemo(
     () =>
       incentives.map((incentive) => ({
         ...incentive,
-        usdValue: getIncentiveUsdValue(incentive, btcPrice),
+        usdValue: getIncentiveUsdValue(incentive, btcPrice, mezoPrice),
       })),
-    [btcPrice, incentives],
+    [btcPrice, mezoPrice, incentives],
   )
 
   // Calculate total incentives USD
