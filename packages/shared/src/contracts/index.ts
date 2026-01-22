@@ -1,4 +1,4 @@
-import { type Address, getAddress } from "viem"
+import { getAddress } from "viem"
 
 export const CHAIN_ID = {
   testnet: 31611,
