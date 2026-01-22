@@ -1,6 +1,10 @@
 import { Head, Html, Main, NextScript } from "next/document"
 
 export default function Document() {
+  const baseUrl =
+    process.env.NEXT_PUBLIC_SITE_URL ?? "https://matchbox.mezo.org"
+  const ogImageUrl = `${baseUrl}/og.png`
+
   return (
     <Html lang="en">
       <Head>
@@ -50,10 +54,10 @@ export default function Document() {
           property="og:description"
           content="The powerful veBTC + veMEZO matching platform for Mezo"
         />
-        <meta property="og:image" content="https://matchbox.mallard.sh/og.png" />
+        <meta property="og:image" content={ogImageUrl} />
         <meta property="og:image:width" content="1200" />
         <meta property="og:image:height" content="630" />
-        <meta property="og:url" content="https://matchbox.mallard.sh" />
+        <meta property="og:url" content={baseUrl} />
 
         {/* Twitter Card */}
         <meta name="twitter:card" content="summary_large_image" />
@@ -65,7 +69,7 @@ export default function Document() {
           name="twitter:description"
           content="The powerful veBTC + veMEZO matching platform for Mezo"
         />
-        <meta name="twitter:image" content="https://matchbox.mallard.sh/og.png" />
+        <meta name="twitter:image" content={ogImageUrl} />
 
         {/* Prevent flash of wrong theme */}
         <script
