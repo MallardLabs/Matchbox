@@ -536,6 +536,45 @@ export function formatAPY(apy: number | null): string {
 }
 
 /**
+ * Calculate projected APY for a gauge after adding a user's vote
+ */
+export function calculateProjectedAPY(
+  currentAPYData: GaugeAPYData | undefined,
+  userVotePercentage: number,
+  userVotingPower: bigint,
+  mezoPrice: number | null,
+): number | null {
+  if (!currentAPYData || currentAPYData.totalIncentivesUSD === 0) {
+    return null
+  }
+
+  if (userVotePercentage <= 0) {
+    return currentAPYData.apy
+  }
+
+  // Calculate user's vote weight: (percentage / 100) * votingPower
+  const userVoteWeight =
+    (BigInt(Math.floor(userVotePercentage * 100)) * userVotingPower) / 10000n
+  const newTotalWeight = currentAPYData.totalVeMEZOWeight + userVoteWeight
+
+  if (newTotalWeight === 0n) {
+    return Number.POSITIVE_INFINITY
+  }
+
+  if (!mezoPrice || mezoPrice === 0) {
+    return null
+  }
+
+  // APY = (incentives / (weight * price)) * 52 * 100
+  const newTotalVeMEZOValueUSD = (Number(newTotalWeight) / 1e18) * mezoPrice
+  if (newTotalVeMEZOValueUSD === 0) return Number.POSITIVE_INFINITY
+
+  const weeklyReturn =
+    currentAPYData.totalIncentivesUSD / newTotalVeMEZOValueUSD
+  return weeklyReturn * EPOCHS_PER_YEAR * 100
+}
+
+/**
  * Calculate APY for veMEZO voting based on used weights
  * APY = (Total Claimable Rewards USD / (Used veMEZO Weight * MEZO Price)) * 52 * 100
  */

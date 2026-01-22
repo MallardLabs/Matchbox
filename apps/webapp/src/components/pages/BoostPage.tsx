@@ -1,11 +1,12 @@
 import { AddressLink } from "@/components/AddressLink"
 import { Layout } from "@/components/Layout"
 import { SpringIn } from "@/components/SpringIn"
-import { formatAPY, useGaugesAPY } from "@/hooks/useAPY"
+import { calculateProjectedAPY, formatAPY, useGaugesAPY } from "@/hooks/useAPY"
 import { useAllGaugeProfiles } from "@/hooks/useGaugeProfiles"
 import type { BoostGauge } from "@/hooks/useGauges"
 import { useBoostGauges } from "@/hooks/useGauges"
 import { useVeMEZOLocks } from "@/hooks/useLocks"
+import { useMezoPrice } from "@/hooks/useMezoPrice"
 import {
   useResetVote,
   useVoteAllocations,
@@ -66,6 +67,7 @@ export default function BoostPage(): JSX.Element {
     [gauges],
   )
   const { apyMap, isLoading: isLoadingAPY } = useGaugesAPY(gaugesForAPY)
+  const { price: mezoPrice } = useMezoPrice()
 
   // Voting state
   const [selectedLockIndex, setSelectedLockIndex] = useState<
@@ -623,6 +625,10 @@ export default function BoostPage(): JSX.Element {
                                   const apyData = apyMap.get(
                                     gauge.address.toLowerCase(),
                                   )
+                                  const userVotePercentage =
+                                    gaugeAllocations.get(gauge.originalIndex) ??
+                                    0
+
                                   if (isLoadingAPY) {
                                     return (
                                       <span className="text-xs text-[var(--content-secondary)]">
@@ -630,15 +636,33 @@ export default function BoostPage(): JSX.Element {
                                       </span>
                                     )
                                   }
+
+                                  const isProjected =
+                                    selectedLock && userVotePercentage > 0
+                                  const displayAPY = isProjected
+                                    ? calculateProjectedAPY(
+                                        apyData,
+                                        userVotePercentage,
+                                        selectedLock.votingPower,
+                                        mezoPrice,
+                                      )
+                                    : (apyData?.apy ?? null)
+
                                   return (
                                     <span
                                       className={`font-mono text-sm font-medium ${
-                                        apyData?.apy && apyData.apy > 0
+                                        displayAPY && displayAPY > 0
                                           ? "text-[var(--positive)]"
                                           : "text-[var(--content-secondary)]"
                                       }`}
+                                      title={
+                                        isProjected
+                                          ? "Projected APY after your vote"
+                                          : undefined
+                                      }
                                     >
-                                      {formatAPY(apyData?.apy ?? null)}
+                                      {formatAPY(displayAPY)}
+                                      {isProjected && " ↓"}
                                     </span>
                                   )
                                 }}
