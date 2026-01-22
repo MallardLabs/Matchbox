@@ -29,7 +29,7 @@ import {
 } from "@mezo-org/mezo-clay"
 import Link from "next/link"
 import type React from "react"
-import { useCallback, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { formatUnits } from "viem"
 import { useAccount } from "wagmi"
 
@@ -160,6 +160,10 @@ export default function BoostPage(): JSX.Element {
     (sum, pct) => sum + pct,
     0,
   )
+
+  useEffect(() => {
+    if (!selectedLock || usedWeight === undefined) return
+  }, [selectedLock, usedWeight, totalAllocation, currentAllocations.length])
 
   // Filtered and sorted gauges for voting table
   const filteredAndSortedGauges = useMemo(() => {
@@ -424,13 +428,16 @@ export default function BoostPage(): JSX.Element {
                           </p>
                           <p
                             className={`text-xs ${
-                              totalAllocation > 100
+                              totalAllocation !== 100
                                 ? "text-[var(--negative)]"
                                 : "text-[var(--content-secondary)]"
                             }`}
                           >
                             Total: {totalAllocation}%
                             {totalAllocation > 100 && " (exceeds 100%)"}
+                            {totalAllocation > 0 && totalAllocation < 100
+                              ? " (must be 100%)"
+                              : ""}
                           </p>
                         </div>
 
@@ -708,7 +715,7 @@ export default function BoostPage(): JSX.Element {
                                   const hasVote =
                                     currentVote !== undefined && currentVote > 0
                                   return (
-                                    <div className="relative z-10 flex items-center gap-1">
+                                    <div className="relative flex items-center gap-1">
                                       <Input
                                         value={currentVote?.toString() ?? ""}
                                         onChange={(e) =>
@@ -749,6 +756,7 @@ export default function BoostPage(): JSX.Element {
                             !selectedLock ||
                             gaugeAllocations.size === 0 ||
                             totalAllocation === 0 ||
+                            totalAllocation !== 100 ||
                             !canVoteInCurrentEpoch
                           }
                         >

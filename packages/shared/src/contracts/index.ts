@@ -13,18 +13,18 @@ export const CONTRACTS = {
     veMEZO: getAddress("0xaCE816CA2bcc9b12C59799dcC5A959Fb9b98111b"),
     veBTC: getAddress("0x38E35d92E6Bfc6787272A62345856B13eA12130a"),
     boostVoter: getAddress("0x21d7bDF5a5929AD179F8cA0c9014A0B62ae6Bfd1"),
-    poolsVoter: getAddress("0x263F1Fd5fB7F866881e1B6cD7d5d6c40Fd985F0D"),
+    // poolsVoter: getAddress("0x263F1Fd5fB7F866881e1B6cD7d5d6c40Fd985F0D"),
     factoryRegistry: getAddress("0x93915fF0ddEd1bfD587ef996Ee91504ab97E95Cf"),
     gaugeFactory: getAddress("0x2c015840d034fe74bea8c62dd00a11e3aa338ad5"),
   },
   mainnet: {
     mezoToken: getAddress("0x7B7c000000000000000000000000000000000001"),
-    veMEZO: undefined as Address | undefined,
-    veBTC: "0x...", // TODO: Add mainnet address
-    boostVoter: undefined as Address | undefined,
-    poolsVoter: "0x...", // TODO: Add mainnet address
-    factoryRegistry: undefined as Address | undefined,
-    gaugeFactory: undefined as Address | undefined,
+    veMEZO: getAddress("0xb90fdAd3DFD180458D62Cc6acedc983D78E20122"),
+    veBTC: getAddress("0x3D4b1b884A7a1E59fE8589a3296EC8f8cBB6f279"), 
+    boostVoter: getAddress("0x2Ba614a598Cffa5a19d683cDCA97bac3a49313d1"),
+    // poolsVoter: "0x...", // CL: "0x..."
+    factoryRegistry: getAddress("0x04B94f55780682478c8D8329368AAAfD320F4D32"),
+    gaugeFactory: getAddress("0x4150DcE1c6d013fa7EBaf4fFCd879D08daA0CCAd"), // CL: "0xfc41E1AAe0e58E8bDC32e85d8C995A902FEdEb13"
   },
 } as const
 
