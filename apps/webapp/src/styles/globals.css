@@ -83,8 +83,9 @@
   *,
   *::before,
   *::after {
-    font-family: "IBM Plex Mono", "JetBrains Mono", "Fira Code", "Consolas",
-      "Monaco", monospace;
+    font-family:
+      "IBM Plex Mono", "JetBrains Mono", "Fira Code", "Consolas", "Monaco",
+      monospace;
   }
 
   html {
@@ -495,6 +496,30 @@
 
 [data-baseweb="input"]:focus-within {
   border-color: var(--border-focus) !important;
+}
+
+/* Modal z-index overrides - ensure modals appear above all content */
+[data-baseweb="modal"] {
+  z-index: 1000 !important;
+}
+
+/* Select/Popover dropdown z-index overrides */
+[data-baseweb="popover"] {
+  z-index: 1100 !important;
+}
+
+[data-baseweb="select"] [data-baseweb="popover"] {
+  z-index: 1100 !important;
+}
+
+/* Menu list dropdowns */
+[data-baseweb="menu"] {
+  z-index: 1100 !important;
+}
+
+/* Layer/Portal containers from BaseUI */
+[data-baseweb="layer"] {
+  z-index: 1000 !important;
 }
 
 /* ============================================
