@@ -1,5 +1,5 @@
-import { useNetwork } from "@/contexts/NetworkContext"
 import {
+  CHAIN_ID,
   MEZO_FALLBACK_PRICE,
   MEZO_PYTH_PRICE_FEED_ID,
   PYTH_MAX_PRICE_AGE,
@@ -19,9 +19,7 @@ export type MezoPriceResult = {
 }
 
 export function useMezoPrice(): MezoPriceResult {
-  const { chainId, isMainnet } = useNetwork()
-  const isPlaceholderFeedId = /^0x0+$/.test(MEZO_PYTH_PRICE_FEED_ID)
-  const shouldUseOracle = USE_PYTH_ORACLE && !isPlaceholderFeedId
+  const chainId = CHAIN_ID.testnet
   const pythAddress = getPythOracleAddress(chainId)
 
   const {
@@ -34,21 +32,12 @@ export function useMezoPrice(): MezoPriceResult {
     functionName: "getPriceNoOlderThan",
     args: [MEZO_PYTH_PRICE_FEED_ID, PYTH_MAX_PRICE_AGE],
     query: {
-      enabled: shouldUseOracle,
+      enabled: USE_PYTH_ORACLE,
       retry: false,
     },
   })
 
-  if (isMainnet && !shouldUseOracle) {
-    return {
-      price: null,
-      isLoading: false,
-      isError: true,
-      source: "pyth",
-    }
-  }
-
-  if (!shouldUseOracle) {
+  if (!USE_PYTH_ORACLE) {
     return {
       price: MEZO_FALLBACK_PRICE,
       isLoading: false,

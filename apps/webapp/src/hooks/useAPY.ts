@@ -1,5 +1,4 @@
 import { getContractConfig } from "@/config/contracts"
-import { useNetwork } from "@/contexts/NetworkContext"
 import { CHAIN_ID, isMezoToken } from "@repo/shared"
 import { useMemo } from "react"
 import type { Address } from "viem"
@@ -40,7 +39,6 @@ export function useGaugeAPY(
   gaugeAddress: Address | undefined,
   totalWeight: bigint | undefined,
 ): GaugeAPYData {
-  const { isMainnet } = useNetwork()
   const { price: btcPrice } = useBtcPrice()
   const { price: mezoPrice } = useMezoPrice()
   const contracts = getContractConfig(CHAIN_ID.testnet)
@@ -169,7 +167,6 @@ export function useGaugeAPY(
 
   // Calculate total incentives in USD
   const totalIncentivesUSD = useMemo(() => {
-    if (isMainnet) return 0
     if (!tokenDataResults || tokenAddresses.length === 0) return 0
 
     let total = 0
@@ -190,14 +187,10 @@ export function useGaugeAPY(
     })
 
     return total
-  }, [tokenDataResults, tokenAddresses, btcPrice, mezoPrice, isMainnet])
+  }, [tokenDataResults, tokenAddresses, btcPrice, mezoPrice])
 
   // Calculate APY
   const apy = useMemo(() => {
-    if (isMainnet) {
-      return null
-    }
-
     // No incentives = no APY
     if (totalIncentivesUSD === 0) {
       return null
@@ -222,7 +215,7 @@ export function useGaugeAPY(
     const apyPercent = annualReturn * 100
 
     return apyPercent
-  }, [totalWeight, totalIncentivesUSD, mezoPrice, isMainnet])
+  }, [totalWeight, totalIncentivesUSD, mezoPrice])
 
   const isLoading =
     isLoadingBribe || isLoadingLength || isLoadingTokens || isLoadingRewards
@@ -246,7 +239,6 @@ export function useGaugesAPY(
   apyMap: Map<string, GaugeAPYData>
   isLoading: boolean
 } {
-  const { isMainnet } = useNetwork()
   const { price: btcPrice } = useBtcPrice()
   const { price: mezoPrice } = useMezoPrice()
   const contracts = getContractConfig(CHAIN_ID.testnet)
@@ -433,10 +425,6 @@ export function useGaugesAPY(
       })
     })
 
-    if (isMainnet) {
-      return map
-    }
-
     // Calculate incentives per gauge (both total USD and by token)
     const gaugeIncentives = new Map<string, number>()
     const gaugeTokenIncentives = new Map<string, TokenIncentive[]>()
@@ -522,14 +510,7 @@ export function useGaugesAPY(
     })
 
     return map
-  }, [
-    gauges,
-    rewardTokenQueries,
-    rewardTokensData,
-    tokenRewardsData,
-    btcPrice,
-    isMainnet,
-  ])
+  }, [gauges, rewardTokenQueries, rewardTokensData, tokenRewardsData, btcPrice])
 
   const isLoading =
     isLoadingBribes || isLoadingLengths || isLoadingTokens || isLoadingRewards
@@ -601,14 +582,9 @@ export function useVotingAPY(
   totalClaimableUSD: number,
   usedWeight: bigint | undefined,
 ): { apy: number | null } {
-  const { isMainnet } = useNetwork()
   const { price: mezoPrice } = useMezoPrice()
 
   const apy = useMemo(() => {
-    if (isMainnet) {
-      return null
-    }
-
     if (!usedWeight || usedWeight === 0n || totalClaimableUSD === 0) {
       return null
     }
@@ -627,7 +603,7 @@ export function useVotingAPY(
     const apyPercent = annualReturn * 100
 
     return apyPercent
-  }, [totalClaimableUSD, usedWeight, mezoPrice, isMainnet])
+  }, [totalClaimableUSD, usedWeight, mezoPrice])
 
   return { apy }
 }
@@ -665,18 +641,9 @@ export function useUpcomingVotingAPY(
   projectedIncentivesUSD: number
   projectedRewardsByToken: ProjectedTokenReward[]
 } {
-  const { isMainnet } = useNetwork()
   const { price: mezoPrice } = useMezoPrice()
 
   const result = useMemo(() => {
-    if (isMainnet) {
-      return {
-        upcomingAPY: null,
-        projectedIncentivesUSD: 0,
-        projectedRewardsByToken: [],
-      }
-    }
-
     if (!usedWeight || usedWeight === 0n || voteAllocations.length === 0) {
       return {
         upcomingAPY: null,
@@ -760,7 +727,7 @@ export function useUpcomingVotingAPY(
       projectedIncentivesUSD: totalUserIncentivesUSD,
       projectedRewardsByToken,
     }
-  }, [voteAllocations, apyMap, usedWeight, mezoPrice, isMainnet])
+  }, [voteAllocations, apyMap, usedWeight, mezoPrice])
 
   return result
 }
