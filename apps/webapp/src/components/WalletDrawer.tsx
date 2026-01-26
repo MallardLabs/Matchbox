@@ -129,11 +129,11 @@ function CheckIcon(): JSX.Element {
   )
 }
 
-function BitcoinIcon(): JSX.Element {
+function BitcoinIcon({ size = 16 }: { size?: number }): JSX.Element {
   return (
     <svg
-      width="16"
-      height="16"
+      width={size}
+      height={size}
       viewBox="0 0 24 24"
       fill="currentColor"
       aria-hidden="true"
@@ -147,11 +147,11 @@ function BitcoinIcon(): JSX.Element {
   )
 }
 
-function EthereumIcon(): JSX.Element {
+function EthereumIcon({ size = 16 }: { size?: number }): JSX.Element {
   return (
     <svg
-      width="16"
-      height="16"
+      width={size}
+      height={size}
       viewBox="0 0 24 24"
       fill="currentColor"
       aria-hidden="true"
@@ -365,74 +365,6 @@ export function WalletDrawer({
           </div>
         </div>
 
-        {/* Connected Addresses */}
-        <div className="border-b border-[var(--border)] p-4">
-          <h3 className="mb-3 text-xs font-medium uppercase tracking-wider text-[var(--content-secondary)]">
-            Connected Addresses
-          </h3>
-          <div className="space-y-2">
-            {/* Primary wallet address (BTC if bitcoin wallet) */}
-            {isBitcoinWallet && walletAddress && (
-              <button
-                type="button"
-                onClick={() => copyToClipboard(walletAddress)}
-                className="flex w-full items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--surface-secondary)] p-3 transition-colors hover:bg-[var(--border)]"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#F7931A] text-white">
-                    <BitcoinIcon />
-                  </div>
-                  <div className="text-left">
-                    <div className="text-xs text-[var(--content-secondary)]">
-                      Bitcoin Address
-                    </div>
-                    <div className="font-mono text-sm text-[var(--content-primary)]">
-                      {formatAddress(walletAddress)}
-                    </div>
-                  </div>
-                </div>
-                <div className="text-[var(--content-secondary)]">
-                  {copiedAddress === walletAddress ? (
-                    <CheckIcon />
-                  ) : (
-                    <CopyIcon />
-                  )}
-                </div>
-              </button>
-            )}
-
-            {/* EVM/Mezo address */}
-            {accountAddress && (
-              <button
-                type="button"
-                onClick={() => copyToClipboard(accountAddress)}
-                className="flex w-full items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--surface-secondary)] p-3 transition-colors hover:bg-[var(--border)]"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#627EEA] text-white">
-                    <EthereumIcon />
-                  </div>
-                  <div className="text-left">
-                    <div className="text-xs text-[var(--content-secondary)]">
-                      {isBitcoinWallet ? "Mezo Smart Account" : "Wallet Address"}
-                    </div>
-                    <div className="font-mono text-sm text-[var(--content-primary)]">
-                      {formatAddress(accountAddress)}
-                    </div>
-                  </div>
-                </div>
-                <div className="text-[var(--content-secondary)]">
-                  {copiedAddress === accountAddress ? (
-                    <CheckIcon />
-                  ) : (
-                    <CopyIcon />
-                  )}
-                </div>
-              </button>
-            )}
-          </div>
-        </div>
-
         {/* Total Balance */}
         <div className="border-b border-[var(--border)] p-4">
           <div className="text-xs text-[var(--content-secondary)]">
@@ -503,6 +435,56 @@ export function WalletDrawer({
                 </div>
               </div>
             ))}
+          </div>
+
+          {/* Connected Addresses - Compact */}
+          <h3 className="mb-2 mt-4 text-xs font-medium uppercase tracking-wider text-[var(--content-secondary)]">
+            Addresses
+          </h3>
+          <div className="space-y-1">
+            {isBitcoinWallet && walletAddress && (
+              <button
+                type="button"
+                onClick={() => copyToClipboard(walletAddress)}
+                className="flex w-full items-center justify-between rounded-md bg-[var(--surface-secondary)] px-2 py-1.5 text-left transition-colors hover:bg-[var(--border)]"
+              >
+                <div className="flex items-center gap-2">
+                  <div className="flex h-5 w-5 items-center justify-center rounded-full bg-[#F7931A] text-white">
+                    <BitcoinIcon size={12} />
+                  </div>
+                  <span className="font-mono text-xs text-[var(--content-primary)]">
+                    {formatAddress(walletAddress)}
+                  </span>
+                </div>
+                <span className="text-[var(--content-secondary)]">
+                  {copiedAddress === walletAddress ? <CheckIcon /> : <CopyIcon />}
+                </span>
+              </button>
+            )}
+            {accountAddress && (
+              <button
+                type="button"
+                onClick={() => copyToClipboard(accountAddress)}
+                className="flex w-full items-center justify-between rounded-md bg-[var(--surface-secondary)] px-2 py-1.5 text-left transition-colors hover:bg-[var(--border)]"
+              >
+                <div className="flex items-center gap-2">
+                  <div className="flex h-5 w-5 items-center justify-center rounded-full bg-[#627EEA] text-white">
+                    <EthereumIcon size={12} />
+                  </div>
+                  <span className="font-mono text-xs text-[var(--content-primary)]">
+                    {formatAddress(accountAddress)}
+                  </span>
+                  {isBitcoinWallet && (
+                    <span className="text-[10px] text-[var(--content-secondary)]">
+                      (Mezo)
+                    </span>
+                  )}
+                </div>
+                <span className="text-[var(--content-secondary)]">
+                  {copiedAddress === accountAddress ? <CheckIcon /> : <CopyIcon />}
+                </span>
+              </button>
+            )}
           </div>
         </div>
 
