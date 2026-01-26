@@ -445,10 +445,10 @@ export default function BoostPage(): JSX.Element {
                               Total Voting Power
                             </p>
                             <p className="font-mono text-sm font-medium tabular-nums text-[var(--content-primary)]">
-                              {formatUnits(
-                                selectedLock.votingPower,
-                                18,
-                              ).slice(0, 10)}
+                              {formatUnits(selectedLock.votingPower, 18).slice(
+                                0,
+                                10,
+                              )}
                             </p>
                           </div>
                           <div>
@@ -469,7 +469,7 @@ export default function BoostPage(): JSX.Element {
                               {formatUnits(
                                 selectedLock.votingPower > (usedWeight ?? 0n)
                                   ? selectedLock.votingPower -
-                                  (usedWeight ?? 0n)
+                                      (usedWeight ?? 0n)
                                   : 0n,
                                 18,
                               ).slice(0, 10)}
@@ -516,10 +516,10 @@ export default function BoostPage(): JSX.Element {
                                         ` (veBTC #${gauge.veBTCTokenId.toString()})`}
                                     </span>
                                     <span className="font-mono text-sm font-medium tabular-nums text-[var(--content-primary)]">
-                                      {formatUnits(
-                                        allocation.weight,
-                                        18,
-                                      ).slice(0, 10)}
+                                      {formatUnits(allocation.weight, 18).slice(
+                                        0,
+                                        10,
+                                      )}
                                     </span>
                                   </div>
                                 )
@@ -537,10 +537,11 @@ export default function BoostPage(): JSX.Element {
                           Allocate Voting Power to Gauges
                         </p>
                         <p
-                          className={`text-xs ${totalAllocation !== 100
+                          className={`text-xs ${
+                            totalAllocation !== 100
                               ? "text-[var(--negative)]"
                               : "text-[var(--content-secondary)]"
-                            }`}
+                          }`}
                         >
                           Total: {totalAllocation}%
                           {totalAllocation > 100 && " (exceeds 100%)"}
@@ -558,9 +559,7 @@ export default function BoostPage(): JSX.Element {
                         <Tag
                           closeable={false}
                           onClick={() => setGaugeStatusFilter("all")}
-                          color={
-                            gaugeStatusFilter === "all" ? "blue" : "gray"
-                          }
+                          color={gaugeStatusFilter === "all" ? "blue" : "gray"}
                         >
                           All
                         </Tag>
@@ -658,12 +657,13 @@ export default function BoostPage(): JSX.Element {
                                     <div className="flex min-w-0 flex-col gap-0.5">
                                       <div className="flex flex-wrap items-center gap-1.5">
                                         <span
-                                          className={`text-xs font-medium ${profile?.display_name ||
-                                              profile?.description ||
-                                              profile?.profile_picture_url
+                                          className={`text-xs font-medium ${
+                                            profile?.display_name ||
+                                            profile?.description ||
+                                            profile?.profile_picture_url
                                               ? "text-[var(--positive)]"
                                               : "text-[var(--negative)]"
-                                            }`}
+                                          }`}
                                         >
                                           {profile?.display_name
                                             ? profile.display_name
@@ -698,10 +698,10 @@ export default function BoostPage(): JSX.Element {
                               {(gauge: GaugeWithAllocation) => (
                                 <span className="font-mono text-sm tabular-nums">
                                   {gauge.veBTCWeight !== undefined
-                                    ? formatUnits(
-                                      gauge.veBTCWeight,
-                                      18,
-                                    ).slice(0, 10)
+                                    ? formatUnits(gauge.veBTCWeight, 18).slice(
+                                        0,
+                                        10,
+                                      )
                                     : "-"}
                                 </span>
                               )}
@@ -747,8 +747,7 @@ export default function BoostPage(): JSX.Element {
                                   gauge.address.toLowerCase(),
                                 )
                                 const userVotePercentage =
-                                  gaugeAllocations.get(gauge.originalIndex) ??
-                                  0
+                                  gaugeAllocations.get(gauge.originalIndex) ?? 0
 
                                 if (isLoadingAPY) {
                                   return (
@@ -762,19 +761,20 @@ export default function BoostPage(): JSX.Element {
                                   selectedLock && userVotePercentage > 0
                                 const displayAPY = isProjected
                                   ? calculateProjectedAPY(
-                                    apyData,
-                                    userVotePercentage,
-                                    selectedLock.votingPower,
-                                    mezoPrice,
-                                  )
+                                      apyData,
+                                      userVotePercentage,
+                                      selectedLock.votingPower,
+                                      mezoPrice,
+                                    )
                                   : (apyData?.apy ?? null)
 
                                 return (
                                   <span
-                                    className={`font-mono text-sm font-medium ${displayAPY && displayAPY > 0
+                                    className={`font-mono text-sm font-medium ${
+                                      displayAPY && displayAPY > 0
                                         ? "text-[var(--positive)]"
                                         : "text-[var(--content-secondary)]"
-                                      }`}
+                                    }`}
                                     title={
                                       isProjected
                                         ? "Projected APY after your vote"
@@ -798,8 +798,8 @@ export default function BoostPage(): JSX.Element {
                                 <span className="font-mono text-sm tabular-nums">
                                   {gauge.optimalAdditionalVeMEZO !== undefined
                                     ? formatFixedPoint(
-                                      gauge.optimalAdditionalVeMEZO,
-                                    )
+                                        gauge.optimalAdditionalVeMEZO,
+                                      )
                                     : "-"}
                                 </span>
                               )}
