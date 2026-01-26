@@ -2,11 +2,12 @@ import { useNetwork } from "@/contexts/NetworkContext"
 import { useTheme } from "@/contexts/ThemeContext"
 import { useBtcPrice } from "@/hooks/useBtcPrice"
 import { useMezoPrice } from "@/hooks/useMezoPrice"
+import { useWalletAccount } from "@mezo-org/passport"
 import { CHAIN_ID, CONTRACTS, ERC20_ABI } from "@repo/shared/contracts"
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { formatUnits } from "viem"
-import { useAccount, useBalance, useDisconnect, useReadContracts } from "wagmi"
+import { useBalance, useDisconnect, useReadContracts } from "wagmi"
 
 function PowerIcon(): JSX.Element {
   return (
@@ -91,6 +92,75 @@ function NetworkIcon(): JSX.Element {
   )
 }
 
+function CopyIcon(): JSX.Element {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+    </svg>
+  )
+}
+
+function CheckIcon(): JSX.Element {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <polyline points="20 6 9 17 4 12" />
+    </svg>
+  )
+}
+
+function BitcoinIcon(): JSX.Element {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      aria-hidden="true"
+    >
+      <path d="M23.638 14.904c-1.602 6.43-8.113 10.34-14.542 8.736C2.67 22.05-1.244 15.525.362 9.105 1.962 2.67 8.475-1.243 14.9.358c6.43 1.605 10.342 8.115 8.738 14.546z" />
+      <path
+        fill="white"
+        d="M17.2 10.06c.24-1.59-.97-2.45-2.63-3.03l.54-2.16-1.31-.33-.52 2.1c-.35-.09-.7-.17-1.06-.25l.53-2.12-1.31-.33-.54 2.16c-.28-.06-.57-.13-.84-.2l-1.8-.45-.35 1.4s.97.22.95.24c.53.13.63.48.61.76l-.61 2.46c.04.01.08.02.13.04l-.13-.03-.86 3.45c-.07.16-.23.4-.6.31.01.02-.95-.24-.95-.24l-.65 1.5 1.7.43c.32.08.63.16.94.24l-.55 2.18 1.31.33.54-2.17c.36.1.71.19 1.06.28l-.54 2.15 1.31.33.55-2.18c2.27.43 3.97.26 4.69-1.79.58-1.65-.03-2.6-1.22-3.22.87-.2 1.53-.77 1.7-1.95zM14.57 15c-.41 1.65-3.2.76-4.1.54l.73-2.93c.9.23 3.81.67 3.37 2.39zm.41-4.1c-.38 1.5-2.69.74-3.45.55l.66-2.66c.76.19 3.19.54 2.79 2.11z"
+      />
+    </svg>
+  )
+}
+
+function EthereumIcon(): JSX.Element {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      aria-hidden="true"
+    >
+      <path d="M11.944 17.97L4.58 13.62 11.943 24l7.37-10.38-7.372 4.35h.003zM12.056 0L4.69 12.223l7.365 4.354 7.365-4.35L12.056 0z" />
+    </svg>
+  )
+}
+
 type TokenBalance = {
   symbol: string
   name: string
@@ -108,7 +178,7 @@ export function WalletDrawer({
   isOpen,
   onClose,
 }: WalletDrawerProps): JSX.Element | null {
-  const { address } = useAccount()
+  const { accountAddress, walletAddress, networkFamily } = useWalletAccount()
   const { disconnect } = useDisconnect()
   const { theme, toggleTheme } = useTheme()
   const { chainId, networkName, switchNetwork, isMainnet } = useNetwork()
@@ -117,6 +187,28 @@ export function WalletDrawer({
   const drawerRef = useRef<HTMLDivElement>(null)
   const [mounted, setMounted] = useState(false)
   const [isVisible, setIsVisible] = useState(false)
+  const [copiedAddress, setCopiedAddress] = useState<string | null>(null)
+
+  const isBitcoinWallet = networkFamily === "bitcoin"
+
+  // Format address for display
+  const formatAddress = (addr: string | undefined) => {
+    if (!addr) return ""
+    if (addr.length > 20) {
+      return `${addr.slice(0, 6)}...${addr.slice(-4)}`
+    }
+    return addr
+  }
+
+  const copyToClipboard = useCallback(async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopiedAddress(text)
+      setTimeout(() => setCopiedAddress(null), 2000)
+    } catch (err) {
+      console.error("Failed to copy:", err)
+    }
+  }, [])
 
   useEffect(() => {
     setMounted(true)
@@ -134,7 +226,7 @@ export function WalletDrawer({
     chainId === CHAIN_ID.testnet ? CONTRACTS.testnet : CONTRACTS.mainnet
 
   const { data: btcBalance, isLoading: btcLoading } = useBalance({
-    address,
+    address: accountAddress,
     chainId,
   })
 
@@ -144,12 +236,12 @@ export function WalletDrawer({
         address: contracts.mezoToken,
         abi: ERC20_ABI,
         functionName: "balanceOf",
-        args: address ? [address] : undefined,
+        args: accountAddress ? [accountAddress] : undefined,
         chainId,
       },
     ],
     query: {
-      enabled: !!address && isOpen,
+      enabled: !!accountAddress && isOpen,
     },
   })
 
@@ -260,7 +352,7 @@ export function WalletDrawer({
 
           <div className="flex items-center gap-3">
             <span className="font-mono text-sm text-[var(--content-primary)]">
-              {address?.slice(0, 6)}...{address?.slice(-4)}
+              {formatAddress(walletAddress)}
             </span>
             <button
               type="button"
@@ -270,6 +362,74 @@ export function WalletDrawer({
             >
               <PowerIcon />
             </button>
+          </div>
+        </div>
+
+        {/* Connected Addresses */}
+        <div className="border-b border-[var(--border)] p-4">
+          <h3 className="mb-3 text-xs font-medium uppercase tracking-wider text-[var(--content-secondary)]">
+            Connected Addresses
+          </h3>
+          <div className="space-y-2">
+            {/* Primary wallet address (BTC if bitcoin wallet) */}
+            {isBitcoinWallet && walletAddress && (
+              <button
+                type="button"
+                onClick={() => copyToClipboard(walletAddress)}
+                className="flex w-full items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--surface-secondary)] p-3 transition-colors hover:bg-[var(--border)]"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#F7931A] text-white">
+                    <BitcoinIcon />
+                  </div>
+                  <div className="text-left">
+                    <div className="text-xs text-[var(--content-secondary)]">
+                      Bitcoin Address
+                    </div>
+                    <div className="font-mono text-sm text-[var(--content-primary)]">
+                      {formatAddress(walletAddress)}
+                    </div>
+                  </div>
+                </div>
+                <div className="text-[var(--content-secondary)]">
+                  {copiedAddress === walletAddress ? (
+                    <CheckIcon />
+                  ) : (
+                    <CopyIcon />
+                  )}
+                </div>
+              </button>
+            )}
+
+            {/* EVM/Mezo address */}
+            {accountAddress && (
+              <button
+                type="button"
+                onClick={() => copyToClipboard(accountAddress)}
+                className="flex w-full items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--surface-secondary)] p-3 transition-colors hover:bg-[var(--border)]"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#627EEA] text-white">
+                    <EthereumIcon />
+                  </div>
+                  <div className="text-left">
+                    <div className="text-xs text-[var(--content-secondary)]">
+                      {isBitcoinWallet ? "Mezo Smart Account" : "Wallet Address"}
+                    </div>
+                    <div className="font-mono text-sm text-[var(--content-primary)]">
+                      {formatAddress(accountAddress)}
+                    </div>
+                  </div>
+                </div>
+                <div className="text-[var(--content-secondary)]">
+                  {copiedAddress === accountAddress ? (
+                    <CheckIcon />
+                  ) : (
+                    <CopyIcon />
+                  )}
+                </div>
+              </button>
+            )}
           </div>
         </div>
 
