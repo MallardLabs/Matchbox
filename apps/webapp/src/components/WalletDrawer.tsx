@@ -129,24 +129,6 @@ function CheckIcon(): JSX.Element {
   )
 }
 
-function BitcoinIcon({ size = 16 }: { size?: number }): JSX.Element {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="currentColor"
-      aria-hidden="true"
-    >
-      <path d="M23.638 14.904c-1.602 6.43-8.113 10.34-14.542 8.736C2.67 22.05-1.244 15.525.362 9.105 1.962 2.67 8.475-1.243 14.9.358c6.43 1.605 10.342 8.115 8.738 14.546z" />
-      <path
-        fill="white"
-        d="M17.2 10.06c.24-1.59-.97-2.45-2.63-3.03l.54-2.16-1.31-.33-.52 2.1c-.35-.09-.7-.17-1.06-.25l.53-2.12-1.31-.33-.54 2.16c-.28-.06-.57-.13-.84-.2l-1.8-.45-.35 1.4s.97.22.95.24c.53.13.63.48.61.76l-.61 2.46c.04.01.08.02.13.04l-.13-.03-.86 3.45c-.07.16-.23.4-.6.31.01.02-.95-.24-.95-.24l-.65 1.5 1.7.43c.32.08.63.16.94.24l-.55 2.18 1.31.33.54-2.17c.36.1.71.19 1.06.28l-.54 2.15 1.31.33.55-2.18c2.27.43 3.97.26 4.69-1.79.58-1.65-.03-2.6-1.22-3.22.87-.2 1.53-.77 1.7-1.95zM14.57 15c-.41 1.65-3.2.76-4.1.54l.73-2.93c.9.23 3.81.67 3.37 2.39zm.41-4.1c-.38 1.5-2.69.74-3.45.55l.66-2.66c.76.19 3.19.54 2.79 2.11z"
-      />
-    </svg>
-  )
-}
-
 function EthereumIcon({ size = 16 }: { size?: number }): JSX.Element {
   return (
     <svg
@@ -436,12 +418,15 @@ export function WalletDrawer({
               </div>
             ))}
           </div>
+        </div>
 
+        {/* Bottom section - Addresses & Settings */}
+        <div className="shrink-0 border-t border-[var(--border)] p-4">
           {/* Connected Addresses - Compact */}
-          <h3 className="mb-2 mt-4 text-xs font-medium uppercase tracking-wider text-[var(--content-secondary)]">
+          <h3 className="mb-2 text-xs font-medium uppercase tracking-wider text-[var(--content-secondary)]">
             Addresses
           </h3>
-          <div className="space-y-1">
+          <div className="mb-4 space-y-1">
             {isBitcoinWallet && walletAddress && (
               <button
                 type="button"
@@ -449,9 +434,11 @@ export function WalletDrawer({
                 className="flex w-full items-center justify-between rounded-md bg-[var(--surface-secondary)] px-2 py-1.5 text-left transition-colors hover:bg-[var(--border)]"
               >
                 <div className="flex items-center gap-2">
-                  <div className="flex h-5 w-5 items-center justify-center rounded-full bg-[#F7931A] text-white">
-                    <BitcoinIcon size={12} />
-                  </div>
+                  <img
+                    src="/token icons/Bitcoin.svg"
+                    alt=""
+                    className="h-5 w-5 rounded-full"
+                  />
                   <span className="font-mono text-xs text-[var(--content-primary)]">
                     {formatAddress(walletAddress)}
                   </span>
@@ -486,14 +473,11 @@ export function WalletDrawer({
               </button>
             )}
           </div>
-        </div>
 
-        {/* Settings - anchored to bottom */}
-        <div className="shrink-0 border-t border-[var(--border)] p-4">
-          <h3 className="mb-3 text-xs font-medium uppercase tracking-wider text-[var(--content-secondary)]">
+          <h3 className="mb-2 text-xs font-medium uppercase tracking-wider text-[var(--content-secondary)]">
             Settings
           </h3>
-          <div className="space-y-2">
+          <div className="space-y-1">
             {/* Network Selector */}
             <button
               type="button"
