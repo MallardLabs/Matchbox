@@ -1,10 +1,10 @@
 import { useTheme } from "@/contexts/ThemeContext"
 import { Button } from "@mezo-org/mezo-clay"
+import { useWalletAccount } from "@mezo-org/passport"
+import { useConnectModal } from "@rainbow-me/rainbowkit"
 import NextLink from "next/link"
 import { useRouter } from "next/router"
 import { useEffect, useState } from "react"
-import { useAccount, useConnect } from "wagmi"
-import { injected } from "wagmi/connectors"
 import { HeaderTicker } from "./HeaderTicker"
 import { WalletDrawer } from "./WalletDrawer"
 
@@ -115,13 +115,22 @@ const navItems = [
 
 export function Header(): JSX.Element {
   const router = useRouter()
-  const { address, isConnected } = useAccount()
-  const { connect } = useConnect()
+  const { walletAddress, isConnected } = useWalletAccount()
+  const { openConnectModal } = useConnectModal()
   const { theme: currentTheme } = useTheme()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [walletDrawerOpen, setWalletDrawerOpen] = useState(false)
 
   const isHomePage = router.pathname === "/"
+
+  // Format address for display (works for both BTC and EVM addresses)
+  const formatAddress = (addr: string | undefined) => {
+    if (!addr) return ""
+    if (addr.length > 20) {
+      return `${addr.slice(0, 6)}...${addr.slice(-4)}`
+    }
+    return addr
+  }
 
   useEffect(() => {
     setMobileMenuOpen(false)
@@ -139,7 +148,7 @@ export function Header(): JSX.Element {
   }, [mobileMenuOpen])
 
   const handleConnect = () => {
-    connect({ connector: injected() })
+    openConnectModal?.()
   }
 
   return (
@@ -220,7 +229,7 @@ export function Header(): JSX.Element {
               <DocIcon />
             </a>
 
-            {isConnected && address ? (
+            {isConnected && walletAddress ? (
               <Button
                 kind="secondary"
                 onClick={() => setWalletDrawerOpen(true)}
@@ -234,7 +243,7 @@ export function Header(): JSX.Element {
               >
                 <span className="flex items-center gap-2 font-mono text-xs tabular-nums">
                   <span className="h-2 w-2 rounded-full bg-[#22C55E] shadow-[0_0_6px_rgba(34,197,94,0.5)]" />
-                  {address.slice(0, 6)}...{address.slice(-4)}
+                  {formatAddress(walletAddress)}
                   <SettingsIcon />
                 </span>
               </Button>
@@ -331,7 +340,7 @@ export function Header(): JSX.Element {
           </nav>
 
           <div className="mt-auto border-t border-[var(--border)] p-4">
-            {isConnected && address ? (
+            {isConnected && walletAddress ? (
               <Button
                 kind="secondary"
                 onClick={() => {
@@ -348,7 +357,7 @@ export function Header(): JSX.Element {
               >
                 <span className="flex items-center justify-center gap-2 font-mono text-xs">
                   <span className="h-2 w-2 rounded-full bg-[#22C55E] shadow-[0_0_6px_rgba(34,197,94,0.5)]" />
-                  {address.slice(0, 6)}...{address.slice(-4)}
+                  {formatAddress(walletAddress)}
                   <SettingsIcon />
                 </span>
               </Button>

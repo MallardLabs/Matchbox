@@ -52,7 +52,11 @@ function TickerItem({
           alt={metric.label}
           width={isInline ? 40 : 20}
           height={isInline ? 40 : 20}
-          className={isInline ? "h-6 w-6 rounded-full md:h-10 md:w-10" : "h-5 w-5 rounded-full"}
+          className={
+            isInline
+              ? "h-6 w-6 rounded-full md:h-10 md:w-10"
+              : "h-5 w-5 rounded-full"
+          }
         />
       )}
       {metric.isClockIcon && isInline && (
@@ -74,7 +78,11 @@ function TickerItem({
       )}
       {metric.statusColor && (
         <span
-          className={isInline ? "h-2.5 w-2.5 rounded-full md:h-3 md:w-3" : "h-2 w-2 rounded-full"}
+          className={
+            isInline
+              ? "h-2.5 w-2.5 rounded-full md:h-3 md:w-3"
+              : "h-2 w-2 rounded-full"
+          }
           style={{
             backgroundColor: metric.statusColor,
             boxShadow: `0 0 ${isInline ? "8" : "6"}px ${metric.statusColor}`,
@@ -226,8 +234,6 @@ export function HeaderTicker({
     return (
       <div className="w-full">
         <div className="mx-auto max-w-4xl rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-8 py-6 md:px-12 md:py-10">
-
-
           {/* Ticker container - sized by ghost element to fit largest content */}
           <div className="relative mx-auto w-fit overflow-hidden">
             {/* Ghost element to reserve space for largest possible content */}
@@ -291,19 +297,21 @@ export function HeaderTicker({
 
       {/* Hover dropdown */}
       <div
-        className={`absolute -left-1 top-full z-50 min-w-[200px] overflow-hidden border border-[var(--border)] bg-[var(--surface)] shadow-lg ${isHovered
-          ? "ticker-dropdown-enter"
-          : "ticker-dropdown-exit pointer-events-none"
-          }`}
+        className={`absolute -left-1 top-full z-50 min-w-[200px] overflow-hidden border border-[var(--border)] bg-[var(--surface)] shadow-lg ${
+          isHovered
+            ? "ticker-dropdown-enter"
+            : "ticker-dropdown-exit pointer-events-none"
+        }`}
       >
         <div className="flex flex-col">
           {metrics.map((metric, index) => (
             <div
               key={metric.id}
-              className={`flex items-center gap-3 px-4 py-2.5 ${index < metrics.length - 1
-                ? "border-b border-[var(--border)]"
-                : ""
-                }`}
+              className={`flex items-center gap-3 px-4 py-2.5 ${
+                index < metrics.length - 1
+                  ? "border-b border-[var(--border)]"
+                  : ""
+              }`}
             >
               {/* Icon container - consistent 24px width for alignment */}
               <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center">

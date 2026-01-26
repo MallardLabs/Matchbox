@@ -561,8 +561,7 @@ export default function IncentivesPage(): JSX.Element {
                         Locked Amount
                       </p>
                       <p className="font-mono text-sm font-medium tabular-nums text-[var(--content-primary)]">
-                        {formatUnits(selectedLock.amount, 18).slice(0, 10)}{" "}
-                        BTC
+                        {formatUnits(selectedLock.amount, 18).slice(0, 10)} BTC
                       </p>
                     </div>
                     <div>
@@ -570,10 +569,7 @@ export default function IncentivesPage(): JSX.Element {
                         Voting Power
                       </p>
                       <p className="font-mono text-sm font-medium tabular-nums text-[var(--content-primary)]">
-                        {formatUnits(selectedLock.votingPower, 18).slice(
-                          0,
-                          10,
-                        )}
+                        {formatUnits(selectedLock.votingPower, 18).slice(0, 10)}
                       </p>
                     </div>
                     <div>
@@ -656,10 +652,11 @@ export default function IncentivesPage(): JSX.Element {
                         key={tab.id}
                         type="button"
                         onClick={() => setActiveTab(tab.id)}
-                        className={`flex-1 rounded-md px-4 py-2.5 text-sm font-medium transition-all ${activeTab === tab.id
+                        className={`flex-1 rounded-md px-4 py-2.5 text-sm font-medium transition-all ${
+                          activeTab === tab.id
                             ? "bg-[var(--surface)] text-[var(--content-primary)] shadow-sm"
                             : "text-[var(--content-secondary)] hover:text-[var(--content-primary)]"
-                          }`}
+                        }`}
                       >
                         {tab.label}
                       </button>
@@ -814,9 +811,7 @@ export default function IncentivesPage(): JSX.Element {
                               </label>
                               <Input
                                 value={twitterUrl}
-                                onChange={(e) =>
-                                  setTwitterUrl(e.target.value)
-                                }
+                                onChange={(e) => setTwitterUrl(e.target.value)}
                                 placeholder="https://twitter.com/yourproject"
                               />
                             </div>
@@ -828,9 +823,7 @@ export default function IncentivesPage(): JSX.Element {
                               </label>
                               <Input
                                 value={discordUrl}
-                                onChange={(e) =>
-                                  setDiscordUrl(e.target.value)
-                                }
+                                onChange={(e) => setDiscordUrl(e.target.value)}
                                 placeholder="https://discord.gg/invite"
                               />
                             </div>
@@ -842,9 +835,7 @@ export default function IncentivesPage(): JSX.Element {
                               </label>
                               <Input
                                 value={telegramUrl}
-                                onChange={(e) =>
-                                  setTelegramUrl(e.target.value)
-                                }
+                                onChange={(e) => setTelegramUrl(e.target.value)}
                                 placeholder="https://t.me/yourproject"
                               />
                             </div>
@@ -934,10 +925,11 @@ export default function IncentivesPage(): JSX.Element {
                                 key={tag}
                                 type="button"
                                 onClick={() => toggleTag(tag)}
-                                className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-all ${selectedTags.includes(tag)
+                                className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-all ${
+                                  selectedTags.includes(tag)
                                     ? "border-[#F7931A] bg-[rgba(247,147,26,0.15)] text-[#F7931A]"
                                     : "border-[var(--border)] text-[var(--content-secondary)] hover:border-[var(--content-tertiary)]"
-                                  }`}
+                                }`}
                               >
                                 {tag}
                               </button>
@@ -1014,10 +1006,11 @@ export default function IncentivesPage(): JSX.Element {
                                     Est. APY
                                   </p>
                                   <p
-                                    className={`font-mono text-lg font-semibold ${apy && apy > 0
+                                    className={`font-mono text-lg font-semibold ${
+                                      apy && apy > 0
                                         ? "text-[var(--positive)]"
                                         : "text-[var(--content-primary)]"
-                                      }`}
+                                    }`}
                                   >
                                     {formatAPY(apy)}
                                   </p>
@@ -1088,8 +1081,7 @@ export default function IncentivesPage(): JSX.Element {
                               className="mb-1 block text-2xs uppercase tracking-wider text-[var(--content-tertiary)]"
                             >
                               Amount
-                              {incentiveToken &&
-                                ` (${incentiveToken.symbol})`}
+                              {incentiveToken && ` (${incentiveToken.symbol})`}
                             </label>
                             <Input
                               id="incentive-amount"
@@ -1184,10 +1176,11 @@ export default function IncentivesPage(): JSX.Element {
                               APY
                             </p>
                             <p
-                              className={`font-mono text-xl font-semibold ${apy && apy > 0
+                              className={`font-mono text-xl font-semibold ${
+                                apy && apy > 0
                                   ? "text-[var(--positive)]"
                                   : "text-[var(--content-primary)]"
-                                }`}
+                              }`}
                             >
                               {formatAPY(apy)}
                             </p>

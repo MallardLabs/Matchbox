@@ -2,11 +2,12 @@ import { useNetwork } from "@/contexts/NetworkContext"
 import { useTheme } from "@/contexts/ThemeContext"
 import { useBtcPrice } from "@/hooks/useBtcPrice"
 import { useMezoPrice } from "@/hooks/useMezoPrice"
+import { useWalletAccount } from "@mezo-org/passport"
 import { CHAIN_ID, CONTRACTS, ERC20_ABI } from "@repo/shared/contracts"
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { formatUnits } from "viem"
-import { useAccount, useBalance, useDisconnect, useReadContracts } from "wagmi"
+import { useBalance, useDisconnect, useReadContracts } from "wagmi"
 
 function PowerIcon(): JSX.Element {
   return (
@@ -91,6 +92,57 @@ function NetworkIcon(): JSX.Element {
   )
 }
 
+function CopyIcon(): JSX.Element {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+    </svg>
+  )
+}
+
+function CheckIcon(): JSX.Element {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <polyline points="20 6 9 17 4 12" />
+    </svg>
+  )
+}
+
+function EthereumIcon({ size = 16 }: { size?: number }): JSX.Element {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      aria-hidden="true"
+    >
+      <path d="M11.944 17.97L4.58 13.62 11.943 24l7.37-10.38-7.372 4.35h.003zM12.056 0L4.69 12.223l7.365 4.354 7.365-4.35L12.056 0z" />
+    </svg>
+  )
+}
+
 type TokenBalance = {
   symbol: string
   name: string
@@ -108,7 +160,7 @@ export function WalletDrawer({
   isOpen,
   onClose,
 }: WalletDrawerProps): JSX.Element | null {
-  const { address } = useAccount()
+  const { accountAddress, walletAddress, networkFamily } = useWalletAccount()
   const { disconnect } = useDisconnect()
   const { theme, toggleTheme } = useTheme()
   const { chainId, networkName, switchNetwork, isMainnet } = useNetwork()
@@ -117,6 +169,28 @@ export function WalletDrawer({
   const drawerRef = useRef<HTMLDivElement>(null)
   const [mounted, setMounted] = useState(false)
   const [isVisible, setIsVisible] = useState(false)
+  const [copiedAddress, setCopiedAddress] = useState<string | null>(null)
+
+  const isBitcoinWallet = networkFamily === "bitcoin"
+
+  // Format address for display
+  const formatAddress = (addr: string | undefined) => {
+    if (!addr) return ""
+    if (addr.length > 20) {
+      return `${addr.slice(0, 6)}...${addr.slice(-4)}`
+    }
+    return addr
+  }
+
+  const copyToClipboard = useCallback(async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopiedAddress(text)
+      setTimeout(() => setCopiedAddress(null), 2000)
+    } catch (err) {
+      console.error("Failed to copy:", err)
+    }
+  }, [])
 
   useEffect(() => {
     setMounted(true)
@@ -134,7 +208,7 @@ export function WalletDrawer({
     chainId === CHAIN_ID.testnet ? CONTRACTS.testnet : CONTRACTS.mainnet
 
   const { data: btcBalance, isLoading: btcLoading } = useBalance({
-    address,
+    address: accountAddress,
     chainId,
   })
 
@@ -144,12 +218,12 @@ export function WalletDrawer({
         address: contracts.mezoToken,
         abi: ERC20_ABI,
         functionName: "balanceOf",
-        args: address ? [address] : undefined,
+        args: accountAddress ? [accountAddress] : undefined,
         chainId,
       },
     ],
     query: {
-      enabled: !!address && isOpen,
+      enabled: !!accountAddress && isOpen,
     },
   })
 
@@ -260,7 +334,7 @@ export function WalletDrawer({
 
           <div className="flex items-center gap-3">
             <span className="font-mono text-sm text-[var(--content-primary)]">
-              {address?.slice(0, 6)}...{address?.slice(-4)}
+              {formatAddress(walletAddress)}
             </span>
             <button
               type="button"
@@ -346,12 +420,64 @@ export function WalletDrawer({
           </div>
         </div>
 
-        {/* Settings - anchored to bottom */}
+        {/* Bottom section - Addresses & Settings */}
         <div className="shrink-0 border-t border-[var(--border)] p-4">
-          <h3 className="mb-3 text-xs font-medium uppercase tracking-wider text-[var(--content-secondary)]">
+          {/* Connected Addresses - Compact */}
+          <h3 className="mb-2 text-xs font-medium uppercase tracking-wider text-[var(--content-secondary)]">
+            Addresses
+          </h3>
+          <div className="mb-4 space-y-1">
+            {isBitcoinWallet && walletAddress && (
+              <button
+                type="button"
+                onClick={() => copyToClipboard(walletAddress)}
+                className="flex w-full items-center justify-between rounded-md bg-[var(--surface-secondary)] px-2 py-1.5 text-left transition-colors hover:bg-[var(--border)]"
+              >
+                <div className="flex items-center gap-2">
+                  <img
+                    src="/token icons/Bitcoin.svg"
+                    alt=""
+                    className="h-5 w-5 rounded-full"
+                  />
+                  <span className="font-mono text-xs text-[var(--content-primary)]">
+                    {formatAddress(walletAddress)}
+                  </span>
+                </div>
+                <span className="text-[var(--content-secondary)]">
+                  {copiedAddress === walletAddress ? <CheckIcon /> : <CopyIcon />}
+                </span>
+              </button>
+            )}
+            {accountAddress && (
+              <button
+                type="button"
+                onClick={() => copyToClipboard(accountAddress)}
+                className="flex w-full items-center justify-between rounded-md bg-[var(--surface-secondary)] px-2 py-1.5 text-left transition-colors hover:bg-[var(--border)]"
+              >
+                <div className="flex items-center gap-2">
+                  <div className="flex h-5 w-5 items-center justify-center rounded-full bg-[#627EEA] text-white">
+                    <EthereumIcon size={12} />
+                  </div>
+                  <span className="font-mono text-xs text-[var(--content-primary)]">
+                    {formatAddress(accountAddress)}
+                  </span>
+                  {isBitcoinWallet && (
+                    <span className="text-[10px] text-[var(--content-secondary)]">
+                      (Mezo)
+                    </span>
+                  )}
+                </div>
+                <span className="text-[var(--content-secondary)]">
+                  {copiedAddress === accountAddress ? <CheckIcon /> : <CopyIcon />}
+                </span>
+              </button>
+            )}
+          </div>
+
+          <h3 className="mb-2 text-xs font-medium uppercase tracking-wider text-[var(--content-secondary)]">
             Settings
           </h3>
-          <div className="space-y-2">
+          <div className="space-y-1">
             {/* Network Selector */}
             <button
               type="button"

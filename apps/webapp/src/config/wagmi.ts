@@ -1,53 +1,37 @@
-import { CHAIN_ID } from "@repo/shared/contracts"
-import { defineChain } from "viem"
-import { http, type Config, createConfig } from "wagmi"
-import { injected } from "wagmi/connectors"
+import { getDefaultWallets, mezoMainnet, mezoTestnet } from "@mezo-org/passport"
+import { getDefaultConfig } from "@rainbow-me/rainbowkit"
+import { http, type Config } from "wagmi"
 
-export const mezoMainnet = defineChain({
-  id: CHAIN_ID.mainnet,
-  name: "Mezo Mainnet",
-  nativeCurrency: {
-    decimals: 18,
-    name: "Bitcoin",
-    symbol: "BTC",
-  },
-  rpcUrls: {
-    default: {
-      http: ["https://rpc-http.mezo.boar.network"],
-    },
-  },
-  blockExplorers: {
-    default: {
-      name: "Mezo Explorer",
-      url: "https://explorer.mezo.org",
-    },
-  },
-})
+export { mezoMainnet, mezoTestnet }
 
-export const mezoTestnet = defineChain({
-  id: CHAIN_ID.testnet,
-  name: "Mezo Testnet",
-  nativeCurrency: {
-    decimals: 18,
-    name: "Bitcoin",
-    symbol: "BTC",
-  },
-  rpcUrls: {
-    default: {
-      http: ["https://rpc.test.mezo.org"],
-    },
-  },
-  blockExplorers: {
-    default: {
-      name: "Mezo Explorer",
-      url: "https://explorer.test.mezo.org",
-    },
-  },
-})
+// WalletConnect Project ID - get one at https://cloud.walletconnect.com
+const WALLET_CONNECT_PROJECT_ID =
+  process.env.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID ||
+  "3fcc6bba6f1de962d911bb5b5c3dba68"
 
-export const wagmiConfig: Config = createConfig({
+// Get Bitcoin wallet connectors from Passport
+// Using mainnet config as the default - network switching is handled by wagmi chains
+const defaultWallets = getDefaultWallets("mainnet")
+
+// Extract wallet groups safely
+const bitcoinWalletGroup = defaultWallets.find(
+  (group) => group.groupName === "Bitcoin",
+)
+const ethereumWalletGroup = defaultWallets.find(
+  (group) => group.groupName === "Ethereum",
+)
+
+// Wallet groups for the connect modal
+const wallets = [
+  ...(bitcoinWalletGroup ? [bitcoinWalletGroup] : []),
+  ...(ethereumWalletGroup ? [ethereumWalletGroup] : []),
+]
+
+export const wagmiConfig: Config = getDefaultConfig({
+  appName: "Matchbox",
+  appDescription: "Mezo Gauge Voting & veMEZO Management",
+  projectId: WALLET_CONNECT_PROJECT_ID,
   chains: [mezoMainnet, mezoTestnet],
-  connectors: [injected()],
   transports: {
     [mezoMainnet.id]: http(undefined, {
       batch: true,
@@ -58,5 +42,7 @@ export const wagmiConfig: Config = createConfig({
       fetchOptions: { cache: "no-store" },
     }),
   },
-  pollingInterval: 30_000,
+  wallets,
+  multiInjectedProviderDiscovery: true,
+  ssr: true,
 })

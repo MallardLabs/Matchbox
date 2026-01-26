@@ -331,12 +331,13 @@ export default function GaugesPage(): JSX.Element {
                           <div className="flex min-w-0 flex-col gap-0.5">
                             <div className="flex flex-wrap items-center gap-1.5">
                               <span
-                                className={`text-xs font-medium ${profile?.display_name ||
-                                    profile?.description ||
-                                    profile?.profile_picture_url
+                                className={`text-xs font-medium ${
+                                  profile?.display_name ||
+                                  profile?.description ||
+                                  profile?.profile_picture_url
                                     ? "text-[var(--positive)]"
                                     : "text-[var(--negative)]"
-                                  }`}
+                                }`}
                               >
                                 {profile?.display_name
                                   ? profile.display_name
@@ -414,10 +415,11 @@ export default function GaugesPage(): JSX.Element {
                       }
                       return (
                         <span
-                          className={`font-mono text-sm font-medium ${apyData?.apy && apyData.apy > 0
+                          className={`font-mono text-sm font-medium ${
+                            apyData?.apy && apyData.apy > 0
                               ? "text-[var(--positive)]"
                               : "text-[var(--content-secondary)]"
-                            }`}
+                          }`}
                         >
                           {formatAPY(apyData?.apy ?? null)}
                         </span>
