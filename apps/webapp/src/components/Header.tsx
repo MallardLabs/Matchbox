@@ -1,10 +1,10 @@
 import { useTheme } from "@/contexts/ThemeContext"
 import { Button } from "@mezo-org/mezo-clay"
-import { Dropdown as PassportDropdown } from "@mezo-org/passport"
+import { useConnectModal } from "@rainbow-me/rainbowkit"
 import NextLink from "next/link"
 import { useRouter } from "next/router"
 import { useEffect, useState } from "react"
-import { useAccount, useDisconnect } from "wagmi"
+import { useAccount } from "wagmi"
 import { HeaderTicker } from "./HeaderTicker"
 import { WalletDrawer } from "./WalletDrawer"
 
@@ -116,7 +116,7 @@ const navItems = [
 export function Header(): JSX.Element {
   const router = useRouter()
   const { address, isConnected } = useAccount()
-  const { disconnect } = useDisconnect()
+  const { openConnectModal } = useConnectModal()
   const { theme: currentTheme } = useTheme()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [walletDrawerOpen, setWalletDrawerOpen] = useState(false)
@@ -138,8 +138,8 @@ export function Header(): JSX.Element {
     }
   }, [mobileMenuOpen])
 
-  const handleSignOut = () => {
-    disconnect()
+  const handleConnect = () => {
+    openConnectModal?.()
   }
 
   return (
@@ -220,34 +220,41 @@ export function Header(): JSX.Element {
               <DocIcon />
             </a>
 
-            <PassportDropdown
-              onSignOut={handleSignOut}
-              triggerProps={{
-                signedIn: {
-                  size: "medium",
-                  kind: "secondary",
-                },
-                signedOut: {
-                  kind: "primary",
-                  children: (
-                    <span className="flex items-center gap-2">
-                      <TerminalIcon />
-                      connect
-                    </span>
-                  ),
-                },
-              }}
-            />
-
-            {isConnected && address && (
-              <button
-                type="button"
+            {isConnected && address ? (
+              <Button
+                kind="secondary"
                 onClick={() => setWalletDrawerOpen(true)}
-                className="flex h-10 w-10 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--content-secondary)] transition-colors hover:bg-[var(--surface-secondary)] hover:text-[var(--content-primary)]"
-                aria-label="Open settings"
+                overrides={{
+                  BaseButton: {
+                    style: {
+                      height: "40px",
+                    },
+                  },
+                }}
               >
-                <SettingsIcon />
-              </button>
+                <span className="flex items-center gap-2 font-mono text-xs tabular-nums">
+                  <span className="h-2 w-2 rounded-full bg-[#22C55E] shadow-[0_0_6px_rgba(34,197,94,0.5)]" />
+                  {address.slice(0, 6)}...{address.slice(-4)}
+                  <SettingsIcon />
+                </span>
+              </Button>
+            ) : (
+              <Button
+                kind="primary"
+                onClick={handleConnect}
+                overrides={{
+                  BaseButton: {
+                    style: {
+                      height: "40px",
+                    },
+                  },
+                }}
+              >
+                <span className="flex items-center gap-2">
+                  <TerminalIcon />
+                  connect
+                </span>
+              </Button>
             )}
           </div>
 
@@ -324,48 +331,48 @@ export function Header(): JSX.Element {
           </nav>
 
           <div className="mt-auto border-t border-[var(--border)] p-4">
-            <div className="flex flex-col gap-2">
-              <PassportDropdown
-                onSignOut={handleSignOut}
-                triggerProps={{
-                  signedIn: {
-                    size: "large",
-                    kind: "secondary",
-                  },
-                  signedOut: {
-                    kind: "primary",
-                    children: (
-                      <span className="flex items-center justify-center gap-2">
-                        <TerminalIcon />
-                        connect wallet
-                      </span>
-                    ),
+            {isConnected && address ? (
+              <Button
+                kind="secondary"
+                onClick={() => {
+                  setMobileMenuOpen(false)
+                  setWalletDrawerOpen(true)
+                }}
+                overrides={{
+                  BaseButton: {
+                    style: {
+                      width: "100%",
+                    },
                   },
                 }}
-              />
-
-              {isConnected && address && (
-                <Button
-                  kind="secondary"
-                  onClick={() => {
-                    setMobileMenuOpen(false)
-                    setWalletDrawerOpen(true)
-                  }}
-                  overrides={{
-                    BaseButton: {
-                      style: {
-                        width: "100%",
-                      },
+              >
+                <span className="flex items-center justify-center gap-2 font-mono text-xs">
+                  <span className="h-2 w-2 rounded-full bg-[#22C55E] shadow-[0_0_6px_rgba(34,197,94,0.5)]" />
+                  {address.slice(0, 6)}...{address.slice(-4)}
+                  <SettingsIcon />
+                </span>
+              </Button>
+            ) : (
+              <Button
+                kind="primary"
+                onClick={() => {
+                  handleConnect()
+                  setMobileMenuOpen(false)
+                }}
+                overrides={{
+                  BaseButton: {
+                    style: {
+                      width: "100%",
                     },
-                  }}
-                >
-                  <span className="flex items-center justify-center gap-2">
-                    <SettingsIcon />
-                    Settings
-                  </span>
-                </Button>
-              )}
-            </div>
+                  },
+                }}
+              >
+                <span className="flex items-center justify-center gap-2">
+                  <TerminalIcon />
+                  connect wallet
+                </span>
+              </Button>
+            )}
           </div>
         </div>
       )}
