@@ -246,7 +246,7 @@ function SystemRow({
             className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
           />
           <div
-            className="pointer-events-none absolute z-10 h-5 w-5 rounded-full bg-[var(--surface-primary)] shadow-lg ring-2 ring-[#F7931A] transition-all duration-75"
+            className="pointer-events-none absolute z-10 h-5 w-5 rounded-full bg-[#F7931A] shadow-[0_0_10px_rgba(247,147,26,0.5)] ring-2 ring-[#F7931A] transition-all duration-75"
             style={{
               left: `calc(2px + ${Math.min(percentage, 100)}% - ${Math.min(percentage, 100) * 0.24}px)`,
             }}
@@ -308,7 +308,7 @@ function BoostSlider({ value, onChange, disabled }: BoostSliderProps) {
       <div
         className={`pointer-events-none absolute z-10 h-5 w-5 rounded-full transition-all duration-75 ${disabled
           ? "border-2 border-[var(--surface-tertiary)] bg-[var(--surface-secondary)]"
-          : "bg-[var(--surface-primary)] shadow-lg ring-2 ring-[#F7931A]"
+          : "bg-[#F7931A] shadow-[0_0_10px_rgba(247,147,26,0.5)] ring-2 ring-[#F7931A]"
           }`}
         style={{ left: `calc(2px + ${percentage}% - ${percentage * 0.24}px)` }}
       />
