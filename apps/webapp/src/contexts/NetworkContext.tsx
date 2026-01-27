@@ -33,10 +33,12 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-
   // Sync with Wagmi chain changes
   useEffect(() => {
-    if (wagmiChainId === CHAIN_ID.mainnet || wagmiChainId === CHAIN_ID.testnet) {
+    if (
+      wagmiChainId === CHAIN_ID.mainnet ||
+      wagmiChainId === CHAIN_ID.testnet
+    ) {
       if (wagmiChainId !== chainId) {
         setChainId(wagmiChainId)
         localStorage.setItem(
@@ -77,4 +79,3 @@ export function useNetwork() {
   }
   return context
 }
-

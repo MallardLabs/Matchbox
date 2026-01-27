@@ -46,10 +46,10 @@ export function useVeBTCLocks() {
     contracts:
       balance !== undefined && address
         ? Array.from({ length: Number(balance) }, (_, i) => ({
-          ...contracts.veBTC,
-          functionName: "ownerToNFTokenIdList",
-          args: [address, BigInt(i)],
-        }))
+            ...contracts.veBTC,
+            functionName: "ownerToNFTokenIdList",
+            args: [address, BigInt(i)],
+          }))
         : [],
     query: {
       enabled: !!balance && balance > 0n,
@@ -137,10 +137,10 @@ export function useVeMEZOLocks(): {
     contracts:
       balance !== undefined && address
         ? Array.from({ length: Number(balance) }, (_, i) => ({
-          ...contracts.veMEZO,
-          functionName: "ownerToNFTokenIdList",
-          args: [address, BigInt(i)],
-        }))
+            ...contracts.veMEZO,
+            functionName: "ownerToNFTokenIdList",
+            args: [address, BigInt(i)],
+          }))
         : [],
     query: {
       enabled: !!balance && balance > 0n,

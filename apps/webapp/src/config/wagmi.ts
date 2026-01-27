@@ -5,13 +5,12 @@ import { http, type Config } from "wagmi"
 export { mezoMainnet, mezoTestnet }
 
 // WalletConnect Project ID - get one at https://cloud.walletconnect.com
-const WALLET_CONNECT_PROJECT_ID =
-  process.env.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID ||
-  "3fcc6bba6f1de962d911bb5b5c3dba68"
+const WALLET_CONNECT_PROJECT_ID = process.env.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID ?? ""
+
 
 // Get Bitcoin wallet connectors from Passport
-// Using testnet config as the default - network switching is handled by wagmi chains
-const defaultWallets = getDefaultWallets("testnet")
+// Using mainnet config - matches production Bitcoin wallets
+export const defaultWallets = getDefaultWallets("mainnet")
 
 // Extract wallet groups safely
 const bitcoinWalletGroup = defaultWallets.find(
@@ -31,7 +30,7 @@ export const wagmiConfig: Config = getDefaultConfig({
   appName: "Matchbox",
   appDescription: "Mezo Gauge Voting & veMEZO Management",
   projectId: WALLET_CONNECT_PROJECT_ID,
-  chains: [mezoTestnet, mezoMainnet],
+  chains: [mezoMainnet, mezoTestnet],
   transports: {
     [mezoMainnet.id]: http(undefined, {
       batch: true,

@@ -1,10 +1,10 @@
 import { useTheme } from "@/contexts/ThemeContext"
 import { Button } from "@mezo-org/mezo-clay"
 import { useWalletAccount } from "@mezo-org/passport"
-import { useConnectModal } from "@rainbow-me/rainbowkit"
 import NextLink from "next/link"
 import { useRouter } from "next/router"
 import { useEffect, useState } from "react"
+import { ConnectWalletDrawer } from "./ConnectWalletDrawer"
 import { HeaderTicker } from "./HeaderTicker"
 import { WalletDrawer } from "./WalletDrawer"
 
@@ -116,10 +116,10 @@ const navItems = [
 export function Header(): JSX.Element {
   const router = useRouter()
   const { walletAddress, isConnected } = useWalletAccount()
-  const { openConnectModal } = useConnectModal()
   const { theme: currentTheme } = useTheme()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [walletDrawerOpen, setWalletDrawerOpen] = useState(false)
+  const [connectDrawerOpen, setConnectDrawerOpen] = useState(false)
 
   const isHomePage = router.pathname === "/"
 
@@ -148,7 +148,7 @@ export function Header(): JSX.Element {
   }, [mobileMenuOpen])
 
   const handleConnect = () => {
-    openConnectModal?.()
+    setConnectDrawerOpen(true)
   }
 
   return (
@@ -186,9 +186,10 @@ export function Header(): JSX.Element {
                   href={item.href}
                   className={`
                     relative px-3 py-2 text-sm transition-colors
-                    ${isActive
-                      ? "text-[var(--content-primary)]"
-                      : "text-[var(--content-secondary)] hover:text-[var(--content-primary)]"
+                    ${
+                      isActive
+                        ? "text-[var(--content-primary)]"
+                        : "text-[var(--content-secondary)] hover:text-[var(--content-primary)]"
                     }
                   `}
                   style={{ textDecoration: "none" }}
@@ -270,6 +271,10 @@ export function Header(): JSX.Element {
             isOpen={walletDrawerOpen}
             onClose={() => setWalletDrawerOpen(false)}
           />
+          <ConnectWalletDrawer
+            isOpen={connectDrawerOpen}
+            onClose={() => setConnectDrawerOpen(false)}
+          />
 
           {/* Mobile Actions */}
           <div className="flex items-center gap-2 md:hidden">
@@ -318,9 +323,10 @@ export function Header(): JSX.Element {
                   href={item.href}
                   className={`
                     flex items-center rounded-lg px-4 py-3 text-lg transition-colors
-                    ${isActive
-                      ? "bg-[var(--surface-secondary)] text-[var(--content-primary)]"
-                      : "text-[var(--content-secondary)] hover:bg-[var(--surface-secondary)] hover:text-[var(--content-primary)]"
+                    ${
+                      isActive
+                        ? "bg-[var(--surface-secondary)] text-[var(--content-primary)]"
+                        : "text-[var(--content-secondary)] hover:bg-[var(--surface-secondary)] hover:text-[var(--content-primary)]"
                     }
                   `}
                   style={{ textDecoration: "none" }}

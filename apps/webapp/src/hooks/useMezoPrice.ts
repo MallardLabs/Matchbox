@@ -1,3 +1,4 @@
+import { useNetwork } from "@/contexts/NetworkContext"
 import {
   MEZO_FALLBACK_PRICE,
   MEZO_PYTH_PRICE_FEED_ID,
@@ -8,7 +9,6 @@ import {
   getPythOracleAddress,
   pythPriceToNumber,
 } from "@repo/shared"
-import { useNetwork } from "@/contexts/NetworkContext"
 import { useReadContract } from "wagmi"
 
 export type MezoPriceResult = {
@@ -74,4 +74,3 @@ export function useMezoPrice(): MezoPriceResult {
     source: "pyth",
   }
 }
-

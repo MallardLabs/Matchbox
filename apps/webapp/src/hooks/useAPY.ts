@@ -50,12 +50,12 @@ export function useGaugeAPY(
     useReadContracts({
       contracts: gaugeAddress
         ? [
-          {
-            ...contracts.boostVoter,
-            functionName: "gaugeToBribe",
-            args: [gaugeAddress],
-          },
-        ]
+            {
+              ...contracts.boostVoter,
+              functionName: "gaugeToBribe",
+              args: [gaugeAddress],
+            },
+          ]
         : [],
       query: {
         enabled: !!gaugeAddress,
@@ -72,22 +72,22 @@ export function useGaugeAPY(
     useReadContracts({
       contracts: hasBribe
         ? [
-          {
-            address: bribeAddress!,
-            abi: [
-              {
-                inputs: [],
-                name: "rewardsListLength",
-                outputs: [
-                  { internalType: "uint256", name: "", type: "uint256" },
-                ],
-                stateMutability: "view",
-                type: "function",
-              },
-            ] as const,
-            functionName: "rewardsListLength" as const,
-          },
-        ]
+            {
+              address: bribeAddress!,
+              abi: [
+                {
+                  inputs: [],
+                  name: "rewardsListLength",
+                  outputs: [
+                    { internalType: "uint256", name: "", type: "uint256" },
+                  ],
+                  stateMutability: "view",
+                  type: "function",
+                },
+              ] as const,
+              functionName: "rewardsListLength" as const,
+            },
+          ]
         : [],
       query: {
         enabled: hasBribe,

@@ -54,8 +54,8 @@ function getIncentiveUsdValue(
   return amount * price
 }
 
-const EXPLORER_URL =
-  process.env.NEXT_PUBLIC_EXPLORER_URL || "https://explorer.test.mezo.org"
+const EXPLORER_URL = process.env.NEXT_PUBLIC_EXPLORER_URL ?? ""
+
 
 // Social link icons
 function TwitterIcon({ size = 18 }: { size?: number }) {
@@ -161,7 +161,6 @@ export default function GaugeDetailPage(): JSX.Element {
 
   const { chainId } = useNetwork()
   const contracts = getContractConfig(chainId)
-
 
   // Fetch gauge data
   const { data: gaugeData, isLoading: isLoadingGauge } = useReadContracts({

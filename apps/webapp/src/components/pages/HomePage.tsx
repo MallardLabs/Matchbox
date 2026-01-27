@@ -201,7 +201,9 @@ export default function HomePage(): JSX.Element {
                   aria-hidden="true"
                 />
                 <p className="font-mono text-xs text-[var(--content-secondary)]">
-                  <span className="text-[#F7931A]" aria-hidden="true">$</span>{" "}
+                  <span className="text-[#F7931A]" aria-hidden="true">
+                    $
+                  </span>{" "}
                   connect --wallet to get started
                 </p>
               </div>

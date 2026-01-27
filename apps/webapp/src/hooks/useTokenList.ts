@@ -1,5 +1,5 @@
-import { CHAIN_ID, CONTRACTS } from "@repo/shared/contracts"
 import { useNetwork } from "@/contexts/NetworkContext"
+import { CHAIN_ID, CONTRACTS } from "@repo/shared/contracts"
 import { useEffect, useState } from "react"
 import type { Address } from "viem"
 import { erc20Abi, getAddress } from "viem"
@@ -90,22 +90,22 @@ export function useCustomToken(address: Address | undefined) {
   const { data, isLoading } = useReadContracts({
     contracts: address
       ? [
-        {
-          address,
-          abi: erc20Abi,
-          functionName: "name",
-        },
-        {
-          address,
-          abi: erc20Abi,
-          functionName: "symbol",
-        },
-        {
-          address,
-          abi: erc20Abi,
-          functionName: "decimals",
-        },
-      ]
+          {
+            address,
+            abi: erc20Abi,
+            functionName: "name",
+          },
+          {
+            address,
+            abi: erc20Abi,
+            functionName: "symbol",
+          },
+          {
+            address,
+            abi: erc20Abi,
+            functionName: "decimals",
+          },
+        ]
       : [],
     query: {
       enabled: !!address,

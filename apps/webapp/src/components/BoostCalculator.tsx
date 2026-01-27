@@ -100,18 +100,20 @@ function InputRow({
 
   return (
     <div
-      className={`relative flex h-14 items-center overflow-hidden rounded-xl transition-all duration-200 sm:h-16 ${readOnly
-        ? "bg-[var(--surface-secondary)] ring-1 ring-[var(--border)]"
-        : "bg-[var(--surface-primary)] shadow-[0_0_12px_rgba(247,147,26,0.15)] ring-2 ring-[#F7931A]/30"
-        }`}
+      className={`relative flex h-14 items-center overflow-hidden rounded-xl transition-all duration-200 sm:h-16 ${
+        readOnly
+          ? "bg-[var(--surface-secondary)] ring-1 ring-[var(--border)]"
+          : "bg-[var(--surface-primary)] shadow-[0_0_12px_rgba(247,147,26,0.15)] ring-2 ring-[#F7931A]/30"
+      }`}
     >
       <button
         type="button"
         onClick={onToggleLock}
-        className={`absolute left-2 top-1/2 -translate-y-1/2 rounded-lg p-1.5 transition-all duration-200 sm:left-3 sm:p-2 ${isLocked
-          ? "bg-[var(--surface-tertiary)] text-[var(--content-secondary)] hover:bg-[var(--surface-secondary)]"
-          : "bg-[#F7931A] text-white shadow-[0_0_8px_rgba(233,30,99,0.4)] hover:bg-[#E8820C]"
-          }`}
+        className={`absolute left-2 top-1/2 -translate-y-1/2 rounded-lg p-1.5 transition-all duration-200 sm:left-3 sm:p-2 ${
+          isLocked
+            ? "bg-[var(--surface-tertiary)] text-[var(--content-secondary)] hover:bg-[var(--surface-secondary)]"
+            : "bg-[#F7931A] text-white shadow-[0_0_8px_rgba(233,30,99,0.4)] hover:bg-[#E8820C]"
+        }`}
         title={
           isLocked ? "Unlock (Enable Editing)" : "Lock (Calculate this value)"
         }
@@ -156,18 +158,20 @@ function InputRow({
         onChange={handleChange}
         readOnly={readOnly}
         placeholder="0"
-        className={`h-full w-full bg-transparent pl-12 pr-[88px] text-right font-mono text-lg font-semibold outline-none transition-colors placeholder:text-[var(--content-secondary)]/50 sm:pl-16 sm:pr-28 sm:text-2xl ${readOnly
-          ? "cursor-default text-[var(--content-secondary)]"
-          : "text-[var(--content-primary)]"
-          }`}
+        className={`h-full w-full bg-transparent pl-12 pr-[88px] text-right font-mono text-lg font-semibold outline-none transition-colors placeholder:text-[var(--content-secondary)]/50 sm:pl-16 sm:pr-28 sm:text-2xl ${
+          readOnly
+            ? "cursor-default text-[var(--content-secondary)]"
+            : "text-[var(--content-primary)]"
+        }`}
       />
 
       <div className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 sm:right-3">
         <span
-          className={`flex items-center gap-1 rounded-lg px-2 py-1 text-[10px] font-semibold tracking-wide transition-colors sm:gap-1.5 sm:px-2.5 sm:py-1.5 sm:text-xs ${readOnly
-            ? "bg-[var(--surface-tertiary)] text-[var(--content-secondary)]"
-            : "bg-[#F7931A]/10 text-[#F7931A]"
-            }`}
+          className={`flex items-center gap-1 rounded-lg px-2 py-1 text-[10px] font-semibold tracking-wide transition-colors sm:gap-1.5 sm:px-2.5 sm:py-1.5 sm:text-xs ${
+            readOnly
+              ? "bg-[var(--surface-tertiary)] text-[var(--content-secondary)]"
+              : "bg-[#F7931A]/10 text-[#F7931A]"
+          }`}
         >
           <TokenIcon symbol={tokenSymbol} size={14} className="opacity-80" />
           {label}
@@ -284,8 +288,9 @@ function BoostSlider({ value, onChange, disabled }: BoostSliderProps) {
 
   return (
     <div
-      className={`relative flex h-10 w-full touch-none select-none items-center overflow-visible ${disabled ? "cursor-not-allowed" : "cursor-pointer"
-        }`}
+      className={`relative flex h-10 w-full touch-none select-none items-center overflow-visible ${
+        disabled ? "cursor-not-allowed" : "cursor-pointer"
+      }`}
     >
       <div className="pointer-events-none absolute left-3 right-3 h-2 overflow-hidden rounded-full bg-[var(--surface-tertiary)]">
         <div
@@ -306,10 +311,11 @@ function BoostSlider({ value, onChange, disabled }: BoostSliderProps) {
         className="absolute inset-0 h-full w-full cursor-inherit opacity-0"
       />
       <div
-        className={`pointer-events-none absolute z-10 h-5 w-5 rounded-full transition-all duration-75 ${disabled
-          ? "border-2 border-[var(--surface-tertiary)] bg-[var(--surface-secondary)]"
-          : "bg-[#F7931A] shadow-[0_0_10px_rgba(247,147,26,0.5)] ring-2 ring-[#F7931A]"
-          }`}
+        className={`pointer-events-none absolute z-10 h-5 w-5 rounded-full transition-all duration-75 ${
+          disabled
+            ? "border-2 border-[var(--surface-tertiary)] bg-[var(--surface-secondary)]"
+            : "bg-[#F7931A] shadow-[0_0_10px_rgba(247,147,26,0.5)] ring-2 ring-[#F7931A]"
+        }`}
         style={{ left: `calc(2px + ${percentage}% - ${percentage * 0.24}px)` }}
       />
     </div>
@@ -530,8 +536,9 @@ export function BoostCalculator() {
             System Totals
           </span>
           <svg
-            className={`h-3.5 w-3.5 text-[var(--content-secondary)] transition-transform duration-300 sm:h-4 sm:w-4 ${systemTotalsOpen ? "rotate-180" : ""
-              }`}
+            className={`h-3.5 w-3.5 text-[var(--content-secondary)] transition-transform duration-300 sm:h-4 sm:w-4 ${
+              systemTotalsOpen ? "rotate-180" : ""
+            }`}
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -599,8 +606,9 @@ export function BoostCalculator() {
         </div>
 
         <div
-          className={`transition-all duration-200 ${lockState === "NONE" ? "opacity-30" : ""
-            }`}
+          className={`transition-all duration-200 ${
+            lockState === "NONE" ? "opacity-30" : ""
+          }`}
         >
           <BoostSlider
             value={boost}
@@ -610,8 +618,9 @@ export function BoostCalculator() {
         </div>
 
         <div
-          className={`mt-2 flex justify-between px-0.5 font-mono text-[10px] font-medium sm:mt-3 sm:text-xs ${lockState === "NONE" ? "opacity-30" : ""
-            }`}
+          className={`mt-2 flex justify-between px-0.5 font-mono text-[10px] font-medium sm:mt-3 sm:text-xs ${
+            lockState === "NONE" ? "opacity-30" : ""
+          }`}
         >
           {[1, 2, 3, 4, 5].map((val) => (
             <button
@@ -619,13 +628,15 @@ export function BoostCalculator() {
               type="button"
               onClick={() => lockState !== "NONE" && handleBoostChange(val)}
               disabled={lockState === "NONE"}
-              className={`transition-colors ${lockState !== "NONE"
-                ? "cursor-pointer hover:text-[#F7931A]"
-                : "cursor-not-allowed"
-                } ${Math.round(boost) === val
+              className={`transition-colors ${
+                lockState !== "NONE"
+                  ? "cursor-pointer hover:text-[#F7931A]"
+                  : "cursor-not-allowed"
+              } ${
+                Math.round(boost) === val
                   ? "text-[#F7931A]"
                   : "text-[var(--content-secondary)]"
-                }`}
+              }`}
             >
               {val}×
             </button>
@@ -633,10 +644,11 @@ export function BoostCalculator() {
         </div>
 
         <div
-          className={`overflow-hidden transition-all duration-300 ease-out ${lockState === "NONE"
-            ? "mt-3 max-h-12 opacity-100 sm:mt-4"
-            : "mt-0 max-h-0 opacity-0"
-            }`}
+          className={`overflow-hidden transition-all duration-300 ease-out ${
+            lockState === "NONE"
+              ? "mt-3 max-h-12 opacity-100 sm:mt-4"
+              : "mt-0 max-h-0 opacity-0"
+          }`}
         >
           <p className="text-center text-[10px] text-[var(--content-secondary)] sm:text-xs">
             Lock one input to adjust boost target

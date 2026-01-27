@@ -16,8 +16,9 @@ export const getBaseUrl = () => {
 
   // 3. Fallback to default (if all else fails)
   if (!baseUrl) {
-    baseUrl = "https://matchbox.mallard.sh"
+    baseUrl = ""
   }
+
 
   if (baseUrl && !baseUrl.startsWith("http")) {
     baseUrl = `https://${baseUrl}`

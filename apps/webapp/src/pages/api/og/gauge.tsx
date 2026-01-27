@@ -25,7 +25,8 @@ const mezoTestnet = {
   },
   rpcUrls: {
     default: {
-      http: ["https://rpc.test.mezo.org"],
+      http: [process.env.NEXT_PUBLIC_RPC_URL ?? ""],
+
     },
   },
 }
