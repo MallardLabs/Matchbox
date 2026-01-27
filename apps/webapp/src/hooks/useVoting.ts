@@ -1,4 +1,5 @@
 import { getContractConfig } from "@/config/contracts"
+import { useNetwork } from "@/contexts/NetworkContext"
 import { CHAIN_ID } from "@repo/shared/contracts"
 import { useMemo } from "react"
 import type { Address, Hex } from "viem"
@@ -21,7 +22,8 @@ type VoteStateResult = {
 }
 
 export function useVoteState(tokenId: bigint | undefined): VoteStateResult {
-  const contracts = getContractConfig(CHAIN_ID.testnet)
+  const { chainId } = useNetwork()
+  const contracts = getContractConfig(chainId)
   // Stabilize the timestamp to avoid refetches on every render
   // Round to nearest minute to reduce query key changes
   const now = useMemo(() => {
@@ -114,7 +116,8 @@ export function useBatchVoteState(tokenIds: bigint[]): {
   voteStateMap: Map<string, BatchVoteState>
   isLoading: boolean
 } {
-  const contracts = getContractConfig(CHAIN_ID.testnet)
+  const { chainId } = useNetwork()
+  const contracts = getContractConfig(chainId)
   const now = useMemo(() => {
     const timestamp = Math.floor(Date.now() / 1000)
     return BigInt(Math.floor(timestamp / 60) * 60)
@@ -216,7 +219,8 @@ type CreateBoostGaugeResult = WriteHookResult & {
 }
 
 export function useCreateBoostGauge(): CreateBoostGaugeResult {
-  const contracts = getContractConfig(CHAIN_ID.testnet)
+  const { chainId } = useNetwork()
+  const contracts = getContractConfig(chainId)
   const { writeContract, data: hash, isPending, error } = useWriteContract()
 
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
@@ -262,7 +266,8 @@ type VoteOnGaugeResult = WriteHookResult & {
 }
 
 export function useVoteOnGauge(): VoteOnGaugeResult {
-  const contracts = getContractConfig(CHAIN_ID.testnet)
+  const { chainId } = useNetwork()
+  const contracts = getContractConfig(chainId)
   const { writeContract, data: hash, isPending, error } = useWriteContract()
 
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
@@ -300,7 +305,8 @@ type ResetVoteResult = WriteHookResult & {
 }
 
 export function useResetVote(): ResetVoteResult {
-  const contracts = getContractConfig(CHAIN_ID.testnet)
+  const { chainId } = useNetwork()
+  const contracts = getContractConfig(chainId)
   const { writeContract, data: hash, isPending, error } = useWriteContract()
 
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
@@ -334,7 +340,8 @@ type PokeBoostResult = WriteHookResult & {
 }
 
 export function usePokeBoost(): PokeBoostResult {
-  const contracts = getContractConfig(CHAIN_ID.testnet)
+  const { chainId } = useNetwork()
+  const contracts = getContractConfig(chainId)
   const { writeContract, data: hash, isPending, error } = useWriteContract()
 
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
@@ -371,7 +378,8 @@ export function useBribeAddress(gaugeAddress: Address | undefined): {
   isLoading: boolean
   refetch: RefetchFn
 } {
-  const contracts = getContractConfig(CHAIN_ID.testnet)
+  const { chainId } = useNetwork()
+  const contracts = getContractConfig(chainId)
 
   const { data, isLoading, refetch } = useReadContract({
     ...contracts.boostVoter,
@@ -643,7 +651,8 @@ type AddIncentivesResult = WriteHookResult & {
 }
 
 export function useBoostVoterAddress(): Address | undefined {
-  const contracts = getContractConfig(CHAIN_ID.testnet)
+  const { chainId } = useNetwork()
+  const contracts = getContractConfig(chainId)
   return contracts.boostVoter.address
 }
 
@@ -651,7 +660,8 @@ export function useIsAllowlistedToken(tokenAddress: Address | undefined): {
   isAllowlisted: boolean | undefined
   isLoading: boolean
 } {
-  const contracts = getContractConfig(CHAIN_ID.testnet)
+  const { chainId } = useNetwork()
+  const contracts = getContractConfig(chainId)
 
   const { data, isLoading } = useReadContract({
     ...contracts.boostVoter,
@@ -680,7 +690,8 @@ export function useVoteAllocations(
   allocations: VoteAllocation[]
   isLoading: boolean
 } {
-  const contracts = getContractConfig(CHAIN_ID.testnet)
+  const { chainId } = useNetwork()
+  const contracts = getContractConfig(chainId)
 
   const { data, isLoading } = useReadContracts({
     contracts: gaugeAddresses.map((gaugeAddress) => ({
@@ -718,7 +729,8 @@ export function useAllVoteAllocations(
   aggregatedAllocations: VoteAllocation[]
   isLoading: boolean
 } {
-  const contracts = getContractConfig(CHAIN_ID.testnet)
+  const { chainId } = useNetwork()
+  const contracts = getContractConfig(chainId)
 
   // Query votes for all tokenId + gauge combinations
   const { data, isLoading } = useReadContracts({
@@ -790,7 +802,8 @@ export function useAllUsedWeights(tokenIds: bigint[]): {
   totalUsedWeight: bigint
   isLoading: boolean
 } {
-  const contracts = getContractConfig(CHAIN_ID.testnet)
+  const { chainId } = useNetwork()
+  const contracts = getContractConfig(chainId)
 
   const { data, isLoading } = useReadContracts({
     contracts: tokenIds.map((tokenId) => ({

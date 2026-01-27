@@ -1,5 +1,4 @@
 import {
-  CHAIN_ID,
   MEZO_FALLBACK_PRICE,
   MEZO_PYTH_PRICE_FEED_ID,
   PYTH_MAX_PRICE_AGE,
@@ -9,6 +8,7 @@ import {
   getPythOracleAddress,
   pythPriceToNumber,
 } from "@repo/shared"
+import { useNetwork } from "@/contexts/NetworkContext"
 import { useReadContract } from "wagmi"
 
 export type MezoPriceResult = {
@@ -19,7 +19,7 @@ export type MezoPriceResult = {
 }
 
 export function useMezoPrice(): MezoPriceResult {
-  const chainId = CHAIN_ID.testnet
+  const { chainId } = useNetwork()
   const pythAddress = getPythOracleAddress(chainId)
 
   const {
@@ -74,3 +74,4 @@ export function useMezoPrice(): MezoPriceResult {
     source: "pyth",
   }
 }
+

@@ -10,8 +10,8 @@ const WALLET_CONNECT_PROJECT_ID =
   "3fcc6bba6f1de962d911bb5b5c3dba68"
 
 // Get Bitcoin wallet connectors from Passport
-// Using mainnet config as the default - network switching is handled by wagmi chains
-const defaultWallets = getDefaultWallets("mainnet")
+// Using testnet config as the default - network switching is handled by wagmi chains
+const defaultWallets = getDefaultWallets("testnet")
 
 // Extract wallet groups safely
 const bitcoinWalletGroup = defaultWallets.find(
@@ -31,7 +31,7 @@ export const wagmiConfig: Config = getDefaultConfig({
   appName: "Matchbox",
   appDescription: "Mezo Gauge Voting & veMEZO Management",
   projectId: WALLET_CONNECT_PROJECT_ID,
-  chains: [mezoMainnet, mezoTestnet],
+  chains: [mezoTestnet, mezoMainnet],
   transports: {
     [mezoMainnet.id]: http(undefined, {
       batch: true,

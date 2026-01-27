@@ -1,4 +1,5 @@
 import { getContractConfig } from "@/config/contracts"
+import { useNetwork } from "@/contexts/NetworkContext"
 import { CHAIN_ID, isMezoToken } from "@repo/shared"
 import { useMemo } from "react"
 import type { Address } from "viem"
@@ -41,19 +42,20 @@ export function useGaugeAPY(
 ): GaugeAPYData {
   const { price: btcPrice } = useBtcPrice()
   const { price: mezoPrice } = useMezoPrice()
-  const contracts = getContractConfig(CHAIN_ID.testnet)
+  const { chainId } = useNetwork()
+  const contracts = getContractConfig(chainId)
 
   // Get bribe address for the gauge
   const { data: bribeAddressData, isLoading: isLoadingBribe } =
     useReadContracts({
       contracts: gaugeAddress
         ? [
-            {
-              ...contracts.boostVoter,
-              functionName: "gaugeToBribe",
-              args: [gaugeAddress],
-            },
-          ]
+          {
+            ...contracts.boostVoter,
+            functionName: "gaugeToBribe",
+            args: [gaugeAddress],
+          },
+        ]
         : [],
       query: {
         enabled: !!gaugeAddress,
@@ -70,22 +72,22 @@ export function useGaugeAPY(
     useReadContracts({
       contracts: hasBribe
         ? [
-            {
-              address: bribeAddress!,
-              abi: [
-                {
-                  inputs: [],
-                  name: "rewardsListLength",
-                  outputs: [
-                    { internalType: "uint256", name: "", type: "uint256" },
-                  ],
-                  stateMutability: "view",
-                  type: "function",
-                },
-              ] as const,
-              functionName: "rewardsListLength" as const,
-            },
-          ]
+          {
+            address: bribeAddress!,
+            abi: [
+              {
+                inputs: [],
+                name: "rewardsListLength",
+                outputs: [
+                  { internalType: "uint256", name: "", type: "uint256" },
+                ],
+                stateMutability: "view",
+                type: "function",
+              },
+            ] as const,
+            functionName: "rewardsListLength" as const,
+          },
+        ]
         : [],
       query: {
         enabled: hasBribe,
@@ -241,7 +243,8 @@ export function useGaugesAPY(
 } {
   const { price: btcPrice } = useBtcPrice()
   const { price: mezoPrice } = useMezoPrice()
-  const contracts = getContractConfig(CHAIN_ID.testnet)
+  const { chainId } = useNetwork()
+  const contracts = getContractConfig(chainId)
 
   const gaugeAddresses = gauges.map((g) => g.address)
 

@@ -1,4 +1,5 @@
 import { getContractConfig } from "@/config/contracts"
+import { useNetwork } from "@/contexts/NetworkContext"
 import { CHAIN_ID } from "@repo/shared/contracts"
 import { useEffect } from "react"
 import {
@@ -24,7 +25,8 @@ type RefetchFn = () => Promise<unknown>
 
 export function useVeBTCLocks() {
   const { address } = useAccount()
-  const contracts = getContractConfig(CHAIN_ID.testnet)
+  const { chainId } = useNetwork()
+  const contracts = getContractConfig(chainId)
 
   const { data: balanceData } = useReadContracts({
     contracts: [
@@ -45,10 +47,10 @@ export function useVeBTCLocks() {
     contracts:
       balance !== undefined && address
         ? Array.from({ length: Number(balance) }, (_, i) => ({
-            ...contracts.veBTC,
-            functionName: "ownerToNFTokenIdList",
-            args: [address, BigInt(i)],
-          }))
+          ...contracts.veBTC,
+          functionName: "ownerToNFTokenIdList",
+          args: [address, BigInt(i)],
+        }))
         : [],
     query: {
       enabled: !!balance && balance > 0n,
@@ -114,7 +116,8 @@ export function useVeMEZOLocks(): {
   refetch: RefetchFn
 } {
   const { address } = useAccount()
-  const contracts = getContractConfig(CHAIN_ID.testnet)
+  const { chainId } = useNetwork()
+  const contracts = getContractConfig(chainId)
 
   const { data: balanceData } = useReadContracts({
     contracts: [
@@ -135,10 +138,10 @@ export function useVeMEZOLocks(): {
     contracts:
       balance !== undefined && address
         ? Array.from({ length: Number(balance) }, (_, i) => ({
-            ...contracts.veMEZO,
-            functionName: "ownerToNFTokenIdList",
-            args: [address, BigInt(i)],
-          }))
+          ...contracts.veMEZO,
+          functionName: "ownerToNFTokenIdList",
+          args: [address, BigInt(i)],
+        }))
         : [],
     query: {
       enabled: !!balance && balance > 0n,
@@ -200,7 +203,8 @@ export function useMEZOBalance(): {
   refetch: RefetchFn
 } {
   const { address } = useAccount()
-  const contracts = getContractConfig(CHAIN_ID.testnet)
+  const { chainId } = useNetwork()
+  const contracts = getContractConfig(chainId)
 
   const { data, refetch } = useReadContracts({
     contracts: [
@@ -239,7 +243,8 @@ export function useApproveMEZO(): {
   error: Error | null
   reset: () => void
 } {
-  const contracts = getContractConfig(CHAIN_ID.testnet)
+  const { chainId } = useNetwork()
+  const contracts = getContractConfig(chainId)
 
   const {
     writeContract,
@@ -290,7 +295,8 @@ export function useCreateVeMEZOLock(): {
   error: Error | null
   reset: () => void
 } {
-  const contracts = getContractConfig(CHAIN_ID.testnet)
+  const { chainId } = useNetwork()
+  const contracts = getContractConfig(chainId)
   const { refetch: refetchBalance } = useMEZOBalance()
 
   const {

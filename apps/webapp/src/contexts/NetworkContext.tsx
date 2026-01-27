@@ -7,7 +7,7 @@ import {
   useEffect,
   useState,
 } from "react"
-import { useSwitchChain } from "wagmi"
+import { useChainId, useSwitchChain } from "wagmi"
 
 type NetworkContextType = {
   chainId: SupportedChainId
@@ -19,15 +19,34 @@ type NetworkContextType = {
 const NetworkContext = createContext<NetworkContextType | undefined>(undefined)
 
 export function NetworkProvider({ children }: { children: ReactNode }) {
+  const wagmiChainId = useChainId()
   const [chainId, setChainId] = useState<SupportedChainId>(CHAIN_ID.testnet)
+  const [hasInitialized, setHasInitialized] = useState(false)
   const { switchChain } = useSwitchChain()
 
+  // Initial load from localStorage
   useEffect(() => {
     const saved = localStorage.getItem("mezo-network")
     if (saved === "mainnet") {
       setChainId(CHAIN_ID.mainnet)
+    } else {
+      setChainId(CHAIN_ID.testnet)
     }
+    setHasInitialized(true)
   }, [])
+
+  // Sync with Wagmi chain changes
+  useEffect(() => {
+    if (wagmiChainId === CHAIN_ID.mainnet || wagmiChainId === CHAIN_ID.testnet) {
+      if (wagmiChainId !== chainId) {
+        setChainId(wagmiChainId)
+        localStorage.setItem(
+          "mezo-network",
+          wagmiChainId === CHAIN_ID.mainnet ? "mainnet" : "testnet",
+        )
+      }
+    }
+  }, [wagmiChainId, chainId])
 
   const switchNetwork = useCallback(() => {
     const newChainId =
@@ -59,3 +78,4 @@ export function useNetwork() {
   }
   return context
 }
+

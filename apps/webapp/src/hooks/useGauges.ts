@@ -1,4 +1,5 @@
 import { getContractConfig } from "@/config/contracts"
+import { useNetwork } from "@/contexts/NetworkContext"
 import { CHAIN_ID, NON_STAKING_GAUGE_ABI } from "@repo/shared/contracts"
 import { Rational } from "@thesis-co/cent"
 import { useMemo } from "react"
@@ -16,7 +17,8 @@ export type BoostGauge = {
 }
 
 export function useBoostGauges() {
-  const contracts = getContractConfig(CHAIN_ID.testnet)
+  const { chainId } = useNetwork()
+  const contracts = getContractConfig(chainId)
 
   const { data: lengthData, isLoading: isLoadingLength } = useReadContract({
     ...contracts.boostVoter,
@@ -360,7 +362,8 @@ export function useBoostGauges() {
 }
 
 export function useBoostGaugeForToken(tokenId: bigint | undefined) {
-  const contracts = getContractConfig(CHAIN_ID.testnet)
+  const { chainId } = useNetwork()
+  const contracts = getContractConfig(chainId)
 
   const {
     data: gaugeAddress,
@@ -388,7 +391,8 @@ export function useBoostGaugeForToken(tokenId: bigint | undefined) {
 }
 
 export function useBoostInfo(tokenId: bigint | undefined) {
-  const contracts = getContractConfig(CHAIN_ID.testnet)
+  const { chainId } = useNetwork()
+  const contracts = getContractConfig(chainId)
 
   const { data: boost, isLoading } = useReadContract({
     ...contracts.boostVoter,
@@ -409,7 +413,8 @@ export function useBoostInfo(tokenId: bigint | undefined) {
 }
 
 export function useVoterTotals() {
-  const contracts = getContractConfig(CHAIN_ID.testnet)
+  const { chainId } = useNetwork()
+  const contracts = getContractConfig(chainId)
 
   const { data, isLoading } = useReadContracts({
     contracts: [
@@ -442,7 +447,8 @@ export function useVoterTotals() {
 }
 
 export function useGaugeWeight(gaugeAddress: Address | undefined) {
-  const contracts = getContractConfig(CHAIN_ID.testnet)
+  const { chainId } = useNetwork()
+  const contracts = getContractConfig(chainId)
 
   const { data, isLoading } = useReadContract({
     ...contracts.boostVoter,
@@ -468,7 +474,8 @@ export type BatchGaugeData = {
 }
 
 export function useBatchGaugeData(tokenIds: bigint[]) {
-  const contracts = getContractConfig(CHAIN_ID.testnet)
+  const { chainId } = useNetwork()
+  const contracts = getContractConfig(chainId)
 
   // Fetch gauge addresses for all token IDs
   const { data: gaugeAddressesData, isLoading: isLoadingGauges } =
