@@ -1,6 +1,6 @@
 import { getContractConfig } from "@/config/contracts"
 import { useNetwork } from "@/contexts/NetworkContext"
-import { CHAIN_ID, isMezoToken } from "@repo/shared"
+import { isMezoToken } from "@repo/shared"
 import { useMemo } from "react"
 import type { Address } from "viem"
 import { useReadContracts } from "wagmi"

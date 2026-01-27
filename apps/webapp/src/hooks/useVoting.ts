@@ -1,6 +1,5 @@
 import { getContractConfig } from "@/config/contracts"
 import { useNetwork } from "@/contexts/NetworkContext"
-import { CHAIN_ID } from "@repo/shared/contracts"
 import { useMemo } from "react"
 import type { Address, Hex } from "viem"
 import {
@@ -834,7 +833,8 @@ export function useAllUsedWeights(tokenIds: bigint[]): {
 }
 
 export function useAddIncentives(): AddIncentivesResult {
-  const contracts = getContractConfig(CHAIN_ID.testnet)
+  const { chainId } = useNetwork()
+  const contracts = getContractConfig(chainId)
   const { writeContract, data: hash, isPending, error } = useWriteContract()
 
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
@@ -888,7 +888,8 @@ export function useClaimableBribes(veMEZOTokenIds: bigint[]): {
   isLoading: boolean
   refetch: RefetchFn
 } {
-  const contracts = getContractConfig(CHAIN_ID.testnet)
+  const { chainId } = useNetwork()
+  const contracts = getContractConfig(chainId)
 
   // First, get the list of all gauges
   const { data: lengthData, isLoading: isLoadingLength } = useReadContract({
@@ -1184,7 +1185,8 @@ type ClaimBribesResult = WriteHookResult & {
 }
 
 export function useClaimBribes(): ClaimBribesResult {
-  const contracts = getContractConfig(CHAIN_ID.testnet)
+  const { chainId } = useNetwork()
+  const contracts = getContractConfig(chainId)
   const { writeContract, data: hash, isPending, error } = useWriteContract()
 
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({

@@ -1,6 +1,5 @@
 import { getContractConfig } from "@/config/contracts"
 import { useNetwork } from "@/contexts/NetworkContext"
-import { CHAIN_ID } from "@repo/shared/contracts"
 import { useEffect } from "react"
 import {
   useAccount,

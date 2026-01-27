@@ -2,6 +2,7 @@ import { AddressLink } from "@/components/AddressLink"
 import { SpringIn } from "@/components/SpringIn"
 import { TokenIcon } from "@/components/TokenIcon"
 import { getContractConfig } from "@/config/contracts"
+import { useNetwork } from "@/contexts/NetworkContext"
 import { formatAPY, useGaugeAPY } from "@/hooks/useAPY"
 import { useBtcPrice } from "@/hooks/useBtcPrice"
 import { useGaugeHistory, useGaugeProfile } from "@/hooks/useGaugeProfiles"
@@ -18,7 +19,7 @@ import {
   formatTokenAmount,
 } from "@/utils/format"
 import { Button, Card, Skeleton, Tag } from "@mezo-org/mezo-clay"
-import { CHAIN_ID, NON_STAKING_GAUGE_ABI } from "@repo/shared/contracts"
+import { NON_STAKING_GAUGE_ABI } from "@repo/shared/contracts"
 import Link from "next/link"
 import { useRouter } from "next/router"
 import { useMemo } from "react"
@@ -158,28 +159,30 @@ export default function GaugeDetailPage(): JSX.Element {
   const { address } = router.query
   const gaugeAddress = address as Address | undefined
 
-  const contracts = getContractConfig(CHAIN_ID.testnet)
+  const { chainId } = useNetwork()
+  const contracts = getContractConfig(chainId)
+
 
   // Fetch gauge data
   const { data: gaugeData, isLoading: isLoadingGauge } = useReadContracts({
     contracts: gaugeAddress
       ? [
-          {
-            ...contracts.boostVoter,
-            functionName: "weights",
-            args: [gaugeAddress],
-          },
-          {
-            ...contracts.boostVoter,
-            functionName: "isAlive",
-            args: [gaugeAddress],
-          },
-          {
-            address: gaugeAddress,
-            abi: NON_STAKING_GAUGE_ABI,
-            functionName: "rewardsBeneficiary",
-          },
-        ]
+        {
+          ...contracts.boostVoter,
+          functionName: "weights",
+          args: [gaugeAddress],
+        },
+        {
+          ...contracts.boostVoter,
+          functionName: "isAlive",
+          args: [gaugeAddress],
+        },
+        {
+          address: gaugeAddress,
+          abi: NON_STAKING_GAUGE_ABI,
+          functionName: "rewardsBeneficiary",
+        },
+      ]
       : [],
     query: {
       enabled: !!gaugeAddress,
@@ -207,10 +210,10 @@ export default function GaugeDetailPage(): JSX.Element {
     contracts:
       beneficiary && balance > 0
         ? Array.from({ length: balance }, (_, i) => ({
-            ...contracts.veBTC,
-            functionName: "ownerToNFTokenIdList",
-            args: [beneficiary, BigInt(i)],
-          }))
+          ...contracts.veBTC,
+          functionName: "ownerToNFTokenIdList",
+          args: [beneficiary, BigInt(i)],
+        }))
         : [],
     query: {
       enabled: !!beneficiary && balance > 0,
@@ -365,11 +368,10 @@ export default function GaugeDetailPage(): JSX.Element {
                 <div className="min-w-0 flex-1">
                   <div className="mb-3 flex flex-wrap items-center gap-3">
                     <h2
-                      className={`text-2xl font-semibold md:text-3xl ${
-                        hasProfileContent
+                      className={`text-2xl font-semibold md:text-3xl ${hasProfileContent
                           ? "text-[var(--content-primary)]"
                           : "text-[var(--content-secondary)]"
-                      }`}
+                        }`}
                     >
                       {profile?.display_name ||
                         `veBTC #${veBTCTokenId?.toString() ?? "Unknown"}`}
@@ -532,11 +534,10 @@ export default function GaugeDetailPage(): JSX.Element {
                     Voting APY
                   </p>
                   <h3
-                    className={`font-mono text-lg font-semibold tabular-nums md:text-xl ${
-                      apy && apy > 0
+                    className={`font-mono text-lg font-semibold tabular-nums md:text-xl ${apy && apy > 0
                         ? "text-[var(--positive)]"
                         : "text-[var(--content-primary)]"
-                    }`}
+                      }`}
                   >
                     {isLoadingAPY ? "..." : formatAPY(apy)}
                   </h3>
@@ -733,9 +734,9 @@ export default function GaugeDetailPage(): JSX.Element {
                               <td className="py-3 text-right font-mono text-sm tabular-nums text-[var(--content-primary)]">
                                 {record.vemezo_weight
                                   ? formatTokenAmount(
-                                      BigInt(record.vemezo_weight),
-                                      18,
-                                    )
+                                    BigInt(record.vemezo_weight),
+                                    18,
+                                  )
                                   : "-"}
                               </td>
                               <td className="py-3 text-right font-mono text-sm tabular-nums text-[var(--content-primary)]">
@@ -749,11 +750,10 @@ export default function GaugeDetailPage(): JSX.Element {
                                   : "-"}
                               </td>
                               <td
-                                className={`py-3 text-right font-mono text-sm font-medium tabular-nums ${
-                                  record.apy && record.apy > 0
+                                className={`py-3 text-right font-mono text-sm font-medium tabular-nums ${record.apy && record.apy > 0
                                     ? "text-[var(--positive)]"
                                     : "text-[var(--content-primary)]"
-                                }`}
+                                  }`}
                               >
                                 {record.apy ? formatAPY(record.apy) : "-"}
                               </td>

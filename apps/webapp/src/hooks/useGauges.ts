@@ -1,6 +1,6 @@
 import { getContractConfig } from "@/config/contracts"
 import { useNetwork } from "@/contexts/NetworkContext"
-import { CHAIN_ID, NON_STAKING_GAUGE_ABI } from "@repo/shared/contracts"
+import { NON_STAKING_GAUGE_ABI } from "@repo/shared/contracts"
 import { Rational } from "@thesis-co/cent"
 import { useMemo } from "react"
 import type { Address } from "viem"

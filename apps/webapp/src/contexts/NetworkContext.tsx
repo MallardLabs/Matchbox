@@ -21,7 +21,6 @@ const NetworkContext = createContext<NetworkContextType | undefined>(undefined)
 export function NetworkProvider({ children }: { children: ReactNode }) {
   const wagmiChainId = useChainId()
   const [chainId, setChainId] = useState<SupportedChainId>(CHAIN_ID.testnet)
-  const [hasInitialized, setHasInitialized] = useState(false)
   const { switchChain } = useSwitchChain()
 
   // Initial load from localStorage
@@ -32,8 +31,8 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
     } else {
       setChainId(CHAIN_ID.testnet)
     }
-    setHasInitialized(true)
   }, [])
+
 
   // Sync with Wagmi chain changes
   useEffect(() => {

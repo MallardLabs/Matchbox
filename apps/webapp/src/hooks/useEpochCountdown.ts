@@ -1,5 +1,5 @@
 import { getContractConfig } from "@/config/contracts"
-import { CHAIN_ID } from "@repo/shared/contracts"
+import { useNetwork } from "@/contexts/NetworkContext"
 import { useEffect, useMemo, useState } from "react"
 import { useReadContract } from "wagmi"
 
@@ -27,7 +27,9 @@ function formatTimeRemaining(seconds: number): string {
 }
 
 export function useEpochCountdown(): EpochCountdownResult {
-  const contracts = getContractConfig(CHAIN_ID.testnet)
+  const { chainId } = useNetwork()
+  const contracts = getContractConfig(chainId)
+
   const [currentTime, setCurrentTime] = useState(() =>
     Math.floor(Date.now() / 1000),
   )

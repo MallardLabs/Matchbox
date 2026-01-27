@@ -288,9 +288,8 @@ export function WalletDrawer({
     <>
       {/* Backdrop */}
       <div
-        className={`fixed inset-0 z-[60] cursor-pointer bg-black/50 transition-opacity duration-200 ${
-          isVisible ? "opacity-100" : "opacity-0"
-        }`}
+        className={`fixed inset-0 z-[60] cursor-pointer bg-black/50 transition-opacity duration-200 ${isVisible ? "opacity-100" : "opacity-0"
+          }`}
         onClick={handleClose}
         onKeyDown={(e) => e.key === "Enter" && handleClose()}
         role="button"
@@ -305,9 +304,8 @@ export function WalletDrawer({
         aria-modal="true"
         aria-label="Wallet details"
         tabIndex={-1}
-        className={`fixed right-0 top-0 z-[70] flex h-full w-full max-w-[400px] flex-col bg-[var(--surface)] shadow-2xl transition-transform duration-200 ease-out ${
-          isVisible ? "translate-x-0" : "translate-x-full"
-        }`}
+        className={`fixed right-0 top-0 z-[70] flex h-full w-full max-w-[400px] flex-col bg-[var(--surface)] shadow-2xl transition-transform duration-200 ease-out ${isVisible ? "translate-x-0" : "translate-x-full"
+          }`}
       >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[var(--border)] p-4">

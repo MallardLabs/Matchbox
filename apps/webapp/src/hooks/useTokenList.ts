@@ -1,4 +1,5 @@
 import { CHAIN_ID, CONTRACTS } from "@repo/shared/contracts"
+import { useNetwork } from "@/contexts/NetworkContext"
 import { useEffect, useState } from "react"
 import type { Address } from "viem"
 import { erc20Abi, getAddress } from "viem"
@@ -42,6 +43,7 @@ const DEFAULT_TOKENS: Token[] = [
 ]
 
 export function useTokenList(tokenListUrl?: string) {
+  const { chainId } = useNetwork()
   const [tokens, setTokens] = useState<Token[]>(DEFAULT_TOKENS)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
@@ -57,7 +59,7 @@ export function useTokenList(tokenListUrl?: string) {
         }
         const data: TokenList = await response.json()
         const chainTokens = data.tokens.filter(
-          (token) => token.chainId === CHAIN_ID.testnet,
+          (token) => token.chainId === chainId,
         )
         // Combine default tokens with fetched tokens, avoiding duplicates
         const defaultAddresses = new Set(
@@ -84,25 +86,26 @@ export function useTokenList(tokenListUrl?: string) {
 }
 
 export function useCustomToken(address: Address | undefined) {
+  const { chainId } = useNetwork()
   const { data, isLoading } = useReadContracts({
     contracts: address
       ? [
-          {
-            address,
-            abi: erc20Abi,
-            functionName: "name",
-          },
-          {
-            address,
-            abi: erc20Abi,
-            functionName: "symbol",
-          },
-          {
-            address,
-            abi: erc20Abi,
-            functionName: "decimals",
-          },
-        ]
+        {
+          address,
+          abi: erc20Abi,
+          functionName: "name",
+        },
+        {
+          address,
+          abi: erc20Abi,
+          functionName: "symbol",
+        },
+        {
+          address,
+          abi: erc20Abi,
+          functionName: "decimals",
+        },
+      ]
       : [],
     query: {
       enabled: !!address,
@@ -127,7 +130,7 @@ export function useCustomToken(address: Address | undefined) {
   }
 
   const token: Token = {
-    chainId: CHAIN_ID.testnet,
+    chainId: chainId,
     address,
     name: nameResult.result as string,
     symbol: symbolResult.result as string,
