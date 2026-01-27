@@ -1,4 +1,4 @@
-import { mezoMainnet, mezoTestnet, wagmiConfig } from "@/config/wagmi"
+import { mezoTestnet, wagmiConfig } from "@/config/wagmi"
 import { GaugeProfilesProvider } from "@/contexts/GaugeProfilesContext"
 import { NetworkProvider } from "@/contexts/NetworkContext"
 import {
