@@ -65,6 +65,13 @@ export default function Document() {
         />
         <meta name="twitter:image" content={ogImageUrl} />
 
+        {/* Analytics */}
+        <script
+          defer
+          src="https://cloud.umami.is/script.js"
+          data-website-id="3ef4eb61-21a5-450d-8302-3b414970911e"
+        />
+
         {/* Prevent flash of wrong theme */}
         <script
           dangerouslySetInnerHTML={{

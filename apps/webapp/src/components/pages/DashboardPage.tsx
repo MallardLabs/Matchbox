@@ -1,3 +1,4 @@
+import { AnimatedNumber } from "@/components/AnimatedNumber"
 import { SpringIn } from "@/components/SpringIn"
 import { TransferProfileModal } from "@/components/TransferProfileModal"
 import type { GaugeProfile } from "@/config/supabase"
@@ -1059,11 +1060,10 @@ export default function DashboardPage(): JSX.Element {
                         {hasClaimableRewards && totalClaimableUSD > 0 && (
                           <div className="mb-5">
                             <span className="font-mono text-4xl font-bold tabular-nums text-[var(--content-primary)]">
-                              $
-                              {totalClaimableUSD.toLocaleString(undefined, {
-                                minimumFractionDigits: 2,
-                                maximumFractionDigits: 2,
-                              })}
+                              <AnimatedNumber
+                                value={totalClaimableUSD}
+                                prefix="$"
+                              />
                             </span>
                           </div>
                         )}

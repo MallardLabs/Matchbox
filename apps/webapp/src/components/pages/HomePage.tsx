@@ -188,28 +188,25 @@ export default function HomePage(): JSX.Element {
         </SpringIn>
       </div>
 
-      {/* Connect Prompt */}
-      {!isConnected && (
-        <SpringIn delay={4} variant="card">
-          <div className="flex items-center gap-3 rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface-secondary)] px-6 py-4">
-            <div
-              className="h-2 w-2 animate-pulse rounded-full bg-[#F7931A]"
-              aria-hidden="true"
-            />
-            <p className="font-mono text-sm text-[var(--content-secondary)]">
-              <span className="text-[#F7931A]" aria-hidden="true">
-                $
-              </span>{" "}
-              connect --wallet to get started
-            </p>
-          </div>
-        </SpringIn>
-      )}
-
       {/* Live Stats Ticker */}
-      <SpringIn delay={5} variant="card">
-        <footer className="mb-8 w-full max-w-4xl border-t border-[var(--border)] pt-8">
-          <HeaderTicker showInline={true} />
+      <SpringIn delay={4} variant="card">
+        <footer className="mb-12 w-full max-w-4xl border-t border-[var(--border)] pt-8">
+          <div className="flex flex-col items-center gap-6">
+            <HeaderTicker showInline={true} />
+
+            {!isConnected && (
+              <div className="flex items-center gap-2.5 rounded-full border border-[var(--border)] bg-[var(--surface-secondary)] px-4 py-1.5 transition-colors hover:bg-[var(--surface-hover)]">
+                <div
+                  className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#F7931A]"
+                  aria-hidden="true"
+                />
+                <p className="font-mono text-xs text-[var(--content-secondary)]">
+                  <span className="text-[#F7931A]" aria-hidden="true">$</span>{" "}
+                  connect --wallet to get started
+                </p>
+              </div>
+            )}
+          </div>
         </footer>
       </SpringIn>
     </div>

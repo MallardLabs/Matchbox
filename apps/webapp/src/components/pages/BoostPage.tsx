@@ -1,4 +1,5 @@
 import { AddressLink } from "@/components/AddressLink"
+import { BoostCalculator } from "@/components/BoostCalculator"
 import {
   LockCarouselSelector,
   type VeMEZOLockData,
@@ -27,6 +28,8 @@ import {
   ChevronDown,
   ChevronUp,
   Input,
+  Modal,
+  ModalBody,
   Skeleton,
   TableBuilder,
   TableBuilderColumn,
@@ -237,6 +240,9 @@ export default function BoostPage(): JSX.Element {
   const [gaugeStatusFilter, setGaugeStatusFilter] =
     useState<StatusFilter>("active")
 
+  // Calculator modal state
+  const [isCalculatorOpen, setIsCalculatorOpen] = useState(false)
+
   const handleGaugeSort = useCallback(
     (column: GaugeSortColumn) => {
       if (gaugeSortColumn === column) {
@@ -396,14 +402,76 @@ export default function BoostPage(): JSX.Element {
   return (
     <div className="flex flex-col gap-6">
       {/* Page Header */}
-      <header>
-        <h1 className="mb-2 text-2xl font-semibold text-[var(--content-primary)]">
-          <span className="text-[#F7931A]">$</span> boost --vote
-        </h1>
-        <p className="text-sm text-[var(--content-secondary)]">
-          Use your veMEZO voting power to boost veBTC gauges and earn bribes
-        </p>
+      <header className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="mb-2 text-2xl font-semibold text-[var(--content-primary)]">
+            <span className="text-[#F7931A]">$</span> boost --vote
+          </h1>
+          <p className="text-sm text-[var(--content-secondary)]">
+            Use your veMEZO voting power to boost veBTC gauges and earn bribes
+          </p>
+        </div>
+        <Button
+          kind="secondary"
+          size="small"
+          onClick={() => setIsCalculatorOpen(true)}
+          startEnhancer={
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <rect x="4" y="2" width="16" height="20" rx="2" />
+              <line x1="8" y1="6" x2="16" y2="6" />
+              <line x1="8" y1="10" x2="10" y2="10" />
+              <line x1="12" y1="10" x2="14" y2="10" />
+              <line x1="16" y1="10" x2="16" y2="10" />
+              <line x1="8" y1="14" x2="10" y2="14" />
+              <line x1="12" y1="14" x2="14" y2="14" />
+              <line x1="16" y1="14" x2="16" y2="14" />
+              <line x1="8" y1="18" x2="10" y2="18" />
+              <line x1="12" y1="18" x2="16" y2="18" />
+            </svg>
+          }
+        >
+          Calculator
+        </Button>
       </header>
+
+      {/* Boost Calculator Modal */}
+      <Modal
+        isOpen={isCalculatorOpen}
+        onClose={() => setIsCalculatorOpen(false)}
+        overrides={{
+          Dialog: {
+            style: {
+              maxWidth: "420px",
+              width: "100%",
+              padding: "0",
+            },
+          },
+          Close: {
+            style: {
+              top: "12px",
+              right: "12px",
+            },
+          },
+        }}
+      >
+        <ModalBody
+          $style={{
+            padding: "16px",
+          }}
+        >
+          <BoostCalculator />
+        </ModalBody>
+      </Modal>
 
       {!isConnected ? (
         <SpringIn delay={0} variant="card">
