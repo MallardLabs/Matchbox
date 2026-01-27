@@ -1,6 +1,6 @@
 # Supabase Edge Functions
 
-This directory contains Supabase Edge Functions for the MatchBox application.
+This directory contains Supabase Edge Functions for the Matchbox application.
 
 ## Functions
 
@@ -31,7 +31,7 @@ Records daily snapshots of gauge performance metrics into the `gauge_history` ta
 
 3. Link your project:
    ```bash
-   cd /path/to/MatchBox
+   cd /path/to/Matchbox
    supabase link --project-ref YOUR_PROJECT_REF
    ```
 

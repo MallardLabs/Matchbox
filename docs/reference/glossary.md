@@ -1,11 +1,11 @@
 ---
 title: Glossary
-description: Key terms and definitions for MatchBox and Mezo Earn
+description: Key terms and definitions for Matchbox and Mezo Earn
 ---
 
 # Glossary
 
-A comprehensive reference of terms used in MatchBox and the Mezo Earn ecosystem.
+A comprehensive reference of terms used in Matchbox and the Mezo Earn ecosystem.
 
 ## A
 
@@ -15,7 +15,7 @@ The distribution of your veMEZO voting power across different gauges. You can al
 
 ### APY (Annual Percentage Yield)
 
-The estimated yearly return on your position, accounting for compounding. In MatchBox, APY reflects your projected earnings from voting rewards or gauge incentives, extrapolated over a year.
+The estimated yearly return on your position, accounting for compounding. In Matchbox, APY reflects your projected earnings from voting rewards or gauge incentives, extrapolated over a year.
 
 ### Allowlist
 
@@ -49,7 +49,7 @@ The gradual reduction of voting power over time as your lock approaches expirati
 
 ### Dashboard
 
-The MatchBox interface showing your portfolio, positions, claimable rewards, and performance metrics.
+The Matchbox interface showing your portfolio, positions, claimable rewards, and performance metrics.
 
 ## E
 
@@ -73,7 +73,7 @@ A smart contract associated with a veBTC position that receives votes from veMEZ
 
 ### Gauge Profile
 
-Customizable information about a gauge on MatchBox, including display name, description, profile picture, social links, and strategy statements.
+Customizable information about a gauge on Matchbox, including display name, description, profile picture, social links, and strategy statements.
 
 ## I
 
@@ -97,7 +97,7 @@ The commitment period for your tokens. veBTC locks range from 1-28 days; veMEZO 
 
 Mezo's incentive token distributed across the ecosystem. Voting power influences mats emissions to different gauges and pools.
 
-### MatchBox
+### Matchbox
 
 The veBTC + veMEZO matching protocol that creates a marketplace connecting gauge owners with voters.
 
@@ -107,7 +107,7 @@ The broader yield-generating ecosystem within Mezo, including token locking, vot
 
 ### Mezo Network
 
-The Bitcoin-backed Layer 2 blockchain where MatchBox and Mezo Earn operate.
+The Bitcoin-backed Layer 2 blockchain where Matchbox and Mezo Earn operate.
 
 ### MEZO (Token)
 
@@ -231,4 +231,4 @@ See [Voting Power](#voting-power) or [Total Weight](#total-weight) depending on 
 
 - [Core Concepts](/concepts) - Detailed explanations of key concepts
 - [FAQ](/reference/faq) - Common questions and answers
-- [Getting Started](/getting-started) - Begin using MatchBox
+- [Getting Started](/getting-started) - Begin using Matchbox

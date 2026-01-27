@@ -12,9 +12,9 @@ export default function Gauges() {
   const baseUrl = getBaseUrl()
   const ogImageUrl = getOgImageUrl()
   const pageUrl = `${baseUrl}/gauges`
-  const title = "Gauges | MatchBox"
+  const title = "Gauges | Matchbox"
   const description =
-    "Browse all gauges, view their boost multipliers, and vote with your veMEZO."
+    "Explore active gauges on Mezo, view current boost multipliers, and allocate your voting power to maximize incentives."
 
   return (
     <>

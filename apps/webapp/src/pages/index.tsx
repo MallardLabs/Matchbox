@@ -11,9 +11,9 @@ const HomePage = dynamic(() => import("@/components/pages/HomePage"), {
 export default function Home() {
   const baseUrl = getBaseUrl()
   const ogImageUrl = getOgImageUrl()
-  const title = "MatchBox - Boost Voting for Mezo"
+  const title = "Matchbox | The Liquidity Layer for Mezo"
   const description =
-    "Vote with your veMEZO to boost gauges and earn rewards on Mezo."
+    "Optimize your yields on Mezo. Vote with veMEZO to boost gauges and maximize your rewards through the Matchbox liquidity layer."
 
   return (
     <>

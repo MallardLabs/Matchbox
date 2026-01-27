@@ -63,7 +63,7 @@ To prevent decay:
 
 ## Boost Multiplier
 
-One of the most powerful features of veBTC is the ability to receive a **boost multiplier** from veMEZO votes. This is where MatchBox comes in.
+One of the most powerful features of veBTC is the ability to receive a **boost multiplier** from veMEZO votes. This is where Matchbox comes in.
 
 ### How Boosting Works
 
@@ -91,7 +91,7 @@ Every veBTC position is associated with a **gauge** - a smart contract address t
 - Tracks your boost multiplier
 - Can hold incentives to attract voters
 
-On MatchBox, you can customize your gauge with:
+On Matchbox, you can customize your gauge with:
 
 - Display name and description
 - Profile picture
@@ -114,9 +114,9 @@ Earn a share of chain activity and bridging fees proportional to your boosted vo
 
 Shape Mezo's economic direction by participating in governance decisions.
 
-### 4. MatchBox Participation
+### 4. Matchbox Participation
 
-On MatchBox, you can:
+On Matchbox, you can:
 
 - Create a gauge profile to attract voters
 - Offer incentives to boost your position
@@ -136,9 +136,9 @@ Lock durations align to epoch boundaries (Thursday 00:00 UTC). This means your l
 
 To earn active rewards (beyond passive bridging fees), you must vote each epoch. Non-voting in an epoch forfeits active earnings for that period.
 
-## veBTC in MatchBox
+## veBTC in Matchbox
 
-On MatchBox, veBTC holders can:
+On Matchbox, veBTC holders can:
 
 1. **View their positions** - See all veBTC NFTs in the Dashboard
 2. **Manage gauge profiles** - Customize how your gauge appears to voters

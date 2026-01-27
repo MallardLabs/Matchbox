@@ -15,9 +15,9 @@ export default function Incentives() {
   const baseUrl = getBaseUrl()
   const ogImageUrl = getOgImageUrl()
   const pageUrl = `${baseUrl}/incentives`
-  const title = "veBTC | MatchBox"
+  const title = "veBTC | Matchbox"
   const description =
-    "Add incentives to gauges to attract more veMEZO votes and boost your rewards."
+    "Create and manage incentives for Mezo gauges to attract veMEZO liquidity to your project through the Matchbox incentive layer."
 
   return (
     <>

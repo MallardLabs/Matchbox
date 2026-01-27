@@ -56,8 +56,8 @@ export default function GaugeDetail({ address, profile }: GaugePageProps) {
   const displayName = profile?.display_name ?? `Gauge ${address.slice(0, 8)}...`
   const description =
     profile?.description ??
-    "View gauge details, vote stats, and boost multiplier on MatchBox."
-  const title = `${displayName} | MatchBox`
+    "View detailed stats, voting power distribution, and active incentives for this gauge on Matchbox."
+  const title = `${displayName} | Matchbox`
 
   return (
     <>

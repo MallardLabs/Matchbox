@@ -1,15 +1,15 @@
 ---
 title: Dashboard Guide
-description: Understanding and using the MatchBox Dashboard
+description: Understanding and using the Matchbox Dashboard
 ---
 
 # Dashboard Guide
 
-The Dashboard is your central hub for monitoring all your MatchBox activity. Whether you're a veMEZO voter or veBTC gauge owner, the Dashboard provides a comprehensive view of your positions, rewards, and performance.
+The Dashboard is your central hub for monitoring all your Matchbox activity. Whether you're a veMEZO voter or veBTC gauge owner, the Dashboard provides a comprehensive view of your positions, rewards, and performance.
 
 ## Accessing the Dashboard
 
-1. Connect your wallet to MatchBox
+1. Connect your wallet to Matchbox
 2. Click **Dashboard** in the navigation bar
 3. Your personalized dashboard loads automatically
 

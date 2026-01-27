@@ -1,11 +1,11 @@
 ---
 title: Understanding Gauges
-description: Learn how gauges work and how to optimize them on MatchBox
+description: Learn how gauges work and how to optimize them on Matchbox
 ---
 
 # Understanding Gauges
 
-Gauges are the central mechanism connecting veBTC holders with veMEZO voters. Understanding how gauges work is essential for maximizing your returns on MatchBox, whether you're offering incentives or voting for rewards.
+Gauges are the central mechanism connecting veBTC holders with veMEZO voters. Understanding how gauges work is essential for maximizing your returns on Matchbox, whether you're offering incentives or voting for rewards.
 
 ## What is a Gauge?
 
@@ -32,7 +32,7 @@ Each gauge has several key attributes:
 | **Boost Multiplier** | Current boost level (1x to 5x) |
 | **Is Alive** | Whether the gauge is active |
 
-### MatchBox Profile Properties
+### Matchbox Profile Properties
 
 | Property | Description |
 |----------|-------------|
@@ -69,7 +69,7 @@ More veMEZO votes relative to veBTC power = higher boost.
 
 ### Optimal veMEZO Target
 
-Each gauge has an "optimal" amount of veMEZO votes needed to reach maximum boost. MatchBox displays this metric to help:
+Each gauge has an "optimal" amount of veMEZO votes needed to reach maximum boost. Matchbox displays this metric to help:
 
 - **veBTC holders** understand how much support they need
 - **veMEZO voters** identify gauges that could benefit most from their votes
@@ -83,7 +83,7 @@ Incentives are rewards offered by veBTC gauge owners to attract veMEZO votes.
 1. **veBTC holder** deposits tokens into their gauge as incentives
 2. **veMEZO holders** see the incentives and vote for the gauge
 3. At epoch end, incentives are distributed proportionally to voters
-4. **Voters claim** their earned incentives on MatchBox
+4. **Voters claim** their earned incentives on Matchbox
 
 ### Supported Incentive Tokens
 
@@ -105,7 +105,7 @@ Your Share = (Your veMEZO Votes / Total veMEZO Votes) × Total Incentives
 
 ## APY Calculations
 
-MatchBox calculates APY to help you evaluate opportunities.
+Matchbox calculates APY to help you evaluate opportunities.
 
 ### Current APY
 
@@ -132,9 +132,9 @@ Based on:
 | **Higher veMEZO power** | More absolute earnings |
 | **Gauge performance** | Consistent rewards attract more votes |
 
-## Gauge Profiles on MatchBox
+## Gauge Profiles on Matchbox
 
-MatchBox allows veBTC holders to create detailed profiles for their gauges.
+Matchbox allows veBTC holders to create detailed profiles for their gauges.
 
 ### Why Profiles Matter
 
@@ -156,7 +156,7 @@ A well-crafted profile:
 
 ## Browsing Gauges
 
-On the MatchBox Gauges page, you can:
+On the Matchbox Gauges page, you can:
 
 ### View All Gauges
 
@@ -183,7 +183,7 @@ Click any gauge to see:
 
 ## Gauge Performance Metrics
 
-MatchBox tracks and displays several performance indicators:
+Matchbox tracks and displays several performance indicators:
 
 ### Real-Time Metrics
 

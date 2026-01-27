@@ -88,7 +88,7 @@ export default async function handler(req: NextRequest) {
       <div style={{ display: "flex", marginBottom: "48px" }}>
         <img
           src={logoUrl}
-          alt="MatchBox"
+          alt="Matchbox"
           width={160}
           height={40}
           style={{ objectFit: "contain" }}
@@ -115,7 +115,7 @@ export default async function handler(req: NextRequest) {
             letterSpacing: "-2px",
           }}
         >
-          MATCHBOX
+          Matchbox
         </h1>
         <p
           style={{

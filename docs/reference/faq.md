@@ -1,33 +1,33 @@
 ---
 title: Frequently Asked Questions
-description: Common questions about MatchBox and Mezo Earn
+description: Common questions about Matchbox and Mezo Earn
 ---
 
 # Frequently Asked Questions
 
-Find answers to common questions about using MatchBox and participating in the Mezo Earn ecosystem.
+Find answers to common questions about using Matchbox and participating in the Mezo Earn ecosystem.
 
 ## General Questions
 
-### What is MatchBox?
+### What is Matchbox?
 
-MatchBox is a matching protocol that connects veBTC holders with veMEZO holders on the Mezo Network. It creates a marketplace where veBTC holders can offer incentives to attract voting power, and veMEZO holders can earn rewards by voting on gauges.
+Matchbox is a matching protocol that connects veBTC holders with veMEZO holders on the Mezo Network. It creates a marketplace where veBTC holders can offer incentives to attract voting power, and veMEZO holders can earn rewards by voting on gauges.
 
-### How is MatchBox different from Mezo Earn?
+### How is Matchbox different from Mezo Earn?
 
-Mezo Earn is the broader ecosystem where you lock BTC and MEZO to receive veBTC and veMEZO. MatchBox is specifically focused on the incentive marketplace - helping veBTC holders attract votes and veMEZO holders find the best voting opportunities.
+Mezo Earn is the broader ecosystem where you lock BTC and MEZO to receive veBTC and veMEZO. Matchbox is specifically focused on the incentive marketplace - helping veBTC holders attract votes and veMEZO holders find the best voting opportunities.
 
-### Do I need both veBTC and veMEZO to use MatchBox?
+### Do I need both veBTC and veMEZO to use Matchbox?
 
-No. You can use MatchBox with either:
+No. You can use Matchbox with either:
 
 - **veMEZO only** - Vote on gauges and earn incentives
 - **veBTC only** - Manage your gauge and attract votes
 - **Both** - Participate on both sides of the marketplace
 
-### Is MatchBox safe to use?
+### Is Matchbox safe to use?
 
-MatchBox interacts with audited smart contracts on the Mezo Network. However, as with any DeFi protocol, there are inherent risks. Never invest more than you can afford to lose, and always verify transactions before signing.
+Matchbox interacts with audited smart contracts on the Mezo Network. However, as with any DeFi protocol, there are inherent risks. Never invest more than you can afford to lose, and always verify transactions before signing.
 
 ## veBTC Questions
 
@@ -210,9 +210,9 @@ Lock durations round down to full weeks, with expiry on Thursday 00:00 UTC.
 
 Any WalletConnect-compatible wallet works, including MetaMask, Rainbow, and others.
 
-### What network is MatchBox on?
+### What network is Matchbox on?
 
-MatchBox runs on the Mezo Network. Make sure your wallet is connected to the correct network.
+Matchbox runs on the Mezo Network. Make sure your wallet is connected to the correct network.
 
 ### Why is my transaction failing?
 
@@ -262,12 +262,12 @@ In your wallet, add or switch to the Mezo Network. Check Mezo documentation for 
 ### Where can I learn more?
 
 - [Mezo Earn Documentation](https://mezo.org/docs/users/mezo-earn)
-- [MatchBox Guides](/guides/voting)
+- [Matchbox Guides](/guides/voting)
 - [Glossary](/reference/glossary)
 
 ### How do I report a bug?
 
-Contact the MatchBox team through official channels or community Discord.
+Contact the Matchbox team through official channels or community Discord.
 
 ### Where can I discuss strategies?
 

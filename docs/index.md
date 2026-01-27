@@ -1,24 +1,24 @@
 ---
-title: Introduction to MatchBox
+title: Introduction to Matchbox
 description: A veBTC + veMEZO matching protocol for maximizing your Mezo Earn rewards
 ---
 
-# Welcome to MatchBox
+# Welcome to Matchbox
 
-MatchBox is a matching protocol that connects veBTC holders with veMEZO holders on the Mezo Network. It creates a marketplace where both sides can maximize their earning potential through strategic voting and incentives.
+Matchbox is a matching protocol that connects veBTC holders with veMEZO holders on the Mezo Network. It creates a marketplace where both sides can maximize their earning potential through strategic voting and incentives.
 
-## What is MatchBox?
+## What is Matchbox?
 
-MatchBox solves a key challenge in the Mezo Earn ecosystem: **how do veBTC holders attract voting power to boost their positions, and how do veMEZO holders find the best opportunities to earn rewards?**
+Matchbox solves a key challenge in the Mezo Earn ecosystem: **how do veBTC holders attract voting power to boost their positions, and how do veMEZO holders find the best opportunities to earn rewards?**
 
 Think of it as a two-sided marketplace:
 
 - **veBTC holders** want their gauges to receive more votes, which increases their boost multiplier and earning potential
 - **veMEZO holders** want to earn rewards (bribes) by using their voting power strategically
 
-MatchBox brings these two groups together.
+Matchbox brings these two groups together.
 
-## Who is MatchBox For?
+## Who is Matchbox For?
 
 ### veMEZO Holders
 
@@ -46,7 +46,7 @@ If you hold veBTC (locked BTC), you can:
 
 1. **veBTC holders** lock BTC on Mezo Earn and receive a veBTC NFT, which is associated with a gauge
 2. **veMEZO holders** lock MEZO on Mezo Earn and receive a veMEZO NFT with voting power
-3. On MatchBox, **veBTC holders** can add incentives to their gauge to attract votes
+3. On Matchbox, **veBTC holders** can add incentives to their gauge to attract votes
 4. **veMEZO holders** browse gauges, evaluate incentives, and vote with their veMEZO
 5. Votes boost the veBTC position, and voters earn their share of incentives
 

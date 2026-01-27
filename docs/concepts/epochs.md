@@ -1,11 +1,11 @@
 ---
 title: Epochs and Timing
-description: Understanding the weekly epoch cycle in Mezo Earn and MatchBox
+description: Understanding the weekly epoch cycle in Mezo Earn and Matchbox
 ---
 
 # Epochs and Timing
 
-Mezo Earn operates on a weekly cycle called an "epoch." Understanding epoch timing is crucial for maximizing your rewards on MatchBox, as votes reset each week and missing an epoch means forfeiting that week's earnings.
+Mezo Earn operates on a weekly cycle called an "epoch." Understanding epoch timing is crucial for maximizing your rewards on Matchbox, as votes reset each week and missing an epoch means forfeiting that week's earnings.
 
 ## What is an Epoch?
 
@@ -80,7 +80,7 @@ This means:
 
 To maximize earnings, plan to:
 
-1. Check MatchBox early in each epoch
+1. Check Matchbox early in each epoch
 2. Evaluate current gauge opportunities
 3. Allocate your veMEZO votes
 4. Monitor throughout the week if desired
@@ -117,7 +117,7 @@ After an epoch ends:
 
 ### How to Claim
 
-1. Visit the MatchBox Dashboard
+1. Visit the Matchbox Dashboard
 2. View your claimable rewards
 3. Click "Claim" to receive tokens
 4. Confirm the transaction

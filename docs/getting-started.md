@@ -1,15 +1,15 @@
 ---
 title: Getting Started
-description: Connect your wallet and start using MatchBox
+description: Connect your wallet and start using Matchbox
 ---
 
-# Getting Started with MatchBox
+# Getting Started with Matchbox
 
-This guide will help you connect to MatchBox and start earning rewards or boosting your veBTC position.
+This guide will help you connect to Matchbox and start earning rewards or boosting your veBTC position.
 
 ## Prerequisites
 
-Before using MatchBox, you'll need:
+Before using Matchbox, you'll need:
 
 1. **A compatible wallet** - MetaMask or any WalletConnect-compatible wallet
 2. **veBTC and/or veMEZO positions** - Lock BTC or MEZO on [Mezo Earn](https://mezo.org/docs/users/mezo-earn) to receive these NFTs
@@ -24,7 +24,7 @@ Visit [Mezo Earn](https://mezo.org/docs/users/mezo-earn) to:
 
 ## Step 1: Connect Your Wallet
 
-1. Visit the MatchBox app
+1. Visit the Matchbox app
 2. Click **Connect Wallet** in the top navigation bar
 3. Select your wallet provider (MetaMask, WalletConnect, etc.)
 4. Approve the connection in your wallet

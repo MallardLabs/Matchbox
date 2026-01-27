@@ -94,7 +94,7 @@ Your veMEZO gives you the power to boost veBTC positions by up to 5x. This makes
 
 ### 2. Earn Incentives (Bribes)
 
-Through MatchBox, veBTC gauge owners offer incentives to attract your votes. By voting on their gauges, you earn a proportional share of these bribes.
+Through Matchbox, veBTC gauge owners offer incentives to attract your votes. By voting on their gauges, you earn a proportional share of these bribes.
 
 ### 3. Rebase Rewards
 
@@ -110,11 +110,11 @@ Beyond active voting rewards, you earn from:
 
 - Protocol fee distributions
 - Rebase emissions
-- MatchBox incentives
+- Matchbox incentives
 
-## Using veMEZO on MatchBox
+## Using veMEZO on Matchbox
 
-On MatchBox, veMEZO holders can:
+On Matchbox, veMEZO holders can:
 
 ### Browse Gauges
 
@@ -192,9 +192,9 @@ To maximize earnings, you need to:
 - Monitor gauge performance
 - Claim accumulated rewards
 
-## veMEZO in MatchBox
+## veMEZO in Matchbox
 
-On MatchBox, your veMEZO enables you to:
+On Matchbox, your veMEZO enables you to:
 
 1. **View your positions** - See all veMEZO NFTs in the Dashboard
 2. **Browse gauges** - Explore all available opportunities

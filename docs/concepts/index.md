@@ -1,15 +1,15 @@
 ---
 title: Core Concepts
-description: Understanding the fundamentals of MatchBox and Mezo Earn
+description: Understanding the fundamentals of Matchbox and Mezo Earn
 ---
 
 # Core Concepts
 
-Before diving into MatchBox, it's important to understand the key concepts that power the platform. This section covers the fundamentals of the Mezo Earn ecosystem and how MatchBox fits in.
+Before diving into Matchbox, it's important to understand the key concepts that power the platform. This section covers the fundamentals of the Mezo Earn ecosystem and how Matchbox fits in.
 
 ## Overview
 
-MatchBox operates within the Mezo Earn ecosystem, which uses a voting escrow model to align incentives between token holders and the protocol. The key building blocks are:
+Matchbox operates within the Mezo Earn ecosystem, which uses a voting escrow model to align incentives between token holders and the protocol. The key building blocks are:
 
 - **veBTC** - Voting escrow BTC (your locked Bitcoin position)
 - **veMEZO** - Voting escrow MEZO (your locked MEZO position)
@@ -27,9 +27,9 @@ Both veBTC and veMEZO follow a "voting escrow" pattern:
 
 This model rewards long-term commitment: the longer you lock, the more influence you have.
 
-## How MatchBox Fits In
+## How Matchbox Fits In
 
-MatchBox creates a marketplace where:
+Matchbox creates a marketplace where:
 
 - **veBTC holders** can offer incentives to attract veMEZO votes to their gauge
 - **veMEZO holders** can earn rewards by voting for gauges with attractive incentives

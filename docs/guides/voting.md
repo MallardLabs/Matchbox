@@ -1,11 +1,11 @@
 ---
 title: Voting Guide
-description: Step-by-step guide to voting with your veMEZO on MatchBox
+description: Step-by-step guide to voting with your veMEZO on Matchbox
 ---
 
 # Voting Guide for veMEZO Holders
 
-This guide walks you through the process of using your veMEZO to vote on gauges and earn incentive rewards on MatchBox.
+This guide walks you through the process of using your veMEZO to vote on gauges and earn incentive rewards on Matchbox.
 
 ## Prerequisites
 
@@ -31,7 +31,7 @@ Don't have veMEZO yet? Visit [Mezo Earn](https://mezo.org/docs/users/mezo-earn/l
 
 ### Step 1: Navigate to the Boost Page
 
-From the MatchBox homepage or navigation bar, click **Boost** (or "Vote to Boost").
+From the Matchbox homepage or navigation bar, click **Boost** (or "Vote to Boost").
 
 You'll see the voting interface with:
 

@@ -1,11 +1,11 @@
 ---
 title: Gauge Management Guide
-description: Step-by-step guide to managing your veBTC gauge on MatchBox
+description: Step-by-step guide to managing your veBTC gauge on Matchbox
 ---
 
 # Gauge Management Guide for veBTC Holders
 
-This guide walks you through setting up and managing your veBTC gauge on MatchBox to attract veMEZO votes and maximize your boost.
+This guide walks you through setting up and managing your veBTC gauge on Matchbox to attract veMEZO votes and maximize your boost.
 
 ## Prerequisites
 
@@ -29,7 +29,7 @@ Don't have veBTC yet? Visit [Mezo Earn](https://mezo.org/docs/users/mezo-earn/lo
 
 ## Understanding Your Gauge
 
-Every veBTC position is automatically associated with a gauge. On MatchBox, you can:
+Every veBTC position is automatically associated with a gauge. On Matchbox, you can:
 
 - **Customize** your gauge profile to attract voters
 - **Add incentives** to encourage veMEZO holders to vote for you
@@ -40,7 +40,7 @@ Every veBTC position is automatically associated with a gauge. On MatchBox, you 
 
 ### Step 1: Navigate to the Incentives Page
 
-From the MatchBox homepage or navigation bar, click **Incentives** (or "Manage Gauge").
+From the Matchbox homepage or navigation bar, click **Incentives** (or "Manage Gauge").
 
 You'll see the gauge management interface with:
 

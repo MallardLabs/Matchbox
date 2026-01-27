@@ -16,6 +16,10 @@ export default function Document() {
           crossOrigin="anonymous"
         />
 
+        {/* Favicon */}
+        <link rel="icon" href="/matchbox_icon.png" />
+        <link rel="apple-touch-icon" href="/matchbox_icon.png" />
+
         {/* Preload critical font weights to prevent FOUT */}
         <link
           rel="preload"

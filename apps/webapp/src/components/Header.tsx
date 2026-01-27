@@ -186,10 +186,9 @@ export function Header(): JSX.Element {
                   href={item.href}
                   className={`
                     relative px-3 py-2 text-sm transition-colors
-                    ${
-                      isActive
-                        ? "text-[var(--content-primary)]"
-                        : "text-[var(--content-secondary)] hover:text-[var(--content-primary)]"
+                    ${isActive
+                      ? "text-[var(--content-primary)]"
+                      : "text-[var(--content-secondary)] hover:text-[var(--content-primary)]"
                     }
                   `}
                   style={{ textDecoration: "none" }}
@@ -319,10 +318,9 @@ export function Header(): JSX.Element {
                   href={item.href}
                   className={`
                     flex items-center rounded-lg px-4 py-3 text-lg transition-colors
-                    ${
-                      isActive
-                        ? "bg-[var(--surface-secondary)] text-[var(--content-primary)]"
-                        : "text-[var(--content-secondary)] hover:bg-[var(--surface-secondary)] hover:text-[var(--content-primary)]"
+                    ${isActive
+                      ? "bg-[var(--surface-secondary)] text-[var(--content-primary)]"
+                      : "text-[var(--content-secondary)] hover:bg-[var(--surface-secondary)] hover:text-[var(--content-primary)]"
                     }
                   `}
                   style={{ textDecoration: "none" }}

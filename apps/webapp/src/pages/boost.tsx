@@ -12,9 +12,9 @@ export default function Boost() {
   const baseUrl = getBaseUrl()
   const ogImageUrl = getOgImageUrl()
   const pageUrl = `${baseUrl}/boost`
-  const title = "veMEZO | MatchBox"
+  const title = "veMEZO | Matchbox"
   const description =
-    "Vote with your veMEZO to boost gauges and maximize your rewards on Mezo."
+    "Maximize your yields by boosting gauges with your veMEZO. Participate in the Matchbox ecosystem and earn more rewards."
 
   return (
     <>

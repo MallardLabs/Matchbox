@@ -15,9 +15,9 @@ export default function Dashboard() {
   const baseUrl = getBaseUrl()
   const ogImageUrl = getOgImageUrl()
   const pageUrl = `${baseUrl}/dashboard`
-  const title = "Dashboard | MatchBox"
+  const title = "Dashboard | Matchbox"
   const description =
-    "View your veMEZO positions, voting power, and gauge votes on MatchBox."
+    "Manage your veMEZO positions, track your voting power, and monitor your rewards on the Matchbox dashboard."
 
   return (
     <>

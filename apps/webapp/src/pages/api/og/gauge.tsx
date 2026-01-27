@@ -194,7 +194,7 @@ export default async function handler(req: NextRequest) {
       <div style={{ display: "flex", marginBottom: "32px" }}>
         <img
           src={logoUrl}
-          alt="MatchBox"
+          alt="Matchbox"
           width={140}
           height={35}
           style={{ objectFit: "contain" }}
