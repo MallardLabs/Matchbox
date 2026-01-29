@@ -9,6 +9,10 @@ import { useGaugeHistory, useGaugeProfile } from "@/hooks/useGaugeProfiles"
 import { useBoostInfo } from "@/hooks/useGauges"
 import { useMezoPrice } from "@/hooks/useMezoPrice"
 import {
+  formatUsdValue,
+  getTokenValueUsd,
+} from "@/hooks/useTokenPrices"
+import {
   type BribeIncentive,
   useBribeAddress,
   useBribeIncentives,
@@ -19,39 +23,28 @@ import {
   formatTokenAmount,
 } from "@/utils/format"
 import { Button, Card, Skeleton, Tag } from "@mezo-org/mezo-clay"
+import { getTokenUsdPrice } from "@repo/shared"
 import { NON_STAKING_GAUGE_ABI } from "@repo/shared/contracts"
 import Link from "next/link"
 import { useRouter } from "next/router"
 import { useMemo } from "react"
-import { type Address, formatUnits } from "viem"
+import type { Address } from "viem"
 import { useReadContract, useReadContracts } from "wagmi"
 
-import { isMezoToken } from "@repo/shared"
-
 type IncentiveWithUSD = BribeIncentive & { usdValue: number | null }
-
-function formatUsdValue(value: number | null): string {
-  if (!value || Number.isNaN(value)) return "~$0.00"
-  return `~$${value.toLocaleString("en-US", {
-    maximumFractionDigits: 2,
-    minimumFractionDigits: 2,
-  })}`
-}
 
 function getIncentiveUsdValue(
   incentive: BribeIncentive,
   btcPrice: number | null,
   mezoPrice: number | null,
 ): number | null {
-  const amount = Number.parseFloat(
-    formatUnits(incentive.amount, incentive.decimals),
+  const priceUsd = getTokenUsdPrice(
+    incentive.tokenAddress,
+    incentive.symbol,
+    btcPrice,
+    mezoPrice,
   )
-  if (!Number.isFinite(amount)) return null
-
-  const price = isMezoToken(incentive.tokenAddress) ? mezoPrice : btcPrice
-  if (!price) return null
-
-  return amount * price
+  return getTokenValueUsd(incentive.amount, incentive.decimals, priceUsd)
 }
 
 const EXPLORER_URL = process.env.NEXT_PUBLIC_EXPLORER_URL ?? ""
