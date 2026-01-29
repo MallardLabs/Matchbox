@@ -56,7 +56,6 @@ function getIncentiveUsdValue(
 
 const EXPLORER_URL = process.env.NEXT_PUBLIC_EXPLORER_URL ?? ""
 
-
 // Social link icons
 function TwitterIcon({ size = 18 }: { size?: number }) {
   return (
@@ -166,22 +165,22 @@ export default function GaugeDetailPage(): JSX.Element {
   const { data: gaugeData, isLoading: isLoadingGauge } = useReadContracts({
     contracts: gaugeAddress
       ? [
-        {
-          ...contracts.boostVoter,
-          functionName: "weights",
-          args: [gaugeAddress],
-        },
-        {
-          ...contracts.boostVoter,
-          functionName: "isAlive",
-          args: [gaugeAddress],
-        },
-        {
-          address: gaugeAddress,
-          abi: NON_STAKING_GAUGE_ABI,
-          functionName: "rewardsBeneficiary",
-        },
-      ]
+          {
+            ...contracts.boostVoter,
+            functionName: "weights",
+            args: [gaugeAddress],
+          },
+          {
+            ...contracts.boostVoter,
+            functionName: "isAlive",
+            args: [gaugeAddress],
+          },
+          {
+            address: gaugeAddress,
+            abi: NON_STAKING_GAUGE_ABI,
+            functionName: "rewardsBeneficiary",
+          },
+        ]
       : [],
     query: {
       enabled: !!gaugeAddress,
@@ -209,10 +208,10 @@ export default function GaugeDetailPage(): JSX.Element {
     contracts:
       beneficiary && balance > 0
         ? Array.from({ length: balance }, (_, i) => ({
-          ...contracts.veBTC,
-          functionName: "ownerToNFTokenIdList",
-          args: [beneficiary, BigInt(i)],
-        }))
+            ...contracts.veBTC,
+            functionName: "ownerToNFTokenIdList",
+            args: [beneficiary, BigInt(i)],
+          }))
         : [],
     query: {
       enabled: !!beneficiary && balance > 0,
@@ -367,10 +366,11 @@ export default function GaugeDetailPage(): JSX.Element {
                 <div className="min-w-0 flex-1">
                   <div className="mb-3 flex flex-wrap items-center gap-3">
                     <h2
-                      className={`text-2xl font-semibold md:text-3xl ${hasProfileContent
+                      className={`text-2xl font-semibold md:text-3xl ${
+                        hasProfileContent
                           ? "text-[var(--content-primary)]"
                           : "text-[var(--content-secondary)]"
-                        }`}
+                      }`}
                     >
                       {profile?.display_name ||
                         `veBTC #${veBTCTokenId?.toString() ?? "Unknown"}`}
@@ -533,10 +533,11 @@ export default function GaugeDetailPage(): JSX.Element {
                     Voting APY
                   </p>
                   <h3
-                    className={`font-mono text-lg font-semibold tabular-nums md:text-xl ${apy && apy > 0
+                    className={`font-mono text-lg font-semibold tabular-nums md:text-xl ${
+                      apy && apy > 0
                         ? "text-[var(--positive)]"
                         : "text-[var(--content-primary)]"
-                      }`}
+                    }`}
                   >
                     {isLoadingAPY ? "..." : formatAPY(apy)}
                   </h3>
@@ -733,9 +734,9 @@ export default function GaugeDetailPage(): JSX.Element {
                               <td className="py-3 text-right font-mono text-sm tabular-nums text-[var(--content-primary)]">
                                 {record.vemezo_weight
                                   ? formatTokenAmount(
-                                    BigInt(record.vemezo_weight),
-                                    18,
-                                  )
+                                      BigInt(record.vemezo_weight),
+                                      18,
+                                    )
                                   : "-"}
                               </td>
                               <td className="py-3 text-right font-mono text-sm tabular-nums text-[var(--content-primary)]">
@@ -749,10 +750,11 @@ export default function GaugeDetailPage(): JSX.Element {
                                   : "-"}
                               </td>
                               <td
-                                className={`py-3 text-right font-mono text-sm font-medium tabular-nums ${record.apy && record.apy > 0
+                                className={`py-3 text-right font-mono text-sm font-medium tabular-nums ${
+                                  record.apy && record.apy > 0
                                     ? "text-[var(--positive)]"
                                     : "text-[var(--content-primary)]"
-                                  }`}
+                                }`}
                               >
                                 {record.apy ? formatAPY(record.apy) : "-"}
                               </td>

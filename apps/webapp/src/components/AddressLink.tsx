@@ -4,7 +4,6 @@ import type { Address } from "viem"
 
 const DEFAULT_EXPLORER_URL = process.env.NEXT_PUBLIC_EXPLORER_URL ?? ""
 
-
 type AddressLinkProps = {
   address: Address
   label?: string

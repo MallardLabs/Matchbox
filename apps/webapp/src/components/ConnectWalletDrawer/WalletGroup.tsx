@@ -1,7 +1,7 @@
 import { useState } from "react"
 import { WalletRow } from "./WalletRow"
 
-type WalletEntry = {
+export type WalletEntry = {
   id: string
   name: string
   icon: string | undefined
@@ -13,7 +13,7 @@ type WalletGroupProps = {
   label: string
   wallets: WalletEntry[]
   pendingConnectorId: string | null
-  onConnect: (connectorId: string) => void
+  onConnect: (connectorId: string, wallet: WalletEntry) => void
 }
 
 function ChevronIcon({ expanded }: { expanded: boolean }): JSX.Element {
@@ -71,7 +71,7 @@ export function WalletGroup({
               isInstalled={wallet.isInstalled}
               isPending={pendingConnectorId === wallet.id}
               downloadUrl={wallet.downloadUrl}
-              onConnect={() => onConnect(wallet.id)}
+              onConnect={() => onConnect(wallet.id, wallet)}
             />
           ))}
         </div>

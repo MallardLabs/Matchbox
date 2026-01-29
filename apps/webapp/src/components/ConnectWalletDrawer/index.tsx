@@ -1,7 +1,7 @@
 import { useTheme } from "@/contexts/ThemeContext"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
-import { WalletGroup } from "./WalletGroup"
+import { type WalletEntry, WalletGroup } from "./WalletGroup"
 import { useWalletList } from "./useWalletList"
 
 type ConnectWalletDrawerProps = {
@@ -53,6 +53,100 @@ function MoonIcon(): JSX.Element {
   )
 }
 
+function BackIcon(): JSX.Element {
+  return (
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M19 12H5" />
+      <polyline points="12 19 5 12 12 5" />
+    </svg>
+  )
+}
+
+function ConnectingView({
+  wallet,
+  error,
+  onBack,
+  onRetry,
+}: {
+  wallet: WalletEntry
+  error: string | null
+  onBack: () => void
+  onRetry: () => void
+}): JSX.Element {
+  return (
+    <div className="flex flex-1 flex-col items-center justify-center px-6 py-12">
+      {/* Wallet Icon with spinner ring */}
+      <div className="relative mb-6">
+        {wallet.icon ? (
+          <img
+            src={wallet.icon}
+            alt={wallet.name}
+            className="h-20 w-20 rounded-2xl"
+          />
+        ) : (
+          <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-[var(--border)] text-2xl font-bold text-[var(--content-secondary)]">
+            {wallet.name.slice(0, 2)}
+          </div>
+        )}
+        {!error && (
+          <div className="absolute -inset-2">
+            <div className="h-full w-full animate-spin rounded-full border-4 border-transparent border-t-[var(--accent)]" />
+          </div>
+        )}
+      </div>
+
+      {/* Status text */}
+      <h3 className="mb-2 text-lg font-semibold text-[var(--content-primary)]">
+        {error ? "Connection Failed" : `Connecting to ${wallet.name}`}
+      </h3>
+
+      <p className="mb-6 text-center text-sm text-[var(--content-secondary)]">
+        {error
+          ? error
+          : `Open the ${wallet.name} extension to connect your wallet.`}
+      </p>
+
+      {/* Action buttons */}
+      {error ? (
+        <div className="flex gap-3">
+          <button
+            type="button"
+            onClick={onBack}
+            className="rounded-lg border border-[var(--border)] px-6 py-2.5 text-sm font-medium text-[var(--content-primary)] transition-colors hover:bg-[var(--surface-secondary)]"
+          >
+            Back
+          </button>
+          <button
+            type="button"
+            onClick={onRetry}
+            className="rounded-lg bg-[var(--accent)] px-6 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90"
+          >
+            Try Again
+          </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={onBack}
+          className="rounded-lg border border-[var(--border)] px-6 py-2.5 text-sm font-medium text-[var(--content-primary)] transition-colors hover:bg-[var(--surface-secondary)]"
+        >
+          Cancel
+        </button>
+      )}
+    </div>
+  )
+}
+
 export function ConnectWalletDrawer({
   isOpen,
   onClose,
@@ -67,8 +161,14 @@ export function ConnectWalletDrawer({
     setTimeout(onClose, 200)
   }, [onClose])
 
-  const { groups, connect, pendingConnectorId, error } =
-    useWalletList(handleClose)
+  const {
+    groups,
+    connect,
+    pendingConnectorId,
+    connectingWallet,
+    cancelConnect,
+    error,
+  } = useWalletList(handleClose)
 
   useEffect(() => {
     setMounted(true)
@@ -84,13 +184,19 @@ export function ConnectWalletDrawer({
 
   useEffect(() => {
     function handleEscape(e: KeyboardEvent) {
-      if (e.key === "Escape") handleClose()
+      if (e.key === "Escape") {
+        if (connectingWallet) {
+          cancelConnect()
+        } else {
+          handleClose()
+        }
+      }
     }
     if (isOpen) {
       document.addEventListener("keydown", handleEscape)
     }
     return () => document.removeEventListener("keydown", handleEscape)
-  }, [isOpen, handleClose])
+  }, [isOpen, handleClose, connectingWallet, cancelConnect])
 
   useEffect(() => {
     if (isOpen && drawerRef.current) {
@@ -100,12 +206,16 @@ export function ConnectWalletDrawer({
 
   if (!isOpen || !mounted) return null
 
+  const isConnecting = !!connectingWallet
+
   return createPortal(
     <>
       <div
         className={`fixed inset-0 z-[60] cursor-pointer bg-black/50 transition-opacity duration-200 ${isVisible ? "opacity-100" : "opacity-0"}`}
-        onClick={handleClose}
-        onKeyDown={(e) => e.key === "Enter" && handleClose()}
+        onClick={isConnecting ? cancelConnect : handleClose}
+        onKeyDown={(e) =>
+          e.key === "Enter" && (isConnecting ? cancelConnect() : handleClose())
+        }
         role="button"
         tabIndex={0}
         aria-label="Close drawer"
@@ -121,9 +231,23 @@ export function ConnectWalletDrawer({
       >
         {/* Header */}
         <header className="flex items-center justify-between border-b border-[var(--border)] p-4">
-          <h2 className="text-lg font-semibold text-[var(--content-primary)]">
-            Connect Wallet
-          </h2>
+          {isConnecting ? (
+            <button
+              type="button"
+              onClick={cancelConnect}
+              className="flex items-center gap-2 text-[var(--content-secondary)] transition-colors hover:text-[var(--content-primary)]"
+              aria-label="Back to wallet list"
+            >
+              <BackIcon />
+              <span className="text-lg font-semibold text-[var(--content-primary)]">
+                Back
+              </span>
+            </button>
+          ) : (
+            <h2 className="text-lg font-semibold text-[var(--content-primary)]">
+              Connect Wallet
+            </h2>
+          )}
           <nav className="flex items-center gap-1">
             <button
               type="button"
@@ -161,30 +285,35 @@ export function ConnectWalletDrawer({
           </nav>
         </header>
 
-        {/* Wallet groups */}
-        <div className="min-h-0 flex-1 overflow-y-auto px-1 py-2">
-          {groups.map((group) => (
-            <WalletGroup
-              key={group.label}
-              label={group.label}
-              wallets={group.wallets}
-              pendingConnectorId={pendingConnectorId}
-              onConnect={connect}
-            />
-          ))}
+        {/* Content - either connecting view or wallet list */}
+        {isConnecting && connectingWallet ? (
+          <ConnectingView
+            wallet={connectingWallet}
+            error={error}
+            onBack={cancelConnect}
+            onRetry={() => connect(connectingWallet.id, connectingWallet)}
+          />
+        ) : (
+          <>
+            {/* Wallet groups */}
+            <div className="min-h-0 flex-1 overflow-y-auto px-1 py-2">
+              {groups.map((group) => (
+                <WalletGroup
+                  key={group.label}
+                  label={group.label}
+                  wallets={group.wallets}
+                  pendingConnectorId={pendingConnectorId}
+                  onConnect={connect}
+                />
+              ))}
 
-          {groups.length === 0 && (
-            <p className="px-4 py-8 text-center text-sm text-[var(--content-secondary)]">
-              No wallets detected. Install a wallet extension to continue.
-            </p>
-          )}
-        </div>
-
-        {/* Error */}
-        {error && (
-          <p className="border-t border-[var(--border)] px-4 py-3 text-xs text-red-500">
-            {error}
-          </p>
+              {groups.length === 0 && (
+                <p className="px-4 py-8 text-center text-sm text-[var(--content-secondary)]">
+                  No wallets detected. Install a wallet extension to continue.
+                </p>
+              )}
+            </div>
+          </>
         )}
       </div>
     </>,

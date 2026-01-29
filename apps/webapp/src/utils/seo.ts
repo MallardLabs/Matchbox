@@ -19,7 +19,6 @@ export const getBaseUrl = () => {
     baseUrl = ""
   }
 
-
   if (baseUrl && !baseUrl.startsWith("http")) {
     baseUrl = `https://${baseUrl}`
   }
