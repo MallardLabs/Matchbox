@@ -1,5 +1,5 @@
 import { getDefaultWallets, mezoMainnet, mezoTestnet } from "@mezo-org/passport"
-import { getDefaultConfig } from "@rainbow-me/rainbowkit"
+import { getDefaultConfig, type WalletList } from "@rainbow-me/rainbowkit"
 import {
   injectedWallet,
   rabbyWallet,
@@ -7,12 +7,11 @@ import {
 } from "@rainbow-me/rainbowkit/wallets"
 import { http, type Config } from "wagmi"
 
-
 export { mezoMainnet, mezoTestnet }
 
 // WalletConnect Project ID - get one at https://cloud.walletconnect.com
-const WALLET_CONNECT_PROJECT_ID = process.env.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID ?? ""
-
+const WALLET_CONNECT_PROJECT_ID =
+  process.env.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID ?? ""
 
 // Get Bitcoin wallet connectors from Passport
 // Using mainnet config - matches production Bitcoin wallets
@@ -22,18 +21,11 @@ export const defaultWallets = rawDefaultWallets.map((group) => {
   if (group.groupName === "Ethereum") {
     return {
       ...group,
-      wallets: [
-        ...group.wallets,
-        tahoWallet(),
-        rabbyWallet(),
-        injectedWallet(),
-      ],
+      wallets: [...group.wallets, tahoWallet, rabbyWallet, injectedWallet],
     }
   }
   return group
 })
-
-
 
 // Extract wallet groups safely
 const bitcoinWalletGroup = defaultWallets.find(
@@ -44,11 +36,10 @@ const ethereumWalletGroup = defaultWallets.find(
 )
 
 // Wallet groups for the connect modal
-const wallets = [
+const wallets: WalletList = [
   ...(bitcoinWalletGroup ? [bitcoinWalletGroup] : []),
   ...(ethereumWalletGroup ? [ethereumWalletGroup] : []),
 ]
-
 
 export const wagmiConfig: Config = getDefaultConfig({
   appName: "Matchbox",
