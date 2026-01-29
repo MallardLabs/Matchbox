@@ -315,11 +315,11 @@ export function SendModal({ isOpen, onClose }: SendModalProps): JSX.Element {
     const to = recipientAddress as Address
 
     if (isNativeToken) {
-      // Send native BTC
+      // Send native BTC - use "0x" as empty data to prevent "0x0" invalid hex error
       sendTransaction({
         to,
         value: parsedAmount,
-        chainId,
+        data: "0x" as `0x${string}`,
       })
     } else {
       // Send ERC-20 token
