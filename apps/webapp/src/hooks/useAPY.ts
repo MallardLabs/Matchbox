@@ -550,7 +550,7 @@ export function useGaugesAPY(
     })
 
     return map
-  }, [gauges, rewardTokenQueries, rewardTokensData, tokenRewardsData, btcPrice])
+  }, [gauges, rewardTokenQueries, rewardTokensData, tokenRewardsData, btcPrice, mezoPrice])
 
   const isLoading =
     isLoadingBribes || isLoadingLengths || isLoadingTokens || isLoadingRewards
