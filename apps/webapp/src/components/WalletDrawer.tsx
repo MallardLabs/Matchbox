@@ -1,3 +1,5 @@
+import { ReceiveModal } from "@/components/ReceiveModal"
+import { SendModal } from "@/components/SendModal"
 import { useNetwork } from "@/contexts/NetworkContext"
 import { useTheme } from "@/contexts/ThemeContext"
 import { useBtcPrice } from "@/hooks/useBtcPrice"
@@ -143,6 +145,44 @@ function EthereumIcon({ size = 16 }: { size?: number }): JSX.Element {
   )
 }
 
+function SendIcon(): JSX.Element {
+  return (
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <line x1="12" y1="19" x2="12" y2="5" />
+      <polyline points="5 12 12 5 19 12" />
+    </svg>
+  )
+}
+
+function ReceiveIcon(): JSX.Element {
+  return (
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <line x1="12" y1="5" x2="12" y2="19" />
+      <polyline points="19 12 12 19 5 12" />
+    </svg>
+  )
+}
+
 type TokenBalance = {
   symbol: string
   name: string
@@ -170,6 +210,8 @@ export function WalletDrawer({
   const [mounted, setMounted] = useState(false)
   const [isVisible, setIsVisible] = useState(false)
   const [copiedAddress, setCopiedAddress] = useState<string | null>(null)
+  const [isSendModalOpen, setIsSendModalOpen] = useState(false)
+  const [isReceiveModalOpen, setIsReceiveModalOpen] = useState(false)
 
   const isBitcoinWallet = networkFamily === "bitcoin"
 
@@ -426,7 +468,7 @@ export function WalletDrawer({
           <h3 className="mb-2 text-xs font-medium uppercase tracking-wider text-[var(--content-secondary)]">
             Addresses
           </h3>
-          <div className="mb-4 space-y-1">
+          <div className="mb-3 space-y-1">
             {isBitcoinWallet && walletAddress && (
               <button
                 type="button"
@@ -482,6 +524,26 @@ export function WalletDrawer({
             )}
           </div>
 
+          {/* Send & Receive Buttons */}
+          <div className="mb-4 flex gap-2">
+            <button
+              type="button"
+              onClick={() => setIsSendModalOpen(true)}
+              className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface-secondary)] py-2.5 text-sm font-medium text-[var(--content-primary)] transition-colors hover:bg-[var(--border)]"
+            >
+              <SendIcon />
+              Send
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsReceiveModalOpen(true)}
+              className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface-secondary)] py-2.5 text-sm font-medium text-[var(--content-primary)] transition-colors hover:bg-[var(--border)]"
+            >
+              <ReceiveIcon />
+              Receive
+            </button>
+          </div>
+
           <h3 className="mb-2 text-xs font-medium uppercase tracking-wider text-[var(--content-secondary)]">
             Settings
           </h3>
@@ -519,6 +581,16 @@ export function WalletDrawer({
           </div>
         </div>
       </div>
+
+      {/* Modals */}
+      <SendModal
+        isOpen={isSendModalOpen}
+        onClose={() => setIsSendModalOpen(false)}
+      />
+      <ReceiveModal
+        isOpen={isReceiveModalOpen}
+        onClose={() => setIsReceiveModalOpen(false)}
+      />
     </>,
     document.body,
   )
