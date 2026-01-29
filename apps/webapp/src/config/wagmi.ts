@@ -1,5 +1,5 @@
 import { getDefaultWallets, mezoMainnet, mezoTestnet } from "@mezo-org/passport"
-import { getDefaultConfig, type WalletList } from "@rainbow-me/rainbowkit"
+import { type WalletList, getDefaultConfig } from "@rainbow-me/rainbowkit"
 import {
   injectedWallet,
   rabbyWallet,
