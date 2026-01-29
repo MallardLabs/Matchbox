@@ -123,7 +123,7 @@ export function SendView({ onBack, onClose }: SendViewProps): JSX.Element {
 
   const explorerBaseUrl = isMainnet
     ? "https://explorer.mezo.org"
-    : "https://explorer.testnet.mezo.org"
+    : "https://explorer.test.mezo.org"
 
   const isNativeToken = useMemo(
     () =>

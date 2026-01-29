@@ -71,7 +71,7 @@ export function ReceiveView({ onBack: _onBack }: ReceiveViewProps): JSX.Element 
 
   const explorerBaseUrl = isMainnet
     ? "https://explorer.mezo.org"
-    : "https://explorer.testnet.mezo.org"
+    : "https://explorer.test.mezo.org"
 
   const handleCopy = useCallback(async () => {
     if (!accountAddress) return
