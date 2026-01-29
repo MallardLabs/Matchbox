@@ -510,7 +510,7 @@ export function WalletDrawer({
                 <button
                   type="button"
                   onClick={handleSendClick}
-                  className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-[var(--accent)] to-orange-500 py-3 font-semibold text-white shadow-lg shadow-orange-500/20 transition-all hover:shadow-xl hover:shadow-orange-500/30"
+                  className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-[var(--accent)] py-3 font-semibold text-white transition-all hover:opacity-90"
                 >
                   <SendIcon />
                   Send

@@ -67,14 +67,10 @@ export function WalletSetupView({
     <div className="flex flex-1 flex-col items-center justify-center px-6 text-center">
       {/* Animated Logo */}
       <div className="relative mb-8">
-        <div className="flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-[var(--accent)] to-orange-500 shadow-lg shadow-orange-500/25">
+        <div className="flex h-24 w-24 items-center justify-center rounded-full bg-[var(--accent)]">
           <img src="/token icons/Mezo.svg" alt="Mezo" className="h-14 w-14" />
         </div>
         <div className="absolute -inset-3 animate-spin rounded-full border-4 border-transparent border-t-[var(--accent)]" />
-        <div
-          className="absolute -inset-6 animate-spin rounded-full border-4 border-transparent border-t-orange-500/50"
-          style={{ animationDuration: "2s", animationDirection: "reverse" }}
-        />
       </div>
 
       {/* Status Text */}

@@ -93,7 +93,7 @@ export function ReceiveView({ onBack: _onBack }: ReceiveViewProps): JSX.Element 
     <div className="flex flex-1 flex-col items-center px-4">
       {/* Header Section */}
       <div className="mb-6 text-center">
-        <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-[var(--accent)]/10 to-orange-500/10 px-4 py-2">
+        <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-[var(--surface-secondary)] border border-[var(--border)] px-4 py-2">
           <img
             src="/token icons/Mezo.svg"
             alt="Mezo"
@@ -113,7 +113,7 @@ export function ReceiveView({ onBack: _onBack }: ReceiveViewProps): JSX.Element 
 
       {/* QR Code Card */}
       {accountAddress && (
-        <div className="mb-6 overflow-hidden rounded-3xl bg-gradient-to-br from-white to-gray-50 p-1 shadow-xl">
+        <div className="mb-6 overflow-hidden rounded-3xl border border-[var(--border)] bg-white p-1 shadow-lg">
           <div className="rounded-[22px] bg-white p-6">
             <QRCodeSVG
               value={accountAddress}
@@ -141,7 +141,7 @@ export function ReceiveView({ onBack: _onBack }: ReceiveViewProps): JSX.Element 
           className="mb-6 flex w-full items-center justify-between gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface-secondary)] px-4 py-3 transition-all hover:border-[var(--accent)] hover:bg-[var(--surface)]"
         >
           <div className="flex items-center gap-3 overflow-hidden">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[var(--accent)] to-orange-500">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--accent)]">
               <img
                 src="/token icons/Mezo.svg"
                 alt="Mezo"
@@ -165,7 +165,7 @@ export function ReceiveView({ onBack: _onBack }: ReceiveViewProps): JSX.Element 
         <button
           type="button"
           onClick={handleCopy}
-          className="flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-[var(--accent)] to-orange-500 py-4 font-semibold text-white shadow-lg shadow-orange-500/25 transition-all hover:shadow-xl hover:shadow-orange-500/30"
+          className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[var(--accent)] py-4 font-semibold text-white transition-all hover:opacity-90"
         >
           {copied ? (
             <>

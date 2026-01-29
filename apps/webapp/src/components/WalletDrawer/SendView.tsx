@@ -285,7 +285,7 @@ export function SendView({ onBack, onClose }: SendViewProps): JSX.Element {
   if (step === "success") {
     return (
       <div className="flex flex-1 flex-col items-center justify-center px-6 text-center">
-        <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-green-400 to-emerald-500 shadow-lg shadow-green-500/25">
+        <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-green-500">
           <svg
             width="40"
             height="40"
@@ -326,7 +326,7 @@ export function SendView({ onBack, onClose }: SendViewProps): JSX.Element {
           <button
             type="button"
             onClick={onClose}
-            className="flex-1 rounded-2xl bg-[var(--accent)] py-3 font-medium text-white transition-opacity hover:opacity-90"
+            className="flex-1 rounded-2xl bg-[var(--accent)] py-3 font-semibold text-white transition-opacity hover:opacity-90"
           >
             Done
           </button>
@@ -339,7 +339,7 @@ export function SendView({ onBack, onClose }: SendViewProps): JSX.Element {
   if (step === "error") {
     return (
       <div className="flex flex-1 flex-col items-center justify-center px-6 text-center">
-        <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-red-400 to-rose-500 shadow-lg shadow-red-500/25">
+        <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-red-500">
           <svg
             width="40"
             height="40"
@@ -390,7 +390,7 @@ export function SendView({ onBack, onClose }: SendViewProps): JSX.Element {
     return (
       <div className="flex flex-1 flex-col items-center justify-center px-6 text-center">
         <div className="relative mb-8">
-          <div className="flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-[var(--accent)] to-orange-500 shadow-lg shadow-orange-500/25">
+          <div className="flex h-24 w-24 items-center justify-center rounded-full bg-[var(--surface-secondary)] border-2 border-[var(--border)]">
             {selectedToken && (
               <TokenIcon symbol={selectedToken.symbol} size={48} />
             )}
@@ -504,7 +504,7 @@ export function SendView({ onBack, onClose }: SendViewProps): JSX.Element {
         type="button"
         onClick={handleSend}
         disabled={!canSend || isWritePending || isSendPending}
-        className="mt-auto w-full rounded-2xl bg-gradient-to-r from-[var(--accent)] to-orange-500 py-4 text-lg font-semibold text-white shadow-lg shadow-orange-500/25 transition-all hover:shadow-xl hover:shadow-orange-500/30 disabled:opacity-50 disabled:shadow-none"
+        className="mt-auto w-full rounded-2xl bg-[var(--accent)] py-4 text-lg font-semibold text-white transition-all hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
       >
         {!selectedToken
           ? "Select a token"
