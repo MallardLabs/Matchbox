@@ -1,6 +1,6 @@
 import { getContractConfig } from "@/config/contracts"
 import { useNetwork } from "@/contexts/NetworkContext"
-import { isMezoToken } from "@repo/shared"
+import { getTokenUsdPrice } from "@repo/shared"
 import { useMemo } from "react"
 import type { Address } from "viem"
 import { useReadContracts } from "wagmi"
@@ -123,7 +123,7 @@ export function useGaugeAPY(
 
   const currentEpochStart = getEpochStart(Math.floor(Date.now() / 1000))
 
-  // Get token rewards per epoch and decimals for each token
+  // Get token rewards per epoch, decimals, and symbol for each token
   const { data: tokenDataResults, isLoading: isLoadingRewards } =
     useReadContracts({
       contracts: tokenAddresses.flatMap((tokenAddress) => [
@@ -161,6 +161,19 @@ export function useGaugeAPY(
           ] as const,
           functionName: "decimals" as const,
         },
+        {
+          address: tokenAddress,
+          abi: [
+            {
+              inputs: [],
+              name: "symbol",
+              outputs: [{ internalType: "string", name: "", type: "string" }],
+              stateMutability: "view",
+              type: "function",
+            },
+          ] as const,
+          functionName: "symbol" as const,
+        },
       ]),
       query: {
         enabled: hasBribe && tokenAddresses.length > 0,
@@ -173,18 +186,24 @@ export function useGaugeAPY(
 
     let total = 0
     tokenAddresses.forEach((tokenAddress, i) => {
-      const amount = tokenDataResults[i * 2]?.result as bigint | undefined
-      const decimals = tokenDataResults[i * 2 + 1]?.result as number | undefined
+      const amount = tokenDataResults[i * 3]?.result as bigint | undefined
+      const decimals = tokenDataResults[i * 3 + 1]?.result as number | undefined
+      const symbol = tokenDataResults[i * 3 + 2]?.result as string | undefined
 
       if (amount && amount > 0n) {
         const tokenAmount = Number(amount) / Math.pow(10, decimals ?? 18)
 
-        // Get price for this token
-        // On this Bitcoin L2, assume everything except MEZO is BTC-denominated
-        const isMezo = isMezoToken(tokenAddress)
-        const price = isMezo ? (mezoPrice ?? 0) : (btcPrice ?? 0)
+        // Get price using the token pricing system
+        const price = getTokenUsdPrice(
+          tokenAddress,
+          symbol,
+          btcPrice,
+          mezoPrice,
+        )
 
-        total += tokenAmount * price
+        if (price !== null) {
+          total += tokenAmount * price
+        }
       }
     })
 
@@ -355,7 +374,7 @@ export function useGaugesAPY(
 
   const currentEpochStart = getEpochStart(Math.floor(Date.now() / 1000))
 
-  // Get token rewards per epoch and decimals - only run when we have resolved token addresses
+  // Get token rewards per epoch, decimals, and symbol - only run when we have resolved token addresses
   const { data: tokenRewardsData, isLoading: isLoadingRewards } =
     useReadContracts({
       contracts: rewardTokenQueries.flatMap(({ bribeAddress }, i) => {
@@ -403,6 +422,20 @@ export function useGaugesAPY(
             ] as const,
             functionName: "decimals" as const,
           },
+          {
+            address:
+              tokenAddress ?? "0x0000000000000000000000000000000000000000",
+            abi: [
+              {
+                inputs: [],
+                name: "symbol",
+                outputs: [{ internalType: "string", name: "", type: "string" }],
+                stateMutability: "view",
+                type: "function",
+              },
+            ] as const,
+            functionName: "symbol" as const,
+          },
         ]
       }),
       query: {
@@ -434,21 +467,25 @@ export function useGaugesAPY(
 
     rewardTokenQueries.forEach((query, i) => {
       const tokenAddress = rewardTokensData?.[i]?.result as Address | undefined
-      const amount = tokenRewardsData?.[i * 2]?.result as bigint | undefined
-      const decimals = tokenRewardsData?.[i * 2 + 1]?.result as
+      const amount = tokenRewardsData?.[i * 3]?.result as bigint | undefined
+      const decimals = tokenRewardsData?.[i * 3 + 1]?.result as
         | number
         | undefined
+      const symbol = tokenRewardsData?.[i * 3 + 2]?.result as string | undefined
 
       if (tokenAddress && amount && amount > 0n) {
         const tokenAmount = Number(amount) / Math.pow(10, decimals ?? 18)
         const tokenKey = tokenAddress.toLowerCase()
 
-        // Get price for this token
-        // On this Bitcoin L2, assume everything except MEZO is BTC-denominated
-        const isMezo = isMezoToken(tokenAddress)
-        const price = isMezo ? (mezoPrice ?? 0) : (btcPrice ?? 0)
+        // Get price using the token pricing system
+        const price = getTokenUsdPrice(
+          tokenAddress,
+          symbol,
+          btcPrice,
+          mezoPrice,
+        )
 
-        const usdValue = tokenAmount * price
+        const usdValue = price !== null ? tokenAmount * price : 0
         const gaugeKey = query.gaugeAddress.toLowerCase()
         const current = gaugeIncentives.get(gaugeKey) ?? 0
         gaugeIncentives.set(gaugeKey, current + usdValue)
@@ -464,7 +501,7 @@ export function useGaugesAPY(
         } else {
           existingTokens.push({
             tokenAddress: tokenKey,
-            symbol: isMezo ? "MEZO" : "BTC",
+            symbol: symbol ?? "???",
             amount,
             decimals: decimals ?? 18,
             usdValue,
@@ -513,7 +550,7 @@ export function useGaugesAPY(
     })
 
     return map
-  }, [gauges, rewardTokenQueries, rewardTokensData, tokenRewardsData, btcPrice])
+  }, [gauges, rewardTokenQueries, rewardTokensData, tokenRewardsData, btcPrice, mezoPrice])
 
   const isLoading =
     isLoadingBribes || isLoadingLengths || isLoadingTokens || isLoadingRewards

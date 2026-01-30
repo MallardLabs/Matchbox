@@ -23,6 +23,10 @@ import { useVeBTCLocks } from "@/hooks/useLocks"
 import { useMezoPrice } from "@/hooks/useMezoPrice"
 import type { Token } from "@/hooks/useTokenList"
 import {
+  formatUsdValue,
+  getTokenValueUsd,
+} from "@/hooks/useTokenPrices"
+import {
   type BribeIncentive,
   useAddIncentives,
   useApproveToken,
@@ -43,37 +47,26 @@ import {
   Tag,
   Textarea,
 } from "@mezo-org/mezo-clay"
+import { getTokenUsdPrice } from "@repo/shared"
 import Link from "next/link"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { formatUnits, parseUnits } from "viem"
 import { useAccount } from "wagmi"
 
-import { isMezoToken } from "@repo/shared"
-
 type IncentiveWithUSD = BribeIncentive & { usdValue: number | null }
-
-function formatUsdValue(value: number | null): string {
-  if (!value || Number.isNaN(value)) return "~$0.00"
-  return `~$${value.toLocaleString("en-US", {
-    maximumFractionDigits: 2,
-    minimumFractionDigits: 2,
-  })}`
-}
 
 function getIncentiveUsdValue(
   incentive: BribeIncentive,
   btcPrice: number | null,
   mezoPrice: number | null,
 ): number | null {
-  const amount = Number.parseFloat(
-    formatUnits(incentive.amount, incentive.decimals),
+  const priceUsd = getTokenUsdPrice(
+    incentive.tokenAddress,
+    incentive.symbol,
+    btcPrice,
+    mezoPrice,
   )
-  if (!Number.isFinite(amount)) return null
-
-  const price = isMezoToken(incentive.tokenAddress) ? mezoPrice : btcPrice
-  if (!price) return null
-
-  return amount * price
+  return getTokenValueUsd(incentive.amount, incentive.decimals, priceUsd)
 }
 
 // Social link icons
