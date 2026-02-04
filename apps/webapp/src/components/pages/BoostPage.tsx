@@ -752,11 +752,6 @@ export default function BoostPage(): JSX.Element {
                                 }
                                 handleToggleGaugeSelection(gaugeIndex)
                               }}
-                              title={
-                                hasChangedVote
-                                  ? "Update vote percentage"
-                                  : "Remove from cart"
-                              }
                             >
                               <span className="sr-only">
                                 {hasChangedVote
