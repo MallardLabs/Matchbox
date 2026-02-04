@@ -31,14 +31,10 @@ import {
   Modal,
   ModalBody,
   Skeleton,
-  TableBuilder,
-  TableBuilderColumn,
   Tag,
-  useStyletron,
 } from "@mezo-org/mezo-clay"
 import { isMezoToken } from "@repo/shared"
 import Link from "next/link"
-import type React from "react"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { formatUnits } from "viem"
 import { useAccount } from "wagmi"
@@ -60,7 +56,6 @@ type GaugeWithAllocation = BoostGauge & {
 }
 
 export default function BoostPage(): JSX.Element {
-  const [, theme] = useStyletron()
   const { isConnected } = useAccount()
   const { locks: veMEZOLocks, isLoading: isLoadingLocks } = useVeMEZOLocks()
   const { gauges, isLoading: isLoadingGauges } = useBoostGauges()
@@ -86,6 +81,12 @@ export default function BoostPage(): JSX.Element {
   >()
   // Track gauge allocations: Map of gauge index -> percentage (0-100)
   const [gaugeAllocations, setGaugeAllocations] = useState<Map<number, number>>(
+    new Map(),
+  )
+  const [selectedGaugeIndexes, setSelectedGaugeIndexes] = useState<
+    Set<number>
+  >(new Set())
+  const [cartSnapshots, setCartSnapshots] = useState<Map<number, number>>(
     new Map(),
   )
 
@@ -242,6 +243,7 @@ export default function BoostPage(): JSX.Element {
 
   // Calculator modal state
   const [isCalculatorOpen, setIsCalculatorOpen] = useState(false)
+  const [isCartOpen, setIsCartOpen] = useState(false)
 
   const handleGaugeSort = useCallback(
     (column: GaugeSortColumn) => {
@@ -271,32 +273,30 @@ export default function BoostPage(): JSX.Element {
     )
   }
 
-  const GaugeSortableHeader = ({
-    column,
-    children,
-  }: {
-    column: GaugeSortColumn
-    children: React.ReactNode
-  }): JSX.Element => (
-    <button
-      type="button"
-      className="inline-flex cursor-pointer items-center gap-1 border-none bg-transparent p-0 font-inherit text-inherit"
-      onClick={() => handleGaugeSort(column)}
-    >
-      {children}
-      {getGaugeSortIndicator(column)}
-    </button>
-  )
-
   // Calculate total allocation percentage
   const totalAllocation = Array.from(gaugeAllocations.values()).reduce(
     (sum, pct) => sum + pct,
     0,
   )
 
+  const selectedGaugeList = useMemo(
+    () => Array.from(selectedGaugeIndexes.values()),
+    [selectedGaugeIndexes],
+  )
+
   useEffect(() => {
-    if (!selectedLock || usedWeight === undefined) return
-  }, [selectedLock, usedWeight, totalAllocation, currentAllocations.length])
+    if (selectedLockIndex === undefined) {
+      setGaugeAllocations(new Map())
+      setSelectedGaugeIndexes(new Set())
+      setCartSnapshots(new Map())
+      setIsCartOpen(false)
+      return
+    }
+    setGaugeAllocations(new Map())
+    setSelectedGaugeIndexes(new Set())
+    setCartSnapshots(new Map())
+    setIsCartOpen(false)
+  }, [selectedLockIndex])
 
   // Filtered and sorted gauges for voting table
   const filteredAndSortedGauges = useMemo(() => {
@@ -306,6 +306,15 @@ export default function BoostPage(): JSX.Element {
       originalIndex: i,
       votingPct: gaugeAllocations.get(i) ?? 0,
     }))
+
+    const hasGaugeProfile = (gauge: BoostGauge) => {
+      const profile = gaugeProfiles.get(gauge.address.toLowerCase())
+      return Boolean(
+        profile?.display_name ||
+          profile?.description ||
+          profile?.profile_picture_url,
+      )
+    }
 
     // Filter by status
     if (gaugeStatusFilter === "active") {
@@ -318,6 +327,12 @@ export default function BoostPage(): JSX.Element {
     if (gaugeSortColumn) {
       result.sort((a, b) => {
         let comparison: number
+
+        const aHasProfile = hasGaugeProfile(a)
+        const bHasProfile = hasGaugeProfile(b)
+        if (aHasProfile !== bHasProfile) {
+          return aHasProfile ? -1 : 1
+        }
 
         switch (gaugeSortColumn) {
           case "veBTCWeight": {
@@ -362,6 +377,7 @@ export default function BoostPage(): JSX.Element {
     gaugeSortDirection,
     gaugeStatusFilter,
     gaugeAllocations,
+    gaugeProfiles,
     apyMap,
   ])
 
@@ -375,7 +391,70 @@ export default function BoostPage(): JSX.Element {
       }
       return next
     })
+    if (percentage <= 0) {
+      setSelectedGaugeIndexes((prev) => {
+        const next = new Set(prev)
+        next.delete(gaugeIndex)
+        return next
+      })
+      setCartSnapshots((prev) => {
+        const next = new Map(prev)
+        next.delete(gaugeIndex)
+        return next
+      })
+    }
   }
+
+  const handleToggleGaugeSelection = useCallback(
+    function handleToggleGaugeSelection(gaugeIndex: number) {
+      setSelectedGaugeIndexes((prev) => {
+        const next = new Set(prev)
+        if (next.has(gaugeIndex)) {
+          next.delete(gaugeIndex)
+          setGaugeAllocations((prevAllocations) => {
+            const nextAllocations = new Map(prevAllocations)
+            nextAllocations.delete(gaugeIndex)
+            return nextAllocations
+          })
+          setCartSnapshots((prevSnapshots) => {
+            const nextSnapshots = new Map(prevSnapshots)
+            nextSnapshots.delete(gaugeIndex)
+            return nextSnapshots
+          })
+        } else {
+          next.add(gaugeIndex)
+        }
+        return next
+      })
+    },
+    [],
+  )
+
+  const handleAddGaugeToCart = useCallback(
+    function handleAddGaugeToCart(gaugeIndex: number) {
+      setSelectedGaugeIndexes((prev) => {
+        const next = new Set(prev)
+        next.add(gaugeIndex)
+        return next
+      })
+      setCartSnapshots((prev) => {
+        const next = new Map(prev)
+        const allocation = gaugeAllocations.get(gaugeIndex) ?? 0
+        next.set(gaugeIndex, allocation)
+        return next
+      })
+    },
+    [gaugeAllocations],
+  )
+
+  const handleClearSelections = useCallback(
+    function handleClearSelections() {
+      setSelectedGaugeIndexes(new Set())
+      setGaugeAllocations(new Map())
+      setCartSnapshots(new Map())
+    },
+    [],
+  )
 
   const handleVote = () => {
     if (!selectedLock || gaugeAllocations.size === 0) return
@@ -396,6 +475,20 @@ export default function BoostPage(): JSX.Element {
     if (!selectedLock) return
     reset(selectedLock.tokenId)
   }
+
+  const handleCheckoutOpen = useCallback(
+    function handleCheckoutOpen() {
+      setIsCartOpen(true)
+    },
+    [],
+  )
+
+  const handleCheckoutClose = useCallback(
+    function handleCheckoutClose() {
+      setIsCartOpen(false)
+    },
+    [],
+  )
 
   const isLoading = isLoadingLocks || isLoadingGauges
 
@@ -470,6 +563,280 @@ export default function BoostPage(): JSX.Element {
           }}
         >
           <BoostCalculator />
+        </ModalBody>
+      </Modal>
+
+      <Modal
+        isOpen={isCartOpen}
+        onClose={handleCheckoutClose}
+        overrides={{
+          Dialog: {
+            style: {
+              maxWidth: "720px",
+              width: "100%",
+              padding: "0",
+              position: "fixed",
+              bottom: "0",
+              left: "0",
+              right: "0",
+              margin: "0 auto",
+              borderTopLeftRadius: "16px",
+              borderTopRightRadius: "16px",
+            },
+          },
+          Close: {
+            style: {
+              top: "12px",
+              right: "12px",
+            },
+          },
+        }}
+      >
+        <ModalBody
+          $style={{
+            padding: "16px",
+          }}
+        >
+          <div className="flex flex-col gap-4">
+            <header className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-xs uppercase tracking-wider text-[var(--content-tertiary)]">
+                  Shopping cart
+                </p>
+                <h2 className="text-lg font-semibold text-[var(--content-primary)]">
+                  Vote allocations
+                </h2>
+              </div>
+              <div className="flex items-center gap-2">
+                <Tag closeable={false} color="blue">
+                  {selectedGaugeIndexes.size} selected
+                </Tag>
+                <Tag
+                  closeable={false}
+                  color={totalAllocation === 100 ? "green" : "yellow"}
+                >
+                  Total {totalAllocation}%
+                </Tag>
+              </div>
+            </header>
+
+            {selectedGaugeList.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-[var(--border)] p-6 text-center">
+                <p className="text-sm text-[var(--content-secondary)]">
+                  Select gauges to start building your vote
+                </p>
+              </div>
+            ) : (
+              <fieldset className="rounded-lg border border-[var(--border)] p-4">
+                <legend className="px-2 text-xs uppercase tracking-wider text-[var(--content-tertiary)]">
+                  Vote weights
+                </legend>
+                {!selectedLock && (
+                  <p className="mt-3 text-xs text-[var(--content-secondary)]">
+                    Select a veMEZO lock to finalize your votes.
+                  </p>
+                )}
+                <ol className="mt-4 flex flex-col gap-3">
+                  {selectedGaugeList.map((gaugeIndex) => {
+                    const gauge = gauges[gaugeIndex]
+                    if (!gauge) return null
+                    const profile = gaugeProfiles.get(
+                      gauge.address.toLowerCase(),
+                    )
+                    const apyData = apyMap.get(gauge.address.toLowerCase())
+                    const currentVote =
+                      gaugeAllocations.get(gaugeIndex) ?? 0
+                    const snapshotVote =
+                      cartSnapshots.get(gaugeIndex) ?? currentVote
+                    const isProjected = !!selectedLock && currentVote > 0
+                    const displayAPY = isProjected
+                      ? calculateProjectedAPY(
+                          apyData,
+                          currentVote,
+                          selectedLock.votingPower,
+                          mezoPrice,
+                        )
+                      : (apyData?.apy ?? null)
+                    const hasChangedVote = snapshotVote !== currentVote
+                    return (
+                      <li
+                        key={gauge.address}
+                        className="rounded-lg border border-[var(--border)] p-3"
+                      >
+                        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                          <div className="flex min-w-0 items-center gap-3">
+                            <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center overflow-hidden rounded-full border border-[var(--border)] bg-[var(--surface-secondary)]">
+                              {profile?.profile_picture_url ? (
+                                <img
+                                  src={profile.profile_picture_url}
+                                  alt={`Gauge #${gauge.veBTCTokenId.toString()}`}
+                                  className="h-full w-full object-cover"
+                                />
+                              ) : (
+                                <span className="text-2xs text-[var(--content-secondary)]">
+                                  #
+                                  {gauge.veBTCTokenId > 0n
+                                    ? gauge.veBTCTokenId.toString()
+                                    : "?"}
+                                </span>
+                              )}
+                            </div>
+                            <div className="min-w-0">
+                              <Link
+                                href={`/gauges/${gauge.address}`}
+                                className="text-sm font-semibold text-[var(--content-primary)] no-underline"
+                              >
+                                {profile?.display_name
+                                  ? profile.display_name
+                                  : gauge.veBTCTokenId > 0n
+                                    ? `veBTC #${gauge.veBTCTokenId.toString()}`
+                                    : `${gauge.address.slice(0, 6)}...${gauge.address.slice(-4)}`}
+                              </Link>
+                              {profile?.description && (
+                                <p className="mt-1 line-clamp-2 text-2xs text-[var(--content-secondary)]">
+                                  {profile.description}
+                                </p>
+                              )}
+                              <p className="mt-2 text-2xs text-[var(--content-secondary)]">
+                                APY:{" "}
+                                <span
+                                  className={
+                                    displayAPY && displayAPY > 0
+                                      ? "font-mono text-[var(--positive)]"
+                                      : "font-mono text-[var(--content-secondary)]"
+                                  }
+                                >
+                                  {formatAPY(displayAPY)}
+                                  {isProjected && " ↓"}
+                                </span>
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2 md:flex-nowrap">
+                            <label
+                              htmlFor={`vote-weight-${gaugeIndex}`}
+                              className="text-xs text-[var(--content-secondary)]"
+                            >
+                              Vote %
+                            </label>
+                            <Input
+                              id={`vote-weight-${gaugeIndex}`}
+                              value={currentVote.toString()}
+                              onChange={(e) =>
+                                handleAllocationChange(
+                                  gaugeIndex,
+                                  Number(e.target.value) || 0,
+                                )
+                              }
+                              placeholder="0"
+                              type="number"
+                              size="small"
+                              positive={currentVote > 0}
+                              overrides={{
+                                Root: {
+                                  style: { width: "90px" },
+                                },
+                              }}
+                            />
+                            <Button
+                              kind="secondary"
+                              size="small"
+                              onClick={() => {
+                                if (hasChangedVote) {
+                                  setCartSnapshots((prev) => {
+                                    const next = new Map(prev)
+                                    next.set(gaugeIndex, currentVote)
+                                    return next
+                                  })
+                                  return
+                                }
+                                handleToggleGaugeSelection(gaugeIndex)
+                              }}
+                              title={
+                                hasChangedVote
+                                  ? "Update vote percentage"
+                                  : "Remove from cart"
+                              }
+                            >
+                              <span className="sr-only">
+                                {hasChangedVote
+                                  ? "Update vote percentage"
+                                  : "Remove from cart"}
+                              </span>
+                              {hasChangedVote ? (
+                                <svg
+                                  width="16"
+                                  height="16"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  aria-hidden="true"
+                                >
+                                  <polyline points="20 6 9 17 4 12" />
+                                </svg>
+                              ) : (
+                                <svg
+                                  width="16"
+                                  height="16"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  aria-hidden="true"
+                                >
+                                  <polyline points="3 6 5 6 21 6" />
+                                  <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                                  <path d="M10 11v6" />
+                                  <path d="M14 11v6" />
+                                  <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                                </svg>
+                              )}
+                            </Button>
+                          </div>
+                        </div>
+                      </li>
+                    )
+                  })}
+                </ol>
+              </fieldset>
+            )}
+
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] pt-3">
+              <div className="text-xs text-[var(--content-secondary)]">
+                Total allocation must equal 100% to vote.
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {selectedLock && usedWeight && usedWeight > 0n && (
+                  <Button
+                    kind="secondary"
+                    onClick={handleReset}
+                    isLoading={isResetting || isConfirmingReset}
+                  >
+                    Reset Vote
+                  </Button>
+                )}
+                <Button
+                  kind="primary"
+                  onClick={handleVote}
+                  isLoading={isVoting || isConfirmingVote}
+                  disabled={
+                    !selectedLock ||
+                    gaugeAllocations.size === 0 ||
+                    totalAllocation === 0 ||
+                    totalAllocation !== 100 ||
+                    !canVoteInCurrentEpoch
+                  }
+                >
+                  Vote ({totalAllocation}%)
+                </Button>
+              </div>
+            </div>
+          </div>
         </ModalBody>
       </Modal>
 
@@ -656,81 +1023,98 @@ export default function BoostPage(): JSX.Element {
                           No gauges available to vote on
                         </p>
                       ) : (
-                        <div className="-mx-4 overflow-x-auto px-4 md:-mx-3 md:px-3">
-                          <TableBuilder
-                            data={filteredAndSortedGauges}
-                            overrides={{
-                              Root: {
-                                style: {
-                                  maxHeight: "400px",
-                                  overflow: "auto",
-                                  minWidth: "800px",
-                                },
-                              },
-                              TableHeadCell: {
-                                style: {
-                                  backgroundColor:
-                                    theme.colors.backgroundSecondary,
-                                  whiteSpace: "nowrap",
-                                },
-                              },
-                              TableBodyRow: {
-                                style: {
-                                  backgroundColor:
-                                    theme.colors.backgroundPrimary,
-                                  position: "relative",
-                                  cursor: "pointer",
-                                  ":hover": {
-                                    backgroundColor:
-                                      theme.colors.backgroundSecondary,
-                                  },
-                                },
-                              },
-                              TableBodyCell: {
-                                style: {
-                                  whiteSpace: "nowrap",
-                                  verticalAlign: "middle",
-                                },
-                              },
-                            }}
-                          >
-                            <TableBuilderColumn header="Gauge">
-                              {(gauge: GaugeWithAllocation) => {
-                                const profile = gaugeProfiles.get(
-                                  gauge.address.toLowerCase(),
-                                )
-                                return (
-                                  <Link
-                                    href={`/gauges/${gauge.address}`}
-                                    className="flex items-center gap-3 text-inherit no-underline before:absolute before:inset-0 before:content-['']"
-                                  >
-                                    {/* Profile Picture */}
-                                    <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center overflow-hidden rounded-full border border-[var(--border)] bg-[var(--surface-secondary)]">
-                                      {profile?.profile_picture_url ? (
-                                        <img
-                                          src={profile.profile_picture_url}
-                                          alt={`Gauge #${gauge.veBTCTokenId.toString()}`}
-                                          className="h-full w-full object-cover"
-                                        />
-                                      ) : (
-                                        <span className="text-2xs text-[var(--content-secondary)]">
-                                          #
-                                          {gauge.veBTCTokenId > 0n
-                                            ? gauge.veBTCTokenId.toString()
-                                            : "?"}
-                                        </span>
-                                      )}
-                                    </div>
-                                    {/* Gauge Info */}
-                                    <div className="flex min-w-0 flex-col gap-0.5">
-                                      <div className="flex flex-wrap items-center gap-1.5">
-                                        <span
-                                          className={`text-xs font-medium ${
+                        <div className="flex flex-col gap-4">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-xs text-[var(--content-secondary)]">
+                              Sort:
+                            </span>
+                            {(
+                              [
+                                { id: "apy", label: "APY" },
+                                { id: "veMEZOWeight", label: "veMEZO Weight" },
+                                { id: "veBTCWeight", label: "veBTC Weight" },
+                                { id: "boost", label: "Boost" },
+                                { id: "optimalVeMEZO", label: "Optimal veMEZO" },
+                              ] as const
+                            ).map((option) => (
+                              <button
+                                key={option.id}
+                                type="button"
+                                onClick={() => handleGaugeSort(option.id)}
+                                className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs ${
+                                  gaugeSortColumn === option.id
+                                    ? "border-[var(--content-primary)] text-[var(--content-primary)]"
+                                    : "border-[var(--border)] text-[var(--content-secondary)]"
+                                }`}
+                              >
+                                {option.label}
+                                {getGaugeSortIndicator(option.id)}
+                              </button>
+                            ))}
+                          </div>
+                          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                            {filteredAndSortedGauges.map((gauge) => {
+                              const profile = gaugeProfiles.get(
+                                gauge.address.toLowerCase(),
+                              )
+                              const apyData = apyMap.get(
+                                gauge.address.toLowerCase(),
+                              )
+                              const userVotePercentage =
+                                gaugeAllocations.get(gauge.originalIndex) ?? 0
+                              const isProjected =
+                                selectedLock && userVotePercentage > 0
+                              const displayAPY = isProjected
+                                ? calculateProjectedAPY(
+                                    apyData,
+                                    userVotePercentage,
+                                    selectedLock.votingPower,
+                                    mezoPrice,
+                                  )
+                                : (apyData?.apy ?? null)
+                              const isSelected = selectedGaugeIndexes.has(
+                                gauge.originalIndex,
+                              )
+                              const votePercentage =
+                                gaugeAllocations.get(gauge.originalIndex) ?? 0
+                              return (
+                                <article
+                                  key={gauge.address}
+                                  className={`flex flex-col gap-3 rounded-xl border bg-[var(--surface)] p-4 ${
+                                    isSelected
+                                      ? "border-[var(--positive)]"
+                                      : "border-[var(--border)]"
+                                  }`}
+                                >
+                                  <div className="flex items-start justify-between gap-3">
+                                    <Link
+                                      href={`/gauges/${gauge.address}`}
+                                      className="flex min-w-0 items-center gap-3 text-inherit no-underline"
+                                    >
+                                      <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center overflow-hidden rounded-full border border-[var(--border)] bg-[var(--surface-secondary)]">
+                                        {profile?.profile_picture_url ? (
+                                          <img
+                                            src={profile.profile_picture_url}
+                                            alt={`Gauge #${gauge.veBTCTokenId.toString()}`}
+                                            className="h-full w-full object-cover"
+                                          />
+                                        ) : (
+                                          <span className="text-2xs text-[var(--content-secondary)]">
+                                            #
+                                            {gauge.veBTCTokenId > 0n
+                                              ? gauge.veBTCTokenId.toString()
+                                              : "?"}
+                                          </span>
+                                        )}
+                                      </div>
+                                      <div className="min-w-0">
+                                        <p
+                                          className={`text-sm font-semibold ${
                                             profile?.display_name ||
                                             profile?.description ||
                                             profile?.profile_picture_url
-                                              ? "text-[var(--positive)]"
-                                              : "text-[var(--negative)]"
+                                              ? "text-[var(--content-primary)]"
+                                              : "text-[var(--content-secondary)]"
                                           }`}
                                         >
                                           {profile?.display_name
@@ -738,214 +1122,147 @@ export default function BoostPage(): JSX.Element {
                                             : gauge.veBTCTokenId > 0n
                                               ? `veBTC #${gauge.veBTCTokenId.toString()}`
                                               : `${gauge.address.slice(0, 6)}...${gauge.address.slice(-4)}`}
-                                        </span>
-                                        {profile?.display_name &&
-                                          gauge.veBTCTokenId > 0n && (
-                                            <span className="inline-flex items-center rounded border border-[rgba(247,147,26,0.3)] bg-[rgba(247,147,26,0.15)] px-1.5 py-0.5 font-mono text-2xs font-semibold tracking-wide text-[#F7931A]">
-                                              #{gauge.veBTCTokenId.toString()}
-                                            </span>
-                                          )}
+                                        </p>
+                                        {profile?.description && (
+                                          <p className="truncate text-2xs text-[var(--content-secondary)]">
+                                            {profile.description}
+                                          </p>
+                                        )}
                                       </div>
-                                      {profile?.description && (
-                                        <span className="max-w-[150px] truncate text-2xs text-[var(--content-secondary)]">
-                                          {profile.description}
-                                        </span>
-                                      )}
-                                    </div>
-                                  </Link>
-                                )
-                              }}
-                            </TableBuilderColumn>
-                            <TableBuilderColumn
-                              header={
-                                <GaugeSortableHeader column="veBTCWeight">
-                                  veBTC Weight
-                                </GaugeSortableHeader>
-                              }
-                            >
-                              {(gauge: GaugeWithAllocation) => (
-                                <span className="font-mono text-sm tabular-nums">
-                                  {gauge.veBTCWeight !== undefined
-                                    ? formatUnits(gauge.veBTCWeight, 18).slice(
-                                        0,
-                                        10,
-                                      )
-                                    : "-"}
-                                </span>
-                              )}
-                            </TableBuilderColumn>
-                            <TableBuilderColumn
-                              header={
-                                <GaugeSortableHeader column="veMEZOWeight">
-                                  veMEZO Weight
-                                </GaugeSortableHeader>
-                              }
-                            >
-                              {(gauge: GaugeWithAllocation) => (
-                                <span className="font-mono text-sm tabular-nums">
-                                  {formatUnits(gauge.totalWeight, 18).slice(
-                                    0,
-                                    10,
-                                  )}
-                                </span>
-                              )}
-                            </TableBuilderColumn>
-                            <TableBuilderColumn
-                              header={
-                                <GaugeSortableHeader column="boost">
-                                  Boost
-                                </GaugeSortableHeader>
-                              }
-                            >
-                              {(gauge: GaugeWithAllocation) => (
-                                <span className="font-mono text-sm tabular-nums">
-                                  {formatMultiplier(gauge.boostMultiplier)}
-                                </span>
-                              )}
-                            </TableBuilderColumn>
-                            <TableBuilderColumn
-                              header={
-                                <GaugeSortableHeader column="apy">
-                                  APY
-                                </GaugeSortableHeader>
-                              }
-                            >
-                              {(gauge: GaugeWithAllocation) => {
-                                const apyData = apyMap.get(
-                                  gauge.address.toLowerCase(),
-                                )
-                                const userVotePercentage =
-                                  gaugeAllocations.get(gauge.originalIndex) ?? 0
-
-                                if (isLoadingAPY) {
-                                  return (
-                                    <span className="text-xs text-[var(--content-secondary)]">
-                                      ...
-                                    </span>
-                                  )
-                                }
-
-                                const isProjected =
-                                  selectedLock && userVotePercentage > 0
-                                const displayAPY = isProjected
-                                  ? calculateProjectedAPY(
-                                      apyData,
-                                      userVotePercentage,
-                                      selectedLock.votingPower,
-                                      mezoPrice,
-                                    )
-                                  : (apyData?.apy ?? null)
-
-                                return (
-                                  <span
-                                    className={`font-mono text-sm font-medium ${
-                                      displayAPY && displayAPY > 0
-                                        ? "text-[var(--positive)]"
-                                        : "text-[var(--content-secondary)]"
-                                    }`}
-                                    title={
-                                      isProjected
-                                        ? "Projected APY after your vote"
-                                        : undefined
-                                    }
-                                  >
-                                    {formatAPY(displayAPY)}
-                                    {isProjected && " ↓"}
-                                  </span>
-                                )
-                              }}
-                            </TableBuilderColumn>
-                            <TableBuilderColumn
-                              header={
-                                <GaugeSortableHeader column="optimalVeMEZO">
-                                  Optimal veMEZO
-                                </GaugeSortableHeader>
-                              }
-                            >
-                              {(gauge: GaugeWithAllocation) => (
-                                <span className="font-mono text-sm tabular-nums">
-                                  {gauge.optimalAdditionalVeMEZO !== undefined
-                                    ? formatFixedPoint(
-                                        gauge.optimalAdditionalVeMEZO,
-                                      )
-                                    : "-"}
-                                </span>
-                              )}
-                            </TableBuilderColumn>
-                            <TableBuilderColumn header="Status">
-                              {(gauge: GaugeWithAllocation) => (
-                                <Tag
-                                  color={gauge.isAlive ? "green" : "red"}
-                                  closeable={false}
-                                >
-                                  {gauge.isAlive ? "Active" : "Inactive"}
-                                </Tag>
-                              )}
-                            </TableBuilderColumn>
-                            <TableBuilderColumn header="Vote %">
-                              {(gauge: GaugeWithAllocation) => {
-                                const currentVote = gaugeAllocations.get(
-                                  gauge.originalIndex,
-                                )
-                                const hasVote =
-                                  currentVote !== undefined && currentVote > 0
-                                return (
-                                  <div className="relative flex items-center gap-1">
-                                    <Input
-                                      value={currentVote?.toString() ?? ""}
-                                      onChange={(e) =>
-                                        handleAllocationChange(
-                                          gauge.originalIndex,
-                                          Number(e.target.value) || 0,
-                                        )
-                                      }
-                                      placeholder="0"
-                                      type="number"
-                                      size="small"
-                                      positive={hasVote}
-                                      overrides={{
-                                        Root: {
-                                          style: { width: "80px" },
-                                        },
-                                      }}
-                                    />
-                                    <span className="font-mono text-sm font-medium text-[var(--content-primary)]">
-                                      %
-                                    </span>
+                                    </Link>
+                                    <Tag
+                                      color={gauge.isAlive ? "green" : "red"}
+                                      closeable={false}
+                                    >
+                                      {gauge.isAlive ? "Active" : "Inactive"}
+                                    </Tag>
                                   </div>
-                                )
-                              }}
-                            </TableBuilderColumn>
-                          </TableBuilder>
+                                  <dl className="grid grid-cols-2 gap-3 text-xs">
+                                    <div>
+                                      <dt className="text-[var(--content-tertiary)]">
+                                        veBTC Weight
+                                      </dt>
+                                      <dd className="font-mono text-[var(--content-primary)]">
+                                        {gauge.veBTCWeight !== undefined
+                                          ? formatUnits(
+                                              gauge.veBTCWeight,
+                                              18,
+                                            ).slice(0, 10)
+                                          : "-"}
+                                      </dd>
+                                    </div>
+                                    <div>
+                                      <dt className="text-[var(--content-tertiary)]">
+                                        veMEZO Weight
+                                      </dt>
+                                      <dd className="font-mono text-[var(--content-primary)]">
+                                        {formatUnits(gauge.totalWeight, 18).slice(
+                                          0,
+                                          10,
+                                        )}
+                                      </dd>
+                                    </div>
+                                    <div>
+                                      <dt className="text-[var(--content-tertiary)]">
+                                        Boost
+                                      </dt>
+                                      <dd className="font-mono text-[var(--content-primary)]">
+                                        {formatMultiplier(gauge.boostMultiplier)}
+                                      </dd>
+                                    </div>
+                                    <div>
+                                      <dt className="text-[var(--content-tertiary)]">
+                                        APY
+                                      </dt>
+                                      <dd
+                                        className={`font-mono ${
+                                          displayAPY && displayAPY > 0
+                                            ? "text-[var(--positive)]"
+                                            : "text-[var(--content-secondary)]"
+                                        }`}
+                                        title={
+                                          isProjected
+                                            ? "Projected APY after your vote"
+                                            : undefined
+                                        }
+                                      >
+                                        {isLoadingAPY ? "..." : formatAPY(displayAPY)}
+                                        {isProjected && " ↓"}
+                                      </dd>
+                                    </div>
+                                    <div>
+                                      <dt className="text-[var(--content-tertiary)]">
+                                        Optimal veMEZO
+                                      </dt>
+                                      <dd className="font-mono text-[var(--content-primary)]">
+                                        {gauge.optimalAdditionalVeMEZO !==
+                                        undefined
+                                          ? formatFixedPoint(
+                                              gauge.optimalAdditionalVeMEZO,
+                                            )
+                                          : "-"}
+                                      </dd>
+                                    </div>
+                                  </dl>
+                                  <fieldset className="flex flex-col gap-3 rounded-lg bg-[var(--surface-secondary)] p-3">
+                                    <legend className="text-2xs uppercase tracking-wider text-[var(--content-tertiary)]">
+                                      Vote setup
+                                    </legend>
+                                    <ol className="flex flex-wrap items-center justify-between gap-3">
+                                      <li className="flex flex-1 items-center gap-2">
+                                        <label
+                                          htmlFor={`gauge-vote-${gauge.originalIndex}`}
+                                          className="text-2xs text-[var(--content-secondary)]"
+                                        >
+                                          Vote %
+                                        </label>
+                                        <Input
+                                          id={`gauge-vote-${gauge.originalIndex}`}
+                                          value={votePercentage.toString()}
+                                          onChange={(e) =>
+                                            handleAllocationChange(
+                                              gauge.originalIndex,
+                                              Number(e.target.value) || 0,
+                                            )
+                                          }
+                                          placeholder="0"
+                                          type="number"
+                                          size="small"
+                                          positive={votePercentage > 0}
+                                          overrides={{
+                                            Root: {
+                                              style: { width: "96px" },
+                                            },
+                                          }}
+                                        />
+                                      </li>
+                                      <li className="flex items-center gap-2">
+                                        <Button
+                                          kind={
+                                            isSelected ? "secondary" : "primary"
+                                          }
+                                          size="small"
+                                          onClick={() =>
+                                            isSelected
+                                              ? handleToggleGaugeSelection(
+                                                  gauge.originalIndex,
+                                                )
+                                              : handleAddGaugeToCart(
+                                                  gauge.originalIndex,
+                                                )
+                                          }
+                                          disabled={!isSelected && votePercentage <= 0}
+                                        >
+                                          {isSelected ? "Remove" : "Add to cart"}
+                                        </Button>
+                                      </li>
+                                    </ol>
+                                  </fieldset>
+                                </article>
+                              )
+                            })}
+                          </div>
                         </div>
-                      )}
-                    </div>
-
-                    {/* Vote Buttons */}
-                    <div className="mt-2 flex flex-wrap gap-4 max-sm:flex-col max-sm:gap-3">
-                      <Button
-                        kind="primary"
-                        onClick={handleVote}
-                        isLoading={isVoting || isConfirmingVote}
-                        disabled={
-                          !selectedLock ||
-                          gaugeAllocations.size === 0 ||
-                          totalAllocation === 0 ||
-                          totalAllocation !== 100 ||
-                          !canVoteInCurrentEpoch
-                        }
-                      >
-                        Vote ({totalAllocation}%)
-                      </Button>
-
-                      {selectedLock && usedWeight && usedWeight > 0n && (
-                        <Button
-                          kind="secondary"
-                          onClick={handleReset}
-                          isLoading={isResetting || isConfirmingReset}
-                        >
-                          Reset Vote
-                        </Button>
                       )}
                     </div>
                   </div>
@@ -968,6 +1285,46 @@ export default function BoostPage(): JSX.Element {
             </SpringIn>
           )}
         </>
+      )}
+
+      {selectedGaugeIndexes.size > 0 && (
+        <div className="fixed bottom-4 left-0 right-0 z-40 px-4">
+          <div className="mx-auto flex w-full max-w-3xl flex-wrap items-center justify-between gap-3 rounded-full border border-[var(--border)] bg-[var(--surface)] px-4 py-2 shadow-lg">
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-[var(--content-secondary)]">
+                Selections
+              </span>
+              <span className="font-mono text-sm font-semibold text-[var(--content-primary)]">
+                {selectedGaugeIndexes.size}
+              </span>
+              <span className="text-xs text-[var(--content-secondary)]">
+                Total
+              </span>
+              <span
+                className={`font-mono text-sm font-semibold ${
+                  totalAllocation === 100
+                    ? "text-[var(--positive)]"
+                    : "text-[var(--content-primary)]"
+                }`}
+              >
+                {totalAllocation}%
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button kind="secondary" size="small" onClick={handleClearSelections}>
+                Clear
+              </Button>
+              <Button
+                kind="primary"
+                size="small"
+                onClick={handleCheckoutOpen}
+                disabled={!selectedLock}
+              >
+                Checkout
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
