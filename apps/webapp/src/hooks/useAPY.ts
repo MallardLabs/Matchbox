@@ -581,8 +581,17 @@ export function useGaugesAPY(
     mezoPrice,
   ])
 
+  // Check if we're still loading - must account for cascading query dependencies
+  // A later query being disabled (not loading) doesn't mean data is ready
   const isLoading =
-    isLoadingBribes || isLoadingLengths || isLoadingTokens || isLoadingRewards
+    isLoadingBribes ||
+    isLoadingLengths ||
+    isLoadingTokens ||
+    isLoadingRewards ||
+    // Also loading if we expect data from cascading queries but don't have it yet
+    (validBribes.length > 0 && !rewardsLengthData) ||
+    (rewardTokenQueries.length > 0 && !rewardTokensData) ||
+    (resolvedRewardTokenQueries.length > 0 && !tokenRewardsData)
 
   return {
     apyMap,
