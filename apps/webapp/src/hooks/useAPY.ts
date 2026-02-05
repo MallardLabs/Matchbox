@@ -428,69 +428,86 @@ export function useGaugesAPY(
       )
   }, [rewardTokensData, rewardTokenQueries])
 
-  // Get token rewards per epoch, decimals, and symbol - only run when we have resolved token addresses
-  const { data: tokenRewardsData, isLoading: isLoadingRewards } =
-    useReadContracts({
-      contracts: resolvedRewardTokenQueries.flatMap(
-        ({ bribeAddress, tokenAddress }) => [
+  // Get token rewards per epoch - one call per gauge-token pair
+  const { data: amountsData, isLoading: isLoadingAmounts } = useReadContracts({
+    contracts: resolvedRewardTokenQueries.map(({ bribeAddress, tokenAddress }) => ({
+      address: bribeAddress,
+      abi: [
+        {
+          inputs: [
+            { internalType: "address", name: "token", type: "address" },
+            { internalType: "uint256", name: "epochStart", type: "uint256" },
+          ],
+          name: "tokenRewardsPerEpoch",
+          outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
+          stateMutability: "view",
+          type: "function",
+        },
+      ] as const,
+      functionName: "tokenRewardsPerEpoch" as const,
+      args: [tokenAddress, contractEpochStart ?? 0n],
+    })),
+    query: {
+      enabled: resolvedRewardTokenQueries.length > 0 && contractEpochStart !== undefined,
+    },
+  })
+
+  // Get unique token addresses to deduplicate metadata fetching
+  const uniqueTokenAddresses = useMemo(() => {
+    const set = new Set<string>()
+    resolvedRewardTokenQueries.forEach(q => set.add(q.tokenAddress.toLowerCase()))
+    return Array.from(set) as Address[]
+  }, [resolvedRewardTokenQueries])
+
+  // Get decimals and symbol for each UNIQUE token
+  const { data: metadataData, isLoading: isLoadingMetadata } = useReadContracts({
+    contracts: uniqueTokenAddresses.flatMap((tokenAddress) => [
+      {
+        address: tokenAddress,
+        abi: [
           {
-            address: bribeAddress,
-            abi: [
-              {
-                inputs: [
-                  { internalType: "address", name: "token", type: "address" },
-                  {
-                    internalType: "uint256",
-                    name: "epochStart",
-                    type: "uint256",
-                  },
-                ],
-                name: "tokenRewardsPerEpoch",
-                outputs: [
-                  { internalType: "uint256", name: "", type: "uint256" },
-                ],
-                stateMutability: "view",
-                type: "function",
-              },
-            ] as const,
-            functionName: "tokenRewardsPerEpoch" as const,
-            args: [tokenAddress, contractEpochStart ?? 0n],
+            inputs: [],
+            name: "decimals",
+            outputs: [{ internalType: "uint8", name: "", type: "uint8" }],
+            stateMutability: "view",
+            type: "function",
           },
-          {
-            address: tokenAddress,
-            abi: [
-              {
-                inputs: [],
-                name: "decimals",
-                outputs: [{ internalType: "uint8", name: "", type: "uint8" }],
-                stateMutability: "view",
-                type: "function",
-              },
-            ] as const,
-            functionName: "decimals" as const,
-          },
-          {
-            address: tokenAddress,
-            abi: [
-              {
-                inputs: [],
-                name: "symbol",
-                outputs: [{ internalType: "string", name: "", type: "string" }],
-                stateMutability: "view",
-                type: "function",
-              },
-            ] as const,
-            functionName: "symbol" as const,
-          },
-        ],
-      ),
-      query: {
-        // Only run when we have actual token addresses resolved and epoch start is known
-        enabled:
-          resolvedRewardTokenQueries.length > 0 &&
-          contractEpochStart !== undefined,
+        ] as const,
+        functionName: "decimals" as const,
       },
+      {
+        address: tokenAddress,
+        abi: [
+          {
+            inputs: [],
+            name: "symbol",
+            outputs: [{ internalType: "string", name: "", type: "string" }],
+            stateMutability: "view",
+            type: "function",
+          },
+        ] as const,
+        functionName: "symbol" as const,
+      },
+    ]),
+    query: {
+      enabled: uniqueTokenAddresses.length > 0,
+    },
+  })
+
+  // Map metadata back to token addresses for easy lookup
+  const tokenMetadataMap = useMemo(() => {
+    const map = new Map<string, { decimals: number; symbol: string }>()
+    if (!metadataData) return map
+
+    uniqueTokenAddresses.forEach((address, i) => {
+      const decimals = metadataData[i * 2]?.result as number | undefined
+      const symbol = metadataData[i * 2 + 1]?.result as string | undefined
+      if (decimals !== undefined && symbol !== undefined) {
+        map.set(address.toLowerCase(), { decimals, symbol })
+      }
     })
+    return map
+  }, [metadataData, uniqueTokenAddresses])
 
   // Calculate APY for each gauge
   const apyMap = useMemo(() => {
@@ -508,20 +525,19 @@ export function useGaugesAPY(
       })
     })
 
-    // Calculate incentives per gauge (both total USD and by token)
+    // Calculate incentives per gauge
     const gaugeIncentives = new Map<string, number>()
     const gaugeTokenIncentives = new Map<string, TokenIncentive[]>()
 
     resolvedRewardTokenQueries.forEach((query, i) => {
       const tokenAddress = query.tokenAddress
-      const amount = tokenRewardsData?.[i * 3]?.result as bigint | undefined
-      const decimals = tokenRewardsData?.[i * 3 + 1]?.result as
-        | number
-        | undefined
-      const symbol = tokenRewardsData?.[i * 3 + 2]?.result as string | undefined
+      const amount = amountsData?.[i]?.result as bigint | undefined
+      const metadata = tokenMetadataMap.get(tokenAddress.toLowerCase())
 
-      if (tokenAddress && amount && amount > 0n) {
-        const tokenAmount = Number(amount) / Math.pow(10, decimals ?? 18)
+      if (amount && amount > 0n) {
+        const decimals = metadata?.decimals ?? 18
+        const symbol = metadata?.symbol
+        const tokenAmount = Number(amount) / Math.pow(10, decimals)
         const tokenKey = tokenAddress.toLowerCase()
 
         // Get price using the token pricing system
@@ -550,7 +566,7 @@ export function useGaugesAPY(
             tokenAddress: tokenKey,
             symbol: symbol ?? "???",
             amount,
-            decimals: decimals ?? 18,
+            decimals: decimals,
             usdValue,
           })
         }
@@ -558,7 +574,7 @@ export function useGaugesAPY(
       }
     })
 
-    // Calculate APY for each gauge
+    // Calculate APY for each gauge using shared helper
     gauges.forEach((gauge) => {
       const gaugeKey = gauge.address.toLowerCase()
       const totalIncentivesUSD = gaugeIncentives.get(gaugeKey) ?? 0
@@ -581,8 +597,8 @@ export function useGaugesAPY(
   }, [
     gauges,
     resolvedRewardTokenQueries,
-    rewardTokensData,
-    tokenRewardsData,
+    amountsData,
+    tokenMetadataMap,
     btcPrice,
     mezoPrice,
   ])
@@ -593,16 +609,35 @@ export function useGaugesAPY(
     isLoadingBribes ||
     isLoadingLengths ||
     isLoadingTokens ||
-    isLoadingRewards ||
+    isLoadingAmounts ||
+    isLoadingMetadata ||
     // Also loading if we expect data from cascading queries but don't have it yet
     (validBribes.length > 0 && !rewardsLengthData) ||
     (rewardTokenQueries.length > 0 && !rewardTokensData) ||
-    (resolvedRewardTokenQueries.length > 0 && !tokenRewardsData)
+    (resolvedRewardTokenQueries.length > 0 && !amountsData) ||
+    (uniqueTokenAddresses.length > 0 && !metadataData)
 
-  return {
-    apyMap,
-    isLoading,
-  }
+  // Create the final resulting map and loading state
+  const resultData = useMemo(() => {
+    // Check for specific debug cases (e.g. weight but no APY)
+    apyMap.forEach((data, key) => {
+      if (data.totalVeMEZOWeight > 0n && data.apy === null && !isLoading) {
+        console.log(`DEBUG: Gauge ${key} has weight but null APY`, {
+          totalIncentivesUSD: data.totalIncentivesUSD,
+          mezoPrice,
+          hasBribe: validBribes.some(b => b.gaugeAddress.toLowerCase() === key),
+          tokenCount: resolvedRewardTokenQueries.filter(q => q.gaugeAddress.toLowerCase() === key).length,
+        });
+      }
+    });
+
+    return {
+      apyMap,
+      isLoading,
+    }
+  }, [apyMap, isLoading, mezoPrice, validBribes, resolvedRewardTokenQueries])
+
+  return resultData
 }
 
 /**
