@@ -383,25 +383,27 @@ export function useGaugesAPY(
       },
     })
 
-  // Extract valid token addresses from results
-  const resolvedTokenAddresses = useMemo(() => {
+  // Build a resolved list of reward token queries with valid token addresses
+  const resolvedRewardTokenQueries = useMemo(() => {
     if (!rewardTokensData) return []
-    return rewardTokensData
-      .map((r) => r.result as Address | undefined)
+    return rewardTokenQueries
+      .map((query, i) => ({
+        ...query,
+        tokenAddress: rewardTokensData[i]?.result as Address | undefined,
+      }))
       .filter(
-        (addr): addr is Address =>
-          !!addr && addr !== "0x0000000000000000000000000000000000000000",
+        (query): query is typeof query & { tokenAddress: Address } =>
+          !!query.tokenAddress &&
+          query.tokenAddress !==
+            "0x0000000000000000000000000000000000000000",
       )
-  }, [rewardTokensData])
+  }, [rewardTokensData, rewardTokenQueries])
 
   // Get token rewards per epoch, decimals, and symbol - only run when we have resolved token addresses
   const { data: tokenRewardsData, isLoading: isLoadingRewards } =
     useReadContracts({
-      contracts: rewardTokenQueries.flatMap(({ bribeAddress }, i) => {
-        const tokenAddress = rewardTokensData?.[i]?.result as
-          | Address
-          | undefined
-        return [
+      contracts: resolvedRewardTokenQueries.flatMap(
+        ({ bribeAddress, tokenAddress }) => [
           {
             address: bribeAddress,
             abi: [
@@ -423,14 +425,10 @@ export function useGaugesAPY(
               },
             ] as const,
             functionName: "tokenRewardsPerEpoch" as const,
-            args: [
-              tokenAddress ?? "0x0000000000000000000000000000000000000000",
-              contractEpochStart ?? 0n,
-            ],
+            args: [tokenAddress, contractEpochStart ?? 0n],
           },
           {
-            address:
-              tokenAddress ?? "0x0000000000000000000000000000000000000000",
+            address: tokenAddress,
             abi: [
               {
                 inputs: [],
@@ -443,8 +441,7 @@ export function useGaugesAPY(
             functionName: "decimals" as const,
           },
           {
-            address:
-              tokenAddress ?? "0x0000000000000000000000000000000000000000",
+            address: tokenAddress,
             abi: [
               {
                 inputs: [],
@@ -456,13 +453,12 @@ export function useGaugesAPY(
             ] as const,
             functionName: "symbol" as const,
           },
-        ]
-      }),
+        ],
+      ),
       query: {
         // Only run when we have actual token addresses resolved and epoch start is known
         enabled:
-          rewardTokenQueries.length > 0 &&
-          resolvedTokenAddresses.length > 0 &&
+          resolvedRewardTokenQueries.length > 0 &&
           contractEpochStart !== undefined,
       },
     })
@@ -487,8 +483,8 @@ export function useGaugesAPY(
     const gaugeIncentives = new Map<string, number>()
     const gaugeTokenIncentives = new Map<string, TokenIncentive[]>()
 
-    rewardTokenQueries.forEach((query, i) => {
-      const tokenAddress = rewardTokensData?.[i]?.result as Address | undefined
+    resolvedRewardTokenQueries.forEach((query, i) => {
+      const tokenAddress = query.tokenAddress
       const amount = tokenRewardsData?.[i * 3]?.result as bigint | undefined
       const decimals = tokenRewardsData?.[i * 3 + 1]?.result as
         | number
@@ -578,7 +574,7 @@ export function useGaugesAPY(
     return map
   }, [
     gauges,
-    rewardTokenQueries,
+    resolvedRewardTokenQueries,
     rewardTokensData,
     tokenRewardsData,
     btcPrice,
@@ -717,7 +713,7 @@ export function useUpcomingVotingAPY(
   const { price: mezoPrice } = useMezoPrice()
 
   const result = useMemo(() => {
-    if (!usedWeight || usedWeight === 0n || voteAllocations.length === 0) {
+    if (voteAllocations.length === 0) {
       return {
         upcomingAPY: null,
         projectedIncentivesUSD: 0,
@@ -776,11 +772,19 @@ export function useUpcomingVotingAPY(
       }
     }
 
+    const projectedRewardsByToken = Array.from(tokenRewardsMap.values())
+
+    if (!usedWeight || usedWeight === 0n) {
+      return {
+        upcomingAPY: null,
+        projectedIncentivesUSD: totalUserIncentivesUSD,
+        projectedRewardsByToken,
+      }
+    }
+
     // Convert used veMEZO weight to USD value
     const usedVeMEZOAmount = Number(usedWeight) / 1e18
     const usedVeMEZOValueUSD = usedVeMEZOAmount * (mezoPrice ?? 0)
-
-    const projectedRewardsByToken = Array.from(tokenRewardsMap.values())
 
     if (usedVeMEZOValueUSD === 0) {
       return {
