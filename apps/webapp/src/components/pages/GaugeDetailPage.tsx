@@ -8,10 +8,7 @@ import { useBtcPrice } from "@/hooks/useBtcPrice"
 import { useGaugeHistory, useGaugeProfile } from "@/hooks/useGaugeProfiles"
 import { useBoostInfo } from "@/hooks/useGauges"
 import { useMezoPrice } from "@/hooks/useMezoPrice"
-import {
-  formatUsdValue,
-  getTokenValueUsd,
-} from "@/hooks/useTokenPrices"
+import { formatUsdValue, getTokenValueUsd } from "@/hooks/useTokenPrices"
 import {
   type BribeIncentive,
   useBribeAddress,
@@ -180,7 +177,8 @@ export default function GaugeDetailPage(): JSX.Element {
     },
   })
 
-  const totalWeight = (gaugeData?.[0]?.result as bigint) ?? 0n
+  // Keep as undefined when data is loading to avoid premature "infinite APY" display
+  const totalWeight = gaugeData?.[0]?.result as bigint | undefined
   const isAlive = (gaugeData?.[1]?.result as boolean) ?? false
   const beneficiary = gaugeData?.[2]?.result as Address | undefined
 
@@ -483,7 +481,7 @@ export default function GaugeDetailPage(): JSX.Element {
                     veMEZO Weight
                   </p>
                   <h3 className="font-mono text-lg font-semibold tabular-nums text-[var(--content-primary)] md:text-xl">
-                    {formatTokenAmount(totalWeight, 18)}
+                    {formatTokenAmount(totalWeight ?? 0n, 18)}
                   </h3>
                 </div>
               </Card>

@@ -3,6 +3,7 @@ const TOKEN_ICON_MAP: Record<string, string> = {
   WBTC: "/token icons/Bitcoin.svg",
   TBTC: "/token icons/Bitcoin.svg",
   MEZO: "/token icons/Mezo.svg",
+  MUSD: "/token icons/MUSD.svg",
 }
 
 type TokenIconProps = {

@@ -8,6 +8,7 @@ const TOKEN_ICONS: Record<string, string> = {
   WBTC: "/token icons/Bitcoin.svg",
   tBTC: "/token icons/Bitcoin.svg",
   MEZO: "/token icons/Mezo.svg",
+  MUSD: "/token icons/MUSD.svg",
 }
 
 function TokenIcon({
@@ -101,6 +102,7 @@ export interface VeMEZOLockData extends LockItem {
   usedWeight?: bigint
   currentAPY?: number | null
   upcomingAPY?: number | null
+  projectedAPY?: number | null // Dynamic APY based on pending vote allocations
   claimableUSD?: number | null
   isLoadingUsedWeight?: boolean
   isLoadingAPY?: boolean
@@ -141,7 +143,10 @@ function DashboardVeMEZOCard({
       lock.currentAPY > 0) ||
     (lock.upcomingAPY !== null &&
       lock.upcomingAPY !== undefined &&
-      lock.upcomingAPY > 0)
+      lock.upcomingAPY > 0) ||
+    (lock.projectedAPY !== null &&
+      lock.projectedAPY !== undefined &&
+      lock.projectedAPY > 0)
 
   return (
     <div className="flex h-full flex-col">
@@ -178,17 +183,40 @@ function DashboardVeMEZOCard({
             </div>
           ) : (
             hasAPY && (
-              <div className="mt-1 flex items-center gap-1.5">
+              <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                {/* Projected APY from pending votes (shown prominently) */}
+                {lock.projectedAPY !== null &&
+                  lock.projectedAPY !== undefined &&
+                  lock.projectedAPY > 0 && (
+                    <span
+                      className="inline-flex items-center rounded border border-[rgba(247,147,26,0.4)] bg-[rgba(247,147,26,0.15)] px-1.5 py-0.5 text-[11px] font-semibold text-[#F7931A]"
+                      title="Projected APY based on your pending votes"
+                    >
+                      {formatAPY(lock.projectedAPY)} APY ↓
+                    </span>
+                  )}
+                {/* Current APY from earned rewards */}
                 {lock.currentAPY !== null &&
                   lock.currentAPY !== undefined &&
-                  lock.currentAPY > 0 && (
+                  lock.currentAPY > 0 &&
+                  !(
+                    lock.projectedAPY !== null &&
+                    lock.projectedAPY !== undefined &&
+                    lock.projectedAPY > 0
+                  ) && (
                     <span className="inline-flex items-center rounded border border-[rgba(var(--positive-rgb),0.3)] bg-[rgba(var(--positive-rgb),0.15)] px-1.5 py-0.5 text-[11px] font-semibold text-[var(--positive)]">
                       {formatAPY(lock.currentAPY)} APY
                     </span>
                   )}
+                {/* Upcoming APY from on-chain votes (shown when no projected) */}
                 {lock.upcomingAPY !== null &&
                   lock.upcomingAPY !== undefined &&
-                  lock.upcomingAPY > 0 && (
+                  lock.upcomingAPY > 0 &&
+                  !(
+                    lock.projectedAPY !== null &&
+                    lock.projectedAPY !== undefined &&
+                    lock.projectedAPY > 0
+                  ) && (
                     <>
                       {lock.currentAPY !== null &&
                         lock.currentAPY !== undefined &&
@@ -321,6 +349,11 @@ function DashboardVeBTCCard({
               >
                 {lock.displayName || `veBTC #${lock.tokenId.toString()}`}
               </span>
+              {lock.displayName && (
+                <span className="inline-flex items-center rounded bg-[rgba(247,147,26,0.15)] border border-[rgba(247,147,26,0.3)] px-1.5 py-0.5 font-mono text-2xs font-semibold tracking-wide text-[#F7931A]">
+                  #{lock.tokenId.toString()}
+                </span>
+              )}
               {isSelected && (
                 <div className="flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full bg-[#F7931A]">
                   <svg

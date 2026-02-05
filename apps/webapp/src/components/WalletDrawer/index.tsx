@@ -10,7 +10,7 @@ import { formatUnits } from "viem"
 import { useBalance, useDisconnect, useReadContracts } from "wagmi"
 import { ReceiveView } from "./ReceiveView"
 import { SendView } from "./SendView"
-import { useWalletReady, WalletSetupView } from "./WalletSetupView"
+import { WalletSetupView, useWalletReady } from "./WalletSetupView"
 
 type DrawerView = "main" | "send" | "receive" | "setup"
 
@@ -686,7 +686,10 @@ export function WalletDrawer({
                 : "translate-x-full opacity-0"
             }`}
           >
-            <SendView onBack={() => setCurrentView("main")} onClose={handleClose} />
+            <SendView
+              onBack={() => setCurrentView("main")}
+              onClose={handleClose}
+            />
           </div>
 
           {/* Receive View */}

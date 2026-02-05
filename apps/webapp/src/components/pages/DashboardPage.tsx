@@ -41,7 +41,7 @@ import { useEffect, useMemo, useState } from "react"
 import { type Address, formatUnits } from "viem"
 import { useAccount } from "wagmi"
 
-import { isMezoToken } from "@repo/shared"
+import { getTokenUsdPrice } from "@repo/shared"
 
 // Format token values with appropriate precision based on magnitude
 function formatTokenValue(amount: bigint, decimals: number): string {
@@ -66,6 +66,7 @@ const TOKEN_ICONS: Record<string, string> = {
   WBTC: "/token icons/Bitcoin.svg",
   tBTC: "/token icons/Bitcoin.svg",
   MEZO: "/token icons/Mezo.svg",
+  MUSD: "/token icons/MUSD.svg",
 }
 
 function TokenIcon({
@@ -582,8 +583,13 @@ function ClaimableRewardRow({
               {rewardsByToken.map((reward) => {
                 const tokenAmount =
                   Number(reward.amount) / Math.pow(10, reward.decimals)
-                const isMezo = isMezoToken(reward.tokenAddress)
-                const price = isMezo ? (mezoPrice ?? 0) : (btcPrice ?? 0)
+                const price =
+                  getTokenUsdPrice(
+                    reward.tokenAddress,
+                    reward.symbol,
+                    btcPrice,
+                    mezoPrice,
+                  ) ?? 0
                 const usdValue = tokenAmount * price
 
                 return (
@@ -855,8 +861,8 @@ export default function DashboardPage(): JSX.Element {
     let total = 0
     for (const [tokenAddr, info] of totalClaimable.entries()) {
       const tokenAmount = Number(info.amount) / Math.pow(10, info.decimals)
-      const isMezo = isMezoToken(tokenAddr)
-      const price = isMezo ? (mezoPrice ?? 0) : (btcPrice ?? 0)
+      const price =
+        getTokenUsdPrice(tokenAddr, info.symbol, btcPrice, mezoPrice) ?? 0
       total += tokenAmount * price
     }
     return total
@@ -871,8 +877,13 @@ export default function DashboardPage(): JSX.Element {
       for (const reward of bribe.rewards) {
         const tokenAmount =
           Number(reward.earned) / Math.pow(10, reward.decimals)
-        const isMezo = isMezoToken(reward.tokenAddress)
-        const price = isMezo ? (mezoPrice ?? 0) : (btcPrice ?? 0)
+        const price =
+          getTokenUsdPrice(
+            reward.tokenAddress,
+            reward.symbol,
+            btcPrice,
+            mezoPrice,
+          ) ?? 0
         usdValue += tokenAmount * price
       }
       const existing = map.get(tokenIdKey) ?? 0
@@ -1076,10 +1087,13 @@ export default function DashboardPage(): JSX.Element {
                                 const tokenAmount =
                                   Number(info.amount) /
                                   Math.pow(10, info.decimals)
-                                const isMezo = isMezoToken(tokenAddr)
-                                const price = isMezo
-                                  ? (mezoPrice ?? 0)
-                                  : (btcPrice ?? 0)
+                                const price =
+                                  getTokenUsdPrice(
+                                    tokenAddr,
+                                    info.symbol,
+                                    btcPrice,
+                                    mezoPrice,
+                                  ) ?? 0
                                 const usdValue = tokenAmount * price
 
                                 return (

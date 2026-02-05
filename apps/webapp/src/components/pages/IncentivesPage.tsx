@@ -22,10 +22,7 @@ import {
 import { useVeBTCLocks } from "@/hooks/useLocks"
 import { useMezoPrice } from "@/hooks/useMezoPrice"
 import type { Token } from "@/hooks/useTokenList"
-import {
-  formatUsdValue,
-  getTokenValueUsd,
-} from "@/hooks/useTokenPrices"
+import { formatUsdValue, getTokenValueUsd } from "@/hooks/useTokenPrices"
 import {
   type BribeIncentive,
   useAddIncentives,

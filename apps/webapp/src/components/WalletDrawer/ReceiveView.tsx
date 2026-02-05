@@ -64,7 +64,9 @@ type ReceiveViewProps = {
   onBack: () => void
 }
 
-export function ReceiveView({ onBack: _onBack }: ReceiveViewProps): JSX.Element {
+export function ReceiveView({
+  onBack: _onBack,
+}: ReceiveViewProps): JSX.Element {
   const { accountAddress } = useWalletAccount()
   const { isMainnet } = useNetwork()
   const [copied, setCopied] = useState(false)
@@ -142,11 +144,7 @@ export function ReceiveView({ onBack: _onBack }: ReceiveViewProps): JSX.Element 
         >
           <div className="flex items-center gap-3 overflow-hidden">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--accent)]">
-              <img
-                src="/token icons/Mezo.svg"
-                alt="Mezo"
-                className="h-6 w-6"
-              />
+              <img src="/token icons/Mezo.svg" alt="Mezo" className="h-6 w-6" />
             </div>
             <span className="truncate font-mono text-sm text-[var(--content-primary)]">
               {accountAddress}

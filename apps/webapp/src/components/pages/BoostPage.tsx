@@ -33,7 +33,7 @@ import {
   Skeleton,
   Tag,
 } from "@mezo-org/mezo-clay"
-import { isMezoToken } from "@repo/shared"
+import { getTokenUsdPrice } from "@repo/shared"
 import Link from "next/link"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { formatUnits } from "viem"
@@ -83,9 +83,9 @@ export default function BoostPage(): JSX.Element {
   const [gaugeAllocations, setGaugeAllocations] = useState<Map<number, number>>(
     new Map(),
   )
-  const [selectedGaugeIndexes, setSelectedGaugeIndexes] = useState<
-    Set<number>
-  >(new Set())
+  const [selectedGaugeIndexes, setSelectedGaugeIndexes] = useState<Set<number>>(
+    new Set(),
+  )
   const [cartSnapshots, setCartSnapshots] = useState<Map<number, number>>(
     new Map(),
   )
@@ -128,8 +128,13 @@ export default function BoostPage(): JSX.Element {
       let usdValue = 0
       for (const reward of bribe.rewards) {
         const tokenAmount = Number(reward.earned) / 10 ** reward.decimals
-        const isMezo = isMezoToken(reward.tokenAddress)
-        const price = isMezo ? (mezoPrice ?? 0) : (btcPrice ?? 0)
+        const price =
+          getTokenUsdPrice(
+            reward.tokenAddress,
+            reward.symbol,
+            btcPrice,
+            mezoPrice,
+          ) ?? 0
         usdValue += tokenAmount * price
       }
       const existing = map.get(tokenIdKey) ?? 0
@@ -140,7 +145,7 @@ export default function BoostPage(): JSX.Element {
 
   // Create enriched veMEZO locks with voting data for the carousel
   const enrichedVeMEZOLocks: VeMEZOLockData[] = useMemo(() => {
-    return veMEZOLocks.map((lock) => {
+    return veMEZOLocks.map((lock, lockIndex) => {
       // Get batch vote state for this lock
       const batchVoteState = voteStateMap.get(lock.tokenId.toString())
       const lockUsedWeight = batchVoteState?.usedWeight
@@ -197,10 +202,53 @@ export default function BoostPage(): JSX.Element {
         }
       }
 
+      // Calculate PROJECTED APY from local gauge allocations (pending votes)
+      // Only calculate for the selected lock
+      let projectedAPY: number | null = null
+      if (selectedLockIndex === lockIndex && mezoPrice && mezoPrice > 0) {
+        let totalProjectedIncentivesUSD = 0
+        let totalUserVoteWeight = 0n
+
+        // Iterate through all gauge allocations for this lock
+        for (const [gaugeIndex, votePercentage] of gaugeAllocations.entries()) {
+          if (votePercentage <= 0) continue
+
+          const gauge = gauges[gaugeIndex]
+          if (!gauge) continue
+
+          const gaugeData = apyMap.get(gauge.address.toLowerCase())
+          if (!gaugeData || gaugeData.totalIncentivesUSD <= 0) continue
+
+          // Calculate user's vote weight for this gauge
+          const userVoteWeight =
+            (BigInt(Math.floor(votePercentage * 100)) * lock.votingPower) /
+            10000n
+          totalUserVoteWeight += userVoteWeight
+
+          // Calculate user's share of incentives (considering their vote adds to total)
+          const newTotalWeight = gaugeData.totalVeMEZOWeight + userVoteWeight
+          if (newTotalWeight > 0n) {
+            const userShare = Number(userVoteWeight) / Number(newTotalWeight)
+            totalProjectedIncentivesUSD +=
+              gaugeData.totalIncentivesUSD * userShare
+          }
+        }
+
+        if (totalProjectedIncentivesUSD > 0 && totalUserVoteWeight > 0n) {
+          const usedVeMEZOAmount = Number(totalUserVoteWeight) / 1e18
+          const usedVeMEZOValueUSD = usedVeMEZOAmount * mezoPrice
+          if (usedVeMEZOValueUSD > 0) {
+            const weeklyReturn = totalProjectedIncentivesUSD / usedVeMEZOValueUSD
+            projectedAPY = weeklyReturn * 52 * 100
+          }
+        }
+      }
+
       const result: VeMEZOLockData = {
         ...lock,
         currentAPY,
         upcomingAPY,
+        projectedAPY,
         isLoadingUsedWeight: isLoadingVoteState,
         isLoadingAPY: isLoadingBribes || isLoadingAPY,
       }
@@ -222,16 +270,21 @@ export default function BoostPage(): JSX.Element {
     isLoadingVoteState,
     isLoadingBribes,
     isLoadingAPY,
+    selectedLockIndex,
+    gaugeAllocations,
+    gauges,
   ])
   const {
     vote,
     isPending: isVoting,
     isConfirming: isConfirmingVote,
+    isSuccess: isVoteSuccess,
   } = useVoteOnGauge()
   const {
     reset,
     isPending: isResetting,
     isConfirming: isConfirmingReset,
+    isSuccess: isResetSuccess,
   } = useResetVote()
 
   // Gauge table sorting and filtering state
@@ -244,6 +297,16 @@ export default function BoostPage(): JSX.Element {
   // Calculator modal state
   const [isCalculatorOpen, setIsCalculatorOpen] = useState(false)
   const [isCartOpen, setIsCartOpen] = useState(false)
+
+  // Close cart and clear allocations after successful vote/reset
+  useEffect(() => {
+    if (isVoteSuccess || isResetSuccess) {
+      setIsCartOpen(false)
+      setGaugeAllocations(new Map())
+      setSelectedGaugeIndexes(new Set())
+      setCartSnapshots(new Map())
+    }
+  }, [isVoteSuccess, isResetSuccess])
 
   const handleGaugeSort = useCallback(
     (column: GaugeSortColumn) => {
@@ -447,14 +510,11 @@ export default function BoostPage(): JSX.Element {
     [gaugeAllocations],
   )
 
-  const handleClearSelections = useCallback(
-    function handleClearSelections() {
-      setSelectedGaugeIndexes(new Set())
-      setGaugeAllocations(new Map())
-      setCartSnapshots(new Map())
-    },
-    [],
-  )
+  const handleClearSelections = useCallback(function handleClearSelections() {
+    setSelectedGaugeIndexes(new Set())
+    setGaugeAllocations(new Map())
+    setCartSnapshots(new Map())
+  }, [])
 
   const handleVote = () => {
     if (!selectedLock || gaugeAllocations.size === 0) return
@@ -476,19 +536,13 @@ export default function BoostPage(): JSX.Element {
     reset(selectedLock.tokenId)
   }
 
-  const handleCheckoutOpen = useCallback(
-    function handleCheckoutOpen() {
-      setIsCartOpen(true)
-    },
-    [],
-  )
+  const handleCheckoutOpen = useCallback(function handleCheckoutOpen() {
+    setIsCartOpen(true)
+  }, [])
 
-  const handleCheckoutClose = useCallback(
-    function handleCheckoutClose() {
-      setIsCartOpen(false)
-    },
-    [],
-  )
+  const handleCheckoutClose = useCallback(function handleCheckoutClose() {
+    setIsCartOpen(false)
+  }, [])
 
   const isLoading = isLoadingLocks || isLoadingGauges
 
@@ -644,8 +698,7 @@ export default function BoostPage(): JSX.Element {
                       gauge.address.toLowerCase(),
                     )
                     const apyData = apyMap.get(gauge.address.toLowerCase())
-                    const currentVote =
-                      gaugeAllocations.get(gaugeIndex) ?? 0
+                    const currentVote = gaugeAllocations.get(gaugeIndex) ?? 0
                     const snapshotVote =
                       cartSnapshots.get(gaugeIndex) ?? currentVote
                     const isProjected = !!selectedLock && currentVote > 0
@@ -682,16 +735,23 @@ export default function BoostPage(): JSX.Element {
                               )}
                             </div>
                             <div className="min-w-0">
-                              <Link
-                                href={`/gauges/${gauge.address}`}
-                                className="text-sm font-semibold text-[var(--content-primary)] no-underline"
-                              >
-                                {profile?.display_name
-                                  ? profile.display_name
-                                  : gauge.veBTCTokenId > 0n
-                                    ? `veBTC #${gauge.veBTCTokenId.toString()}`
-                                    : `${gauge.address.slice(0, 6)}...${gauge.address.slice(-4)}`}
-                              </Link>
+                              <div className="flex items-center gap-2">
+                                <Link
+                                  href={`/gauges/${gauge.address}`}
+                                  className="text-sm font-semibold text-[var(--content-primary)] no-underline"
+                                >
+                                  {profile?.display_name
+                                    ? profile.display_name
+                                    : gauge.veBTCTokenId > 0n
+                                      ? `veBTC #${gauge.veBTCTokenId.toString()}`
+                                      : `${gauge.address.slice(0, 6)}...${gauge.address.slice(-4)}`}
+                                </Link>
+                                {profile?.display_name && gauge.veBTCTokenId > 0n && (
+                                  <span className="inline-flex items-center rounded bg-[rgba(247,147,26,0.15)] border border-[rgba(247,147,26,0.3)] px-1.5 py-0.5 font-mono text-2xs font-semibold tracking-wide text-[#F7931A]">
+                                    #{gauge.veBTCTokenId.toString()}
+                                  </span>
+                                )}
+                              </div>
                               {profile?.description && (
                                 <p className="mt-1 line-clamp-2 text-2xs text-[var(--content-secondary)]">
                                   {profile.description}
@@ -801,34 +861,55 @@ export default function BoostPage(): JSX.Element {
               </fieldset>
             )}
 
-            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] pt-3">
-              <div className="text-xs text-[var(--content-secondary)]">
-                Total allocation must equal 100% to vote.
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {selectedLock && usedWeight && usedWeight > 0n && (
+            <div className="flex flex-col gap-3 border-t border-[var(--border)] pt-3">
+              {/* Transaction Status Indicator */}
+              {(isVoting || isConfirmingVote || isResetting || isConfirmingReset) && (
+                <div className="flex items-center gap-2 rounded-lg bg-[rgba(247,147,26,0.1)] px-3 py-2">
+                  <div className="h-2 w-2 animate-pulse rounded-full bg-[#F7931A]" />
+                  <span className="text-sm text-[#F7931A]">
+                    {isVoting || isResetting
+                      ? "Waiting for wallet confirmation..."
+                      : "Confirming transaction..."}
+                  </span>
+                </div>
+              )}
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="text-xs text-[var(--content-secondary)]">
+                  Total allocation must equal 100% to vote.
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {selectedLock && usedWeight && usedWeight > 0n && (
+                    <Button
+                      kind="secondary"
+                      onClick={handleReset}
+                      isLoading={isResetting || isConfirmingReset}
+                    >
+                      {isResetting
+                        ? "Confirm in wallet..."
+                        : isConfirmingReset
+                          ? "Confirming..."
+                          : "Reset Vote"}
+                    </Button>
+                  )}
                   <Button
-                    kind="secondary"
-                    onClick={handleReset}
-                    isLoading={isResetting || isConfirmingReset}
+                    kind="primary"
+                    onClick={handleVote}
+                    isLoading={isVoting || isConfirmingVote}
+                    disabled={
+                      !selectedLock ||
+                      gaugeAllocations.size === 0 ||
+                      totalAllocation === 0 ||
+                      totalAllocation !== 100 ||
+                      !canVoteInCurrentEpoch
+                    }
                   >
-                    Reset Vote
+                    {isVoting
+                      ? "Confirm in wallet..."
+                      : isConfirmingVote
+                        ? "Confirming..."
+                        : `Vote (${totalAllocation}%)`}
                   </Button>
-                )}
-                <Button
-                  kind="primary"
-                  onClick={handleVote}
-                  isLoading={isVoting || isConfirmingVote}
-                  disabled={
-                    !selectedLock ||
-                    gaugeAllocations.size === 0 ||
-                    totalAllocation === 0 ||
-                    totalAllocation !== 100 ||
-                    !canVoteInCurrentEpoch
-                  }
-                >
-                  Vote ({totalAllocation}%)
-                </Button>
+                </div>
               </div>
             </div>
           </div>
@@ -1029,7 +1110,10 @@ export default function BoostPage(): JSX.Element {
                                 { id: "veMEZOWeight", label: "veMEZO Weight" },
                                 { id: "veBTCWeight", label: "veBTC Weight" },
                                 { id: "boost", label: "Boost" },
-                                { id: "optimalVeMEZO", label: "Optimal veMEZO" },
+                                {
+                                  id: "optimalVeMEZO",
+                                  label: "Optimal veMEZO",
+                                },
                               ] as const
                             ).map((option) => (
                               <button
@@ -1103,21 +1187,28 @@ export default function BoostPage(): JSX.Element {
                                         )}
                                       </div>
                                       <div className="min-w-0">
-                                        <p
-                                          className={`text-sm font-semibold ${
-                                            profile?.display_name ||
-                                            profile?.description ||
-                                            profile?.profile_picture_url
-                                              ? "text-[var(--content-primary)]"
-                                              : "text-[var(--content-secondary)]"
-                                          }`}
-                                        >
-                                          {profile?.display_name
-                                            ? profile.display_name
-                                            : gauge.veBTCTokenId > 0n
-                                              ? `veBTC #${gauge.veBTCTokenId.toString()}`
-                                              : `${gauge.address.slice(0, 6)}...${gauge.address.slice(-4)}`}
-                                        </p>
+                                        <div className="flex items-center gap-2">
+                                          <p
+                                            className={`text-sm font-semibold ${
+                                              profile?.display_name ||
+                                              profile?.description ||
+                                              profile?.profile_picture_url
+                                                ? "text-[var(--content-primary)]"
+                                                : "text-[var(--content-secondary)]"
+                                            }`}
+                                          >
+                                            {profile?.display_name
+                                              ? profile.display_name
+                                              : gauge.veBTCTokenId > 0n
+                                                ? `veBTC #${gauge.veBTCTokenId.toString()}`
+                                                : `${gauge.address.slice(0, 6)}...${gauge.address.slice(-4)}`}
+                                          </p>
+                                          {profile?.display_name && gauge.veBTCTokenId > 0n && (
+                                            <span className="inline-flex items-center rounded bg-[rgba(247,147,26,0.15)] border border-[rgba(247,147,26,0.3)] px-1.5 py-0.5 font-mono text-2xs font-semibold tracking-wide text-[#F7931A]">
+                                              #{gauge.veBTCTokenId.toString()}
+                                            </span>
+                                          )}
+                                        </div>
                                         {profile?.description && (
                                           <p className="truncate text-2xs text-[var(--content-secondary)]">
                                             {profile.description}
@@ -1151,10 +1242,10 @@ export default function BoostPage(): JSX.Element {
                                         veMEZO Weight
                                       </dt>
                                       <dd className="font-mono text-[var(--content-primary)]">
-                                        {formatUnits(gauge.totalWeight, 18).slice(
-                                          0,
-                                          10,
-                                        )}
+                                        {formatUnits(
+                                          gauge.totalWeight,
+                                          18,
+                                        ).slice(0, 10)}
                                       </dd>
                                     </div>
                                     <div>
@@ -1162,7 +1253,9 @@ export default function BoostPage(): JSX.Element {
                                         Boost
                                       </dt>
                                       <dd className="font-mono text-[var(--content-primary)]">
-                                        {formatMultiplier(gauge.boostMultiplier)}
+                                        {formatMultiplier(
+                                          gauge.boostMultiplier,
+                                        )}
                                       </dd>
                                     </div>
                                     <div>
@@ -1181,7 +1274,9 @@ export default function BoostPage(): JSX.Element {
                                             : undefined
                                         }
                                       >
-                                        {isLoadingAPY ? "..." : formatAPY(displayAPY)}
+                                        {isLoadingAPY
+                                          ? "..."
+                                          : formatAPY(displayAPY)}
                                         {isProjected && " ↓"}
                                       </dd>
                                     </div>
@@ -1246,9 +1341,13 @@ export default function BoostPage(): JSX.Element {
                                                   gauge.originalIndex,
                                                 )
                                           }
-                                          disabled={!isSelected && votePercentage <= 0}
+                                          disabled={
+                                            !isSelected && votePercentage <= 0
+                                          }
                                         >
-                                          {isSelected ? "Remove" : "Add to cart"}
+                                          {isSelected
+                                            ? "Remove"
+                                            : "Add to cart"}
                                         </Button>
                                       </li>
                                     </ol>
@@ -1306,7 +1405,11 @@ export default function BoostPage(): JSX.Element {
               </span>
             </div>
             <div className="flex items-center gap-2">
-              <Button kind="secondary" size="small" onClick={handleClearSelections}>
+              <Button
+                kind="secondary"
+                size="small"
+                onClick={handleClearSelections}
+              >
                 Clear
               </Button>
               <Button

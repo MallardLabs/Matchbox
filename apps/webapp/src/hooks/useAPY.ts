@@ -3,16 +3,27 @@ import { useNetwork } from "@/contexts/NetworkContext"
 import { getTokenUsdPrice } from "@repo/shared"
 import { useMemo } from "react"
 import type { Address } from "viem"
-import { useReadContracts } from "wagmi"
+import { useReadContract, useReadContracts } from "wagmi"
 import { useBtcPrice } from "./useBtcPrice"
 import { useMezoPrice } from "./useMezoPrice"
 
-// Epoch duration in seconds (7 days)
-const EPOCH_DURATION = 7 * 24 * 60 * 60
 const EPOCHS_PER_YEAR = 52
 
-function getEpochStart(timestamp: number): bigint {
-  return BigInt(Math.floor(timestamp / EPOCH_DURATION) * EPOCH_DURATION)
+/**
+ * Hook to get the current epoch start from the contract
+ * This ensures we use the same epoch boundaries as the contract
+ */
+function useContractEpochStart(): bigint | undefined {
+  const { chainId } = useNetwork()
+  const contracts = getContractConfig(chainId)
+
+  const { data: epochStartData } = useReadContract({
+    ...contracts.boostVoter,
+    functionName: "epochStart",
+    args: [BigInt(Math.floor(Date.now() / 1000))],
+  })
+
+  return epochStartData as bigint | undefined
 }
 
 export type TokenIncentive = {
@@ -44,6 +55,7 @@ export function useGaugeAPY(
   const { price: mezoPrice } = useMezoPrice()
   const { chainId } = useNetwork()
   const contracts = getContractConfig(chainId)
+  const contractEpochStart = useContractEpochStart()
 
   // Get bribe address for the gauge
   const { data: bribeAddressData, isLoading: isLoadingBribe } =
@@ -121,8 +133,6 @@ export function useGaugeAPY(
   const tokenAddresses =
     rewardTokensData?.map((r) => r.result as Address).filter(Boolean) ?? []
 
-  const currentEpochStart = getEpochStart(Math.floor(Date.now() / 1000))
-
   // Get token rewards per epoch, decimals, and symbol for each token
   const { data: tokenDataResults, isLoading: isLoadingRewards } =
     useReadContracts({
@@ -146,7 +156,7 @@ export function useGaugeAPY(
             },
           ] as const,
           functionName: "tokenRewardsPerEpoch" as const,
-          args: [tokenAddress, currentEpochStart],
+          args: [tokenAddress, contractEpochStart ?? 0n],
         },
         {
           address: tokenAddress,
@@ -176,7 +186,8 @@ export function useGaugeAPY(
         },
       ]),
       query: {
-        enabled: hasBribe && tokenAddresses.length > 0,
+        enabled:
+          hasBribe && tokenAddresses.length > 0 && contractEpochStart !== undefined,
       },
     })
 
@@ -217,8 +228,18 @@ export function useGaugeAPY(
       return null
     }
 
+    // If totalWeight is undefined (not passed), return null (data not ready)
+    if (totalWeight === undefined) {
+      return null
+    }
+
+    // If mezo price isn't available yet, return null instead of infinity
+    if (mezoPrice === null || mezoPrice === 0) {
+      return null
+    }
+
     // Has incentives but no votes = infinite APY (first voter gets all rewards)
-    if (!totalWeight || totalWeight === 0n) {
+    if (totalWeight === 0n) {
       return Number.POSITIVE_INFINITY
     }
 
@@ -226,7 +247,7 @@ export function useGaugeAPY(
     const totalVeMEZOAmount = Number(totalWeight) / 1e18
 
     // Value of veMEZO votes in USD
-    const totalVeMEZOValueUSD = totalVeMEZOAmount * (mezoPrice ?? 0)
+    const totalVeMEZOValueUSD = totalVeMEZOAmount * mezoPrice
 
     if (totalVeMEZOValueUSD === 0) return Number.POSITIVE_INFINITY
 
@@ -264,6 +285,7 @@ export function useGaugesAPY(
   const { price: mezoPrice } = useMezoPrice()
   const { chainId } = useNetwork()
   const contracts = getContractConfig(chainId)
+  const contractEpochStart = useContractEpochStart()
 
   const gaugeAddresses = gauges.map((g) => g.address)
 
@@ -372,8 +394,6 @@ export function useGaugesAPY(
       )
   }, [rewardTokensData])
 
-  const currentEpochStart = getEpochStart(Math.floor(Date.now() / 1000))
-
   // Get token rewards per epoch, decimals, and symbol - only run when we have resolved token addresses
   const { data: tokenRewardsData, isLoading: isLoadingRewards } =
     useReadContracts({
@@ -405,7 +425,7 @@ export function useGaugesAPY(
             functionName: "tokenRewardsPerEpoch" as const,
             args: [
               tokenAddress ?? "0x0000000000000000000000000000000000000000",
-              currentEpochStart,
+              contractEpochStart ?? 0n,
             ],
           },
           {
@@ -439,9 +459,11 @@ export function useGaugesAPY(
         ]
       }),
       query: {
-        // Only run when we have actual token addresses resolved
+        // Only run when we have actual token addresses resolved and epoch start is known
         enabled:
-          rewardTokenQueries.length > 0 && resolvedTokenAddresses.length > 0,
+          rewardTokenQueries.length > 0 &&
+          resolvedTokenAddresses.length > 0 &&
+          contractEpochStart !== undefined,
       },
     })
 
@@ -522,12 +544,16 @@ export function useGaugesAPY(
 
       // No incentives = no APY
       if (totalIncentivesUSD > 0) {
+        // If mezo price isn't available yet, return null instead of infinity
+        if (mezoPrice === null || mezoPrice === 0) {
+          apy = null
+        }
         // Has incentives but no votes = infinite APY (first voter gets all rewards)
-        if (!totalWeight || totalWeight === 0n) {
+        else if (!totalWeight || totalWeight === 0n) {
           apy = Number.POSITIVE_INFINITY
         } else {
           const totalVeMEZOAmount = Number(totalWeight) / 1e18
-          const totalVeMEZOValueUSD = totalVeMEZOAmount * (mezoPrice ?? 0)
+          const totalVeMEZOValueUSD = totalVeMEZOAmount * mezoPrice
 
           if (totalVeMEZOValueUSD > 0) {
             const weeklyReturn = totalIncentivesUSD / totalVeMEZOValueUSD
@@ -550,7 +576,14 @@ export function useGaugesAPY(
     })
 
     return map
-  }, [gauges, rewardTokenQueries, rewardTokensData, tokenRewardsData, btcPrice, mezoPrice])
+  }, [
+    gauges,
+    rewardTokenQueries,
+    rewardTokensData,
+    tokenRewardsData,
+    btcPrice,
+    mezoPrice,
+  ])
 
   const isLoading =
     isLoadingBribes || isLoadingLengths || isLoadingTokens || isLoadingRewards

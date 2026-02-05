@@ -127,9 +127,7 @@ export function WalletSetupView({
             </div>
           )}
           <span className="text-sm font-medium text-[var(--content-primary)]">
-            {isDeployed
-              ? "Smart Account ready"
-              : "Deploying Smart Account..."}
+            {isDeployed ? "Smart Account ready" : "Deploying Smart Account..."}
           </span>
         </div>
       </div>
