@@ -9,6 +9,17 @@ import { useMezoPrice } from "./useMezoPrice"
 
 const EPOCHS_PER_YEAR = 52
 
+// Cache the timestamp at module level to avoid re-fetching on every render
+// This is fine because epoch boundaries don't change within a session
+let cachedEpochTimestamp: bigint | null = null
+
+function getStableEpochTimestamp(): bigint {
+  if (cachedEpochTimestamp === null) {
+    cachedEpochTimestamp = BigInt(Math.floor(Date.now() / 1000))
+  }
+  return cachedEpochTimestamp
+}
+
 /**
  * Hook to get the current epoch start from the contract
  * This ensures we use the same epoch boundaries as the contract
@@ -20,7 +31,7 @@ function useContractEpochStart(): bigint | undefined {
   const { data: epochStartData } = useReadContract({
     ...contracts.boostVoter,
     functionName: "epochStart",
-    args: [BigInt(Math.floor(Date.now() / 1000))],
+    args: [getStableEpochTimestamp()],
   })
 
   return epochStartData as bigint | undefined
@@ -473,20 +484,6 @@ export function useGaugesAPY(
   const apyMap = useMemo(() => {
     const map = new Map<string, GaugeAPYData>()
 
-    // Debug logging
-    console.log("[useGaugesAPY] Calculating APY map", {
-      gaugesCount: gauges.length,
-      validBribesCount: validBribes.length,
-      resolvedRewardTokenQueriesCount: resolvedRewardTokenQueries.length,
-      tokenRewardsDataLength: tokenRewardsData?.length,
-      contractEpochStart: contractEpochStart?.toString(),
-      btcPrice,
-      mezoPrice,
-      // Show first few token reward results to debug
-      sampleTokenRewards: tokenRewardsData?.slice(0, 6),
-      sampleResolvedQueries: resolvedRewardTokenQueries.slice(0, 2),
-    })
-
     // Initialize all gauges with default values
     gauges.forEach((gauge) => {
       map.set(gauge.address.toLowerCase(), {
@@ -510,18 +507,6 @@ export function useGaugesAPY(
         | number
         | undefined
       const symbol = tokenRewardsData?.[i * 3 + 2]?.result as string | undefined
-
-      // Only log if we have a valid token address with actual data
-      if (tokenAddress && (amount !== undefined || decimals !== undefined || symbol !== undefined)) {
-        console.log("[useGaugesAPY] Token reward", {
-          gaugeAddress: query.gaugeAddress,
-          tokenAddress,
-          amount: amount?.toString(),
-          decimals,
-          symbol,
-          rawResult: tokenRewardsData?.[i * 3],
-        })
-      }
 
       if (tokenAddress && amount && amount > 0n) {
         const tokenAmount = Number(amount) / Math.pow(10, decimals ?? 18)
