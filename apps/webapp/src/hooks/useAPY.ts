@@ -55,6 +55,50 @@ export type GaugeAPYData = {
 }
 
 /**
+ * Shared logic to calculate APY from incentives and weight
+ */
+export function calculateAPYFromData(
+  totalIncentivesUSD: number,
+  totalWeight: bigint | undefined,
+  mezoPrice: number | null,
+): number | null {
+  // No incentives = no APY
+  if (totalIncentivesUSD === 0) {
+    return null
+  }
+
+  // If totalWeight is undefined, data isn't ready
+  if (totalWeight === undefined) {
+    return null
+  }
+
+  // If mezo price isn't available yet, return null instead of infinity
+  if (mezoPrice === null || mezoPrice === 0) {
+    return null
+  }
+
+  // Has incentives but no votes = infinite APY (first voter gets all rewards)
+  if (totalWeight === 0n) {
+    return Number.POSITIVE_INFINITY
+  }
+
+  // Convert veMEZO weight to a number (18 decimals)
+  const totalVeMEZOAmount = Number(totalWeight) / 1e18
+
+  // Value of veMEZO votes in USD
+  const totalVeMEZOValueUSD = totalVeMEZOAmount * mezoPrice
+
+  if (totalVeMEZOValueUSD <= 0) return Number.POSITIVE_INFINITY
+
+  // APY = (weekly rewards / total position value) * 52 weeks * 100%
+  const weeklyReturn = totalIncentivesUSD / totalVeMEZOValueUSD
+  const annualReturn = weeklyReturn * EPOCHS_PER_YEAR
+  const apyPercent = annualReturn * 100
+
+  return apyPercent
+}
+
+/**
  * Calculate APY for a single gauge
  * APY = (Total Epoch Incentives USD / (Total veMEZO votes * MEZO Price)) * 52 * 100
  */
@@ -73,12 +117,12 @@ export function useGaugeAPY(
     useReadContracts({
       contracts: gaugeAddress
         ? [
-            {
-              ...contracts.boostVoter,
-              functionName: "gaugeToBribe",
-              args: [gaugeAddress],
-            },
-          ]
+          {
+            ...contracts.boostVoter,
+            functionName: "gaugeToBribe",
+            args: [gaugeAddress],
+          },
+        ]
         : [],
       query: {
         enabled: !!gaugeAddress,
@@ -95,22 +139,22 @@ export function useGaugeAPY(
     useReadContracts({
       contracts: hasBribe
         ? [
-            {
-              address: bribeAddress!,
-              abi: [
-                {
-                  inputs: [],
-                  name: "rewardsListLength",
-                  outputs: [
-                    { internalType: "uint256", name: "", type: "uint256" },
-                  ],
-                  stateMutability: "view",
-                  type: "function",
-                },
-              ] as const,
-              functionName: "rewardsListLength" as const,
-            },
-          ]
+          {
+            address: bribeAddress!,
+            abi: [
+              {
+                inputs: [],
+                name: "rewardsListLength",
+                outputs: [
+                  { internalType: "uint256", name: "", type: "uint256" },
+                ],
+                stateMutability: "view",
+                type: "function",
+              },
+            ] as const,
+            functionName: "rewardsListLength" as const,
+          },
+        ]
         : [],
       query: {
         enabled: hasBribe,
@@ -235,42 +279,10 @@ export function useGaugeAPY(
   }, [tokenDataResults, tokenAddresses, btcPrice, mezoPrice])
 
   // Calculate APY
-  const apy = useMemo(() => {
-    // No incentives = no APY
-    if (totalIncentivesUSD === 0) {
-      return null
-    }
-
-    // If totalWeight is undefined (not passed), return null (data not ready)
-    if (totalWeight === undefined) {
-      return null
-    }
-
-    // If mezo price isn't available yet, return null instead of infinity
-    if (mezoPrice === null || mezoPrice === 0) {
-      return null
-    }
-
-    // Has incentives but no votes = infinite APY (first voter gets all rewards)
-    if (totalWeight === 0n) {
-      return Number.POSITIVE_INFINITY
-    }
-
-    // Convert veMEZO weight to a number (18 decimals)
-    const totalVeMEZOAmount = Number(totalWeight) / 1e18
-
-    // Value of veMEZO votes in USD
-    const totalVeMEZOValueUSD = totalVeMEZOAmount * mezoPrice
-
-    if (totalVeMEZOValueUSD === 0) return Number.POSITIVE_INFINITY
-
-    // APY = (weekly rewards / total position value) * 52 weeks * 100%
-    const weeklyReturn = totalIncentivesUSD / totalVeMEZOValueUSD
-    const annualReturn = weeklyReturn * EPOCHS_PER_YEAR
-    const apyPercent = annualReturn * 100
-
-    return apyPercent
-  }, [totalWeight, totalIncentivesUSD, mezoPrice])
+  const apy = useMemo(
+    () => calculateAPYFromData(totalIncentivesUSD, totalWeight, mezoPrice),
+    [totalWeight, totalIncentivesUSD, mezoPrice],
+  )
 
   const isLoading =
     isLoadingBribe || isLoadingLength || isLoadingTokens || isLoadingRewards
@@ -553,30 +565,7 @@ export function useGaugesAPY(
       const totalWeight = gauge.totalWeight
       const incentivesByToken = gaugeTokenIncentives.get(gaugeKey) ?? []
 
-      let apy: number | null = null
-
-      // No incentives = no APY
-      if (totalIncentivesUSD > 0) {
-        // If mezo price isn't available yet, return null instead of infinity
-        if (mezoPrice === null || mezoPrice === 0) {
-          apy = null
-        }
-        // Has incentives but no votes = infinite APY (first voter gets all rewards)
-        else if (!totalWeight || totalWeight === 0n) {
-          apy = Number.POSITIVE_INFINITY
-        } else {
-          const totalVeMEZOAmount = Number(totalWeight) / 1e18
-          const totalVeMEZOValueUSD = totalVeMEZOAmount * mezoPrice
-
-          if (totalVeMEZOValueUSD > 0) {
-            const weeklyReturn = totalIncentivesUSD / totalVeMEZOValueUSD
-            const annualReturn = weeklyReturn * EPOCHS_PER_YEAR
-            apy = annualReturn * 100
-          } else {
-            apy = Number.POSITIVE_INFINITY
-          }
-        }
-      }
+      const apy = calculateAPYFromData(totalIncentivesUSD, totalWeight, mezoPrice)
 
       map.set(gaugeKey, {
         gaugeAddress: gauge.address,
@@ -679,26 +668,10 @@ export function useVotingAPY(
 ): { apy: number | null } {
   const { price: mezoPrice } = useMezoPrice()
 
-  const apy = useMemo(() => {
-    if (!usedWeight || usedWeight === 0n || totalClaimableUSD === 0) {
-      return null
-    }
-
-    // Convert used veMEZO weight to a number (18 decimals)
-    const usedVeMEZOAmount = Number(usedWeight) / 1e18
-
-    // Value of used veMEZO votes in USD
-    const usedVeMEZOValueUSD = usedVeMEZOAmount * (mezoPrice ?? 0)
-
-    if (usedVeMEZOValueUSD === 0) return null
-
-    // APY = (weekly rewards / total position value) * 52 weeks * 100%
-    const weeklyReturn = totalClaimableUSD / usedVeMEZOValueUSD
-    const annualReturn = weeklyReturn * EPOCHS_PER_YEAR
-    const apyPercent = annualReturn * 100
-
-    return apyPercent
-  }, [totalClaimableUSD, usedWeight, mezoPrice])
+  const apy = useMemo(
+    () => calculateAPYFromData(totalClaimableUSD, usedWeight, mezoPrice),
+    [totalClaimableUSD, usedWeight, mezoPrice],
+  )
 
   return { apy }
 }
@@ -790,43 +763,16 @@ export function useUpcomingVotingAPY(
       }
     }
 
-    if (totalUserIncentivesUSD === 0) {
-      return {
-        upcomingAPY: null,
-        projectedIncentivesUSD: 0,
-        projectedRewardsByToken: [],
-      }
-    }
-
     const projectedRewardsByToken = Array.from(tokenRewardsMap.values())
 
-    if (!usedWeight || usedWeight === 0n) {
-      return {
-        upcomingAPY: null,
-        projectedIncentivesUSD: totalUserIncentivesUSD,
-        projectedRewardsByToken,
-      }
-    }
-
-    // Convert used veMEZO weight to USD value
-    const usedVeMEZOAmount = Number(usedWeight) / 1e18
-    const usedVeMEZOValueUSD = usedVeMEZOAmount * (mezoPrice ?? 0)
-
-    if (usedVeMEZOValueUSD === 0) {
-      return {
-        upcomingAPY: null,
-        projectedIncentivesUSD: totalUserIncentivesUSD,
-        projectedRewardsByToken,
-      }
-    }
-
-    // Calculate APY: (weekly rewards / total position value) * 52 weeks * 100%
-    const weeklyReturn = totalUserIncentivesUSD / usedVeMEZOValueUSD
-    const annualReturn = weeklyReturn * EPOCHS_PER_YEAR
-    const apyPercent = annualReturn * 100
+    const upcomingAPY = calculateAPYFromData(
+      totalUserIncentivesUSD,
+      usedWeight,
+      mezoPrice,
+    )
 
     return {
-      upcomingAPY: apyPercent,
+      upcomingAPY,
       projectedIncentivesUSD: totalUserIncentivesUSD,
       projectedRewardsByToken,
     }

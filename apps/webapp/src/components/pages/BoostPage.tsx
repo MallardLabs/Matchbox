@@ -5,7 +5,12 @@ import {
   type VeMEZOLockData,
 } from "@/components/LockCarouselSelector"
 import { SpringIn } from "@/components/SpringIn"
-import { calculateProjectedAPY, formatAPY, useGaugesAPY } from "@/hooks/useAPY"
+import {
+  calculateAPYFromData,
+  calculateProjectedAPY,
+  formatAPY,
+  useGaugesAPY,
+} from "@/hooks/useAPY"
 import { useBtcPrice } from "@/hooks/useBtcPrice"
 import { useAllGaugeProfiles } from "@/hooks/useGaugeProfiles"
 import type { BoostGauge } from "@/hooks/useGauges"
@@ -155,22 +160,13 @@ export default function BoostPage(): JSX.Element {
       // Calculate CURRENT APY from claimable rewards (like Dashboard)
       const claimableUSD =
         claimableUSDByTokenId.get(lock.tokenId.toString()) ?? 0
-      let currentAPY: number | null = null
-      if (
-        lockUsedWeight &&
-        lockUsedWeight > 0n &&
-        claimableUSD > 0 &&
-        mezoPrice
-      ) {
-        const usedVeMEZOAmount = Number(lockUsedWeight) / 1e18
-        const usedVeMEZOValueUSD = usedVeMEZOAmount * mezoPrice
-        if (usedVeMEZOValueUSD > 0) {
-          const weeklyReturn = claimableUSD / usedVeMEZOValueUSD
-          currentAPY = weeklyReturn * 52 * 100
-        }
-      }
+      const currentAPY = calculateAPYFromData(
+        claimableUSD,
+        lockUsedWeight,
+        mezoPrice,
+      )
 
-      // Calculate UPCOMING APY from vote allocations (existing logic)
+      // Calculate UPCOMING APY from vote allocations
       let upcomingAPY: number | null = null
       if (
         lockUsedWeight &&
@@ -192,14 +188,11 @@ export default function BoostPage(): JSX.Element {
             totalUserIncentivesUSD += gaugeData.totalIncentivesUSD * userShare
           }
         }
-        if (totalUserIncentivesUSD > 0) {
-          const usedVeMEZOAmount = Number(lockUsedWeight) / 1e18
-          const usedVeMEZOValueUSD = usedVeMEZOAmount * mezoPrice
-          if (usedVeMEZOValueUSD > 0) {
-            const weeklyReturn = totalUserIncentivesUSD / usedVeMEZOValueUSD
-            upcomingAPY = weeklyReturn * 52 * 100
-          }
-        }
+        upcomingAPY = calculateAPYFromData(
+          totalUserIncentivesUSD,
+          lockUsedWeight,
+          mezoPrice,
+        )
       }
 
       // Calculate PROJECTED APY from local gauge allocations (pending votes)
@@ -234,14 +227,11 @@ export default function BoostPage(): JSX.Element {
           }
         }
 
-        if (totalProjectedIncentivesUSD > 0 && totalUserVoteWeight > 0n) {
-          const usedVeMEZOAmount = Number(totalUserVoteWeight) / 1e18
-          const usedVeMEZOValueUSD = usedVeMEZOAmount * mezoPrice
-          if (usedVeMEZOValueUSD > 0) {
-            const weeklyReturn = totalProjectedIncentivesUSD / usedVeMEZOValueUSD
-            projectedAPY = weeklyReturn * 52 * 100
-          }
-        }
+        projectedAPY = calculateAPYFromData(
+          totalProjectedIncentivesUSD,
+          totalUserVoteWeight,
+          mezoPrice,
+        )
       }
 
       const result: VeMEZOLockData = {
@@ -374,8 +364,8 @@ export default function BoostPage(): JSX.Element {
       const profile = gaugeProfiles.get(gauge.address.toLowerCase())
       return Boolean(
         profile?.display_name ||
-          profile?.description ||
-          profile?.profile_picture_url,
+        profile?.description ||
+        profile?.profile_picture_url,
       )
     }
 
@@ -704,11 +694,11 @@ export default function BoostPage(): JSX.Element {
                     const isProjected = !!selectedLock && currentVote > 0
                     const displayAPY = isProjected
                       ? calculateProjectedAPY(
-                          apyData,
-                          currentVote,
-                          selectedLock.votingPower,
-                          mezoPrice,
-                        )
+                        apyData,
+                        currentVote,
+                        selectedLock.votingPower,
+                        mezoPrice,
+                      )
                       : (apyData?.apy ?? null)
                     const hasChangedVote = snapshotVote !== currentVote
                     return (
@@ -980,7 +970,7 @@ export default function BoostPage(): JSX.Element {
                               {formatUnits(
                                 selectedLock.votingPower > (usedWeight ?? 0n)
                                   ? selectedLock.votingPower -
-                                      (usedWeight ?? 0n)
+                                  (usedWeight ?? 0n)
                                   : 0n,
                                 18,
                               ).slice(0, 10)}
@@ -1048,11 +1038,10 @@ export default function BoostPage(): JSX.Element {
                           Allocate Voting Power to Gauges
                         </p>
                         <p
-                          className={`text-xs ${
-                            totalAllocation !== 100
-                              ? "text-[var(--negative)]"
-                              : "text-[var(--content-secondary)]"
-                          }`}
+                          className={`text-xs ${totalAllocation !== 100
+                            ? "text-[var(--negative)]"
+                            : "text-[var(--content-secondary)]"
+                            }`}
                         >
                           Total: {totalAllocation}%
                           {totalAllocation > 100 && " (exceeds 100%)"}
@@ -1120,11 +1109,10 @@ export default function BoostPage(): JSX.Element {
                                 key={option.id}
                                 type="button"
                                 onClick={() => handleGaugeSort(option.id)}
-                                className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs ${
-                                  gaugeSortColumn === option.id
-                                    ? "border-[var(--content-primary)] text-[var(--content-primary)]"
-                                    : "border-[var(--border)] text-[var(--content-secondary)]"
-                                }`}
+                                className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs ${gaugeSortColumn === option.id
+                                  ? "border-[var(--content-primary)] text-[var(--content-primary)]"
+                                  : "border-[var(--border)] text-[var(--content-secondary)]"
+                                  }`}
                               >
                                 {option.label}
                                 {getGaugeSortIndicator(option.id)}
@@ -1145,11 +1133,11 @@ export default function BoostPage(): JSX.Element {
                                 selectedLock && userVotePercentage > 0
                               const displayAPY = isProjected
                                 ? calculateProjectedAPY(
-                                    apyData,
-                                    userVotePercentage,
-                                    selectedLock.votingPower,
-                                    mezoPrice,
-                                  )
+                                  apyData,
+                                  userVotePercentage,
+                                  selectedLock.votingPower,
+                                  mezoPrice,
+                                )
                                 : (apyData?.apy ?? null)
                               const isSelected = selectedGaugeIndexes.has(
                                 gauge.originalIndex,
@@ -1159,11 +1147,10 @@ export default function BoostPage(): JSX.Element {
                               return (
                                 <article
                                   key={gauge.address}
-                                  className={`flex flex-col gap-3 rounded-xl border bg-[var(--surface)] p-4 ${
-                                    isSelected
-                                      ? "border-[var(--positive)]"
-                                      : "border-[var(--border)]"
-                                  }`}
+                                  className={`flex flex-col gap-3 rounded-xl border bg-[var(--surface)] p-4 ${isSelected
+                                    ? "border-[var(--positive)]"
+                                    : "border-[var(--border)]"
+                                    }`}
                                 >
                                   <div className="flex items-start justify-between gap-3">
                                     <Link
@@ -1189,13 +1176,12 @@ export default function BoostPage(): JSX.Element {
                                       <div className="min-w-0">
                                         <div className="flex items-center gap-2">
                                           <p
-                                            className={`text-sm font-semibold ${
-                                              profile?.display_name ||
+                                            className={`text-sm font-semibold ${profile?.display_name ||
                                               profile?.description ||
                                               profile?.profile_picture_url
-                                                ? "text-[var(--content-primary)]"
-                                                : "text-[var(--content-secondary)]"
-                                            }`}
+                                              ? "text-[var(--content-primary)]"
+                                              : "text-[var(--content-secondary)]"
+                                              }`}
                                           >
                                             {profile?.display_name
                                               ? profile.display_name
@@ -1231,9 +1217,9 @@ export default function BoostPage(): JSX.Element {
                                       <dd className="font-mono text-[var(--content-primary)]">
                                         {gauge.veBTCWeight !== undefined
                                           ? formatUnits(
-                                              gauge.veBTCWeight,
-                                              18,
-                                            ).slice(0, 10)
+                                            gauge.veBTCWeight,
+                                            18,
+                                          ).slice(0, 10)
                                           : "-"}
                                       </dd>
                                     </div>
@@ -1263,11 +1249,10 @@ export default function BoostPage(): JSX.Element {
                                         APY
                                       </dt>
                                       <dd
-                                        className={`font-mono ${
-                                          displayAPY && displayAPY > 0
-                                            ? "text-[var(--positive)]"
-                                            : "text-[var(--content-secondary)]"
-                                        }`}
+                                        className={`font-mono ${displayAPY && displayAPY > 0
+                                          ? "text-[var(--positive)]"
+                                          : "text-[var(--content-secondary)]"
+                                          }`}
                                         title={
                                           isProjected
                                             ? "Projected APY after your vote"
@@ -1286,10 +1271,10 @@ export default function BoostPage(): JSX.Element {
                                       </dt>
                                       <dd className="font-mono text-[var(--content-primary)]">
                                         {gauge.optimalAdditionalVeMEZO !==
-                                        undefined
+                                          undefined
                                           ? formatFixedPoint(
-                                              gauge.optimalAdditionalVeMEZO,
-                                            )
+                                            gauge.optimalAdditionalVeMEZO,
+                                          )
                                           : "-"}
                                       </dd>
                                     </div>
@@ -1335,11 +1320,11 @@ export default function BoostPage(): JSX.Element {
                                           onClick={() =>
                                             isSelected
                                               ? handleToggleGaugeSelection(
-                                                  gauge.originalIndex,
-                                                )
+                                                gauge.originalIndex,
+                                              )
                                               : handleAddGaugeToCart(
-                                                  gauge.originalIndex,
-                                                )
+                                                gauge.originalIndex,
+                                              )
                                           }
                                           disabled={
                                             !isSelected && votePercentage <= 0
@@ -1395,11 +1380,10 @@ export default function BoostPage(): JSX.Element {
                 Total
               </span>
               <span
-                className={`font-mono text-sm font-semibold ${
-                  totalAllocation === 100
-                    ? "text-[var(--positive)]"
-                    : "text-[var(--content-primary)]"
-                }`}
+                className={`font-mono text-sm font-semibold ${totalAllocation === 100
+                  ? "text-[var(--positive)]"
+                  : "text-[var(--content-primary)]"
+                  }`}
               >
                 {totalAllocation}%
               </span>
