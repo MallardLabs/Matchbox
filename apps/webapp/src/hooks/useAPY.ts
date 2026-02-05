@@ -399,7 +399,9 @@ export function useGaugesAPY(
       .filter(
         (query): query is typeof query & { tokenAddress: Address } =>
           !!query.tokenAddress &&
-          query.tokenAddress !== "0x0000000000000000000000000000000000000000",
+          query.tokenAddress !== "0x0000000000000000000000000000000000000000" &&
+          // Filter out obviously invalid addresses (less than 20 non-zero bytes)
+          !query.tokenAddress.match(/^0x0*[0-9a-fA-F]{1,8}$/),
       )
   }, [rewardTokensData, rewardTokenQueries])
 
@@ -480,6 +482,9 @@ export function useGaugesAPY(
       contractEpochStart: contractEpochStart?.toString(),
       btcPrice,
       mezoPrice,
+      // Show first few token reward results to debug
+      sampleTokenRewards: tokenRewardsData?.slice(0, 6),
+      sampleResolvedQueries: resolvedRewardTokenQueries.slice(0, 2),
     })
 
     // Initialize all gauges with default values
@@ -506,13 +511,17 @@ export function useGaugesAPY(
         | undefined
       const symbol = tokenRewardsData?.[i * 3 + 2]?.result as string | undefined
 
-      console.log("[useGaugesAPY] Token reward", {
-        gaugeAddress: query.gaugeAddress,
-        tokenAddress,
-        amount: amount?.toString(),
-        decimals,
-        symbol,
-      })
+      // Only log if we have a valid token address with actual data
+      if (tokenAddress && (amount !== undefined || decimals !== undefined || symbol !== undefined)) {
+        console.log("[useGaugesAPY] Token reward", {
+          gaugeAddress: query.gaugeAddress,
+          tokenAddress,
+          amount: amount?.toString(),
+          decimals,
+          symbol,
+          rawResult: tokenRewardsData?.[i * 3],
+        })
+      }
 
       if (tokenAddress && amount && amount > 0n) {
         const tokenAmount = Number(amount) / Math.pow(10, decimals ?? 18)
