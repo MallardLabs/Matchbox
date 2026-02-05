@@ -187,7 +187,9 @@ export function useGaugeAPY(
       ]),
       query: {
         enabled:
-          hasBribe && tokenAddresses.length > 0 && contractEpochStart !== undefined,
+          hasBribe &&
+          tokenAddresses.length > 0 &&
+          contractEpochStart !== undefined,
       },
     })
 
@@ -287,7 +289,7 @@ export function useGaugesAPY(
   const contracts = getContractConfig(chainId)
   const contractEpochStart = useContractEpochStart()
 
-  const gaugeAddresses = gauges.map((g) => g.address)
+  const gaugeAddresses = useMemo(() => gauges.map((g) => g.address), [gauges])
 
   // Get bribe addresses for all gauges
   const { data: bribeAddressesData, isLoading: isLoadingBribes } =
@@ -317,7 +319,10 @@ export function useGaugesAPY(
     })
   }, [bribeAddressesData, gaugeAddresses])
 
-  const validBribes = bribeInfos.filter((b) => b.bribeAddress)
+  const validBribes = useMemo(
+    () => bribeInfos.filter((b) => b.bribeAddress),
+    [bribeInfos],
+  )
 
   // Get rewards list length for all bribe contracts
   const { data: rewardsLengthData, isLoading: isLoadingLengths } =
@@ -394,8 +399,7 @@ export function useGaugesAPY(
       .filter(
         (query): query is typeof query & { tokenAddress: Address } =>
           !!query.tokenAddress &&
-          query.tokenAddress !==
-            "0x0000000000000000000000000000000000000000",
+          query.tokenAddress !== "0x0000000000000000000000000000000000000000",
       )
   }, [rewardTokensData, rewardTokenQueries])
 
@@ -467,6 +471,17 @@ export function useGaugesAPY(
   const apyMap = useMemo(() => {
     const map = new Map<string, GaugeAPYData>()
 
+    // Debug logging
+    console.log("[useGaugesAPY] Calculating APY map", {
+      gaugesCount: gauges.length,
+      validBribesCount: validBribes.length,
+      resolvedRewardTokenQueriesCount: resolvedRewardTokenQueries.length,
+      tokenRewardsDataLength: tokenRewardsData?.length,
+      contractEpochStart: contractEpochStart?.toString(),
+      btcPrice,
+      mezoPrice,
+    })
+
     // Initialize all gauges with default values
     gauges.forEach((gauge) => {
       map.set(gauge.address.toLowerCase(), {
@@ -490,6 +505,14 @@ export function useGaugesAPY(
         | number
         | undefined
       const symbol = tokenRewardsData?.[i * 3 + 2]?.result as string | undefined
+
+      console.log("[useGaugesAPY] Token reward", {
+        gaugeAddress: query.gaugeAddress,
+        tokenAddress,
+        amount: amount?.toString(),
+        decimals,
+        symbol,
+      })
 
       if (tokenAddress && amount && amount > 0n) {
         const tokenAmount = Number(amount) / Math.pow(10, decimals ?? 18)
