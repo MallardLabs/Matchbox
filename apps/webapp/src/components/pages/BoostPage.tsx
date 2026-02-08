@@ -40,7 +40,7 @@ import {
 } from "@mezo-org/mezo-clay"
 import { getTokenUsdPrice } from "@repo/shared"
 import Link from "next/link"
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { formatUnits } from "viem"
 import { useAccount } from "wagmi"
 
@@ -94,6 +94,7 @@ export default function BoostPage(): JSX.Element {
   const [cartSnapshots, setCartSnapshots] = useState<Map<number, number>>(
     new Map(),
   )
+  const prevSelectedLockIndexRef = useRef<number | undefined>(undefined)
 
   const selectedLock =
     selectedLockIndex !== undefined ? veMEZOLocks[selectedLockIndex] : undefined
@@ -283,6 +284,7 @@ export default function BoostPage(): JSX.Element {
     useState<SortDirection>("desc")
   const [gaugeStatusFilter, setGaugeStatusFilter] =
     useState<StatusFilter>("active")
+  const [gaugeSearchQuery, setGaugeSearchQuery] = useState("")
 
   // Calculator modal state
   const [isCalculatorOpen, setIsCalculatorOpen] = useState(false)
@@ -338,6 +340,9 @@ export default function BoostPage(): JSX.Element {
   )
 
   useEffect(() => {
+    const prev = prevSelectedLockIndexRef.current
+    prevSelectedLockIndexRef.current = selectedLockIndex
+
     if (selectedLockIndex === undefined) {
       setGaugeAllocations(new Map())
       setSelectedGaugeIndexes(new Set())
@@ -345,6 +350,13 @@ export default function BoostPage(): JSX.Element {
       setIsCartOpen(false)
       return
     }
+
+    // First selection from no lock: preserve allocations
+    if (prev === undefined) {
+      return
+    }
+
+    // Switching between locks: clear
     setGaugeAllocations(new Map())
     setSelectedGaugeIndexes(new Set())
     setCartSnapshots(new Map())
@@ -374,6 +386,22 @@ export default function BoostPage(): JSX.Element {
       result = result.filter((g) => g.isAlive)
     } else if (gaugeStatusFilter === "inactive") {
       result = result.filter((g) => !g.isAlive)
+    }
+
+    // Filter by search query
+    if (gaugeSearchQuery.trim()) {
+      const query = gaugeSearchQuery.trim().toLowerCase()
+      result = result.filter((g) => {
+        const profile = gaugeProfiles.get(g.address.toLowerCase())
+        const displayName = profile?.display_name?.toLowerCase() ?? ""
+        const tokenIdStr = g.veBTCTokenId > 0n ? g.veBTCTokenId.toString() : ""
+        const addressStr = g.address.toLowerCase()
+        return (
+          displayName.includes(query) ||
+          tokenIdStr.includes(query) ||
+          addressStr.includes(query)
+        )
+      })
     }
 
     // Sort
@@ -429,6 +457,7 @@ export default function BoostPage(): JSX.Element {
     gaugeSortColumn,
     gaugeSortDirection,
     gaugeStatusFilter,
+    gaugeSearchQuery,
     gaugeAllocations,
     gaugeProfiles,
     apyMap,
@@ -923,13 +952,12 @@ export default function BoostPage(): JSX.Element {
         </div>
       ) : (
         <>
-          {/* Voting Form - shown when user has veMEZO locks */}
+          {/* Card 1 — Lock Selection + Position Info */}
           {veMEZOLocks.length > 0 && (
             <SpringIn delay={0} variant="card">
-              <Card title="Vote on Gauge" withBorder overrides={{}}>
+              <Card withBorder overrides={{}}>
                 <div className="py-4">
                   <div className="flex flex-col gap-4">
-                    {/* veMEZO Lock Selection Carousel */}
                     <LockCarouselSelector
                       locks={enrichedVeMEZOLocks}
                       selectedIndex={selectedLockIndex}
@@ -1030,97 +1058,124 @@ export default function BoostPage(): JSX.Element {
                         )}
                       </div>
                     )}
+                  </div>
+                </div>
+              </Card>
+            </SpringIn>
+          )}
 
-                    {/* Gauge Allocation */}
+          {/* Card 2 — Gauge List */}
+          {veMEZOLocks.length > 0 && (
+            <SpringIn delay={1} variant="card">
+              <Card title="Allocate Voting Power" withBorder overrides={{}}>
+                <div className="py-4">
+                  <div className="flex flex-col gap-4">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs text-[var(--content-secondary)]">
+                        {filteredAndSortedGauges.length} gauge{filteredAndSortedGauges.length !== 1 ? "s" : ""}
+                      </p>
+                      <p
+                        className={`text-xs ${totalAllocation !== 100
+                          ? "text-[var(--negative)]"
+                          : "text-[var(--content-secondary)]"
+                          }`}
+                      >
+                        Total: {totalAllocation}%
+                        {totalAllocation > 100 && " (exceeds 100%)"}
+                        {totalAllocation > 0 && totalAllocation < 100
+                          ? " (must be 100%)"
+                          : ""}
+                      </p>
+                    </div>
+
+                    {/* Status filter */}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-xs text-[var(--content-secondary)]">
+                        Filter:
+                      </span>
+                      <Tag
+                        closeable={false}
+                        onClick={() => setGaugeStatusFilter("all")}
+                        color={gaugeStatusFilter === "all" ? "blue" : "gray"}
+                      >
+                        All
+                      </Tag>
+                      <Tag
+                        closeable={false}
+                        onClick={() => setGaugeStatusFilter("active")}
+                        color={
+                          gaugeStatusFilter === "active" ? "green" : "gray"
+                        }
+                      >
+                        Active
+                      </Tag>
+                      <Tag
+                        closeable={false}
+                        onClick={() => setGaugeStatusFilter("inactive")}
+                        color={
+                          gaugeStatusFilter === "inactive" ? "red" : "gray"
+                        }
+                      >
+                        Inactive
+                      </Tag>
+                    </div>
+
+                    {/* Search field */}
                     <div>
-                      <div className="mb-4 flex items-center justify-between">
-                        <p className="text-xs text-[var(--content-secondary)]">
-                          Allocate Voting Power to Gauges
-                        </p>
-                        <p
-                          className={`text-xs ${totalAllocation !== 100
-                            ? "text-[var(--negative)]"
-                            : "text-[var(--content-secondary)]"
-                            }`}
-                        >
-                          Total: {totalAllocation}%
-                          {totalAllocation > 100 && " (exceeds 100%)"}
-                          {totalAllocation > 0 && totalAllocation < 100
-                            ? " (must be 100%)"
-                            : ""}
-                        </p>
-                      </div>
+                      <Input
+                        value={gaugeSearchQuery}
+                        onChange={(e) => setGaugeSearchQuery(e.target.value)}
+                        placeholder="Search gauges..."
+                        size="small"
+                      />
+                    </div>
 
-                      {/* Status filter */}
-                      <div className="mb-4 flex flex-wrap items-center gap-2">
-                        <span className="text-xs text-[var(--content-secondary)]">
-                          Filter:
-                        </span>
-                        <Tag
-                          closeable={false}
-                          onClick={() => setGaugeStatusFilter("all")}
-                          color={gaugeStatusFilter === "all" ? "blue" : "gray"}
-                        >
-                          All
-                        </Tag>
-                        <Tag
-                          closeable={false}
-                          onClick={() => setGaugeStatusFilter("active")}
-                          color={
-                            gaugeStatusFilter === "active" ? "green" : "gray"
-                          }
-                        >
-                          Active
-                        </Tag>
-                        <Tag
-                          closeable={false}
-                          onClick={() => setGaugeStatusFilter("inactive")}
-                          color={
-                            gaugeStatusFilter === "inactive" ? "red" : "gray"
-                          }
-                        >
-                          Inactive
-                        </Tag>
-                      </div>
+                    {gauges.length === 0 ? (
+                      <p className="text-sm text-[var(--content-secondary)]">
+                        No gauges available to vote on
+                      </p>
+                    ) : (
+                      <div className="flex flex-col gap-4">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-xs text-[var(--content-secondary)]">
+                            Sort:
+                          </span>
+                          {(
+                            [
+                              { id: "apy", label: "APY" },
+                              { id: "veMEZOWeight", label: "veMEZO Weight" },
+                              { id: "veBTCWeight", label: "veBTC Weight" },
+                              { id: "boost", label: "Boost" },
+                              {
+                                id: "optimalVeMEZO",
+                                label: "Optimal veMEZO",
+                              },
+                            ] as const
+                          ).map((option) => (
+                            <button
+                              key={option.id}
+                              type="button"
+                              onClick={() => handleGaugeSort(option.id)}
+                              className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs ${gaugeSortColumn === option.id
+                                ? "border-[var(--content-primary)] text-[var(--content-primary)]"
+                                : "border-[var(--border)] text-[var(--content-secondary)]"
+                                }`}
+                            >
+                              {option.label}
+                              {getGaugeSortIndicator(option.id)}
+                            </button>
+                          ))}
+                        </div>
 
-                      {gauges.length === 0 ? (
-                        <p className="text-sm text-[var(--content-secondary)]">
-                          No gauges available to vote on
-                        </p>
-                      ) : (
-                        <div className="flex flex-col gap-4">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="text-xs text-[var(--content-secondary)]">
-                              Sort:
-                            </span>
-                            {(
-                              [
-                                { id: "apy", label: "APY" },
-                                { id: "veMEZOWeight", label: "veMEZO Weight" },
-                                { id: "veBTCWeight", label: "veBTC Weight" },
-                                { id: "boost", label: "Boost" },
-                                {
-                                  id: "optimalVeMEZO",
-                                  label: "Optimal veMEZO",
-                                },
-                              ] as const
-                            ).map((option) => (
-                              <button
-                                key={option.id}
-                                type="button"
-                                onClick={() => handleGaugeSort(option.id)}
-                                className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs ${gaugeSortColumn === option.id
-                                  ? "border-[var(--content-primary)] text-[var(--content-primary)]"
-                                  : "border-[var(--border)] text-[var(--content-secondary)]"
-                                  }`}
-                              >
-                                {option.label}
-                                {getGaugeSortIndicator(option.id)}
-                              </button>
-                            ))}
+                        {filteredAndSortedGauges.length === 0 && gauges.length > 0 ? (
+                          <div className="rounded-lg border border-dashed border-[var(--border)] p-8 text-center">
+                            <p className="text-sm text-[var(--content-secondary)]">
+                              No gauges match your filters
+                            </p>
                           </div>
+                        ) : (
                           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                            {filteredAndSortedGauges.map((gauge) => {
+                            {filteredAndSortedGauges.map((gauge, idx) => {
                               const profile = gaugeProfiles.get(
                                 gauge.address.toLowerCase(),
                               )
@@ -1144,7 +1199,7 @@ export default function BoostPage(): JSX.Element {
                               )
                               const votePercentage =
                                 gaugeAllocations.get(gauge.originalIndex) ?? 0
-                              return (
+                              const cardContent = (
                                 <article
                                   key={gauge.address}
                                   className={`flex flex-col gap-3 rounded-xl border bg-[var(--surface)] p-4 ${isSelected
@@ -1339,11 +1394,20 @@ export default function BoostPage(): JSX.Element {
                                   </fieldset>
                                 </article>
                               )
+                              // Stagger animation on first 9 cards
+                              if (idx < 9) {
+                                return (
+                                  <SpringIn key={gauge.address} delay={2 + idx} variant="card">
+                                    {cardContent}
+                                  </SpringIn>
+                                )
+                              }
+                              return cardContent
                             })}
                           </div>
-                        </div>
-                      )}
-                    </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               </Card>
@@ -1368,42 +1432,49 @@ export default function BoostPage(): JSX.Element {
 
       {selectedGaugeIndexes.size > 0 && (
         <div className="fixed bottom-4 left-0 right-0 z-40 px-4">
-          <div className="mx-auto flex w-full max-w-3xl flex-wrap items-center justify-between gap-3 rounded-full border border-[var(--border)] bg-[var(--surface)] px-4 py-2 shadow-lg">
-            <div className="flex items-center gap-3">
-              <span className="text-xs text-[var(--content-secondary)]">
-                Selections
-              </span>
-              <span className="font-mono text-sm font-semibold text-[var(--content-primary)]">
-                {selectedGaugeIndexes.size}
-              </span>
-              <span className="text-xs text-[var(--content-secondary)]">
-                Total
-              </span>
-              <span
-                className={`font-mono text-sm font-semibold ${totalAllocation === 100
-                  ? "text-[var(--positive)]"
-                  : "text-[var(--content-primary)]"
-                  }`}
-              >
-                {totalAllocation}%
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button
-                kind="secondary"
-                size="small"
-                onClick={handleClearSelections}
-              >
-                Clear
-              </Button>
-              <Button
-                kind="primary"
-                size="small"
-                onClick={handleCheckoutOpen}
-                disabled={!selectedLock}
-              >
-                Checkout
-              </Button>
+          <div className="mx-auto flex w-full max-w-3xl flex-col items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 shadow-lg">
+            {!selectedLock && (
+              <p className="text-xs font-medium text-[#F7931A]">
+                Select a veMEZO lock above to finalize your vote
+              </p>
+            )}
+            <div className="flex w-full flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-[var(--content-secondary)]">
+                  Selections
+                </span>
+                <span className="font-mono text-sm font-semibold text-[var(--content-primary)]">
+                  {selectedGaugeIndexes.size}
+                </span>
+                <span className="text-xs text-[var(--content-secondary)]">
+                  Total
+                </span>
+                <span
+                  className={`font-mono text-sm font-semibold ${totalAllocation === 100
+                    ? "text-[var(--positive)]"
+                    : "text-[var(--content-primary)]"
+                    }`}
+                >
+                  {totalAllocation}%
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  kind="secondary"
+                  size="small"
+                  onClick={handleClearSelections}
+                >
+                  Clear
+                </Button>
+                <Button
+                  kind="primary"
+                  size="small"
+                  onClick={handleCheckoutOpen}
+                  disabled={!selectedLock}
+                >
+                  Checkout
+                </Button>
+              </div>
             </div>
           </div>
         </div>

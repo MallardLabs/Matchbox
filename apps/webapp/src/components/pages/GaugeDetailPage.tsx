@@ -320,6 +320,28 @@ export default function GaugeDetailPage(): JSX.Element {
         </div>
       ) : (
         <>
+          {/* Back navigation */}
+          <button
+            type="button"
+            onClick={() => router.back()}
+            className="inline-flex items-center gap-2 text-sm text-[var(--content-secondary)] transition-colors hover:text-[var(--content-primary)]"
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <polyline points="15 18 9 12 15 6" />
+            </svg>
+            Back
+          </button>
+
           {/* Profile Header */}
           <SpringIn delay={0} variant="card">
             <Card withBorder overrides={{}}>
