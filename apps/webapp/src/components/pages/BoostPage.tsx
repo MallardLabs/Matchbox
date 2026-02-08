@@ -328,9 +328,9 @@ export default function BoostPage(): JSX.Element {
     )
   }
 
-  // Calculate total allocation percentage
-  const totalAllocation = Array.from(gaugeAllocations.values()).reduce(
-    (sum, pct) => sum + pct,
+  // Calculate total allocation percentage (only for selected/cart gauges)
+  const totalAllocation = Array.from(selectedGaugeIndexes).reduce(
+    (sum, idx) => sum + (gaugeAllocations.get(idx) ?? 0),
     0,
   )
 
@@ -536,16 +536,17 @@ export default function BoostPage(): JSX.Element {
   }, [])
 
   const handleVote = () => {
-    if (!selectedLock || gaugeAllocations.size === 0) return
+    if (!selectedLock || selectedGaugeIndexes.size === 0) return
 
-    const selectedGauges = Array.from(gaugeAllocations.keys())
-      .map((idx) => gauges[idx])
-      .filter((g) => g !== undefined)
+    const selectedGauges = Array.from(selectedGaugeIndexes)
+      .map((idx) => ({
+        gauge: gauges[idx],
+        weight: gaugeAllocations.get(idx) ?? 0,
+      }))
+      .filter((entry) => entry.gauge !== undefined && entry.weight > 0)
 
-    const gaugeAddrs = selectedGauges.map((g) => g.address)
-    const weights = Array.from(gaugeAllocations.values()).map((pct) =>
-      BigInt(pct),
-    )
+    const gaugeAddrs = selectedGauges.map((entry) => entry.gauge!.address)
+    const weights = selectedGauges.map((entry) => BigInt(entry.weight))
 
     vote(selectedLock.tokenId, gaugeAddrs, weights)
   }
@@ -794,7 +795,7 @@ export default function BoostPage(): JSX.Element {
                           <div className="flex flex-wrap items-center gap-2 md:flex-nowrap">
                             <label
                               htmlFor={`vote-weight-${gaugeIndex}`}
-                              className="text-xs text-[var(--content-secondary)]"
+                              className="whitespace-nowrap text-xs text-[var(--content-secondary)]"
                             >
                               Vote %
                             </label>
