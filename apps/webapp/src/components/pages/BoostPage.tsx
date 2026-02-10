@@ -120,6 +120,7 @@ export default function BoostPage(): JSX.Element {
     hasVotedThisEpoch,
     isInVotingWindow,
     usedWeight,
+    isLoading: isVoteStateLoading,
   } = useVoteState(selectedLock?.tokenId)
   const { allocations: currentAllocations } = useVoteAllocations(
     selectedLock?.tokenId,
@@ -329,10 +330,43 @@ export default function BoostPage(): JSX.Element {
   }
 
   // Calculate total allocation percentage (only for selected/cart gauges)
-  const totalAllocation = Array.from(selectedGaugeIndexes).reduce(
+  const totalAllocationRaw = Array.from(selectedGaugeIndexes).reduce(
     (sum, idx) => sum + (gaugeAllocations.get(idx) ?? 0),
     0,
   )
+  const totalAllocation = Number(totalAllocationRaw.toFixed(2))
+  const allocationEpsilon = 0.01
+  const isAllocationValid =
+    Math.abs(totalAllocationRaw - 100) <= allocationEpsilon
+  const isOverAllocated = totalAllocationRaw > 100 + allocationEpsilon
+  const isUnderAllocated =
+    totalAllocationRaw > 0 && totalAllocationRaw < 100 - allocationEpsilon
+
+  const cartStatusMessage = useMemo(() => {
+    if (!selectedLock) return "Select a veMEZO lock to finalize your votes."
+    if (gaugeAllocations.size === 0 || totalAllocationRaw === 0) {
+      return "Add vote allocations to continue."
+    }
+    if (!isAllocationValid) {
+      return "Total allocation must equal 100% to vote."
+    }
+    if (isVoteStateLoading) return "Checking voting eligibility..."
+    if (!canVoteInCurrentEpoch) {
+      if (hasVotedThisEpoch) return "You already voted this epoch."
+      if (!isInVotingWindow) return "Outside voting window."
+      return "Voting is unavailable right now."
+    }
+    return null
+  }, [
+    selectedLock,
+    gaugeAllocations.size,
+    totalAllocationRaw,
+    isAllocationValid,
+    isVoteStateLoading,
+    canVoteInCurrentEpoch,
+    hasVotedThisEpoch,
+    isInVotingWindow,
+  ])
 
   const selectedGaugeList = useMemo(
     () => Array.from(selectedGaugeIndexes.values()),
@@ -685,10 +719,7 @@ export default function BoostPage(): JSX.Element {
                 <Tag closeable={false} color="blue">
                   {selectedGaugeIndexes.size} selected
                 </Tag>
-                <Tag
-                  closeable={false}
-                  color={totalAllocation === 100 ? "green" : "yellow"}
-                >
+                <Tag closeable={false} color={isAllocationValid ? "green" : "yellow"}>
                   Total {totalAllocation}%
                 </Tag>
               </div>
@@ -895,7 +926,7 @@ export default function BoostPage(): JSX.Element {
               )}
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="text-xs text-[var(--content-secondary)]">
-                  Total allocation must equal 100% to vote.
+                  {cartStatusMessage ?? "Ready to vote."}
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {selectedLock && usedWeight && usedWeight > 0n && (
@@ -919,7 +950,7 @@ export default function BoostPage(): JSX.Element {
                       !selectedLock ||
                       gaugeAllocations.size === 0 ||
                       totalAllocation === 0 ||
-                      totalAllocation !== 100 ||
+                      !isAllocationValid ||
                       !canVoteInCurrentEpoch
                     }
                   >
@@ -1076,16 +1107,15 @@ export default function BoostPage(): JSX.Element {
                         {filteredAndSortedGauges.length} gauge{filteredAndSortedGauges.length !== 1 ? "s" : ""}
                       </p>
                       <p
-                        className={`text-xs ${totalAllocation !== 100
-                          ? "text-[var(--negative)]"
-                          : "text-[var(--content-secondary)]"
-                          }`}
+                        className={`text-xs ${
+                          !isAllocationValid
+                            ? "text-[var(--negative)]"
+                            : "text-[var(--content-secondary)]"
+                        }`}
                       >
                         Total: {totalAllocation}%
-                        {totalAllocation > 100 && " (exceeds 100%)"}
-                        {totalAllocation > 0 && totalAllocation < 100
-                          ? " (must be 100%)"
-                          : ""}
+                        {isOverAllocated && " (exceeds 100%)"}
+                        {isUnderAllocated ? " (must be 100%)" : ""}
                       </p>
                     </div>
 
