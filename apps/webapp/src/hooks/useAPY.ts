@@ -1,41 +1,12 @@
-import { getContractConfig } from "@/config/contracts"
-import { useNetwork } from "@/contexts/NetworkContext"
+import { useGaugeTopology } from "@/hooks/useGaugeTopology"
+import type { GaugeTopologyResponse } from "@/types/gaugeTopology"
 import { getTokenUsdPrice } from "@repo/shared"
 import { useMemo } from "react"
 import type { Address } from "viem"
-import { useReadContract, useReadContracts } from "wagmi"
 import { useBtcPrice } from "./useBtcPrice"
 import { useMezoPrice } from "./useMezoPrice"
 
 const EPOCHS_PER_YEAR = 52
-
-// Cache the timestamp at module level to avoid re-fetching on every render
-// This is fine because epoch boundaries don't change within a session
-let cachedEpochTimestamp: bigint | null = null
-
-function getStableEpochTimestamp(): bigint {
-  if (cachedEpochTimestamp === null) {
-    cachedEpochTimestamp = BigInt(Math.floor(Date.now() / 1000))
-  }
-  return cachedEpochTimestamp
-}
-
-/**
- * Hook to get the current epoch start from the contract
- * This ensures we use the same epoch boundaries as the contract
- */
-function useContractEpochStart(): bigint | undefined {
-  const { chainId } = useNetwork()
-  const contracts = getContractConfig(chainId)
-
-  const { data: epochStartData } = useReadContract({
-    ...contracts.boostVoter,
-    functionName: "epochStart",
-    args: [getStableEpochTimestamp()],
-  })
-
-  return epochStartData as bigint | undefined
-}
 
 export type TokenIncentive = {
   tokenAddress: string
@@ -108,175 +79,45 @@ export function useGaugeAPY(
 ): GaugeAPYData {
   const { price: btcPrice } = useBtcPrice()
   const { price: mezoPrice } = useMezoPrice()
-  const { chainId } = useNetwork()
-  const contracts = getContractConfig(chainId)
-  const contractEpochStart = useContractEpochStart()
+  const { topology, isLoading: isLoadingTopology } = useGaugeTopology({
+    enabled: !!gaugeAddress,
+  })
 
-  // Get bribe address for the gauge
-  const { data: bribeAddressData, isLoading: isLoadingBribe } =
-    useReadContracts({
-      contracts: gaugeAddress
-        ? [
-          {
-            ...contracts.boostVoter,
-            functionName: "gaugeToBribe",
-            args: [gaugeAddress],
-          },
-        ]
-        : [],
-      query: {
-        enabled: !!gaugeAddress,
-      },
-    })
+  const incentivesByToken = useMemo(() => {
+    if (!gaugeAddress) return []
 
-  const bribeAddress = bribeAddressData?.[0]?.result as Address | undefined
-  const hasBribe =
-    bribeAddress !== undefined &&
-    bribeAddress !== "0x0000000000000000000000000000000000000000"
+    const gauge = topology?.gauges.find(
+      (entry) => entry.gaugeAddress.toLowerCase() === gaugeAddress.toLowerCase(),
+    )
+    if (!gauge) return []
 
-  // Get rewards list length
-  const { data: rewardsLengthData, isLoading: isLoadingLength } =
-    useReadContracts({
-      contracts: hasBribe
-        ? [
-          {
-            address: bribeAddress!,
-            abi: [
-              {
-                inputs: [],
-                name: "rewardsListLength",
-                outputs: [
-                  { internalType: "uint256", name: "", type: "uint256" },
-                ],
-                stateMutability: "view",
-                type: "function",
-              },
-            ] as const,
-            functionName: "rewardsListLength" as const,
-          },
-        ]
-        : [],
-      query: {
-        enabled: hasBribe,
-      },
-    })
-
-  const rewardsLength = Number(rewardsLengthData?.[0]?.result ?? 0n)
-
-  // Get all reward token addresses
-  const { data: rewardTokensData, isLoading: isLoadingTokens } =
-    useReadContracts({
-      contracts: Array.from({ length: rewardsLength }, (_, i) => ({
-        address: bribeAddress!,
-        abi: [
-          {
-            inputs: [{ internalType: "uint256", name: "", type: "uint256" }],
-            name: "rewards",
-            outputs: [{ internalType: "address", name: "", type: "address" }],
-            stateMutability: "view",
-            type: "function",
-          },
-        ] as const,
-        functionName: "rewards" as const,
-        args: [BigInt(i)],
-      })),
-      query: {
-        enabled: hasBribe && rewardsLength > 0,
-      },
-    })
-
-  const tokenAddresses =
-    rewardTokensData?.map((r) => r.result as Address).filter(Boolean) ?? []
-
-  // Get token rewards per epoch, decimals, and symbol for each token
-  const { data: tokenDataResults, isLoading: isLoadingRewards } =
-    useReadContracts({
-      contracts: tokenAddresses.flatMap((tokenAddress) => [
-        {
-          address: bribeAddress!,
-          abi: [
-            {
-              inputs: [
-                { internalType: "address", name: "token", type: "address" },
-                {
-                  internalType: "uint256",
-                  name: "epochStart",
-                  type: "uint256",
-                },
-              ],
-              name: "tokenRewardsPerEpoch",
-              outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
-              stateMutability: "view",
-              type: "function",
-            },
-          ] as const,
-          functionName: "tokenRewardsPerEpoch" as const,
-          args: [tokenAddress, contractEpochStart ?? 0n],
-        },
-        {
-          address: tokenAddress,
-          abi: [
-            {
-              inputs: [],
-              name: "decimals",
-              outputs: [{ internalType: "uint8", name: "", type: "uint8" }],
-              stateMutability: "view",
-              type: "function",
-            },
-          ] as const,
-          functionName: "decimals" as const,
-        },
-        {
-          address: tokenAddress,
-          abi: [
-            {
-              inputs: [],
-              name: "symbol",
-              outputs: [{ internalType: "string", name: "", type: "string" }],
-              stateMutability: "view",
-              type: "function",
-            },
-          ] as const,
-          functionName: "symbol" as const,
-        },
-      ]),
-      query: {
-        enabled:
-          hasBribe &&
-          tokenAddresses.length > 0 &&
-          contractEpochStart !== undefined,
-      },
-    })
-
-  // Calculate total incentives in USD
-  const totalIncentivesUSD = useMemo(() => {
-    if (!tokenDataResults || tokenAddresses.length === 0) return 0
-
-    let total = 0
-    tokenAddresses.forEach((tokenAddress, i) => {
-      const amount = tokenDataResults[i * 3]?.result as bigint | undefined
-      const decimals = tokenDataResults[i * 3 + 1]?.result as number | undefined
-      const symbol = tokenDataResults[i * 3 + 2]?.result as string | undefined
-
-      if (amount && amount > 0n) {
-        const tokenAmount = Number(amount) / Math.pow(10, decimals ?? 18)
-
-        // Get price using the token pricing system
+    return gauge.rewardTokens
+      .map((token) => {
+        const amount = BigInt(token.epochAmount)
+        const tokenAmount = Number(amount) / Math.pow(10, token.decimals)
         const price = getTokenUsdPrice(
-          tokenAddress,
-          symbol,
+          token.tokenAddress,
+          token.symbol,
           btcPrice,
           mezoPrice,
         )
+        const usdValue = price !== null ? tokenAmount * price : 0
 
-        if (price !== null) {
-          total += tokenAmount * price
+        return {
+          tokenAddress: token.tokenAddress.toLowerCase(),
+          symbol: token.symbol,
+          amount,
+          decimals: token.decimals,
+          usdValue,
         }
-      }
-    })
+      })
+      .filter((token) => token.amount > 0n)
+  }, [gaugeAddress, topology, btcPrice, mezoPrice])
 
-    return total
-  }, [tokenDataResults, tokenAddresses, btcPrice, mezoPrice])
+  const totalIncentivesUSD = useMemo(
+    () => incentivesByToken.reduce((sum, token) => sum + token.usdValue, 0),
+    [incentivesByToken],
+  )
 
   // Calculate APY
   const apy = useMemo(
@@ -284,16 +125,13 @@ export function useGaugeAPY(
     [totalWeight, totalIncentivesUSD, mezoPrice],
   )
 
-  const isLoading =
-    isLoadingBribe || isLoadingLength || isLoadingTokens || isLoadingRewards
-
   return {
     gaugeAddress: gaugeAddress ?? ("0x" as Address),
     apy,
     totalIncentivesUSD,
     totalVeMEZOWeight: totalWeight ?? 0n,
-    isLoading,
-    incentivesByToken: [], // Single gauge doesn't track by token for now
+    isLoading: isLoadingTopology,
+    incentivesByToken,
   }
 }
 
@@ -308,336 +146,66 @@ export function useGaugesAPY(
 } {
   const { price: btcPrice } = useBtcPrice()
   const { price: mezoPrice } = useMezoPrice()
-  const { chainId } = useNetwork()
-  const contracts = getContractConfig(chainId)
-  const contractEpochStart = useContractEpochStart()
-
-  const gaugeAddresses = useMemo(() => gauges.map((g) => g.address), [gauges])
-
-  // Get bribe addresses for all gauges
-  const { data: bribeAddressesData, isLoading: isLoadingBribes } =
-    useReadContracts({
-      contracts: gaugeAddresses.map((address) => ({
-        ...contracts.boostVoter,
-        functionName: "gaugeToBribe",
-        args: [address],
-      })),
-      query: {
-        enabled: gaugeAddresses.length > 0,
-      },
-    })
-
-  // Extract valid bribe addresses
-  const bribeInfos = useMemo(() => {
-    if (!bribeAddressesData) return []
-    return gaugeAddresses.map((gaugeAddr, i) => {
-      const bribeAddress = bribeAddressesData[i]?.result as Address | undefined
-      const hasBribe =
-        bribeAddress !== undefined &&
-        bribeAddress !== "0x0000000000000000000000000000000000000000"
-      return {
-        gaugeAddress: gaugeAddr,
-        bribeAddress: hasBribe ? bribeAddress : undefined,
-      }
-    })
-  }, [bribeAddressesData, gaugeAddresses])
-
-  const validBribes = useMemo(
-    () => bribeInfos.filter((b) => b.bribeAddress),
-    [bribeInfos],
-  )
-
-  // Get rewards list length for all bribe contracts
-  const { data: rewardsLengthData, isLoading: isLoadingLengths } =
-    useReadContracts({
-      contracts: validBribes.map(({ bribeAddress }) => ({
-        address: bribeAddress!,
-        abi: [
-          {
-            inputs: [],
-            name: "rewardsListLength",
-            outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
-            stateMutability: "view",
-            type: "function",
-          },
-        ] as const,
-        functionName: "rewardsListLength" as const,
-      })),
-      query: {
-        enabled: validBribes.length > 0,
-      },
-    })
-
-  // Build queries for all reward tokens
-  const rewardTokenQueries = useMemo(() => {
-    if (!rewardsLengthData) return []
-    const queries: Array<{
-      gaugeAddress: Address
-      bribeAddress: Address
-      tokenIndex: number
-    }> = []
-    validBribes.forEach(({ gaugeAddress, bribeAddress }, i) => {
-      const length = Number(rewardsLengthData[i]?.result ?? 0n)
-      for (let j = 0; j < length; j++) {
-        queries.push({
-          gaugeAddress,
-          bribeAddress: bribeAddress!,
-          tokenIndex: j,
-        })
-      }
-    })
-    return queries
-  }, [validBribes, rewardsLengthData])
-
-  // Get all reward token addresses
-  const { data: rewardTokensData, isLoading: isLoadingTokens } =
-    useReadContracts({
-      contracts: rewardTokenQueries.map(({ bribeAddress, tokenIndex }) => ({
-        address: bribeAddress,
-        abi: [
-          {
-            inputs: [{ internalType: "uint256", name: "", type: "uint256" }],
-            name: "rewards",
-            outputs: [{ internalType: "address", name: "", type: "address" }],
-            stateMutability: "view",
-            type: "function",
-          },
-        ] as const,
-        functionName: "rewards" as const,
-        args: [BigInt(tokenIndex)],
-      })),
-      query: {
-        enabled: rewardTokenQueries.length > 0,
-      },
-    })
-
-  // Build a resolved list of reward token queries with valid token addresses
-  const resolvedRewardTokenQueries = useMemo(() => {
-    if (!rewardTokensData) return []
-    return rewardTokenQueries
-      .map((query, i) => ({
-        ...query,
-        tokenAddress: rewardTokensData[i]?.result as Address | undefined,
-      }))
-      .filter(
-        (query): query is typeof query & { tokenAddress: Address } =>
-          !!query.tokenAddress &&
-          query.tokenAddress !== "0x0000000000000000000000000000000000000000" &&
-          // Filter out obviously invalid addresses (less than 20 non-zero bytes)
-          !query.tokenAddress.match(/^0x0*[0-9a-fA-F]{1,8}$/),
-      )
-  }, [rewardTokensData, rewardTokenQueries])
-
-  // Get token rewards per epoch - one call per gauge-token pair
-  const { data: amountsData, isLoading: isLoadingAmounts } = useReadContracts({
-    contracts: resolvedRewardTokenQueries.map(({ bribeAddress, tokenAddress }) => ({
-      address: bribeAddress,
-      abi: [
-        {
-          inputs: [
-            { internalType: "address", name: "token", type: "address" },
-            { internalType: "uint256", name: "epochStart", type: "uint256" },
-          ],
-          name: "tokenRewardsPerEpoch",
-          outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
-          stateMutability: "view",
-          type: "function",
-        },
-      ] as const,
-      functionName: "tokenRewardsPerEpoch" as const,
-      args: [tokenAddress, contractEpochStart ?? 0n],
-    })),
-    query: {
-      enabled: resolvedRewardTokenQueries.length > 0 && contractEpochStart !== undefined,
-    },
+  const { topology, isLoading: isLoadingTopology } = useGaugeTopology({
+    enabled: gauges.length > 0,
   })
 
-  // Get unique token addresses to deduplicate metadata fetching
-  const uniqueTokenAddresses = useMemo(() => {
-    const set = new Set<string>()
-    resolvedRewardTokenQueries.forEach(q => set.add(q.tokenAddress.toLowerCase()))
-    return Array.from(set) as Address[]
-  }, [resolvedRewardTokenQueries])
-
-  // Get decimals and symbol for each UNIQUE token
-  const { data: metadataData, isLoading: isLoadingMetadata } = useReadContracts({
-    contracts: uniqueTokenAddresses.flatMap((tokenAddress) => [
-      {
-        address: tokenAddress,
-        abi: [
-          {
-            inputs: [],
-            name: "decimals",
-            outputs: [{ internalType: "uint8", name: "", type: "uint8" }],
-            stateMutability: "view",
-            type: "function",
-          },
-        ] as const,
-        functionName: "decimals" as const,
-      },
-      {
-        address: tokenAddress,
-        abi: [
-          {
-            inputs: [],
-            name: "symbol",
-            outputs: [{ internalType: "string", name: "", type: "string" }],
-            stateMutability: "view",
-            type: "function",
-          },
-        ] as const,
-        functionName: "symbol" as const,
-      },
-    ]),
-    query: {
-      enabled: uniqueTokenAddresses.length > 0,
-    },
-  })
-
-  // Map metadata back to token addresses for easy lookup
-  const tokenMetadataMap = useMemo(() => {
-    const map = new Map<string, { decimals: number; symbol: string }>()
-    if (!metadataData) return map
-
-    uniqueTokenAddresses.forEach((address, i) => {
-      const decimals = metadataData[i * 2]?.result as number | undefined
-      const symbol = metadataData[i * 2 + 1]?.result as string | undefined
-      if (decimals !== undefined && symbol !== undefined) {
-        map.set(address.toLowerCase(), { decimals, symbol })
-      }
-    })
+  const topologyMap = useMemo(() => {
+    const map = new Map<string, GaugeTopologyResponse["gauges"][number]>()
+    for (const gauge of topology?.gauges ?? []) {
+      map.set(gauge.gaugeAddress.toLowerCase(), gauge)
+    }
     return map
-  }, [metadataData, uniqueTokenAddresses])
+  }, [topology])
 
-  // Calculate APY for each gauge
   const apyMap = useMemo(() => {
     const map = new Map<string, GaugeAPYData>()
 
-    // Initialize all gauges with default values
     gauges.forEach((gauge) => {
-      map.set(gauge.address.toLowerCase(), {
-        gaugeAddress: gauge.address,
-        apy: null,
-        totalIncentivesUSD: 0,
-        totalVeMEZOWeight: gauge.totalWeight,
-        isLoading: false,
-        incentivesByToken: [],
-      })
-    })
+      const topologyGauge = topologyMap.get(gauge.address.toLowerCase())
+      const incentivesByToken: TokenIncentive[] = []
+      let totalIncentivesUSD = 0
 
-    // Calculate incentives per gauge
-    const gaugeIncentives = new Map<string, number>()
-    const gaugeTokenIncentives = new Map<string, TokenIncentive[]>()
+      for (const rewardToken of topologyGauge?.rewardTokens ?? []) {
+        const amount = BigInt(rewardToken.epochAmount)
+        if (amount <= 0n) continue
 
-    resolvedRewardTokenQueries.forEach((query, i) => {
-      const tokenAddress = query.tokenAddress
-      const amount = amountsData?.[i]?.result as bigint | undefined
-      const metadata = tokenMetadataMap.get(tokenAddress.toLowerCase())
-
-      if (amount && amount > 0n) {
-        const decimals = metadata?.decimals ?? 18
-        const symbol = metadata?.symbol
-        const tokenAmount = Number(amount) / Math.pow(10, decimals)
-        const tokenKey = tokenAddress.toLowerCase()
-
-        // Get price using the token pricing system
+        const tokenAmount = Number(amount) / Math.pow(10, rewardToken.decimals)
         const price = getTokenUsdPrice(
-          tokenAddress,
-          symbol,
+          rewardToken.tokenAddress,
+          rewardToken.symbol,
           btcPrice,
           mezoPrice,
         )
-
         const usdValue = price !== null ? tokenAmount * price : 0
-        const gaugeKey = query.gaugeAddress.toLowerCase()
-        const current = gaugeIncentives.get(gaugeKey) ?? 0
-        gaugeIncentives.set(gaugeKey, current + usdValue)
+        totalIncentivesUSD += usdValue
 
-        // Track by token
-        const existingTokens = gaugeTokenIncentives.get(gaugeKey) ?? []
-        const existingToken = existingTokens.find(
-          (t) => t.tokenAddress === tokenKey,
-        )
-        if (existingToken) {
-          existingToken.amount += amount
-          existingToken.usdValue += usdValue
-        } else {
-          existingTokens.push({
-            tokenAddress: tokenKey,
-            symbol: symbol ?? "???",
-            amount,
-            decimals: decimals,
-            usdValue,
-          })
-        }
-        gaugeTokenIncentives.set(gaugeKey, existingTokens)
+        incentivesByToken.push({
+          tokenAddress: rewardToken.tokenAddress.toLowerCase(),
+          symbol: rewardToken.symbol,
+          amount,
+          decimals: rewardToken.decimals,
+          usdValue,
+        })
       }
-    })
 
-    // Calculate APY for each gauge using shared helper
-    gauges.forEach((gauge) => {
-      const gaugeKey = gauge.address.toLowerCase()
-      const totalIncentivesUSD = gaugeIncentives.get(gaugeKey) ?? 0
-      const totalWeight = gauge.totalWeight
-      const incentivesByToken = gaugeTokenIncentives.get(gaugeKey) ?? []
-
-      const apy = calculateAPYFromData(totalIncentivesUSD, totalWeight, mezoPrice)
-
-      map.set(gaugeKey, {
+      map.set(gauge.address.toLowerCase(), {
         gaugeAddress: gauge.address,
-        apy,
+        apy: calculateAPYFromData(totalIncentivesUSD, gauge.totalWeight, mezoPrice),
         totalIncentivesUSD,
-        totalVeMEZOWeight: totalWeight,
+        totalVeMEZOWeight: gauge.totalWeight,
         isLoading: false,
         incentivesByToken,
       })
     })
 
     return map
-  }, [
-    gauges,
-    resolvedRewardTokenQueries,
-    amountsData,
-    tokenMetadataMap,
-    btcPrice,
-    mezoPrice,
-  ])
+  }, [gauges, topologyMap, btcPrice, mezoPrice])
 
-  // Check if we're still loading - must account for cascading query dependencies
-  // A later query being disabled (not loading) doesn't mean data is ready
-  const isLoading =
-    isLoadingBribes ||
-    isLoadingLengths ||
-    isLoadingTokens ||
-    isLoadingAmounts ||
-    isLoadingMetadata ||
-    // Also loading if we expect data from cascading queries but don't have it yet
-    (validBribes.length > 0 && !rewardsLengthData) ||
-    (rewardTokenQueries.length > 0 && !rewardTokensData) ||
-    (resolvedRewardTokenQueries.length > 0 && !amountsData) ||
-    (uniqueTokenAddresses.length > 0 && !metadataData)
-
-  // Create the final resulting map and loading state
-  const resultData = useMemo(() => {
-    // Check for specific debug cases (e.g. weight but no APY)
-    apyMap.forEach((data, key) => {
-      if (data.totalVeMEZOWeight > 0n && data.apy === null && !isLoading) {
-        console.log(`DEBUG: Gauge ${key} has weight but null APY`, {
-          totalIncentivesUSD: data.totalIncentivesUSD,
-          mezoPrice,
-          hasBribe: validBribes.some(b => b.gaugeAddress.toLowerCase() === key),
-          tokenCount: resolvedRewardTokenQueries.filter(q => q.gaugeAddress.toLowerCase() === key).length,
-        });
-      }
-    });
-
-    return {
-      apyMap,
-      isLoading,
-    }
-  }, [apyMap, isLoading, mezoPrice, validBribes, resolvedRewardTokenQueries])
-
-  return resultData
+  return {
+    apyMap,
+    isLoading: isLoadingTopology || (gauges.length > 0 && !topology),
+  }
 }
 
 /**

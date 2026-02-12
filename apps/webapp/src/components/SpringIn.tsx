@@ -18,12 +18,13 @@ export function SpringIn({
   variant = "default",
   className = "",
 }: SpringInProps) {
+  const cappedDelay = Math.min(Math.max(delay, 0), 12)
   const animationClass =
     variant === "card" ? "spring-fly-in-card" : "spring-fly-in"
-  const delayClass = delay <= 10 ? `spring-delay-${delay}` : ""
+  const delayClass = cappedDelay <= 10 ? `spring-delay-${cappedDelay}` : ""
   const delayStyle =
-    delay > 10
-      ? ({ "--spring-delay": delay } as React.CSSProperties)
+    cappedDelay > 10
+      ? ({ "--spring-delay": cappedDelay } as React.CSSProperties)
       : undefined
 
   return (

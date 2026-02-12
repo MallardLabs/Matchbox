@@ -1,3 +1,4 @@
+import { QUERY_PROFILES } from "@/config/queryProfiles"
 import { getContractConfig } from "@/config/contracts"
 import { useNetwork } from "@/contexts/NetworkContext"
 import { useEffect } from "react"
@@ -24,7 +25,7 @@ type RefetchFn = () => Promise<unknown>
 
 export function useVeBTCLocks() {
   const { address } = useAccount()
-  const { chainId } = useNetwork()
+  const { chainId, isNetworkReady } = useNetwork()
   const contracts = getContractConfig(chainId)
 
   const { data: balanceData } = useReadContracts({
@@ -36,7 +37,8 @@ export function useVeBTCLocks() {
       },
     ],
     query: {
-      enabled: !!address,
+      ...QUERY_PROFILES.SHORT_CACHE,
+      enabled: isNetworkReady && !!address,
     },
   })
 
@@ -52,7 +54,8 @@ export function useVeBTCLocks() {
           }))
         : [],
     query: {
-      enabled: !!balance && balance > 0n,
+      ...QUERY_PROFILES.SHORT_CACHE,
+      enabled: isNetworkReady && !!balance && balance > 0n,
     },
   })
 
@@ -78,7 +81,8 @@ export function useVeBTCLocks() {
       },
     ]),
     query: {
-      enabled: tokenIdList.length > 0,
+      ...QUERY_PROFILES.SHORT_CACHE,
+      enabled: isNetworkReady && tokenIdList.length > 0,
     },
   })
 
@@ -115,7 +119,7 @@ export function useVeMEZOLocks(): {
   refetch: RefetchFn
 } {
   const { address } = useAccount()
-  const { chainId } = useNetwork()
+  const { chainId, isNetworkReady } = useNetwork()
   const contracts = getContractConfig(chainId)
 
   const { data: balanceData } = useReadContracts({
@@ -127,7 +131,8 @@ export function useVeMEZOLocks(): {
       },
     ],
     query: {
-      enabled: !!address,
+      ...QUERY_PROFILES.SHORT_CACHE,
+      enabled: isNetworkReady && !!address,
     },
   })
 
@@ -143,7 +148,8 @@ export function useVeMEZOLocks(): {
           }))
         : [],
     query: {
-      enabled: !!balance && balance > 0n,
+      ...QUERY_PROFILES.SHORT_CACHE,
+      enabled: isNetworkReady && !!balance && balance > 0n,
     },
   })
 
@@ -168,7 +174,8 @@ export function useVeMEZOLocks(): {
       },
     ]),
     query: {
-      enabled: tokenIdList.length > 0,
+      ...QUERY_PROFILES.SHORT_CACHE,
+      enabled: isNetworkReady && tokenIdList.length > 0,
     },
   })
 
@@ -202,7 +209,7 @@ export function useMEZOBalance(): {
   refetch: RefetchFn
 } {
   const { address } = useAccount()
-  const { chainId } = useNetwork()
+  const { chainId, isNetworkReady } = useNetwork()
   const contracts = getContractConfig(chainId)
 
   const { data, refetch } = useReadContracts({
@@ -222,7 +229,8 @@ export function useMEZOBalance(): {
       },
     ],
     query: {
-      enabled: !!address,
+      ...QUERY_PROFILES.SHORT_CACHE,
+      enabled: isNetworkReady && !!address,
     },
   })
 

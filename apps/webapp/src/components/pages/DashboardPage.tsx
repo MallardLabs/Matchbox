@@ -1,32 +1,26 @@
 import { AnimatedNumber } from "@/components/AnimatedNumber"
 import { SpringIn } from "@/components/SpringIn"
-import { TransferProfileModal } from "@/components/TransferProfileModal"
 import type { GaugeProfile } from "@/config/supabase"
 import {
   formatAPY,
-  useGaugeAPY,
+  type GaugeAPYData,
   useGaugesAPY,
   useUpcomingVotingAPY,
   useVotingAPY,
 } from "@/hooks/useAPY"
 import { useBtcPrice } from "@/hooks/useBtcPrice"
-import { useAllGaugeProfiles, useGaugeProfile } from "@/hooks/useGaugeProfiles"
-import {
-  useBoostGaugeForToken,
-  useBoostGauges,
-  useBoostInfo,
-  useGaugeWeight,
-} from "@/hooks/useGauges"
+import { useAllGaugeProfiles } from "@/hooks/useGaugeProfiles"
+import { useBatchGaugeData, useBoostGauges } from "@/hooks/useGauges"
 import { useVeBTCLocks, useVeMEZOLocks } from "@/hooks/useLocks"
 import { useMezoPrice } from "@/hooks/useMezoPrice"
 import {
   type ClaimableBribe,
+  type VoteAllocation,
   useAllUsedWeights,
   useAllVoteAllocations,
+  useBatchVoteState,
   useClaimBribes,
   useClaimableBribes,
-  useVoteAllocations,
-  useVoteState,
 } from "@/hooks/useVoting"
 import {
   Button,
@@ -36,12 +30,21 @@ import {
   Skeleton,
   Tag,
 } from "@mezo-org/mezo-clay"
+import dynamic from "next/dynamic"
 import Link from "next/link"
 import { useEffect, useMemo, useState } from "react"
 import { type Address, formatUnits } from "viem"
 import { useAccount } from "wagmi"
 
 import { getTokenUsdPrice } from "@repo/shared"
+
+const TransferProfileModal = dynamic(
+  () =>
+    import("@/components/TransferProfileModal").then(
+      (mod) => mod.TransferProfileModal,
+    ),
+  { ssr: false },
+)
 
 // Format token values with appropriate precision based on magnitude
 function formatTokenValue(amount: bigint, decimals: number): string {
@@ -81,16 +84,21 @@ function TokenIcon({
 
 function VeBTCLockCard({
   lock,
-}: { lock: ReturnType<typeof useVeBTCLocks>["locks"][0] }): JSX.Element {
-  const { hasGauge, gaugeAddress } = useBoostGaugeForToken(lock.tokenId)
-  const { boostMultiplier } = useBoostInfo(lock.tokenId)
-  const { profile } = useGaugeProfile(gaugeAddress)
-  const { weight: gaugeWeight } = useGaugeWeight(gaugeAddress)
-  const { apy, isLoading: isLoadingAPY } = useGaugeAPY(
-    gaugeAddress,
-    gaugeWeight,
-  )
-
+  hasGauge,
+  gaugeAddress,
+  boostMultiplier,
+  profile,
+  apy,
+  isLoadingAPY,
+}: {
+  lock: ReturnType<typeof useVeBTCLocks>["locks"][0]
+  hasGauge: boolean
+  gaugeAddress: Address | undefined
+  boostMultiplier: number
+  profile: GaugeProfile | null
+  apy: number | null
+  isLoadingAPY: boolean
+}): JSX.Element {
   const unlockDate = new Date(Number(lock.end) * 1000)
   const isExpired = unlockDate < new Date()
 
@@ -282,19 +290,19 @@ function VeBTCLockCard({
 function VeMEZOLockCard({
   lock,
   claimableUSD,
-  allGaugeAddresses,
+  usedWeight,
+  canVoteInCurrentEpoch,
+  allocations,
   apyMap,
 }: {
   lock: ReturnType<typeof useVeMEZOLocks>["locks"][0]
   claimableUSD: number
-  allGaugeAddresses: Address[]
-  apyMap: Map<string, ReturnType<typeof useGaugeAPY>>
+  usedWeight: bigint | undefined
+  canVoteInCurrentEpoch: boolean
+  allocations: VoteAllocation[]
+  apyMap: Map<string, GaugeAPYData>
 }): JSX.Element {
-  const { usedWeight, canVoteInCurrentEpoch } = useVoteState(lock.tokenId)
   const { apy } = useVotingAPY(claimableUSD, usedWeight)
-
-  // Get vote allocations for this specific token
-  const { allocations } = useVoteAllocations(lock.tokenId, allGaugeAddresses)
 
   // Calculate projected APY based on vote allocations
   const { upcomingAPY } = useUpcomingVotingAPY(allocations, apyMap, usedWeight)
@@ -409,7 +417,8 @@ function ClaimableRewardRow({
   isConfirming,
   isLast,
   claimableUSD,
-  allGaugeAddresses,
+  usedWeight,
+  allocations,
   apyMap,
   btcPrice,
   mezoPrice,
@@ -421,16 +430,13 @@ function ClaimableRewardRow({
   isConfirming: boolean
   isLast: boolean
   claimableUSD: number
-  allGaugeAddresses: Address[]
-  apyMap: Map<string, ReturnType<typeof useGaugeAPY>>
+  usedWeight: bigint | undefined
+  allocations: VoteAllocation[]
+  apyMap: Map<string, GaugeAPYData>
   btcPrice: number | null
   mezoPrice: number | null
 }): JSX.Element | null {
-  const { usedWeight } = useVoteState(tokenId)
   const { apy } = useVotingAPY(claimableUSD, usedWeight)
-
-  // Get vote allocations for upcoming APY and projected rewards
-  const { allocations } = useVoteAllocations(tokenId, allGaugeAddresses)
   const { upcomingAPY, projectedIncentivesUSD, projectedRewardsByToken } =
     useUpcomingVotingAPY(allocations, apyMap, usedWeight)
 
@@ -666,17 +672,17 @@ function ClaimableRewardRow({
 
 function ProjectedRewardRow({
   tokenId,
-  allGaugeAddresses,
+  usedWeight,
+  allocations,
   apyMap,
   isLast,
 }: {
   tokenId: bigint
-  allGaugeAddresses: Address[]
-  apyMap: Map<string, ReturnType<typeof useGaugeAPY>>
+  usedWeight: bigint | undefined
+  allocations: VoteAllocation[]
+  apyMap: Map<string, GaugeAPYData>
   isLast: boolean
 }): JSX.Element | null {
-  const { usedWeight } = useVoteState(tokenId)
-  const { allocations } = useVoteAllocations(tokenId, allGaugeAddresses)
   const [isExpanded, setIsExpanded] = useState(false)
 
   // Calculate projected rewards and APY for this specific token
@@ -823,12 +829,24 @@ export default function DashboardPage(): JSX.Element {
     () => veMEZOLocks.map((lock) => lock.tokenId),
     [veMEZOLocks],
   )
+  const veBTCTokenIds = useMemo(
+    () => veBTCLocks.map((lock) => lock.tokenId),
+    [veBTCLocks],
+  )
+
+  const { gaugeDataMap, isLoading: isLoadingBatchGaugeData } =
+    useBatchGaugeData(veBTCTokenIds)
+  const { voteStateMap, isLoading: isLoadingBatchVoteState } =
+    useBatchVoteState(veMEZOTokenIds)
 
   const {
     claimableBribes,
     totalClaimable,
+    isLoading: isLoadingClaimableBribes,
     refetch: refetchBribes,
-  } = useClaimableBribes(veMEZOTokenIds)
+  } = useClaimableBribes(veMEZOTokenIds, {
+    enabled: isConnected && veMEZOTokenIds.length > 0,
+  })
 
   const {
     claimBribes,
@@ -904,7 +922,7 @@ export default function DashboardPage(): JSX.Element {
     claimBribes(tokenId, bribesData)
   }
 
-  const isLoading = isLoadingVeBTC || isLoadingVeMEZO
+  const isLoadingCore = isLoadingVeBTC || isLoadingVeMEZO
 
   const totalVeBTCVotingPower = veBTCLocks.reduce(
     (acc, lock) => acc + lock.votingPower,
@@ -921,8 +939,11 @@ export default function DashboardPage(): JSX.Element {
     totalVeMEZOVotingPower,
   )
 
-  // Get all gauges for upcoming APY calculation
-  const { gauges: allGauges } = useBoostGauges()
+  // Get lightweight gauge registry for APY and vote allocations
+  const { gauges: allGauges, isLoading: isLoadingGauges } = useBoostGauges({
+    includeOwnership: false,
+    enabled: isConnected,
+  })
 
   // Build gauge data for APY map
   const gaugeDataForAPY = useMemo(() => {
@@ -933,7 +954,7 @@ export default function DashboardPage(): JSX.Element {
   }, [allGauges])
 
   // Get APY map for all gauges
-  const { apyMap } = useGaugesAPY(gaugeDataForAPY)
+  const { apyMap, isLoading: isLoadingAPY } = useGaugesAPY(gaugeDataForAPY)
 
   // Get all gauge addresses for vote allocation queries
   const allGaugeAddresses = useMemo(() => {
@@ -941,13 +962,18 @@ export default function DashboardPage(): JSX.Element {
   }, [allGauges])
 
   // Get aggregated vote allocations across all veMEZO tokens
-  const { aggregatedAllocations } = useAllVoteAllocations(
+  const {
+    allocationsByToken,
+    aggregatedAllocations,
+    isLoading: isLoadingAllocations,
+  } = useAllVoteAllocations(
     veMEZOTokenIds,
     allGaugeAddresses,
   )
 
   // Get total used weight across all veMEZO tokens
-  const { totalUsedWeight } = useAllUsedWeights(veMEZOTokenIds)
+  const { totalUsedWeight, isLoading: isLoadingUsedWeights } =
+    useAllUsedWeights(veMEZOTokenIds)
 
   // Calculate upcoming APY based on aggregated vote proportions
   const { upcomingAPY, projectedIncentivesUSD } = useUpcomingVotingAPY(
@@ -958,11 +984,54 @@ export default function DashboardPage(): JSX.Element {
 
   const hasClaimableRewards = claimableBribes.length > 0
   const hasFutureRewards = projectedIncentivesUSD > 0
+  const isLoadingRewardsSection =
+    isLoadingClaimableBribes ||
+    isLoadingGauges ||
+    isLoadingAPY ||
+    isLoadingBatchVoteState ||
+    isLoadingAllocations ||
+    isLoadingUsedWeights
   const showRewardsSection = hasClaimableRewards || hasFutureRewards
 
   // Get all gauge profiles for transfer modal
   const { profiles: allGaugeProfiles, refetch: refetchProfiles } =
     useAllGaugeProfiles()
+
+  const veBTCGaugeCardData = useMemo(() => {
+    const map = new Map<
+      string,
+      {
+        hasGauge: boolean
+        gaugeAddress: Address | undefined
+        boostMultiplier: number
+        profile: GaugeProfile | null
+        apy: number | null
+      }
+    >()
+
+    for (const lock of veBTCLocks) {
+      const tokenIdKey = lock.tokenId.toString()
+      const gaugeData = gaugeDataMap.get(tokenIdKey)
+      const gaugeAddress = gaugeData?.gaugeAddress
+      const profile = gaugeAddress
+        ? (allGaugeProfiles.get(gaugeAddress.toLowerCase()) ?? null)
+        : null
+      const apy =
+        gaugeAddress !== undefined
+          ? (apyMap.get(gaugeAddress.toLowerCase())?.apy ?? null)
+          : null
+
+      map.set(tokenIdKey, {
+        hasGauge: gaugeData?.hasGauge ?? false,
+        gaugeAddress,
+        boostMultiplier: gaugeData?.boostMultiplier ?? 1,
+        profile,
+        apy,
+      })
+    }
+
+    return map
+  }, [veBTCLocks, gaugeDataMap, allGaugeProfiles, apyMap])
 
   // Build owned gauges list for the transfer modal
   // This maps veBTC locks to their corresponding gauges
@@ -974,24 +1043,21 @@ export default function DashboardPage(): JSX.Element {
     }> = []
 
     for (const lock of veBTCLocks) {
-      // Find the gauge that this veBTC token is mapped to
-      const matchingGauge = allGauges.find(
-        (g) => g.veBTCTokenId === lock.tokenId,
-      )
-      if (matchingGauge) {
+      const gaugeData = gaugeDataMap.get(lock.tokenId.toString())
+      if (gaugeData?.hasGauge && gaugeData.gaugeAddress) {
         const profile = allGaugeProfiles.get(
-          matchingGauge.address.toLowerCase(),
+          gaugeData.gaugeAddress.toLowerCase(),
         )
         result.push({
           tokenId: lock.tokenId,
-          gaugeAddress: matchingGauge.address,
+          gaugeAddress: gaugeData.gaugeAddress,
           profile: profile ?? null,
         })
       }
     }
 
     return result
-  }, [veBTCLocks, allGauges, allGaugeProfiles])
+  }, [veBTCLocks, gaugeDataMap, allGaugeProfiles])
 
   const canShowTransferButton = ownedGauges.length >= 2
 
@@ -1017,7 +1083,7 @@ export default function DashboardPage(): JSX.Element {
               </div>
             </Card>
           </SpringIn>
-        ) : isLoading ? (
+        ) : isLoadingCore ? (
           <div className="flex flex-col gap-4">
             <Skeleton width="100%" height="100px" animation />
             <Skeleton width="100%" height="200px" animation />
@@ -1026,7 +1092,7 @@ export default function DashboardPage(): JSX.Element {
         ) : (
           <>
             {/* Claimable Rewards Section */}
-            {showRewardsSection && (
+            {showRewardsSection && !isLoadingRewardsSection && (
               <SpringIn delay={0} variant="card">
                 <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
                   {/* Header with total rewards */}
@@ -1175,18 +1241,15 @@ export default function DashboardPage(): JSX.Element {
                     <div className="px-7 py-1 pb-2">
                       {/* Calculate which tokens have pending rewards but no claimable rewards */}
                       {(() => {
-                        const tokensWithPendingOnly: Array<{
-                          tokenId: bigint
-                          index: number
-                        }> = []
-                        veMEZOLocks.forEach((lock, index) => {
+                        const tokensWithPendingOnly: Array<{ tokenId: bigint }> =
+                          []
+                        veMEZOLocks.forEach((lock) => {
                           const tokenIdStr = lock.tokenId.toString()
                           const hasClaimable =
                             bribesGroupedByTokenId.has(tokenIdStr)
                           if (!hasClaimable) {
                             tokensWithPendingOnly.push({
                               tokenId: lock.tokenId,
-                              index,
                             })
                           }
                         })
@@ -1208,6 +1271,9 @@ export default function DashboardPage(): JSX.Element {
                                 {Array.from(
                                   bribesGroupedByTokenId.entries(),
                                 ).map(([tokenIdStr, bribes]) => {
+                                  const tokenState = voteStateMap.get(tokenIdStr)
+                                  const tokenAllocations =
+                                    allocationsByToken.get(tokenIdStr) ?? []
                                   currentRowIndex++
                                   return (
                                     <ClaimableRewardRow
@@ -1224,7 +1290,8 @@ export default function DashboardPage(): JSX.Element {
                                         claimableUSDByTokenId.get(tokenIdStr) ??
                                         0
                                       }
-                                      allGaugeAddresses={allGaugeAddresses}
+                                      usedWeight={tokenState?.usedWeight}
+                                      allocations={tokenAllocations}
                                       apyMap={apyMap}
                                       btcPrice={btcPrice}
                                       mezoPrice={mezoPrice}
@@ -1236,12 +1303,17 @@ export default function DashboardPage(): JSX.Element {
 
                             {/* Projected rewards section - only for tokens without claimable rewards */}
                             {tokensWithPendingOnly.map(({ tokenId }) => {
+                              const tokenIdStr = tokenId.toString()
+                              const tokenState = voteStateMap.get(tokenIdStr)
+                              const tokenAllocations =
+                                allocationsByToken.get(tokenIdStr) ?? []
                               currentRowIndex++
                               return (
                                 <ProjectedRewardRow
                                   key={`projected-${tokenId.toString()}`}
                                   tokenId={tokenId}
-                                  allGaugeAddresses={allGaugeAddresses}
+                                  usedWeight={tokenState?.usedWeight}
+                                  allocations={tokenAllocations}
                                   apyMap={apyMap}
                                   isLast={currentRowIndex === totalRows}
                                 />
@@ -1337,24 +1409,35 @@ export default function DashboardPage(): JSX.Element {
                   </Card>
                 ) : (
                   <div className="grid grid-cols-3 gap-4 max-[1024px]:grid-cols-2 max-[640px]:grid-cols-1 max-[480px]:gap-3">
-                    {veMEZOLocks.map((lock, index) => (
-                      <SpringIn
-                        key={lock.tokenId.toString()}
-                        delay={(showRewardsSection ? 6 : 5) + index}
-                        variant="card"
-                      >
-                        <VeMEZOLockCard
-                          lock={lock}
-                          claimableUSD={
-                            claimableUSDByTokenId.get(
-                              lock.tokenId.toString(),
-                            ) ?? 0
-                          }
-                          allGaugeAddresses={allGaugeAddresses}
-                          apyMap={apyMap}
-                        />
-                      </SpringIn>
-                    ))}
+                    {veMEZOLocks.map((lock, index) => {
+                      const tokenIdKey = lock.tokenId.toString()
+                      const voteState = voteStateMap.get(tokenIdKey)
+                      const allocations =
+                        allocationsByToken.get(tokenIdKey) ?? []
+
+                      return (
+                        <SpringIn
+                          key={lock.tokenId.toString()}
+                          delay={(showRewardsSection ? 6 : 5) + index}
+                          variant="card"
+                        >
+                          <VeMEZOLockCard
+                            lock={lock}
+                            claimableUSD={
+                              claimableUSDByTokenId.get(
+                                lock.tokenId.toString(),
+                              ) ?? 0
+                            }
+                            usedWeight={voteState?.usedWeight}
+                            canVoteInCurrentEpoch={
+                              voteState?.canVoteInCurrentEpoch ?? false
+                            }
+                            allocations={allocations}
+                            apyMap={apyMap}
+                          />
+                        </SpringIn>
+                      )
+                    })}
                   </div>
                 )}
               </div>
@@ -1389,19 +1472,35 @@ export default function DashboardPage(): JSX.Element {
                   </Card>
                 ) : (
                   <div className="grid grid-cols-3 gap-4 max-[1024px]:grid-cols-2 max-[640px]:grid-cols-1 max-[480px]:gap-3">
-                    {veBTCLocks.map((lock, index) => (
-                      <SpringIn
-                        key={lock.tokenId.toString()}
-                        delay={
-                          (showRewardsSection ? 7 : 6) +
-                          veMEZOLocks.length +
-                          index
-                        }
-                        variant="card"
-                      >
-                        <VeBTCLockCard lock={lock} />
-                      </SpringIn>
-                    ))}
+                    {veBTCLocks.map((lock, index) => {
+                      const cardData =
+                        veBTCGaugeCardData.get(lock.tokenId.toString()) ??
+                        null
+
+                      return (
+                        <SpringIn
+                          key={lock.tokenId.toString()}
+                          delay={
+                            (showRewardsSection ? 7 : 6) +
+                            veMEZOLocks.length +
+                            index
+                          }
+                          variant="card"
+                        >
+                          <VeBTCLockCard
+                            lock={lock}
+                            hasGauge={cardData?.hasGauge ?? false}
+                            gaugeAddress={cardData?.gaugeAddress}
+                            boostMultiplier={cardData?.boostMultiplier ?? 1}
+                            profile={cardData?.profile ?? null}
+                            apy={cardData?.apy ?? null}
+                            isLoadingAPY={
+                              isLoadingAPY || isLoadingBatchGaugeData
+                            }
+                          />
+                        </SpringIn>
+                      )
+                    })}
                   </div>
                 )}
               </div>
@@ -1411,12 +1510,14 @@ export default function DashboardPage(): JSX.Element {
       </div>
 
       {/* Transfer Profile Modal */}
-      <TransferProfileModal
-        isOpen={isTransferModalOpen}
-        onClose={() => setIsTransferModalOpen(false)}
-        ownedGauges={ownedGauges}
-        onTransferComplete={refetchProfiles}
-      />
+      {isTransferModalOpen && (
+        <TransferProfileModal
+          isOpen={isTransferModalOpen}
+          onClose={() => setIsTransferModalOpen(false)}
+          ownedGauges={ownedGauges}
+          onTransferComplete={refetchProfiles}
+        />
+      )}
     </>
   )
 }

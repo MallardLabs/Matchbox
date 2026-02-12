@@ -63,7 +63,9 @@ type GaugeWithAllocation = BoostGauge & {
 export default function BoostPage(): JSX.Element {
   const { isConnected } = useAccount()
   const { locks: veMEZOLocks, isLoading: isLoadingLocks } = useVeMEZOLocks()
-  const { gauges, isLoading: isLoadingGauges } = useBoostGauges()
+  const { gauges, isLoading: isLoadingGauges } = useBoostGauges({
+    includeOwnership: true,
+  })
 
   const gaugeAddresses = useMemo(() => gauges.map((g) => g.address), [gauges])
 

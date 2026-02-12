@@ -31,7 +31,9 @@ type StatusFilter = "all" | "active" | "inactive"
 
 export default function GaugesPage(): JSX.Element {
   const [, theme] = useStyletron()
-  const { gauges, isLoading, totalGauges } = useBoostGauges()
+  const { gauges, isLoading, totalGauges } = useBoostGauges({
+    includeOwnership: true,
+  })
   const {
     boostVoterTotalWeight,
     veMEZOTotalVotingPower,

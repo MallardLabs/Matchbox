@@ -1,9 +1,14 @@
+import { QUERY_PROFILES } from "@/config/queryProfiles"
 import { getContractConfig } from "@/config/contracts"
 import { useNetwork } from "@/contexts/NetworkContext"
+import { useGaugeTopology } from "@/hooks/useGaugeTopology"
+import { chunkArray } from "@/utils/chunk"
+import { useQuery } from "@tanstack/react-query"
 import { useMemo } from "react"
 import type { Address, Hex } from "viem"
 import {
   useAccount,
+  usePublicClient,
   useReadContract,
   useReadContracts,
   useWaitForTransactionReceipt,
@@ -21,7 +26,7 @@ type VoteStateResult = {
 }
 
 export function useVoteState(tokenId: bigint | undefined): VoteStateResult {
-  const { chainId } = useNetwork()
+  const { chainId, isNetworkReady } = useNetwork()
   const contracts = getContractConfig(chainId)
   // Stabilize the timestamp to avoid refetches on every render
   // Round to nearest minute to reduce query key changes
@@ -36,7 +41,8 @@ export function useVoteState(tokenId: bigint | undefined): VoteStateResult {
     functionName: "lastVoted",
     args: tokenId !== undefined ? [tokenId] : undefined,
     query: {
-      enabled: tokenId !== undefined,
+      ...QUERY_PROFILES.SHORT_CACHE,
+      enabled: isNetworkReady && tokenId !== undefined,
     },
   })
 
@@ -45,7 +51,8 @@ export function useVoteState(tokenId: bigint | undefined): VoteStateResult {
     functionName: "usedWeights",
     args: tokenId !== undefined ? [tokenId] : undefined,
     query: {
-      enabled: tokenId !== undefined,
+      ...QUERY_PROFILES.SHORT_CACHE,
+      enabled: isNetworkReady && tokenId !== undefined,
     },
   })
 
@@ -54,6 +61,10 @@ export function useVoteState(tokenId: bigint | undefined): VoteStateResult {
       ...contracts.boostVoter,
       functionName: "epochNext",
       args: [now],
+      query: {
+        ...QUERY_PROFILES.SHORT_CACHE,
+        enabled: isNetworkReady,
+      },
     })
 
   const lastVoted = data as bigint | undefined
@@ -115,7 +126,7 @@ export function useBatchVoteState(tokenIds: bigint[]): {
   voteStateMap: Map<string, BatchVoteState>
   isLoading: boolean
 } {
-  const { chainId } = useNetwork()
+  const { chainId, isNetworkReady } = useNetwork()
   const contracts = getContractConfig(chainId)
   const now = useMemo(() => {
     const timestamp = Math.floor(Date.now() / 1000)
@@ -128,6 +139,10 @@ export function useBatchVoteState(tokenIds: bigint[]): {
       ...contracts.boostVoter,
       functionName: "epochNext",
       args: [now],
+      query: {
+        ...QUERY_PROFILES.SHORT_CACHE,
+        enabled: isNetworkReady,
+      },
     })
 
   const epochNext = epochNextData as bigint | undefined
@@ -142,7 +157,8 @@ export function useBatchVoteState(tokenIds: bigint[]): {
         args: [tokenId],
       })),
       query: {
-        enabled: tokenIds.length > 0,
+        ...QUERY_PROFILES.SHORT_CACHE,
+        enabled: isNetworkReady && tokenIds.length > 0,
       },
     })
 
@@ -155,7 +171,8 @@ export function useBatchVoteState(tokenIds: bigint[]): {
         args: [tokenId],
       })),
       query: {
-        enabled: tokenIds.length > 0,
+        ...QUERY_PROFILES.SHORT_CACHE,
+        enabled: isNetworkReady && tokenIds.length > 0,
       },
     })
 
@@ -689,7 +706,7 @@ export function useVoteAllocations(
   allocations: VoteAllocation[]
   isLoading: boolean
 } {
-  const { chainId } = useNetwork()
+  const { chainId, isNetworkReady } = useNetwork()
   const contracts = getContractConfig(chainId)
 
   const { data, isLoading } = useReadContracts({
@@ -699,7 +716,9 @@ export function useVoteAllocations(
       args: tokenId !== undefined ? [tokenId, gaugeAddress] : undefined,
     })),
     query: {
-      enabled: tokenId !== undefined && gaugeAddresses.length > 0,
+      ...QUERY_PROFILES.SHORT_CACHE,
+      enabled:
+        isNetworkReady && tokenId !== undefined && gaugeAddresses.length > 0,
     },
   })
 
@@ -728,7 +747,7 @@ export function useAllVoteAllocations(
   aggregatedAllocations: VoteAllocation[]
   isLoading: boolean
 } {
-  const { chainId } = useNetwork()
+  const { chainId, isNetworkReady } = useNetwork()
   const contracts = getContractConfig(chainId)
 
   // Query votes for all tokenId + gauge combinations
@@ -741,7 +760,8 @@ export function useAllVoteAllocations(
       })),
     ),
     query: {
-      enabled: tokenIds.length > 0 && gaugeAddresses.length > 0,
+      ...QUERY_PROFILES.SHORT_CACHE,
+      enabled: isNetworkReady && tokenIds.length > 0 && gaugeAddresses.length > 0,
     },
   })
 
@@ -801,7 +821,7 @@ export function useAllUsedWeights(tokenIds: bigint[]): {
   totalUsedWeight: bigint
   isLoading: boolean
 } {
-  const { chainId } = useNetwork()
+  const { chainId, isNetworkReady } = useNetwork()
   const contracts = getContractConfig(chainId)
 
   const { data, isLoading } = useReadContracts({
@@ -811,7 +831,8 @@ export function useAllUsedWeights(tokenIds: bigint[]): {
       args: [tokenId],
     })),
     query: {
-      enabled: tokenIds.length > 0,
+      ...QUERY_PROFILES.SHORT_CACHE,
+      enabled: isNetworkReady && tokenIds.length > 0,
     },
   })
 
@@ -879,7 +900,38 @@ export type ClaimableBribe = {
   }[]
 }
 
-export function useClaimableBribes(veMEZOTokenIds: bigint[]): {
+type ClaimableBribesOptions = {
+  enabled?: boolean
+}
+
+const BRIBE_EARNED_ABI = [
+  {
+    inputs: [
+      { internalType: "address", name: "token", type: "address" },
+      { internalType: "uint256", name: "tokenId", type: "uint256" },
+    ],
+    name: "earned",
+    outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
+    stateMutability: "view",
+    type: "function",
+  },
+] as const
+
+const EARNED_QUERY_CHUNK_SIZE = 200
+
+type EarnedQuery = {
+  tokenId: bigint
+  bribeAddress: Address
+  gaugeAddress: Address
+  tokenAddress: Address
+  symbol: string
+  decimals: number
+}
+
+export function useClaimableBribes(
+  veMEZOTokenIds: bigint[],
+  options: ClaimableBribesOptions = {},
+): {
   claimableBribes: ClaimableBribe[]
   totalClaimable: Map<
     Address,
@@ -888,291 +940,167 @@ export function useClaimableBribes(veMEZOTokenIds: bigint[]): {
   isLoading: boolean
   refetch: RefetchFn
 } {
-  const { chainId } = useNetwork()
-  const contracts = getContractConfig(chainId)
-
-  // First, get the list of all gauges
-  const { data: lengthData, isLoading: isLoadingLength } = useReadContract({
-    ...contracts.boostVoter,
-    functionName: "length",
+  const { chainId, isNetworkReady } = useNetwork()
+  const enabled = (options.enabled ?? true) && isNetworkReady
+  const publicClient = usePublicClient({ chainId })
+  const {
+    topology,
+    isLoading: isLoadingTopology,
+    refetch: refetchTopology,
+  } = useGaugeTopology({
+    enabled,
   })
 
-  const length = Number(lengthData ?? 0n)
-
-  // Get all gauge addresses
-  const { data: gaugeAddressesData, isLoading: isLoadingGauges } =
-    useReadContracts({
-      contracts: Array.from({ length }, (_, i) => ({
-        ...contracts.boostVoter,
-        functionName: "gauges",
-        args: [BigInt(i)],
-      })),
-      query: {
-        enabled: length > 0,
-      },
-    })
-
-  const gaugeAddresses =
-    gaugeAddressesData
-      ?.map((r) => r.result as Address | undefined)
-      .filter((v): v is Address => !!v) ?? []
-
-  // Get bribe addresses for all gauges
-  const { data: bribeAddressesData, isLoading: isLoadingBribes } =
-    useReadContracts({
-      contracts: gaugeAddresses.map((gaugeAddr) => ({
-        ...contracts.boostVoter,
-        functionName: "gaugeToBribe",
-        args: [gaugeAddr],
-      })),
-      query: {
-        enabled: gaugeAddresses.length > 0,
-      },
-    })
-
-  // Build gauge -> bribe mapping
-  const gaugeToBribe = new Map<string, Address>()
-  gaugeAddresses.forEach((gauge, i) => {
-    const bribe = bribeAddressesData?.[i]?.result as Address | undefined
-    if (bribe && bribe !== "0x0000000000000000000000000000000000000000") {
-      gaugeToBribe.set(gauge.toLowerCase(), bribe)
-    }
-  })
-
-  const bribeAddresses = Array.from(new Set(gaugeToBribe.values()))
-
-  // Get reward token list length for each bribe
-  const { data: rewardLengthsData, isLoading: isLoadingRewardLengths } =
-    useReadContracts({
-      contracts: bribeAddresses.map((bribeAddr) => ({
-        address: bribeAddr,
-        abi: [
-          {
-            inputs: [],
-            name: "rewardsListLength",
-            outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
-            stateMutability: "view",
-            type: "function",
-          },
-        ] as const,
-        functionName: "rewardsListLength" as const,
-      })),
-      query: {
-        enabled: bribeAddresses.length > 0,
-      },
-    })
-
-  // Build queries for all reward tokens
-  const rewardTokenQueries: { bribeAddress: Address; index: number }[] = []
-  bribeAddresses.forEach((bribeAddr, i) => {
-    const length = Number(rewardLengthsData?.[i]?.result ?? 0n)
-    for (let j = 0; j < length; j++) {
-      rewardTokenQueries.push({ bribeAddress: bribeAddr, index: j })
-    }
-  })
-
-  // Get all reward token addresses
-  const { data: rewardTokensData, isLoading: isLoadingTokens } =
-    useReadContracts({
-      contracts: rewardTokenQueries.map((q) => ({
-        address: q.bribeAddress,
-        abi: [
-          {
-            inputs: [{ internalType: "uint256", name: "", type: "uint256" }],
-            name: "rewards",
-            outputs: [{ internalType: "address", name: "", type: "address" }],
-            stateMutability: "view",
-            type: "function",
-          },
-        ] as const,
-        functionName: "rewards" as const,
-        args: [BigInt(q.index)],
-      })),
-      query: {
-        enabled: rewardTokenQueries.length > 0,
-      },
-    })
-
-  // Build bribe -> reward tokens mapping
-  const bribeToRewardTokens = new Map<string, Address[]>()
-  rewardTokenQueries.forEach((q, i) => {
-    const token = rewardTokensData?.[i]?.result as Address | undefined
-    if (token) {
-      const existing =
-        bribeToRewardTokens.get(q.bribeAddress.toLowerCase()) ?? []
-      existing.push(token)
-      bribeToRewardTokens.set(q.bribeAddress.toLowerCase(), existing)
-    }
-  })
-
-  // Get all unique reward tokens
-  const allRewardTokens = Array.from(
-    new Set(Array.from(bribeToRewardTokens.values()).flat()),
+  const tokenIdsKey = useMemo(
+    () => veMEZOTokenIds.map((tokenId) => tokenId.toString()).sort().join(","),
+    [veMEZOTokenIds],
   )
 
-  // Get token metadata (symbol and decimals)
-  const { data: tokenMetadataData, isLoading: isLoadingMetadata } =
-    useReadContracts({
-      contracts: allRewardTokens.flatMap((tokenAddr) => [
-        {
-          address: tokenAddr,
-          abi: [
-            {
-              inputs: [],
-              name: "symbol",
-              outputs: [{ internalType: "string", name: "", type: "string" }],
-              stateMutability: "view",
-              type: "function",
-            },
-          ] as const,
-          functionName: "symbol" as const,
-        },
-        {
-          address: tokenAddr,
-          abi: [
-            {
-              inputs: [],
-              name: "decimals",
-              outputs: [{ internalType: "uint8", name: "", type: "uint8" }],
-              stateMutability: "view",
-              type: "function",
-            },
-          ] as const,
-          functionName: "decimals" as const,
-        },
-      ]),
-      query: {
-        enabled: allRewardTokens.length > 0,
-      },
-    })
+  const earnedQueries = useMemo(() => {
+    if (!enabled || !topology || veMEZOTokenIds.length === 0) {
+      return [] as EarnedQuery[]
+    }
 
-  // Build token metadata map
-  const tokenMetadata = new Map<string, { symbol: string; decimals: number }>()
-  allRewardTokens.forEach((token, i) => {
-    const symbol = tokenMetadataData?.[i * 2]?.result as string | undefined
-    const decimals = tokenMetadataData?.[i * 2 + 1]?.result as
-      | number
-      | undefined
-    tokenMetadata.set(token.toLowerCase(), {
-      symbol: symbol ?? "???",
-      decimals: decimals ?? 18,
-    })
-  })
+    const queries: EarnedQuery[] = []
 
-  // Now query earned amounts for each veMEZO token for each bribe/token combo
-  const earnedQueries: {
-    tokenId: bigint
-    bribeAddress: Address
-    gaugeAddress: Address
-    tokenAddress: Address
-  }[] = []
-  for (const tokenId of veMEZOTokenIds) {
-    for (const [gaugeKey, bribeAddr] of gaugeToBribe.entries()) {
-      const rewardTokens =
-        bribeToRewardTokens.get(bribeAddr.toLowerCase()) ?? []
-      const gaugeAddr = gaugeAddresses.find(
-        (g) => g.toLowerCase() === gaugeKey,
-      ) as Address
-      for (const tokenAddr of rewardTokens) {
-        earnedQueries.push({
-          tokenId,
-          bribeAddress: bribeAddr,
-          gaugeAddress: gaugeAddr,
-          tokenAddress: tokenAddr,
-        })
+    for (const tokenId of veMEZOTokenIds) {
+      for (const gauge of topology.gauges) {
+        if (!gauge.bribeAddress || gauge.rewardTokens.length === 0) {
+          continue
+        }
+
+        for (const rewardToken of gauge.rewardTokens) {
+          queries.push({
+            tokenId,
+            bribeAddress: gauge.bribeAddress,
+            gaugeAddress: gauge.gaugeAddress,
+            tokenAddress: rewardToken.tokenAddress,
+            symbol: rewardToken.symbol,
+            decimals: rewardToken.decimals,
+          })
+        }
       }
     }
-  }
 
-  const {
-    data: earnedData,
-    isLoading: isLoadingEarned,
-    refetch,
-  } = useReadContracts({
-    contracts: earnedQueries.map((q) => ({
-      address: q.bribeAddress,
-      abi: [
-        {
-          inputs: [
-            { internalType: "address", name: "token", type: "address" },
-            { internalType: "uint256", name: "tokenId", type: "uint256" },
-          ],
-          name: "earned",
-          outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
-          stateMutability: "view",
-          type: "function",
-        },
-      ] as const,
-      functionName: "earned" as const,
-      args: [q.tokenAddress, q.tokenId],
-    })),
-    query: {
-      enabled: earnedQueries.length > 0 && veMEZOTokenIds.length > 0,
+    return queries
+  }, [enabled, topology, veMEZOTokenIds])
+
+  const earnedQuery = useQuery({
+    queryKey: [
+      "claimable-bribes-earned",
+      chainId,
+      tokenIdsKey,
+      topology?.generatedAt ?? "no-topology",
+    ],
+    queryFn: async () => {
+      if (!publicClient || earnedQueries.length === 0) {
+        return []
+      }
+
+      const indexedQueries = earnedQueries.map((query, index) => ({
+        ...query,
+        index,
+      }))
+      const batches = chunkArray(indexedQueries, EARNED_QUERY_CHUNK_SIZE)
+      const earnedValues = new Array<bigint>(earnedQueries.length).fill(0n)
+
+      for (const batch of batches) {
+        const contracts = batch.map((query) => ({
+          address: query.bribeAddress,
+          abi: BRIBE_EARNED_ABI,
+          functionName: "earned" as const,
+          args: [query.tokenAddress, query.tokenId],
+        }))
+
+        const batchResults = (await publicClient.multicall({
+          contracts: contracts as never,
+          allowFailure: true,
+        })) as Array<{ status: "success" | "failure"; result?: unknown }>
+
+        batchResults.forEach((result, resultIndex) => {
+          const originalIndex = batch[resultIndex]?.index
+          if (originalIndex === undefined) return
+
+          earnedValues[originalIndex] =
+            result.status === "success"
+              ? ((result.result as bigint | undefined) ?? 0n)
+              : 0n
+        })
+      }
+
+      return earnedValues
     },
+    enabled: enabled && !!publicClient && earnedQueries.length > 0,
+    ...QUERY_PROFILES.SHORT_CACHE,
   })
 
-  // Build claimable bribes result
-  const claimableBribesMap = new Map<string, ClaimableBribe>()
-  earnedQueries.forEach((q, i) => {
-    const earned = earnedData?.[i]?.result as bigint | undefined
-    if (earned && earned > 0n) {
-      const key = `${q.tokenId.toString()}-${q.bribeAddress.toLowerCase()}`
-      const existing = claimableBribesMap.get(key)
-      const meta = tokenMetadata.get(q.tokenAddress.toLowerCase())
+  const { claimableBribes, totalClaimable } = useMemo(() => {
+    const claimableBribesMap = new Map<string, ClaimableBribe>()
+    const earnedValues = earnedQuery.data ?? []
 
-      const rewardInfo = {
-        tokenAddress: q.tokenAddress,
-        symbol: meta?.symbol ?? "???",
-        decimals: meta?.decimals ?? 18,
+    earnedQueries.forEach((query, index) => {
+      const earned = earnedValues[index] ?? 0n
+      if (earned <= 0n) return
+
+      const claimKey = `${query.tokenId.toString()}-${query.bribeAddress.toLowerCase()}`
+      const reward = {
+        tokenAddress: query.tokenAddress,
+        symbol: query.symbol,
+        decimals: query.decimals,
         earned,
       }
 
+      const existing = claimableBribesMap.get(claimKey)
       if (existing) {
-        existing.rewards.push(rewardInfo)
+        existing.rewards.push(reward)
       } else {
-        claimableBribesMap.set(key, {
-          tokenId: q.tokenId,
-          bribeAddress: q.bribeAddress,
-          gaugeAddress: q.gaugeAddress,
-          rewards: [rewardInfo],
+        claimableBribesMap.set(claimKey, {
+          tokenId: query.tokenId,
+          bribeAddress: query.bribeAddress,
+          gaugeAddress: query.gaugeAddress,
+          rewards: [reward],
         })
       }
-    }
-  })
+    })
 
-  const claimableBribes = Array.from(claimableBribesMap.values())
+    const claimableBribes = Array.from(claimableBribesMap.values())
+    const totalClaimable = new Map<
+      Address,
+      { symbol: string; decimals: number; amount: bigint }
+    >()
 
-  // Calculate totals across all tokens
-  const totalClaimable = new Map<
-    Address,
-    { symbol: string; decimals: number; amount: bigint }
-  >()
-  for (const bribe of claimableBribes) {
-    for (const reward of bribe.rewards) {
-      const existing = totalClaimable.get(reward.tokenAddress)
-      if (existing) {
-        existing.amount += reward.earned
-      } else {
-        totalClaimable.set(reward.tokenAddress, {
-          symbol: reward.symbol,
-          decimals: reward.decimals,
-          amount: reward.earned,
-        })
+    for (const bribe of claimableBribes) {
+      for (const reward of bribe.rewards) {
+        const existing = totalClaimable.get(reward.tokenAddress)
+        if (existing) {
+          existing.amount += reward.earned
+        } else {
+          totalClaimable.set(reward.tokenAddress, {
+            symbol: reward.symbol,
+            decimals: reward.decimals,
+            amount: reward.earned,
+          })
+        }
       }
     }
+
+    return { claimableBribes, totalClaimable }
+  }, [earnedQueries, earnedQuery.data])
+
+  const isLoading =
+    (enabled && veMEZOTokenIds.length > 0 && isLoadingTopology) ||
+    (enabled &&
+      earnedQueries.length > 0 &&
+      (earnedQuery.isLoading || earnedQuery.isFetching))
+
+  const refetch = async () => {
+    await Promise.all([refetchTopology(), earnedQuery.refetch()])
   }
 
   return {
     claimableBribes,
     totalClaimable,
-    isLoading:
-      isLoadingLength ||
-      isLoadingGauges ||
-      isLoadingBribes ||
-      isLoadingRewardLengths ||
-      isLoadingTokens ||
-      isLoadingMetadata ||
-      isLoadingEarned,
+    isLoading,
     refetch,
   }
 }

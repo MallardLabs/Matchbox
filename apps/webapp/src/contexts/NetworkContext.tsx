@@ -12,6 +12,7 @@ import { useChainId, useSwitchChain } from "wagmi"
 type NetworkContextType = {
   chainId: SupportedChainId
   isMainnet: boolean
+  isNetworkReady: boolean
   switchNetwork: () => void
   networkName: string
 }
@@ -20,20 +21,17 @@ const NetworkContext = createContext<NetworkContextType | undefined>(undefined)
 
 export function NetworkProvider({ children }: { children: ReactNode }) {
   const wagmiChainId = useChainId()
-  const [chainId, setChainId] = useState<SupportedChainId>(CHAIN_ID.testnet)
+  const [chainId, setChainId] = useState<SupportedChainId>(() => {
+    if (typeof window === "undefined") {
+      return CHAIN_ID.testnet
+    }
+
+    const saved = localStorage.getItem("mezo-network")
+    return saved === "mainnet" ? CHAIN_ID.mainnet : CHAIN_ID.testnet
+  })
+  const [isNetworkReady, setIsNetworkReady] = useState(false)
   const { switchChain } = useSwitchChain()
 
-  // Initial load from localStorage
-  useEffect(() => {
-    const saved = localStorage.getItem("mezo-network")
-    if (saved === "mainnet") {
-      setChainId(CHAIN_ID.mainnet)
-    } else {
-      setChainId(CHAIN_ID.testnet)
-    }
-  }, [])
-
-  // Sync with Wagmi chain changes
   useEffect(() => {
     if (
       wagmiChainId === CHAIN_ID.mainnet ||
@@ -41,15 +39,28 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
     ) {
       if (wagmiChainId !== chainId) {
         setChainId(wagmiChainId)
-        localStorage.setItem(
-          "mezo-network",
-          wagmiChainId === CHAIN_ID.mainnet ? "mainnet" : "testnet",
-        )
+      }
+      localStorage.setItem(
+        "mezo-network",
+        wagmiChainId === CHAIN_ID.mainnet ? "mainnet" : "testnet",
+      )
+    } else if (!isNetworkReady) {
+      const saved = localStorage.getItem("mezo-network")
+      const savedChainId =
+        saved === "mainnet" ? CHAIN_ID.mainnet : CHAIN_ID.testnet
+      if (savedChainId !== chainId) {
+        setChainId(savedChainId)
       }
     }
-  }, [wagmiChainId, chainId])
+
+    if (!isNetworkReady) {
+      setIsNetworkReady(true)
+    }
+  }, [wagmiChainId, chainId, isNetworkReady])
 
   const switchNetwork = useCallback(() => {
+    if (!isNetworkReady) return
+
     const newChainId =
       chainId === CHAIN_ID.testnet ? CHAIN_ID.mainnet : CHAIN_ID.testnet
     setChainId(newChainId)
@@ -65,7 +76,13 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
 
   return (
     <NetworkContext.Provider
-      value={{ chainId, isMainnet, switchNetwork, networkName }}
+      value={{
+        chainId,
+        isMainnet,
+        isNetworkReady,
+        switchNetwork,
+        networkName,
+      }}
     >
       {children}
     </NetworkContext.Provider>

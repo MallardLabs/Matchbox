@@ -1,12 +1,21 @@
 import { useTheme } from "@/contexts/ThemeContext"
 import { Button } from "@mezo-org/mezo-clay"
 import { useWalletAccount } from "@mezo-org/passport"
+import dynamic from "next/dynamic"
 import NextLink from "next/link"
 import { useRouter } from "next/router"
 import { useEffect, useState } from "react"
-import { ConnectWalletDrawer } from "./ConnectWalletDrawer"
 import { HeaderTicker } from "./HeaderTicker"
-import { WalletDrawer } from "./WalletDrawer"
+
+const ConnectWalletDrawer = dynamic(
+  () => import("./ConnectWalletDrawer").then((mod) => mod.ConnectWalletDrawer),
+  { ssr: false },
+)
+
+const WalletDrawer = dynamic(
+  () => import("./WalletDrawer").then((mod) => mod.WalletDrawer),
+  { ssr: false },
+)
 
 function MenuIcon(): JSX.Element {
   return (
@@ -267,14 +276,18 @@ export function Header(): JSX.Element {
             )}
           </div>
 
-          <WalletDrawer
-            isOpen={walletDrawerOpen}
-            onClose={() => setWalletDrawerOpen(false)}
-          />
-          <ConnectWalletDrawer
-            isOpen={connectDrawerOpen}
-            onClose={() => setConnectDrawerOpen(false)}
-          />
+          {walletDrawerOpen && (
+            <WalletDrawer
+              isOpen={walletDrawerOpen}
+              onClose={() => setWalletDrawerOpen(false)}
+            />
+          )}
+          {connectDrawerOpen && (
+            <ConnectWalletDrawer
+              isOpen={connectDrawerOpen}
+              onClose={() => setConnectDrawerOpen(false)}
+            />
+          )}
 
           {/* Mobile Actions */}
           <div className="flex items-center gap-2 md:hidden">
