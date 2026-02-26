@@ -377,6 +377,11 @@
   opacity: 0;
 }
 
+.spring-fly-in-card-subtle {
+  animation: springFlyInCardSubtle 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  opacity: 0;
+}
+
 @keyframes springFlyIn {
   0% {
     opacity: 0;
@@ -392,6 +397,17 @@
   0% {
     opacity: 0;
     transform: scale(1.4);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes springFlyInCardSubtle {
+  0% {
+    opacity: 0;
+    transform: scale(1.08);
   }
   100% {
     opacity: 1;

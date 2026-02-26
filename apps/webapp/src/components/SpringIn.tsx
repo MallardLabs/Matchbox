@@ -3,7 +3,7 @@ import type { ReactNode } from "react"
 interface SpringInProps {
   children: ReactNode
   delay?: number
-  variant?: "default" | "card"
+  variant?: "default" | "card" | "card-subtle"
   className?: string
 }
 
@@ -20,7 +20,11 @@ export function SpringIn({
 }: SpringInProps) {
   const cappedDelay = Math.min(Math.max(delay, 0), 12)
   const animationClass =
-    variant === "card" ? "spring-fly-in-card" : "spring-fly-in"
+    variant === "card"
+      ? "spring-fly-in-card"
+      : variant === "card-subtle"
+        ? "spring-fly-in-card-subtle"
+        : "spring-fly-in"
   const delayClass = cappedDelay <= 10 ? `spring-delay-${cappedDelay}` : ""
   const delayStyle =
     cappedDelay > 10
@@ -40,7 +44,7 @@ export function SpringIn({
 interface SpringInGridProps {
   children: ReactNode[]
   startDelay?: number
-  variant?: "default" | "card"
+  variant?: "default" | "card" | "card-subtle"
   className?: string
 }
 

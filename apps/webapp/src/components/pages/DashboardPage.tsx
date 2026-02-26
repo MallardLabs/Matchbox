@@ -1,9 +1,10 @@
 import { AnimatedNumber } from "@/components/AnimatedNumber"
+import GaugeCard from "@/components/GaugeCard"
 import { SpringIn } from "@/components/SpringIn"
 import type { GaugeProfile } from "@/config/supabase"
 import {
-  formatAPY,
   type GaugeAPYData,
+  formatAPY,
   useGaugesAPY,
   useUpcomingVotingAPY,
   useVotingAPY,
@@ -942,7 +943,7 @@ export default function DashboardPage(): JSX.Element {
   // Get lightweight gauge registry for APY and vote allocations
   const { gauges: allGauges, isLoading: isLoadingGauges } = useBoostGauges({
     includeOwnership: false,
-    enabled: isConnected,
+    enabled: true,
   })
 
   // Build gauge data for APY map
@@ -966,10 +967,7 @@ export default function DashboardPage(): JSX.Element {
     allocationsByToken,
     aggregatedAllocations,
     isLoading: isLoadingAllocations,
-  } = useAllVoteAllocations(
-    veMEZOTokenIds,
-    allGaugeAddresses,
-  )
+  } = useAllVoteAllocations(veMEZOTokenIds, allGaugeAddresses)
 
   // Get total used weight across all veMEZO tokens
   const { totalUsedWeight, isLoading: isLoadingUsedWeights } =
@@ -1241,8 +1239,9 @@ export default function DashboardPage(): JSX.Element {
                     <div className="px-7 py-1 pb-2">
                       {/* Calculate which tokens have pending rewards but no claimable rewards */}
                       {(() => {
-                        const tokensWithPendingOnly: Array<{ tokenId: bigint }> =
-                          []
+                        const tokensWithPendingOnly: Array<{
+                          tokenId: bigint
+                        }> = []
                         veMEZOLocks.forEach((lock) => {
                           const tokenIdStr = lock.tokenId.toString()
                           const hasClaimable =
@@ -1271,7 +1270,8 @@ export default function DashboardPage(): JSX.Element {
                                 {Array.from(
                                   bribesGroupedByTokenId.entries(),
                                 ).map(([tokenIdStr, bribes]) => {
-                                  const tokenState = voteStateMap.get(tokenIdStr)
+                                  const tokenState =
+                                    voteStateMap.get(tokenIdStr)
                                   const tokenAllocations =
                                     allocationsByToken.get(tokenIdStr) ?? []
                                   currentRowIndex++
@@ -1334,7 +1334,7 @@ export default function DashboardPage(): JSX.Element {
                   <div className="py-2">
                     <div className="mb-1 flex items-center gap-1.5">
                       <TokenIcon symbol="MEZO" size={14} />
-                      <p className="text-2xs uppercase tracking-wider text-[var(--content-secondary)]">
+                      <p className="text-2xs tracking-wider text-[var(--content-secondary)]">
                         Your veMEZO Locks
                       </p>
                     </div>
@@ -1350,7 +1350,7 @@ export default function DashboardPage(): JSX.Element {
                   <div className="py-2">
                     <div className="mb-1 flex items-center gap-1.5">
                       <TokenIcon symbol="MEZO" size={14} />
-                      <p className="text-2xs uppercase tracking-wider text-[var(--content-secondary)]">
+                      <p className="text-2xs tracking-wider text-[var(--content-secondary)]">
                         Your veMEZO Power
                       </p>
                     </div>
@@ -1366,7 +1366,7 @@ export default function DashboardPage(): JSX.Element {
                   <div className="py-2">
                     <div className="mb-1 flex items-center gap-1.5">
                       <TokenIcon symbol="BTC" size={14} />
-                      <p className="text-2xs uppercase tracking-wider text-[var(--content-secondary)]">
+                      <p className="text-2xs tracking-wider text-[var(--content-secondary)]">
                         Your veBTC Locks
                       </p>
                     </div>
@@ -1382,7 +1382,7 @@ export default function DashboardPage(): JSX.Element {
                   <div className="py-2">
                     <div className="mb-1 flex items-center gap-1.5">
                       <TokenIcon symbol="BTC" size={14} />
-                      <p className="text-2xs uppercase tracking-wider text-[var(--content-secondary)]">
+                      <p className="text-2xs tracking-wider text-[var(--content-secondary)]">
                         Your veBTC Power
                       </p>
                     </div>
@@ -1474,8 +1474,7 @@ export default function DashboardPage(): JSX.Element {
                   <div className="grid grid-cols-3 gap-4 max-[1024px]:grid-cols-2 max-[640px]:grid-cols-1 max-[480px]:gap-3">
                     {veBTCLocks.map((lock, index) => {
                       const cardData =
-                        veBTCGaugeCardData.get(lock.tokenId.toString()) ??
-                        null
+                        veBTCGaugeCardData.get(lock.tokenId.toString()) ?? null
 
                       return (
                         <SpringIn
@@ -1508,6 +1507,50 @@ export default function DashboardPage(): JSX.Element {
           </>
         )}
       </div>
+
+      {/* All Gauges */}
+      <SpringIn
+        delay={
+          (showRewardsSection ? 8 : 7) + veMEZOLocks.length + veBTCLocks.length
+        }
+        variant="card"
+      >
+        <div>
+          <h2 className="mb-4 text-xl font-semibold text-[var(--content-primary)]">
+            All Gauges
+          </h2>
+          {isLoadingGauges ? (
+            <Skeleton width="100%" height="200px" animation />
+          ) : allGauges.length === 0 ? (
+            <Card withBorder overrides={{}}>
+              <div className="py-8 text-center">
+                <ParagraphMedium color="var(--content-secondary)">
+                  No gauges found
+                </ParagraphMedium>
+              </div>
+            </Card>
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {allGauges.map((gauge, idx) => (
+                <SpringIn
+                  key={gauge.address}
+                  {...(idx < 9 ? { delay: idx } : {})}
+                  variant="card-subtle"
+                >
+                  <GaugeCard
+                    gauge={gauge}
+                    profile={
+                      allGaugeProfiles.get(gauge.address.toLowerCase()) ?? null
+                    }
+                    apyData={apyMap.get(gauge.address.toLowerCase())}
+                    isLoadingAPY={isLoadingAPY}
+                  />
+                </SpringIn>
+              ))}
+            </div>
+          )}
+        </div>
+      </SpringIn>
 
       {/* Transfer Profile Modal */}
       {isTransferModalOpen && (
