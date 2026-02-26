@@ -26,6 +26,9 @@ import {
 import {
   Button,
   Card,
+  ChevronDown,
+  ChevronUp,
+  Input,
   ParagraphMedium,
   ParagraphSmall,
   Skeleton,
@@ -33,7 +36,7 @@ import {
 } from "@mezo-org/mezo-clay"
 import dynamic from "next/dynamic"
 import Link from "next/link"
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { type Address, formatUnits } from "viem"
 import { useAccount } from "wagmi"
 
@@ -72,6 +75,16 @@ const TOKEN_ICONS: Record<string, string> = {
   MEZO: "/token icons/Mezo.svg",
   MUSD: "/token icons/MUSD.svg",
 }
+
+type GaugeSortColumn =
+  | "veBTCWeight"
+  | "veMEZOWeight"
+  | "boost"
+  | "optimalVeMEZO"
+  | "apy"
+  | null
+type SortDirection = "asc" | "desc"
+type StatusFilter = "all" | "active" | "inactive"
 
 function TokenIcon({
   symbol,
@@ -825,6 +838,12 @@ export default function DashboardPage(): JSX.Element {
   const { price: btcPrice } = useBtcPrice()
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false)
   const { price: mezoPrice } = useMezoPrice()
+  const [gaugeSortColumn, setGaugeSortColumn] = useState<GaugeSortColumn>("apy")
+  const [gaugeSortDirection, setGaugeSortDirection] =
+    useState<SortDirection>("desc")
+  const [gaugeStatusFilter, setGaugeStatusFilter] =
+    useState<StatusFilter>("active")
+  const [gaugeSearchQuery, setGaugeSearchQuery] = useState("")
 
   const veMEZOTokenIds = useMemo(
     () => veMEZOLocks.map((lock) => lock.tokenId),
@@ -1058,6 +1077,123 @@ export default function DashboardPage(): JSX.Element {
   }, [veBTCLocks, gaugeDataMap, allGaugeProfiles])
 
   const canShowTransferButton = ownedGauges.length >= 2
+
+  const handleGaugeSort = useCallback(
+    (column: GaugeSortColumn) => {
+      if (gaugeSortColumn === column) {
+        setGaugeSortDirection((d) => (d === "asc" ? "desc" : "asc"))
+      } else {
+        setGaugeSortColumn(column)
+        setGaugeSortDirection("desc")
+      }
+    },
+    [gaugeSortColumn],
+  )
+
+  const getGaugeSortIndicator = (column: GaugeSortColumn): JSX.Element => {
+    if (gaugeSortColumn === column) {
+      return gaugeSortDirection === "asc" ? (
+        <ChevronUp size={16} />
+      ) : (
+        <ChevronDown size={16} />
+      )
+    }
+    return (
+      <span className="opacity-30">
+        <ChevronDown size={16} />
+      </span>
+    )
+  }
+
+  const filteredAndSortedGauges = useMemo(() => {
+    let result = [...allGauges]
+
+    const hasGaugeProfile = (gaugeAddress: Address) => {
+      const profile = allGaugeProfiles.get(gaugeAddress.toLowerCase())
+      return Boolean(
+        profile?.display_name ||
+          profile?.description ||
+          profile?.profile_picture_url,
+      )
+    }
+
+    if (gaugeStatusFilter === "active") {
+      result = result.filter((g) => g.isAlive)
+    } else if (gaugeStatusFilter === "inactive") {
+      result = result.filter((g) => !g.isAlive)
+    }
+
+    if (gaugeSearchQuery.trim()) {
+      const query = gaugeSearchQuery.trim().toLowerCase()
+      result = result.filter((g) => {
+        const profile = allGaugeProfiles.get(g.address.toLowerCase())
+        const displayName = profile?.display_name?.toLowerCase() ?? ""
+        const tokenIdStr = g.veBTCTokenId > 0n ? g.veBTCTokenId.toString() : ""
+        const addressStr = g.address.toLowerCase()
+        return (
+          displayName.includes(query) ||
+          tokenIdStr.includes(query) ||
+          addressStr.includes(query)
+        )
+      })
+    }
+
+    if (gaugeSortColumn) {
+      result.sort((a, b) => {
+        let comparison = 0
+
+        const aHasProfile = hasGaugeProfile(a.address)
+        const bHasProfile = hasGaugeProfile(b.address)
+        if (aHasProfile !== bHasProfile) {
+          return aHasProfile ? -1 : 1
+        }
+
+        switch (gaugeSortColumn) {
+          case "veBTCWeight": {
+            const aVal = a.veBTCWeight ?? 0n
+            const bVal = b.veBTCWeight ?? 0n
+            comparison = aVal < bVal ? -1 : aVal > bVal ? 1 : 0
+            break
+          }
+          case "veMEZOWeight": {
+            const aVal = a.totalWeight
+            const bVal = b.totalWeight
+            comparison = aVal < bVal ? -1 : aVal > bVal ? 1 : 0
+            break
+          }
+          case "boost":
+            comparison = a.boostMultiplier - b.boostMultiplier
+            break
+          case "optimalVeMEZO": {
+            const aVal = a.optimalAdditionalVeMEZO ?? -1n
+            const bVal = b.optimalAdditionalVeMEZO ?? -1n
+            comparison = aVal < bVal ? -1 : aVal > bVal ? 1 : 0
+            break
+          }
+          case "apy": {
+            const aAPY = apyMap.get(a.address.toLowerCase())?.apy ?? -1
+            const bAPY = apyMap.get(b.address.toLowerCase())?.apy ?? -1
+            comparison = aAPY < bAPY ? -1 : aAPY > bAPY ? 1 : 0
+            break
+          }
+          default:
+            break
+        }
+
+        return gaugeSortDirection === "asc" ? comparison : -comparison
+      })
+    }
+
+    return result
+  }, [
+    allGauges,
+    allGaugeProfiles,
+    gaugeStatusFilter,
+    gaugeSearchQuery,
+    gaugeSortColumn,
+    gaugeSortDirection,
+    apyMap,
+  ])
 
   return (
     <>
@@ -1515,39 +1651,124 @@ export default function DashboardPage(): JSX.Element {
         }
         variant="card"
       >
-        <div className="mt-3">
+        <div className="mt-6">
           <h2 className="mb-4 text-xl font-semibold text-[var(--content-primary)]">
             All Gauges
           </h2>
           {isLoadingGauges ? (
             <Skeleton width="100%" height="200px" animation />
-          ) : allGauges.length === 0 ? (
-            <Card withBorder overrides={{}}>
-              <div className="py-8 text-center">
-                <ParagraphMedium color="var(--content-secondary)">
-                  No gauges found
-                </ParagraphMedium>
-              </div>
-            </Card>
           ) : (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {allGauges.map((gauge, idx) => (
-                <SpringIn
-                  key={gauge.address}
-                  {...(idx < 9 ? { delay: idx } : {})}
-                  variant="card-subtle"
-                >
-                  <GaugeCard
-                    gauge={gauge}
-                    profile={
-                      allGaugeProfiles.get(gauge.address.toLowerCase()) ?? null
-                    }
-                    apyData={apyMap.get(gauge.address.toLowerCase())}
-                    isLoadingAPY={isLoadingAPY}
+            <>
+              <div className="mb-4 flex flex-col gap-4">
+                <p className="text-xs text-[var(--content-secondary)]">
+                  {filteredAndSortedGauges.length} gauge
+                  {filteredAndSortedGauges.length !== 1 ? "s" : ""}
+                </p>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs text-[var(--content-secondary)]">
+                    Filter:
+                  </span>
+                  <Tag
+                    closeable={false}
+                    onClick={() => setGaugeStatusFilter("all")}
+                    color={gaugeStatusFilter === "all" ? "blue" : "gray"}
+                  >
+                    All
+                  </Tag>
+                  <Tag
+                    closeable={false}
+                    onClick={() => setGaugeStatusFilter("active")}
+                    color={gaugeStatusFilter === "active" ? "green" : "gray"}
+                  >
+                    Active
+                  </Tag>
+                  <Tag
+                    closeable={false}
+                    onClick={() => setGaugeStatusFilter("inactive")}
+                    color={gaugeStatusFilter === "inactive" ? "red" : "gray"}
+                  >
+                    Inactive
+                  </Tag>
+                </div>
+
+                <div>
+                  <Input
+                    value={gaugeSearchQuery}
+                    onChange={(e) => setGaugeSearchQuery(e.target.value)}
+                    placeholder="Search gauges..."
+                    size="small"
                   />
-                </SpringIn>
-              ))}
-            </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs text-[var(--content-secondary)]">
+                    Sort:
+                  </span>
+                  {(
+                    [
+                      { id: "apy", label: "APY" },
+                      { id: "veMEZOWeight", label: "veMEZO Weight" },
+                      { id: "veBTCWeight", label: "veBTC Weight" },
+                      { id: "boost", label: "Boost" },
+                      { id: "optimalVeMEZO", label: "Optimal veMEZO" },
+                    ] as const
+                  ).map((option) => (
+                    <button
+                      key={option.id}
+                      type="button"
+                      onClick={() => handleGaugeSort(option.id)}
+                      className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs ${
+                        gaugeSortColumn === option.id
+                          ? "border-[var(--content-primary)] text-[var(--content-primary)]"
+                          : "border-[var(--border)] text-[var(--content-secondary)]"
+                      }`}
+                    >
+                      {option.label}
+                      {getGaugeSortIndicator(option.id)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {allGauges.length === 0 ? (
+                <Card withBorder overrides={{}}>
+                  <div className="py-8 text-center">
+                    <ParagraphMedium color="var(--content-secondary)">
+                      No gauges found
+                    </ParagraphMedium>
+                  </div>
+                </Card>
+              ) : filteredAndSortedGauges.length === 0 ? (
+                <Card withBorder overrides={{}}>
+                  <div className="py-8 text-center">
+                    <ParagraphMedium color="var(--content-secondary)">
+                      No gauges match your filters
+                    </ParagraphMedium>
+                  </div>
+                </Card>
+              ) : (
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  {filteredAndSortedGauges.map((gauge, idx) => (
+                    <SpringIn
+                      key={gauge.address}
+                      {...(idx < 9 ? { delay: idx } : {})}
+                      variant="card-subtle"
+                    >
+                      <GaugeCard
+                        gauge={gauge}
+                        profile={
+                          allGaugeProfiles.get(gauge.address.toLowerCase()) ??
+                          null
+                        }
+                        apyData={apyMap.get(gauge.address.toLowerCase())}
+                        isLoadingAPY={isLoadingAPY}
+                      />
+                    </SpringIn>
+                  ))}
+                </div>
+              )}
+            </>
           )}
         </div>
       </SpringIn>
