@@ -1107,7 +1107,7 @@ export default function BoostPage(): JSX.Element {
 
           {/* Card 2 — Gauge List */}
           {veMEZOLocks.length > 0 && (
-            <SpringIn delay={1} variant="card">
+            <SpringIn delay={1} variant="card-subtle">
               <Card title="Allocate Voting Power" withBorder overrides={{}}>
                 <div className="py-4">
                   <div className="flex flex-col gap-4">
@@ -1217,116 +1217,117 @@ export default function BoostPage(): JSX.Element {
                             </p>
                           </div>
                         ) : (
-                          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                            {filteredAndSortedGauges.map((gauge, idx) => {
-                              const profile = gaugeProfiles.get(
-                                gauge.address.toLowerCase(),
-                              )
-                              const apyData = apyMap.get(
-                                gauge.address.toLowerCase(),
-                              )
-                              const userVotePercentage =
-                                gaugeAllocations.get(gauge.originalIndex) ?? 0
-                              const isProjected =
-                                selectedLock && userVotePercentage > 0
-                              const displayAPY = isProjected
-                                ? calculateProjectedAPY(
-                                    apyData,
-                                    userVotePercentage,
-                                    selectedLock.votingPower,
-                                    mezoPrice,
+                          <div className="relative">
+                            <div className="pointer-events-none sticky top-0 z-10 h-6 bg-gradient-to-b from-[var(--background)] to-transparent" />
+                            <div className="max-h-[600px] overflow-y-auto">
+                              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                                {filteredAndSortedGauges.map((gauge) => {
+                                  const profile = gaugeProfiles.get(
+                                    gauge.address.toLowerCase(),
                                   )
-                                : (apyData?.apy ?? null)
-                              const isSelected = selectedGaugeIndexes.has(
-                                gauge.originalIndex,
-                              )
-                              const votePercentage =
-                                gaugeAllocations.get(gauge.originalIndex) ?? 0
-                              const cardContent = (
-                                <GaugeCard
-                                  key={gauge.address}
-                                  gauge={gauge}
-                                  profile={profile ?? null}
-                                  apyData={apyData}
-                                  isLoadingAPY={isLoadingAPY}
-                                  displayAPY={displayAPY}
-                                  isProjected={!!isProjected}
-                                  isSelected={isSelected}
-                                >
-                                  <fieldset className="flex flex-col gap-3 rounded-lg bg-[var(--surface-secondary)] p-3">
-                                    <legend className="text-2xs uppercase tracking-wider text-[var(--content-tertiary)]">
-                                      Vote setup
-                                    </legend>
-                                    <ol className="flex flex-wrap items-center justify-between gap-3">
-                                      <li className="flex flex-1 items-center gap-2">
-                                        <label
-                                          htmlFor={`gauge-vote-${gauge.originalIndex}`}
-                                          className="text-2xs text-[var(--content-secondary)]"
-                                        >
-                                          Vote %
-                                        </label>
-                                        <Input
-                                          id={`gauge-vote-${gauge.originalIndex}`}
-                                          value={votePercentage.toString()}
-                                          onChange={(e) =>
-                                            handleAllocationChange(
-                                              gauge.originalIndex,
-                                              Number(e.target.value) || 0,
-                                            )
-                                          }
-                                          placeholder="0"
-                                          type="number"
-                                          size="small"
-                                          positive={votePercentage > 0}
-                                          overrides={{
-                                            Root: {
-                                              style: { width: "96px" },
-                                            },
-                                          }}
-                                        />
-                                      </li>
-                                      <li className="flex items-center gap-2">
-                                        <Button
-                                          kind={
-                                            isSelected ? "secondary" : "primary"
-                                          }
-                                          size="small"
-                                          onClick={() =>
-                                            isSelected
-                                              ? handleToggleGaugeSelection(
+                                  const apyData = apyMap.get(
+                                    gauge.address.toLowerCase(),
+                                  )
+                                  const userVotePercentage =
+                                    gaugeAllocations.get(
+                                      gauge.originalIndex,
+                                    ) ?? 0
+                                  const isProjected =
+                                    selectedLock && userVotePercentage > 0
+                                  const displayAPY = isProjected
+                                    ? calculateProjectedAPY(
+                                        apyData,
+                                        userVotePercentage,
+                                        selectedLock.votingPower,
+                                        mezoPrice,
+                                      )
+                                    : (apyData?.apy ?? null)
+                                  const isSelected =
+                                    selectedGaugeIndexes.has(
+                                      gauge.originalIndex,
+                                    )
+                                  const votePercentage =
+                                    gaugeAllocations.get(
+                                      gauge.originalIndex,
+                                    ) ?? 0
+                                  return (
+                                    <GaugeCard
+                                      key={gauge.address}
+                                      gauge={gauge}
+                                      profile={profile ?? null}
+                                      apyData={apyData}
+                                      isLoadingAPY={isLoadingAPY}
+                                      displayAPY={displayAPY}
+                                      isProjected={!!isProjected}
+                                      isSelected={isSelected}
+                                    >
+                                      <fieldset className="flex flex-col gap-3 rounded-lg bg-[var(--surface-secondary)] p-3">
+                                        <legend className="text-2xs uppercase tracking-wider text-[var(--content-tertiary)]">
+                                          Vote setup
+                                        </legend>
+                                        <ol className="flex flex-wrap items-center justify-between gap-3">
+                                          <li className="flex flex-1 items-center gap-2">
+                                            <label
+                                              htmlFor={`gauge-vote-${gauge.originalIndex}`}
+                                              className="text-2xs text-[var(--content-secondary)]"
+                                            >
+                                              Vote %
+                                            </label>
+                                            <Input
+                                              id={`gauge-vote-${gauge.originalIndex}`}
+                                              value={votePercentage.toString()}
+                                              onChange={(e) =>
+                                                handleAllocationChange(
                                                   gauge.originalIndex,
+                                                  Number(e.target.value) || 0,
                                                 )
-                                              : handleAddGaugeToCart(
-                                                  gauge.originalIndex,
-                                                )
-                                          }
-                                          disabled={
-                                            !isSelected && votePercentage <= 0
-                                          }
-                                        >
-                                          {isSelected
-                                            ? "Remove"
-                                            : "Add to cart"}
-                                        </Button>
-                                      </li>
-                                    </ol>
-                                  </fieldset>
-                                </GaugeCard>
-                              )
-                              // Stagger animation on first 9 cards
-                              if (idx < 9) {
-                                return (
-                                  <SpringIn
-                                    key={gauge.address}
-                                    delay={2 + idx}
-                                    variant="card"
-                                  >
-                                    {cardContent}
-                                  </SpringIn>
-                                )
-                              }
-                              return cardContent
-                            })}
+                                              }
+                                              placeholder="0"
+                                              type="number"
+                                              size="small"
+                                              positive={votePercentage > 0}
+                                              overrides={{
+                                                Root: {
+                                                  style: { width: "96px" },
+                                                },
+                                              }}
+                                            />
+                                          </li>
+                                          <li className="flex items-center gap-2">
+                                            <Button
+                                              kind={
+                                                isSelected
+                                                  ? "secondary"
+                                                  : "primary"
+                                              }
+                                              size="small"
+                                              onClick={() =>
+                                                isSelected
+                                                  ? handleToggleGaugeSelection(
+                                                      gauge.originalIndex,
+                                                    )
+                                                  : handleAddGaugeToCart(
+                                                      gauge.originalIndex,
+                                                    )
+                                              }
+                                              disabled={
+                                                !isSelected &&
+                                                votePercentage <= 0
+                                              }
+                                            >
+                                              {isSelected
+                                                ? "Remove"
+                                                : "Add to cart"}
+                                            </Button>
+                                          </li>
+                                        </ol>
+                                      </fieldset>
+                                    </GaugeCard>
+                                  )
+                                })}
+                              </div>
+                            </div>
+                            <div className="pointer-events-none sticky bottom-0 z-10 h-6 bg-gradient-to-t from-[var(--background)] to-transparent" />
                           </div>
                         )}
                       </div>
