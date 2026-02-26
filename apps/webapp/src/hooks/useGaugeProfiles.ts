@@ -250,20 +250,20 @@ function getEpochStart(timestamp: number): number {
 }
 
 /**
- * Check if an owner can transfer a profile this epoch.
- * Returns the current epoch info and whether a transfer is available.
+ * Check which gauge profiles have already been transferred this epoch.
+ * Returns a set of source gauge addresses that were already transferred,
+ * plus epoch timing info.
  */
 export function useCanTransferProfile(ownerAddress: Address | undefined) {
-  const [canTransfer, setCanTransfer] = useState(true)
-  const [lastTransfer, setLastTransfer] = useState<ProfileTransfer | null>(null)
+  const [transferredGauges, setTransferredGauges] = useState<Set<string>>(
+    new Set(),
+  )
   const [isLoading, setIsLoading] = useState(false)
-  const [epochStart, setEpochStart] = useState<number>(0)
   const [nextEpoch, setNextEpoch] = useState<number>(0)
 
   const checkTransferAvailability = useCallback(async () => {
     if (!ownerAddress) {
-      setCanTransfer(false)
-      setLastTransfer(null)
+      setTransferredGauges(new Set())
       return
     }
 
@@ -271,7 +271,6 @@ export function useCanTransferProfile(ownerAddress: Address | undefined) {
 
     const now = Math.floor(Date.now() / 1000)
     const currentEpoch = getEpochStart(now)
-    setEpochStart(currentEpoch)
     setNextEpoch(currentEpoch + EPOCH_DURATION)
 
     const { data, error } = await supabase
@@ -279,19 +278,16 @@ export function useCanTransferProfile(ownerAddress: Address | undefined) {
       .select("*")
       .eq("owner_address", ownerAddress.toLowerCase())
       .eq("epoch_start", currentEpoch)
-      .single()
 
-    if (error && error.code !== "PGRST116") {
-      // PGRST116 = no rows found
+    if (error) {
       console.error("Error checking transfer availability:", error)
     }
 
-    if (data) {
-      setCanTransfer(false)
-      setLastTransfer(data as unknown as ProfileTransfer)
+    if (data && data.length > 0) {
+      const transfers = data as unknown as ProfileTransfer[]
+      setTransferredGauges(new Set(transfers.map((t) => t.from_gauge_address)))
     } else {
-      setCanTransfer(true)
-      setLastTransfer(null)
+      setTransferredGauges(new Set())
     }
 
     setIsLoading(false)
@@ -302,9 +298,7 @@ export function useCanTransferProfile(ownerAddress: Address | undefined) {
   }, [checkTransferAvailability])
 
   return {
-    canTransfer,
-    lastTransfer,
-    epochStart,
+    transferredGauges,
     nextEpoch,
     isLoading,
     refetch: checkTransferAvailability,
@@ -331,7 +325,7 @@ export type TransferResult = {
 
 /**
  * Hook to transfer a gauge profile from one gauge to another.
- * Can only be done once per epoch per owner.
+ * Each gauge profile can only be transferred once per epoch.
  */
 export function useTransferGaugeProfile() {
   const [isLoading, setIsLoading] = useState(false)

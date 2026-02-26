@@ -163,7 +163,7 @@ export function TransferProfileModal({
   const [transferError, setTransferError] = useState<string | null>(null)
 
   const {
-    canTransfer,
+    transferredGauges,
     nextEpoch,
     isLoading: isLoadingCanTransfer,
   } = useCanTransferProfile(address)
@@ -190,6 +190,15 @@ export function TransferProfileModal({
           g.profile?.profile_picture_url,
       ),
     [ownedGauges],
+  )
+
+  // Gauges available for transfer (have profile and not already transferred this epoch)
+  const transferableGauges = useMemo(
+    () =>
+      gaugesWithProfiles.filter(
+        (g) => !transferredGauges.has(g.gaugeAddress.toLowerCase()),
+      ),
+    [gaugesWithProfiles, transferredGauges],
   )
 
   // Filter available destinations (exclude source)
@@ -262,29 +271,6 @@ export function TransferProfileModal({
   ])
 
   const renderContent = () => {
-    // Check if user can transfer this epoch
-    if (!canTransfer && !isLoadingCanTransfer) {
-      return (
-        <div className="py-8 text-center">
-          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-[var(--warning-subtle)]">
-            <span className="text-2xl">⏳</span>
-          </div>
-          <h3 className="mb-2 text-lg font-semibold text-[var(--content-primary)]">
-            Transfer Limit Reached
-          </h3>
-          <p className="mb-4 text-sm text-[var(--content-secondary)]">
-            You have already transferred a profile this epoch. You can transfer
-            again in:
-          </p>
-          <div className="inline-block rounded-lg bg-[var(--surface-secondary)] px-4 py-2">
-            <span className="font-mono text-lg font-semibold text-[var(--content-primary)]">
-              {formatTimeUntilNextEpoch(nextEpoch)}
-            </span>
-          </div>
-        </div>
-      )
-    }
-
     // Check if user has enough gauges
     if (ownedGauges.length < 2) {
       return (
@@ -320,6 +306,29 @@ export function TransferProfileModal({
       )
     }
 
+    // All profiled gauges already transferred this epoch
+    if (transferableGauges.length === 0 && !isLoadingCanTransfer) {
+      return (
+        <div className="py-8 text-center">
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-[var(--warning-subtle)]">
+            <span className="text-2xl">⏳</span>
+          </div>
+          <h3 className="mb-2 text-lg font-semibold text-[var(--content-primary)]">
+            All Profiles Already Transferred
+          </h3>
+          <p className="mb-4 text-sm text-[var(--content-secondary)]">
+            All your gauge profiles have already been transferred this epoch.
+            You can transfer again in:
+          </p>
+          <div className="inline-block rounded-lg bg-[var(--surface-secondary)] px-4 py-2">
+            <span className="font-mono text-lg font-semibold text-[var(--content-primary)]">
+              {formatTimeUntilNextEpoch(nextEpoch)}
+            </span>
+          </div>
+        </div>
+      )
+    }
+
     // Step 1: Select source
     if (step === "source") {
       return (
@@ -329,15 +338,25 @@ export function TransferProfileModal({
             <strong>from</strong>:
           </p>
           <div className="flex max-h-[400px] flex-col gap-3 overflow-y-auto">
-            {gaugesWithProfiles.map((gauge) => (
-              <GaugeOption
-                key={gauge.gaugeAddress}
-                gauge={gauge}
-                isSelected={false}
-                onSelect={() => handleSelectSource(gauge.gaugeAddress)}
-                label="Has profile"
-              />
-            ))}
+            {gaugesWithProfiles.map((gauge) => {
+              const alreadyTransferred = transferredGauges.has(
+                gauge.gaugeAddress.toLowerCase(),
+              )
+              return (
+                <GaugeOption
+                  key={gauge.gaugeAddress}
+                  gauge={gauge}
+                  isSelected={false}
+                  onSelect={() => handleSelectSource(gauge.gaugeAddress)}
+                  disabled={alreadyTransferred}
+                  label={
+                    alreadyTransferred
+                      ? "Already transferred this epoch"
+                      : "Has profile"
+                  }
+                />
+              )
+            })}
           </div>
         </div>
       )
@@ -442,8 +461,8 @@ export function TransferProfileModal({
             <p className="text-sm text-[var(--warning)]">
               <strong>Note:</strong> This will copy all profile data (name,
               description, picture, social links, strategies) to the destination
-              gauge and clear the source gauge's profile. This action can only
-              be done once per epoch.
+              gauge and clear the source gauge's profile. Each gauge profile can
+              only be transferred once per epoch.
             </p>
           </div>
 

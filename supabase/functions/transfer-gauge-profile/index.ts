@@ -1,6 +1,6 @@
 // Supabase Edge Function: transfer-gauge-profile
 // Transfers gauge profile metadata from one gauge to another
-// Limited to once per epoch per owner
+// Limited to once per epoch per source gauge
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 import {
@@ -192,11 +192,11 @@ Deno.serve(async (req) => {
     const now = Math.floor(Date.now() / 1000)
     const epochStart = getEpochStart(now)
 
-    // Check if owner has already transferred this epoch
+    // Check if this gauge profile has already been transferred this epoch
     const { data: existingTransfer, error: transferCheckError } = await supabase
       .from("profile_transfers")
       .select("id")
-      .eq("owner_address", ownerAddr)
+      .eq("from_gauge_address", fromAddr)
       .eq("epoch_start", epochStart)
       .single()
 
@@ -208,9 +208,9 @@ Deno.serve(async (req) => {
 
     if (existingTransfer) {
       return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: "You have already transferred a profile this epoch. You can transfer again next epoch.",
+        JSON.stringify({
+          success: false,
+          error: "This gauge profile has already been transferred this epoch. You can transfer it again next epoch.",
           epoch_start: epochStart,
           next_epoch: epochStart + EPOCH_DURATION
         }),
