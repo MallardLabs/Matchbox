@@ -1649,7 +1649,7 @@ export default function DashboardPage(): JSX.Element {
         delay={
           (showRewardsSection ? 8 : 7) + veMEZOLocks.length + veBTCLocks.length
         }
-        variant="card"
+        variant="card-subtle"
       >
         <div className="mt-6">
           <h2 className="mb-4 text-xl font-semibold text-[var(--content-primary)]">
@@ -1748,24 +1748,31 @@ export default function DashboardPage(): JSX.Element {
                   </div>
                 </Card>
               ) : (
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {filteredAndSortedGauges.map((gauge, idx) => (
-                    <SpringIn
-                      key={gauge.address}
-                      {...(idx < 9 ? { delay: idx } : {})}
-                      variant="card-subtle"
-                    >
-                      <GaugeCard
-                        gauge={gauge}
-                        profile={
-                          allGaugeProfiles.get(gauge.address.toLowerCase()) ??
-                          null
-                        }
-                        apyData={apyMap.get(gauge.address.toLowerCase())}
-                        isLoadingAPY={isLoadingAPY}
-                      />
-                    </SpringIn>
-                  ))}
+                <div className="relative">
+                  <div className="pointer-events-none sticky top-0 z-10 h-6 bg-gradient-to-b from-[var(--background)] to-transparent" />
+                  <div className="max-h-[600px] overflow-y-auto">
+                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                      {filteredAndSortedGauges.map((gauge, idx) => (
+                        <SpringIn
+                          key={gauge.address}
+                          {...(idx < 9 ? { delay: idx } : {})}
+                          variant="card-subtle"
+                        >
+                          <GaugeCard
+                            gauge={gauge}
+                            profile={
+                              allGaugeProfiles.get(
+                                gauge.address.toLowerCase(),
+                              ) ?? null
+                            }
+                            apyData={apyMap.get(gauge.address.toLowerCase())}
+                            isLoadingAPY={isLoadingAPY}
+                          />
+                        </SpringIn>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="pointer-events-none sticky bottom-0 z-10 h-6 bg-gradient-to-t from-[var(--background)] to-transparent" />
                 </div>
               )}
             </>
