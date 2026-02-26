@@ -45,7 +45,7 @@ export const wagmiConfig: Config = getDefaultConfig({
   appName: "Matchbox",
   appDescription: "Mezo Gauge Voting & veMEZO Management",
   projectId: WALLET_CONNECT_PROJECT_ID,
-  chains: [mezoMainnet, mezoTestnet],
+  chains: [mezoTestnet, mezoMainnet],
   transports: {
     [mezoMainnet.id]: http(undefined, {
       batch: true,

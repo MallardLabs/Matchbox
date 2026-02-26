@@ -1,6 +1,8 @@
 import { defaultWallets, mezoMainnet } from "@/config/wagmi"
+import { useNetwork } from "@/contexts/NetworkContext"
+import { CHAIN_ID, type SupportedChainId } from "@repo/shared/contracts"
 import { useCallback, useEffect, useState } from "react"
-import { useAccount, useConnect } from "wagmi"
+import { useAccount, useConnect, useSwitchChain } from "wagmi"
 
 type WalletEntry = {
   id: string
@@ -17,10 +19,12 @@ type WalletGroup = {
 
 // Known wallet icons for wallets that may not provide their own
 const WALLET_ICONS: Record<string, string> = {
-  "io.rabby": "https://rabby.io/assets/images/logo.svg",
-  rabby: "https://rabby.io/assets/images/logo.svg",
-  "com.taho": "https://taho.xyz/taho-logo.svg",
-  taho: "https://taho.xyz/taho-logo.svg",
+  "io.rabby": "/wallet%20logos/rabby.png",
+  rabby: "/wallet%20logos/rabby.png",
+  "rabby wallet": "/wallet%20logos/rabby.png",
+  "com.taho": "/wallet%20logos/taho.png",
+  taho: "/wallet%20logos/taho.png",
+  "taho wallet": "/wallet%20logos/taho.png",
   injected:
     "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'/%3E%3C/svg%3E",
   walletConnect: "https://avatars.githubusercontent.com/u/37784886?s=200&v=4",
@@ -34,8 +38,27 @@ const EIP6963_WALLET_IDS = new Set([
   "com.coinbase.wallet",
 ])
 
+const NETWORK_STORAGE_KEY = "mezo-network"
+
+function isSupportedMezoChainId(chainId: number): chainId is SupportedChainId {
+  return chainId === CHAIN_ID.mainnet || chainId === CHAIN_ID.testnet
+}
+
+function writeSavedNetwork(chainId: SupportedChainId) {
+  if (typeof window === "undefined") {
+    return
+  }
+
+  window.localStorage.setItem(
+    NETWORK_STORAGE_KEY,
+    chainId === CHAIN_ID.mainnet ? "mainnet" : "testnet",
+  )
+}
+
 export function useWalletList(onConnected?: () => void) {
   const { connectors, connect, isPending } = useConnect()
+  const { switchChainAsync } = useSwitchChain()
+  const { chainId: selectedChainId } = useNetwork()
   const { isConnected } = useAccount()
   const [pendingConnectorId, setPendingConnectorId] = useState<string | null>(
     null,
@@ -60,8 +83,6 @@ export function useWalletList(onConnected?: () => void) {
     connectorName: string,
     connectorIcon?: string,
   ): string | undefined {
-    if (connectorIcon) return connectorIcon
-
     // Check known wallet icons
     if (WALLET_ICONS[connectorId]) {
       return WALLET_ICONS[connectorId]
@@ -71,6 +92,8 @@ export function useWalletList(onConnected?: () => void) {
     const nameLower = connectorName.toLowerCase()
     if (nameLower.includes("rabby")) return WALLET_ICONS["io.rabby"]
     if (nameLower.includes("taho")) return WALLET_ICONS["com.taho"]
+
+    if (connectorIcon) return connectorIcon
 
     for (const group of defaultWallets) {
       for (const walletFn of group.wallets) {
@@ -175,12 +198,69 @@ export function useWalletList(onConnected?: () => void) {
         setConnectingWallet(walletEntry)
       }
 
-      // For OrangeKit BTC connectors, we must specify the Mezo chain ID explicitly
+      // For OrangeKit BTC connectors, we must specify the Mezo chain ID explicitly.
+      // EVM wallets should align with the app-selected chain.
       const isBtcConnector = connector.type === "orangekit"
+      const targetChainId = isBtcConnector ? mezoMainnet.id : selectedChainId
 
       connect(
-        { connector, chainId: isBtcConnector ? mezoMainnet.id : undefined },
+        { connector, chainId: targetChainId },
         {
+          onSuccess: async (data) => {
+            if (isBtcConnector) {
+              return
+            }
+
+            const connectedChainId = data.chainId
+            if (
+              !isSupportedMezoChainId(connectedChainId) ||
+              !isSupportedMezoChainId(selectedChainId)
+            ) {
+              return
+            }
+
+            if (connectedChainId === selectedChainId) {
+              console.info("[Network] Wallet connected on selected chain", {
+                selectedChainId,
+              })
+              return
+            }
+
+            console.warn(
+              "[Network] Chain mismatch after connect; auto-switching",
+              {
+                connectedChainId,
+                targetChainId: selectedChainId,
+              },
+            )
+
+            if (!switchChainAsync) {
+              writeSavedNetwork(connectedChainId)
+              console.warn(
+                "[Network] Auto-switch unavailable; persisted connected chain",
+                { connectedChainId },
+              )
+              return
+            }
+
+            try {
+              await switchChainAsync({ chainId: selectedChainId })
+              writeSavedNetwork(selectedChainId)
+              console.info("[Network] Auto-switch after connect succeeded", {
+                targetChainId: selectedChainId,
+              })
+            } catch (error) {
+              writeSavedNetwork(connectedChainId)
+              console.warn(
+                "[Network] Auto-switch after connect failed; falling back to connected chain",
+                {
+                  connectedChainId,
+                  targetChainId: selectedChainId,
+                  error,
+                },
+              )
+            }
+          },
           onError: (err) => {
             console.error(
               "[Wallet Connection Error]",
@@ -195,7 +275,7 @@ export function useWalletList(onConnected?: () => void) {
         },
       )
     },
-    [connectors, connect],
+    [connectors, connect, selectedChainId, switchChainAsync],
   )
 
   const cancelConnect = useCallback(() => {

@@ -1,4 +1,4 @@
-import { mezoMainnet, wagmiConfig } from "@/config/wagmi"
+import { mezoTestnet, wagmiConfig } from "@/config/wagmi"
 import { GaugeProfilesProvider } from "@/contexts/GaugeProfilesContext"
 import { NetworkProvider } from "@/contexts/NetworkContext"
 import {
@@ -42,7 +42,7 @@ function ThemedApp({ Component, pageProps }: ClientAppProps) {
         })
 
   return (
-    <RainbowKitProvider theme={rainbowTheme} initialChain={mezoMainnet}>
+    <RainbowKitProvider theme={rainbowTheme} initialChain={mezoTestnet}>
       <PassportProvider environment="mainnet">
         <ClayProvider theme={themeObject}>
           <SunsetBackground />

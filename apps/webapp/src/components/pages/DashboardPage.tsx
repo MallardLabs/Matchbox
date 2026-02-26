@@ -1515,7 +1515,7 @@ export default function DashboardPage(): JSX.Element {
         }
         variant="card"
       >
-        <div>
+        <div className="mt-3">
           <h2 className="mb-4 text-xl font-semibold text-[var(--content-primary)]">
             All Gauges
           </h2>
