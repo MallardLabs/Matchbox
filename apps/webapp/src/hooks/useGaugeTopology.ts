@@ -13,10 +13,13 @@ async function fetchGaugeTopology(
   chainId: number,
   signal: AbortSignal,
 ): Promise<GaugeTopologyResponse> {
-  const response = await fetch(`/api/analytics/gauge-topology?chainId=${chainId}`, {
-    method: "GET",
-    signal,
-  })
+  const response = await fetch(
+    `/api/analytics/gauge-topology?chainId=${chainId}`,
+    {
+      method: "GET",
+      signal,
+    },
+  )
 
   if (!response.ok) {
     throw new Error(`Failed to fetch gauge topology (${response.status})`)
@@ -45,7 +48,10 @@ export function useGaugeTopology(options: UseGaugeTopologyOptions = {}) {
   }, [query.data])
 
   const gaugeRewardTokens = useMemo(() => {
-    const map = new Map<string, GaugeTopologyResponse["gauges"][number]["rewardTokens"]>()
+    const map = new Map<
+      string,
+      GaugeTopologyResponse["gauges"][number]["rewardTokens"]
+    >()
     for (const gauge of query.data?.gauges ?? []) {
       map.set(gauge.gaugeAddress.toLowerCase(), gauge.rewardTokens)
     }

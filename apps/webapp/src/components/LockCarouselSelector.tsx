@@ -119,8 +119,13 @@ export interface VeBTCLockData extends LockItem {
 
 interface LockCarouselSelectorProps<T extends LockItem> {
   locks: T[]
-  selectedIndex: number | undefined
-  onSelect: (index: number) => void
+  // Single-select API (existing)
+  selectedIndex?: number | undefined
+  onSelect?: (index: number) => void
+  // Multi-select API (opt-in)
+  multiSelect?: boolean
+  selectedIndexes?: Set<number>
+  onToggle?: (index: number) => void
   lockType: "veMEZO" | "veBTC"
   label?: string
   renderCard?: (lock: T, index: number, isSelected: boolean) => React.ReactNode
@@ -540,6 +545,9 @@ export function LockCarouselSelector<T extends LockItem>({
   locks,
   selectedIndex,
   onSelect,
+  multiSelect = false,
+  selectedIndexes,
+  onToggle,
   lockType,
   label = "Select Lock",
   renderCard,
@@ -595,10 +603,15 @@ export function LockCarouselSelector<T extends LockItem>({
   const handleSelect = useCallback(
     (index: number) => {
       setIsAnimating(true)
-      onSelect(index)
+
+      if (multiSelect && onToggle) {
+        onToggle(index)
+      } else if (onSelect) {
+        onSelect(index)
+      }
 
       const container = scrollContainerRef.current
-      if (container) {
+      if (container && !multiSelect) {
         const cards = container.querySelectorAll("[data-carousel-card]")
         const selectedCard = cards[index] as HTMLElement
         if (selectedCard) {
@@ -619,7 +632,7 @@ export function LockCarouselSelector<T extends LockItem>({
 
       setTimeout(() => setIsAnimating(false), 300)
     },
-    [onSelect],
+    [multiSelect, onToggle, onSelect],
   )
 
   const handleMouseMove = useCallback(
@@ -662,7 +675,12 @@ export function LockCarouselSelector<T extends LockItem>({
     setIsDragging(false)
   }, [])
 
-  const showSelectionPrompt = selectedIndex === undefined
+  const selectedCount = multiSelect
+    ? (selectedIndexes?.size ?? 0)
+    : selectedIndex !== undefined
+      ? 1
+      : 0
+  const showSelectionPrompt = selectedCount === 0
 
   if (locks.length === 0) {
     return null
@@ -706,12 +724,42 @@ export function LockCarouselSelector<T extends LockItem>({
 
   const cardRenderer = renderCard || defaultRenderCard
 
+  const handleSelectAll = useCallback(() => {
+    if (!multiSelect || !onToggle) return
+    const allSelected = selectedIndexes?.size === locks.length
+    if (allSelected) {
+      // Deselect all by toggling each selected one
+      for (const idx of selectedIndexes ?? []) {
+        onToggle(idx)
+      }
+    } else {
+      // Select all by toggling each unselected one
+      for (let i = 0; i < locks.length; i++) {
+        if (!selectedIndexes?.has(i)) {
+          onToggle(i)
+        }
+      }
+    }
+  }, [multiSelect, onToggle, selectedIndexes, locks.length])
+
   const selectedLabel = useMemo(() => {
+    if (multiSelect) {
+      const count = selectedIndexes?.size ?? 0
+      if (count === 0) return "No locks selected"
+      if (count === 1 && selectedIndexes) {
+        const idx = Array.from(selectedIndexes)[0]
+        if (idx !== undefined) {
+          const lock = locks[idx]
+          if (lock) return `${lockType} #${lock.tokenId.toString()}`
+        }
+      }
+      return `${count} locks selected`
+    }
     if (selectedIndex === undefined) return "No lock selected"
     const lock = locks[selectedIndex]
     if (!lock) return "No lock selected"
     return `${lockType} #${lock.tokenId.toString()}`
-  }, [selectedIndex, locks, lockType])
+  }, [multiSelect, selectedIndexes, selectedIndex, locks, lockType])
 
   return (
     <div className="flex flex-col gap-4">
@@ -741,9 +789,21 @@ export function LockCarouselSelector<T extends LockItem>({
         </div>
         {locks.length > 1 && (
           <div className="flex items-center gap-2">
+            {multiSelect && (
+              <button
+                type="button"
+                onClick={handleSelectAll}
+                className="rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-xs text-[var(--content-secondary)] transition-colors hover:bg-[var(--surface-secondary)]"
+              >
+                {selectedIndexes?.size === locks.length
+                  ? "Deselect All"
+                  : "Select All"}
+              </button>
+            )}
             <span className="text-xs text-[var(--content-secondary)]">
-              {selectedIndex !== undefined ? selectedIndex + 1 : 0} /{" "}
-              {locks.length}
+              {multiSelect
+                ? `${selectedCount} / ${locks.length}`
+                : `${selectedIndex !== undefined ? selectedIndex + 1 : 0} / ${locks.length}`}
             </span>
             <div className="flex items-center gap-1">
               <button
@@ -799,7 +859,9 @@ export function LockCarouselSelector<T extends LockItem>({
         onMouseLeave={handleMouseLeave}
       >
         {locks.map((lock, index) => {
-          const isSelected = selectedIndex === index
+          const isSelected = multiSelect
+            ? (selectedIndexes?.has(index) ?? false)
+            : selectedIndex === index
 
           return (
             <button
@@ -816,7 +878,7 @@ export function LockCarouselSelector<T extends LockItem>({
                 }
                 handleSelect(index)
               }}
-              className={`flex-shrink-0 text-left outline-none ${
+              className={`relative flex-shrink-0 text-left outline-none ${
                 isAnimating ? "pointer-events-none" : ""
               }`}
               style={{
@@ -825,6 +887,31 @@ export function LockCarouselSelector<T extends LockItem>({
               }}
               aria-pressed={isSelected}
             >
+              {multiSelect && (
+                <div
+                  className={`absolute right-3 top-3 z-10 flex h-5 w-5 items-center justify-center rounded border-2 transition-colors ${
+                    isSelected
+                      ? "border-[#F7931A] bg-[#F7931A]"
+                      : "border-[var(--content-tertiary)] bg-transparent"
+                  }`}
+                >
+                  {isSelected && (
+                    <svg
+                      width="12"
+                      height="12"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="#0B0B0B"
+                      strokeWidth="3"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden="true"
+                    >
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                  )}
+                </div>
+              )}
               <Card
                 withBorder
                 overrides={{
@@ -867,19 +954,24 @@ export function LockCarouselSelector<T extends LockItem>({
       {/* Dot indicators for mobile */}
       {locks.length > 1 && locks.length <= 6 && (
         <div className="flex justify-center gap-2 sm:hidden">
-          {locks.map((lock, index) => (
-            <button
-              key={lock.tokenId.toString()}
-              type="button"
-              onClick={() => handleSelect(index)}
-              className={`h-1.5 rounded-full transition-all duration-300 ${
-                selectedIndex === index
-                  ? "w-6 bg-[#F7931A]"
-                  : "w-2 bg-[var(--border)] hover:bg-[var(--content-tertiary)]"
-              }`}
-              aria-label={`Select ${lockType} #${lock.tokenId.toString()}`}
-            />
-          ))}
+          {locks.map((lock, index) => {
+            const isDotSelected = multiSelect
+              ? (selectedIndexes?.has(index) ?? false)
+              : selectedIndex === index
+            return (
+              <button
+                key={lock.tokenId.toString()}
+                type="button"
+                onClick={() => handleSelect(index)}
+                className={`h-1.5 rounded-full transition-all duration-300 ${
+                  isDotSelected
+                    ? "w-6 bg-[#F7931A]"
+                    : "w-2 bg-[var(--border)] hover:bg-[var(--content-tertiary)]"
+                }`}
+                aria-label={`Select ${lockType} #${lock.tokenId.toString()}`}
+              />
+            )
+          })}
         </div>
       )}
     </div>

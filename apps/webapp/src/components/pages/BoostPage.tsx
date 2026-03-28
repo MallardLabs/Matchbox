@@ -18,15 +18,9 @@ import type { BoostGauge } from "@/hooks/useGauges"
 import { useBoostGauges } from "@/hooks/useGauges"
 import { useVeMEZOLocks } from "@/hooks/useLocks"
 import { useMezoPrice } from "@/hooks/useMezoPrice"
+import { useMultiLockVoting } from "@/hooks/useMultiLockVoting"
 import { useClaimableBribes } from "@/hooks/useVoting"
-import {
-  useAllVoteAllocations,
-  useBatchVoteState,
-  useResetVote,
-  useVoteAllocations,
-  useVoteOnGauge,
-  useVoteState,
-} from "@/hooks/useVoting"
+import { useAllVoteAllocations, useBatchVoteState } from "@/hooks/useVoting"
 import {
   Button,
   Card,
@@ -41,7 +35,7 @@ import {
 import { getTokenUsdPrice } from "@repo/shared"
 import Link from "next/link"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { formatUnits } from "viem"
+import { type Address, formatUnits } from "viem"
 import { useAccount } from "wagmi"
 
 type GaugeSortColumn =
@@ -82,10 +76,10 @@ export default function BoostPage(): JSX.Element {
   const { price: mezoPrice } = useMezoPrice()
   const { price: btcPrice } = useBtcPrice()
 
-  // Voting state
-  const [selectedLockIndex, setSelectedLockIndex] = useState<
-    number | undefined
-  >()
+  // Voting state — multi-lock selection
+  const [selectedLockIndexes, setSelectedLockIndexes] = useState<Set<number>>(
+    new Set(),
+  )
   // Track gauge allocations: Map of gauge index -> percentage (0-100)
   const [gaugeAllocations, setGaugeAllocations] = useState<Map<number, number>>(
     new Map(),
@@ -96,10 +90,18 @@ export default function BoostPage(): JSX.Element {
   const [cartSnapshots, setCartSnapshots] = useState<Map<number, number>>(
     new Map(),
   )
-  const prevSelectedLockIndexRef = useRef<number | undefined>(undefined)
+  const prevSelectedLockCountRef = useRef(0)
 
-  const selectedLock =
-    selectedLockIndex !== undefined ? veMEZOLocks[selectedLockIndex] : undefined
+  const selectedLocks = useMemo(
+    () =>
+      Array.from(selectedLockIndexes)
+        .sort((a, b) => a - b)
+        .map((i) => veMEZOLocks[i])
+        .filter(
+          (lock): lock is (typeof veMEZOLocks)[number] => lock !== undefined,
+        ),
+    [selectedLockIndexes, veMEZOLocks],
+  )
 
   // Batch fetch vote state for all veMEZO locks (for rich carousel cards)
   const allVeMEZOTokenIds = useMemo(
@@ -117,17 +119,72 @@ export default function BoostPage(): JSX.Element {
     gaugeAddresses,
   )
 
+  // Derive aggregated vote state from batch data
   const {
-    canVoteInCurrentEpoch,
-    hasVotedThisEpoch,
-    isInVotingWindow,
-    usedWeight,
-    isLoading: isVoteStateLoading,
-  } = useVoteState(selectedLock?.tokenId)
-  const { allocations: currentAllocations } = useVoteAllocations(
-    selectedLock?.tokenId,
-    gaugeAddresses,
-  )
+    totalVotingPower,
+    totalUsedWeight,
+    votableLocks,
+    anyVotedThisEpoch,
+    anyInVotingWindow,
+    currentAllocations,
+  } = useMemo(() => {
+    let power = 0n
+    let used = 0n
+    const votable: typeof selectedLocks = []
+    let anyVoted = false
+    let anyInWindow = false
+
+    for (const lock of selectedLocks) {
+      power += lock.votingPower
+      const state = voteStateMap.get(lock.tokenId.toString())
+      used += state?.usedWeight ?? 0n
+      if (state?.canVoteInCurrentEpoch) votable.push(lock)
+      if (
+        state &&
+        "hasVotedThisEpoch" in state &&
+        (state as { hasVotedThisEpoch?: boolean }).hasVotedThisEpoch
+      )
+        anyVoted = true
+      if (
+        state &&
+        "isInVotingWindow" in state &&
+        (state as { isInVotingWindow?: boolean }).isInVotingWindow
+      )
+        anyInWindow = true
+    }
+
+    // Aggregate current allocations across all selected locks
+    const allocMap = new Map<string, { gaugeAddress: string; weight: bigint }>()
+    for (const lock of selectedLocks) {
+      const lockAllocs = allocationsByToken.get(lock.tokenId.toString()) ?? []
+      for (const alloc of lockAllocs) {
+        const key = alloc.gaugeAddress.toLowerCase()
+        const existing = allocMap.get(key)
+        if (existing) {
+          allocMap.set(key, {
+            gaugeAddress: alloc.gaugeAddress,
+            weight: existing.weight + alloc.weight,
+          })
+        } else {
+          allocMap.set(key, {
+            gaugeAddress: alloc.gaugeAddress,
+            weight: alloc.weight,
+          })
+        }
+      }
+    }
+
+    return {
+      totalVotingPower: power,
+      totalUsedWeight: used,
+      votableLocks: votable,
+      anyVotedThisEpoch: anyVoted,
+      anyInVotingWindow: anyInWindow,
+      currentAllocations: Array.from(allocMap.values()).filter(
+        (a) => a.weight > 0n,
+      ),
+    }
+  }, [selectedLocks, voteStateMap, allocationsByToken])
 
   // Calculate claimable USD per tokenId (same as Dashboard)
   const claimableUSDByTokenId = useMemo(() => {
@@ -200,9 +257,9 @@ export default function BoostPage(): JSX.Element {
       }
 
       // Calculate PROJECTED APY from local gauge allocations (pending votes)
-      // Only calculate for the selected lock
+      // Only calculate for selected locks
       let projectedAPY: number | null = null
-      if (selectedLockIndex === lockIndex && mezoPrice && mezoPrice > 0) {
+      if (selectedLockIndexes.has(lockIndex) && mezoPrice && mezoPrice > 0) {
         let totalProjectedIncentivesUSD = 0
         let totalUserVoteWeight = 0n
 
@@ -264,22 +321,23 @@ export default function BoostPage(): JSX.Element {
     isLoadingVoteState,
     isLoadingBribes,
     isLoadingAPY,
-    selectedLockIndex,
+    selectedLockIndexes,
     gaugeAllocations,
     gauges,
   ])
   const {
-    vote,
-    isPending: isVoting,
-    isConfirming: isConfirmingVote,
-    isSuccess: isVoteSuccess,
-  } = useVoteOnGauge()
-  const {
-    reset,
-    isPending: isResetting,
-    isConfirming: isConfirmingReset,
-    isSuccess: isResetSuccess,
-  } = useResetVote()
+    voteAll,
+    resetAll,
+    lockStates,
+    currentIndex: multiVoteCurrentIndex,
+    totalLocks: multiVoteTotalLocks,
+    successCount: multiVoteSuccessCount,
+    errorCount: multiVoteErrorCount,
+    isInProgress: isMultiVoteInProgress,
+    isDone: isMultiVoteDone,
+    hasErrors: multiVoteHasErrors,
+    clear: clearMultiVote,
+  } = useMultiLockVoting()
 
   // Gauge table sorting and filtering state
   const [gaugeSortColumn, setGaugeSortColumn] = useState<GaugeSortColumn>("apy")
@@ -293,15 +351,19 @@ export default function BoostPage(): JSX.Element {
   const [isCalculatorOpen, setIsCalculatorOpen] = useState(false)
   const [isCartOpen, setIsCartOpen] = useState(false)
 
-  // Close cart and clear allocations after successful vote/reset
+  // Close cart and clear allocations after fully successful multi-vote
   useEffect(() => {
-    if (isVoteSuccess || isResetSuccess) {
-      setIsCartOpen(false)
-      setGaugeAllocations(new Map())
-      setSelectedGaugeIndexes(new Set())
-      setCartSnapshots(new Map())
+    if (isMultiVoteDone && !multiVoteHasErrors) {
+      const timer = setTimeout(() => {
+        setIsCartOpen(false)
+        setGaugeAllocations(new Map())
+        setSelectedGaugeIndexes(new Set())
+        setCartSnapshots(new Map())
+        clearMultiVote()
+      }, 1500)
+      return () => clearTimeout(timer)
     }
-  }, [isVoteSuccess, isResetSuccess])
+  }, [isMultiVoteDone, multiVoteHasErrors, clearMultiVote])
 
   const handleGaugeSort = useCallback(
     (column: GaugeSortColumn) => {
@@ -345,29 +407,27 @@ export default function BoostPage(): JSX.Element {
     totalAllocationRaw > 0 && totalAllocationRaw < 100 - allocationEpsilon
 
   const cartStatusMessage = useMemo(() => {
-    if (!selectedLock) return "Select a veMEZO lock to finalize your votes."
+    if (selectedLocks.length === 0)
+      return "Select veMEZO locks to finalize your votes."
+    if (votableLocks.length === 0)
+      return "All selected locks have already voted this epoch."
     if (gaugeAllocations.size === 0 || totalAllocationRaw === 0) {
       return "Add vote allocations to continue."
     }
     if (!isAllocationValid) {
       return "Total allocation must equal 100% to vote."
     }
-    if (isVoteStateLoading) return "Checking voting eligibility..."
-    if (!canVoteInCurrentEpoch) {
-      if (hasVotedThisEpoch) return "You already voted this epoch."
-      if (!isInVotingWindow) return "Outside voting window."
-      return "Voting is unavailable right now."
-    }
+    if (isLoadingVoteState) return "Checking voting eligibility..."
+    if (votableLocks.length < selectedLocks.length)
+      return `${votableLocks.length} of ${selectedLocks.length} locks eligible to vote.`
     return null
   }, [
-    selectedLock,
+    selectedLocks.length,
+    votableLocks.length,
     gaugeAllocations.size,
     totalAllocationRaw,
     isAllocationValid,
-    isVoteStateLoading,
-    canVoteInCurrentEpoch,
-    hasVotedThisEpoch,
-    isInVotingWindow,
+    isLoadingVoteState,
   ])
 
   const selectedGaugeList = useMemo(
@@ -375,29 +435,18 @@ export default function BoostPage(): JSX.Element {
     [selectedGaugeIndexes],
   )
 
+  // Clear allocations only when selection becomes fully empty
   useEffect(() => {
-    const prev = prevSelectedLockIndexRef.current
-    prevSelectedLockIndexRef.current = selectedLockIndex
+    const prevCount = prevSelectedLockCountRef.current
+    prevSelectedLockCountRef.current = selectedLockIndexes.size
 
-    if (selectedLockIndex === undefined) {
+    if (selectedLockIndexes.size === 0 && prevCount > 0) {
       setGaugeAllocations(new Map())
       setSelectedGaugeIndexes(new Set())
       setCartSnapshots(new Map())
       setIsCartOpen(false)
-      return
     }
-
-    // First selection from no lock: preserve allocations
-    if (prev === undefined) {
-      return
-    }
-
-    // Switching between locks: clear
-    setGaugeAllocations(new Map())
-    setSelectedGaugeIndexes(new Set())
-    setCartSnapshots(new Map())
-    setIsCartOpen(false)
-  }, [selectedLockIndex])
+  }, [selectedLockIndexes.size])
 
   // Filtered and sorted gauges for voting table
   const filteredAndSortedGauges = useMemo(() => {
@@ -572,7 +621,7 @@ export default function BoostPage(): JSX.Element {
   }, [])
 
   const handleVote = () => {
-    if (!selectedLock || selectedGaugeIndexes.size === 0) return
+    if (votableLocks.length === 0 || selectedGaugeIndexes.size === 0) return
 
     const selectedGauges = Array.from(selectedGaugeIndexes)
       .map((idx) => ({
@@ -581,16 +630,36 @@ export default function BoostPage(): JSX.Element {
       }))
       .filter((entry) => entry.gauge !== undefined && entry.weight > 0)
 
-    const gaugeAddrs = selectedGauges.map((entry) => entry.gauge!.address)
+    const gaugeAddrs = selectedGauges.map(
+      (entry) => entry.gauge?.address as Address,
+    )
     const weights = selectedGauges.map((entry) => BigInt(entry.weight))
+    const tokenIds = votableLocks.map((l) => l.tokenId)
 
-    vote(selectedLock.tokenId, gaugeAddrs, weights)
+    voteAll(tokenIds, gaugeAddrs, weights)
   }
 
   const handleReset = () => {
-    if (!selectedLock) return
-    reset(selectedLock.tokenId)
+    // Only reset locks that have used weight
+    const locksToReset = selectedLocks
+      .filter((lock) => {
+        const state = voteStateMap.get(lock.tokenId.toString())
+        return state?.usedWeight && state.usedWeight > 0n
+      })
+      .map((l) => l.tokenId)
+
+    if (locksToReset.length === 0) return
+    resetAll(locksToReset)
   }
+
+  const handleToggleLock = useCallback((index: number) => {
+    setSelectedLockIndexes((prev) => {
+      const next = new Set(prev)
+      if (next.has(index)) next.delete(index)
+      else next.add(index)
+      return next
+    })
+  }, [])
 
   const handleCheckoutOpen = useCallback(function handleCheckoutOpen() {
     setIsCartOpen(true)
@@ -741,9 +810,9 @@ export default function BoostPage(): JSX.Element {
                 <legend className="px-2 text-xs uppercase tracking-wider text-[var(--content-tertiary)]">
                   Vote weights
                 </legend>
-                {!selectedLock && (
+                {selectedLocks.length === 0 && (
                   <p className="mt-3 text-xs text-[var(--content-secondary)]">
-                    Select a veMEZO lock to finalize your votes.
+                    Select veMEZO locks to finalize your votes.
                   </p>
                 )}
                 <ol className="mt-4 flex flex-col gap-3">
@@ -757,12 +826,13 @@ export default function BoostPage(): JSX.Element {
                     const currentVote = gaugeAllocations.get(gaugeIndex) ?? 0
                     const snapshotVote =
                       cartSnapshots.get(gaugeIndex) ?? currentVote
-                    const isProjected = !!selectedLock && currentVote > 0
+                    const isProjected =
+                      selectedLocks.length > 0 && currentVote > 0
                     const displayAPY = isProjected
                       ? calculateProjectedAPY(
                           apyData,
                           currentVote,
-                          selectedLock.votingPower,
+                          totalVotingPower,
                           mezoPrice,
                         )
                       : (apyData?.apy ?? null)
@@ -918,57 +988,181 @@ export default function BoostPage(): JSX.Element {
               </fieldset>
             )}
 
-            <div className="flex flex-col gap-3 border-t border-[var(--border)] pt-3">
-              {/* Transaction Status Indicator */}
-              {(isVoting ||
-                isConfirmingVote ||
-                isResetting ||
-                isConfirmingReset) && (
-                <div className="flex items-center gap-2 rounded-lg bg-[rgba(247,147,26,0.1)] px-3 py-2">
-                  <div className="h-2 w-2 animate-pulse rounded-full bg-[#F7931A]" />
-                  <span className="text-sm text-[#F7931A]">
-                    {isVoting || isResetting
-                      ? "Waiting for wallet confirmation..."
-                      : "Confirming transaction..."}
-                  </span>
+            {/* Multi-sign progress */}
+            {(isMultiVoteInProgress || isMultiVoteDone) && (
+              <div className="rounded-lg border border-[var(--border)] p-3">
+                <div className="mb-3 flex items-center justify-between">
+                  <p className="text-xs font-semibold text-[var(--content-primary)]">
+                    {isMultiVoteInProgress
+                      ? `Signing transactions (${multiVoteCurrentIndex + 1}/${multiVoteTotalLocks})`
+                      : multiVoteHasErrors
+                        ? `${multiVoteSuccessCount} of ${multiVoteTotalLocks} succeeded`
+                        : "All transactions confirmed"}
+                  </p>
+                  {isMultiVoteDone && !multiVoteHasErrors && (
+                    <Tag color="green" closeable={false}>
+                      Done
+                    </Tag>
+                  )}
                 </div>
-              )}
+                {/* Progress bar */}
+                <div className="mb-3 flex h-2 gap-0.5 overflow-hidden rounded-full">
+                  {lockStates.map((ls) => (
+                    <div
+                      key={ls.tokenId.toString()}
+                      className={`flex-1 transition-colors ${
+                        ls.status === "success"
+                          ? "bg-[var(--positive)]"
+                          : ls.status === "error"
+                            ? "bg-[var(--negative)]"
+                            : ls.status === "signing" ||
+                                ls.status === "confirming"
+                              ? "animate-pulse bg-[#F7931A]"
+                              : ls.status === "skipped"
+                                ? "bg-[var(--content-tertiary)]"
+                                : "bg-[var(--border)]"
+                      }`}
+                    />
+                  ))}
+                </div>
+                {/* Per-lock status */}
+                <ol className="flex flex-col gap-2">
+                  {lockStates.map((ls) => (
+                    <li
+                      key={ls.tokenId.toString()}
+                      className="flex items-center justify-between text-xs"
+                    >
+                      <span className="font-mono text-[var(--content-primary)]">
+                        veMEZO #{ls.tokenId.toString()}
+                      </span>
+                      <span
+                        className={`flex items-center gap-1.5 ${
+                          ls.status === "success"
+                            ? "text-[var(--positive)]"
+                            : ls.status === "error"
+                              ? "text-[var(--negative)]"
+                              : ls.status === "signing" ||
+                                  ls.status === "confirming"
+                                ? "text-[#F7931A]"
+                                : "text-[var(--content-tertiary)]"
+                        }`}
+                      >
+                        {ls.status === "success" && "Confirmed"}
+                        {ls.status === "error" && "Failed"}
+                        {ls.status === "signing" && "Confirm in wallet..."}
+                        {ls.status === "confirming" && "Confirming..."}
+                        {ls.status === "pending" && "Pending"}
+                        {ls.status === "skipped" && "Skipped"}
+                      </span>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            )}
+
+            <div className="flex flex-col gap-3 border-t border-[var(--border)] pt-3">
+              {/* Voting summary for multi-lock */}
+              {selectedLocks.length > 0 &&
+                !isMultiVoteInProgress &&
+                !isMultiVoteDone && (
+                  <div className="text-xs text-[var(--content-secondary)]">
+                    Voting with{" "}
+                    <span className="font-medium text-[var(--content-primary)]">
+                      {votableLocks.length} lock
+                      {votableLocks.length !== 1 ? "s" : ""}
+                    </span>
+                    :{" "}
+                    {votableLocks
+                      .map((l) => `#${l.tokenId.toString()}`)
+                      .join(", ")}
+                  </div>
+                )}
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="text-xs text-[var(--content-secondary)]">
                   {cartStatusMessage ?? "Ready to vote."}
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {selectedLock && usedWeight && usedWeight > 0n && (
+                  {selectedLocks.length > 0 &&
+                    totalUsedWeight > 0n &&
+                    !isMultiVoteInProgress && (
+                      <Button
+                        kind="secondary"
+                        onClick={handleReset}
+                        isLoading={isMultiVoteInProgress}
+                      >
+                        Reset{" "}
+                        {selectedLocks.length > 1
+                          ? `${selectedLocks.length} Locks`
+                          : "Vote"}
+                      </Button>
+                    )}
+                  {isMultiVoteDone && multiVoteHasErrors ? (
+                    <>
+                      <Button
+                        kind="secondary"
+                        onClick={() => {
+                          clearMultiVote()
+                          setIsCartOpen(false)
+                        }}
+                      >
+                        Close
+                      </Button>
+                      <Button
+                        kind="primary"
+                        onClick={() => {
+                          // Retry failed locks
+                          const failedTokenIds = lockStates
+                            .filter((ls) => ls.status === "error")
+                            .map((ls) => ls.tokenId)
+                          if (failedTokenIds.length === 0) return
+                          clearMultiVote()
+
+                          const selectedGauges = Array.from(
+                            selectedGaugeIndexes,
+                          )
+                            .map((idx) => ({
+                              gauge: gauges[idx],
+                              weight: gaugeAllocations.get(idx) ?? 0,
+                            }))
+                            .filter(
+                              (entry) =>
+                                entry.gauge !== undefined && entry.weight > 0,
+                            )
+                          const gaugeAddrs = selectedGauges.map(
+                            (entry) => entry.gauge?.address as Address,
+                          )
+                          const weights = selectedGauges.map((entry) =>
+                            BigInt(entry.weight),
+                          )
+                          voteAll(failedTokenIds, gaugeAddrs, weights)
+                        }}
+                      >
+                        Retry Failed ({multiVoteErrorCount})
+                      </Button>
+                    </>
+                  ) : (
                     <Button
-                      kind="secondary"
-                      onClick={handleReset}
-                      isLoading={isResetting || isConfirmingReset}
+                      kind="primary"
+                      onClick={handleVote}
+                      isLoading={isMultiVoteInProgress}
+                      disabled={
+                        selectedLocks.length === 0 ||
+                        votableLocks.length === 0 ||
+                        gaugeAllocations.size === 0 ||
+                        totalAllocation === 0 ||
+                        !isAllocationValid ||
+                        isMultiVoteInProgress
+                      }
                     >
-                      {isResetting
-                        ? "Confirm in wallet..."
-                        : isConfirmingReset
-                          ? "Confirming..."
-                          : "Reset Vote"}
+                      {isMultiVoteInProgress
+                        ? `Signing ${multiVoteCurrentIndex + 1}/${multiVoteTotalLocks}...`
+                        : isMultiVoteDone
+                          ? "Done"
+                          : votableLocks.length > 1
+                            ? `Vote with ${votableLocks.length} Locks (${totalAllocation}%)`
+                            : `Vote (${totalAllocation}%)`}
                     </Button>
                   )}
-                  <Button
-                    kind="primary"
-                    onClick={handleVote}
-                    isLoading={isVoting || isConfirmingVote}
-                    disabled={
-                      !selectedLock ||
-                      gaugeAllocations.size === 0 ||
-                      totalAllocation === 0 ||
-                      !isAllocationValid ||
-                      !canVoteInCurrentEpoch
-                    }
-                  >
-                    {isVoting
-                      ? "Confirm in wallet..."
-                      : isConfirmingVote
-                        ? "Confirming..."
-                        : `Vote (${totalAllocation}%)`}
-                  </Button>
                 </div>
               </div>
             </div>
@@ -1001,33 +1195,39 @@ export default function BoostPage(): JSX.Element {
                   <div className="flex flex-col gap-4">
                     <LockCarouselSelector
                       locks={enrichedVeMEZOLocks}
-                      selectedIndex={selectedLockIndex}
-                      onSelect={setSelectedLockIndex}
+                      multiSelect
+                      selectedIndexes={selectedLockIndexes}
+                      onToggle={handleToggleLock}
                       lockType="veMEZO"
-                      label="Select veMEZO Lock"
+                      label="Select veMEZO Locks"
                     />
 
-                    {selectedLock && (
+                    {selectedLocks.length > 0 && (
                       <div className="rounded-lg bg-[var(--surface-secondary)] p-4">
-                        <div className="grid grid-cols-3 gap-4 max-md:grid-cols-2 max-sm:grid-cols-1 max-sm:gap-3">
+                        <div className="grid grid-cols-4 gap-4 max-md:grid-cols-2 max-sm:grid-cols-1 max-sm:gap-3">
                           <div>
                             <p className="text-xs text-[var(--content-secondary)]">
-                              Total Voting Power
+                              Locks Selected
                             </p>
                             <p className="font-mono text-sm font-medium tabular-nums text-[var(--content-primary)]">
-                              {formatUnits(selectedLock.votingPower, 18).slice(
-                                0,
-                                10,
-                              )}
+                              {selectedLocks.length}
                             </p>
                           </div>
                           <div>
                             <p className="text-xs text-[var(--content-secondary)]">
-                              Used
+                              Combined Voting Power
                             </p>
                             <p className="font-mono text-sm font-medium tabular-nums text-[var(--content-primary)]">
-                              {usedWeight
-                                ? formatUnits(usedWeight, 18).slice(0, 10)
+                              {formatUnits(totalVotingPower, 18).slice(0, 10)}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-[var(--content-secondary)]">
+                              Total Used
+                            </p>
+                            <p className="font-mono text-sm font-medium tabular-nums text-[var(--content-primary)]">
+                              {totalUsedWeight > 0n
+                                ? formatUnits(totalUsedWeight, 18).slice(0, 10)
                                 : "0"}
                             </p>
                           </div>
@@ -1037,33 +1237,42 @@ export default function BoostPage(): JSX.Element {
                             </p>
                             <p className="font-mono text-sm font-medium tabular-nums text-[var(--content-primary)]">
                               {formatUnits(
-                                selectedLock.votingPower > (usedWeight ?? 0n)
-                                  ? selectedLock.votingPower -
-                                      (usedWeight ?? 0n)
+                                totalVotingPower > totalUsedWeight
+                                  ? totalVotingPower - totalUsedWeight
                                   : 0n,
                                 18,
                               ).slice(0, 10)}
                             </p>
                           </div>
                         </div>
-                        {hasVotedThisEpoch && (
-                          <div className="mt-3">
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {votableLocks.length < selectedLocks.length && (
                             <Tag color="yellow" closeable={false}>
-                              Already voted this epoch
+                              {selectedLocks.length - votableLocks.length} lock
+                              {selectedLocks.length - votableLocks.length > 1
+                                ? "s"
+                                : ""}{" "}
+                              already voted — will be skipped
                             </Tag>
-                          </div>
-                        )}
-                        {!isInVotingWindow && !hasVotedThisEpoch && (
-                          <div className="mt-3">
-                            <Tag color="yellow" closeable={false}>
-                              Outside voting window
+                          )}
+                          {votableLocks.length > 0 && (
+                            <Tag color="green" closeable={false}>
+                              {votableLocks.length} of {selectedLocks.length}{" "}
+                              eligible to vote
                             </Tag>
-                          </div>
-                        )}
+                          )}
+                          {!anyInVotingWindow &&
+                            !anyVotedThisEpoch &&
+                            selectedLocks.length > 0 && (
+                              <Tag color="yellow" closeable={false}>
+                                Outside voting window
+                              </Tag>
+                            )}
+                        </div>
                         {currentAllocations.length > 0 && (
                           <div className="mt-3">
                             <p className="mb-2 text-xs text-[var(--content-secondary)]">
-                              Current Vote Allocations
+                              Current Vote Allocations (aggregated)
                             </p>
                             <div className="flex flex-col gap-2">
                               {currentAllocations.map((allocation) => {
@@ -1079,7 +1288,9 @@ export default function BoostPage(): JSX.Element {
                                   >
                                     <span className="text-xs">
                                       <AddressLink
-                                        address={allocation.gaugeAddress}
+                                        address={
+                                          allocation.gaugeAddress as Address
+                                        }
                                       />
                                       {gauge &&
                                         gauge.veBTCTokenId > 0n &&
@@ -1229,27 +1440,25 @@ export default function BoostPage(): JSX.Element {
                                     gauge.address.toLowerCase(),
                                   )
                                   const userVotePercentage =
-                                    gaugeAllocations.get(
-                                      gauge.originalIndex,
-                                    ) ?? 0
+                                    gaugeAllocations.get(gauge.originalIndex) ??
+                                    0
                                   const isProjected =
-                                    selectedLock && userVotePercentage > 0
+                                    selectedLocks.length > 0 &&
+                                    userVotePercentage > 0
                                   const displayAPY = isProjected
                                     ? calculateProjectedAPY(
                                         apyData,
                                         userVotePercentage,
-                                        selectedLock.votingPower,
+                                        totalVotingPower,
                                         mezoPrice,
                                       )
                                     : (apyData?.apy ?? null)
-                                  const isSelected =
-                                    selectedGaugeIndexes.has(
-                                      gauge.originalIndex,
-                                    )
+                                  const isSelected = selectedGaugeIndexes.has(
+                                    gauge.originalIndex,
+                                  )
                                   const votePercentage =
-                                    gaugeAllocations.get(
-                                      gauge.originalIndex,
-                                    ) ?? 0
+                                    gaugeAllocations.get(gauge.originalIndex) ??
+                                    0
                                   return (
                                     <GaugeCard
                                       key={gauge.address}
@@ -1357,9 +1566,9 @@ export default function BoostPage(): JSX.Element {
       {selectedGaugeIndexes.size > 0 && (
         <div className="fixed bottom-4 left-0 right-0 z-40 px-4">
           <div className="mx-auto flex w-full max-w-3xl flex-col items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 shadow-lg">
-            {!selectedLock && (
+            {selectedLocks.length === 0 && (
               <p className="text-xs font-medium text-[#F7931A]">
-                Select a veMEZO lock above to finalize your vote
+                Select veMEZO locks above to finalize your vote
               </p>
             )}
             <div className="flex w-full flex-wrap items-center justify-between gap-3">
@@ -1395,7 +1604,7 @@ export default function BoostPage(): JSX.Element {
                   kind="primary"
                   size="small"
                   onClick={handleCheckoutOpen}
-                  disabled={!selectedLock}
+                  disabled={selectedLocks.length === 0}
                 >
                   Checkout
                 </Button>

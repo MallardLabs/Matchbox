@@ -1,5 +1,5 @@
-import { QUERY_PROFILES } from "@/config/queryProfiles"
 import { getContractConfig } from "@/config/contracts"
+import { QUERY_PROFILES } from "@/config/queryProfiles"
 import { useNetwork } from "@/contexts/NetworkContext"
 import { NON_STAKING_GAUGE_ABI } from "@repo/shared/contracts"
 import { Rational } from "@thesis-co/cent"

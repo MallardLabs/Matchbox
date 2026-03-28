@@ -49,7 +49,7 @@ export default function Document() {
 
         {/* Open Graph / Social Media */}
         <meta property="og:type" content="website" />
-        <meta property="og:site_name" content="Mallard Labs" />
+        <meta property="og:site_name" content="Trellium" />
         <meta property="og:title" content="Matchbox" />
         <meta
           property="og:description"

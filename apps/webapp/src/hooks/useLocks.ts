@@ -1,5 +1,5 @@
-import { QUERY_PROFILES } from "@/config/queryProfiles"
 import { getContractConfig } from "@/config/contracts"
+import { QUERY_PROFILES } from "@/config/queryProfiles"
 import { useNetwork } from "@/contexts/NetworkContext"
 import { useEffect } from "react"
 import {

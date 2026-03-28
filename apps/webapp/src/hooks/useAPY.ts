@@ -87,7 +87,8 @@ export function useGaugeAPY(
     if (!gaugeAddress) return []
 
     const gauge = topology?.gauges.find(
-      (entry) => entry.gaugeAddress.toLowerCase() === gaugeAddress.toLowerCase(),
+      (entry) =>
+        entry.gaugeAddress.toLowerCase() === gaugeAddress.toLowerCase(),
     )
     if (!gauge) return []
 
@@ -191,7 +192,11 @@ export function useGaugesAPY(
 
       map.set(gauge.address.toLowerCase(), {
         gaugeAddress: gauge.address,
-        apy: calculateAPYFromData(totalIncentivesUSD, gauge.totalWeight, mezoPrice),
+        apy: calculateAPYFromData(
+          totalIncentivesUSD,
+          gauge.totalWeight,
+          mezoPrice,
+        ),
         totalIncentivesUSD,
         totalVeMEZOWeight: gauge.totalWeight,
         isLoading: false,

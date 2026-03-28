@@ -7,7 +7,7 @@ import {
   type SupportedChainId,
 } from "@repo/shared/contracts"
 import type { NextRequest } from "next/server"
-import { type Address, createPublicClient, http } from "viem"
+import { http, type Address, createPublicClient } from "viem"
 
 export const config = {
   runtime: "edge",
@@ -63,12 +63,16 @@ const ERC20_METADATA_ABI = [
 
 function getRpcUrl(chainId: SupportedChainId): string {
   if (chainId === CHAIN_ID.mainnet) {
-    return process.env.NEXT_PUBLIC_RPC_MAINNET_URL ?? "https://rpc-internal.mezo.org"
+    return (
+      process.env.NEXT_PUBLIC_RPC_MAINNET_URL ?? "https://rpc-internal.mezo.org"
+    )
   }
 
-  return process.env.NEXT_PUBLIC_RPC_TESTNET_URL ??
+  return (
+    process.env.NEXT_PUBLIC_RPC_TESTNET_URL ??
     process.env.NEXT_PUBLIC_RPC_URL ??
     "https://rpc.test.mezo.org"
+  )
 }
 
 function getChain(chainId: SupportedChainId) {
@@ -160,7 +164,9 @@ export default async function handler(req: NextRequest) {
     const gaugeResults = await multicallInChunks(client, gaugeContracts)
     const gaugeAddresses = gaugeResults
       .map((result) =>
-        result.status === "success" ? (result.result as Address | undefined) : undefined,
+        result.status === "success"
+          ? (result.result as Address | undefined)
+          : undefined,
       )
       .filter((value): value is Address => !!value && value !== ZERO_ADDRESS)
 
@@ -198,9 +204,13 @@ export default async function handler(req: NextRequest) {
       functionName: "rewardsListLength" as const,
     }))
 
-    const rewardLengthResults = await multicallInChunks(client, rewardLengthContracts)
+    const rewardLengthResults = await multicallInChunks(
+      client,
+      rewardLengthContracts,
+    )
 
-    const rewardTokenQueries: Array<{ bribeAddress: Address; index: number }> = []
+    const rewardTokenQueries: Array<{ bribeAddress: Address; index: number }> =
+      []
     bribeAddresses.forEach((bribeAddress, index) => {
       const rewardsLength =
         rewardLengthResults[index]?.status === "success"
@@ -222,7 +232,10 @@ export default async function handler(req: NextRequest) {
       args: [BigInt(query.index)],
     }))
 
-    const rewardTokenResults = await multicallInChunks(client, rewardTokenContracts)
+    const rewardTokenResults = await multicallInChunks(
+      client,
+      rewardTokenContracts,
+    )
 
     const bribeToRewardTokens = new Map<string, Address[]>()
     rewardTokenQueries.forEach((query, index) => {
@@ -247,22 +260,30 @@ export default async function handler(req: NextRequest) {
       ),
     )
 
-    const tokenMetadataContracts = uniqueRewardTokens.flatMap((tokenAddress) => [
-      {
-        address: tokenAddress,
-        abi: ERC20_METADATA_ABI,
-        functionName: "symbol" as const,
-      },
-      {
-        address: tokenAddress,
-        abi: ERC20_METADATA_ABI,
-        functionName: "decimals" as const,
-      },
-    ])
+    const tokenMetadataContracts = uniqueRewardTokens.flatMap(
+      (tokenAddress) => [
+        {
+          address: tokenAddress,
+          abi: ERC20_METADATA_ABI,
+          functionName: "symbol" as const,
+        },
+        {
+          address: tokenAddress,
+          abi: ERC20_METADATA_ABI,
+          functionName: "decimals" as const,
+        },
+      ],
+    )
 
-    const tokenMetadataResults = await multicallInChunks(client, tokenMetadataContracts)
+    const tokenMetadataResults = await multicallInChunks(
+      client,
+      tokenMetadataContracts,
+    )
 
-    const tokenMetadata = new Map<string, { symbol: string; decimals: number }>()
+    const tokenMetadata = new Map<
+      string,
+      { symbol: string; decimals: number }
+    >()
     uniqueRewardTokens.forEach((tokenAddress, index) => {
       const symbolResult = tokenMetadataResults[index * 2]
       const decimalsResult = tokenMetadataResults[index * 2 + 1]
@@ -282,7 +303,10 @@ export default async function handler(req: NextRequest) {
       })
     })
 
-    const epochAmountQueries: Array<{ bribeAddress: Address; tokenAddress: Address }> = []
+    const epochAmountQueries: Array<{
+      bribeAddress: Address
+      tokenAddress: Address
+    }> = []
     for (const [bribeKey, tokens] of bribeToRewardTokens.entries()) {
       for (const tokenAddress of tokens) {
         epochAmountQueries.push({
@@ -299,7 +323,10 @@ export default async function handler(req: NextRequest) {
       args: [query.tokenAddress, epochStart],
     }))
 
-    const epochAmountResults = await multicallInChunks(client, epochAmountContracts)
+    const epochAmountResults = await multicallInChunks(
+      client,
+      epochAmountContracts,
+    )
     const bribeTokenToAmount = new Map<string, bigint>()
 
     epochAmountQueries.forEach((query, index) => {

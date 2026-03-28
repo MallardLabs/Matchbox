@@ -1,5 +1,5 @@
-import { QUERY_PROFILES } from "@/config/queryProfiles"
 import { getContractConfig } from "@/config/contracts"
+import { QUERY_PROFILES } from "@/config/queryProfiles"
 import { useNetwork } from "@/contexts/NetworkContext"
 import { useGaugeTopology } from "@/hooks/useGaugeTopology"
 import { chunkArray } from "@/utils/chunk"
@@ -761,7 +761,8 @@ export function useAllVoteAllocations(
     ),
     query: {
       ...QUERY_PROFILES.SHORT_CACHE,
-      enabled: isNetworkReady && tokenIds.length > 0 && gaugeAddresses.length > 0,
+      enabled:
+        isNetworkReady && tokenIds.length > 0 && gaugeAddresses.length > 0,
     },
   })
 
@@ -952,7 +953,11 @@ export function useClaimableBribes(
   })
 
   const tokenIdsKey = useMemo(
-    () => veMEZOTokenIds.map((tokenId) => tokenId.toString()).sort().join(","),
+    () =>
+      veMEZOTokenIds
+        .map((tokenId) => tokenId.toString())
+        .sort()
+        .join(","),
     [veMEZOTokenIds],
   )
 
