@@ -137,7 +137,7 @@ export function Header(): JSX.Element {
     return window.location.hostname === "app.matchbox.markets"
   }, [])
 
-  const homeHref = isAppDomain ? "https://matchbox.markets" : "/"
+  const homeHref = isAppDomain ? "/dashboard" : "/"
 
   // Format address for display (works for both BTC and EVM addresses)
   const formatAddress = (addr: string | undefined) => {
@@ -172,26 +172,8 @@ export function Header(): JSX.Element {
       <header className="sticky top-0 z-50 border-b border-[var(--border)] bg-[var(--surface)]/95 backdrop-blur-sm">
         <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4 md:h-16 md:px-6 lg:px-8">
           {/* Logo */}
-          {isAppDomain ? (
-            <a
-              href={homeHref}
-              className="flex items-center gap-2 text-[var(--content-primary)] no-underline transition-opacity hover:opacity-80"
-            >
-              <img
-                src="/matchbox.png"
-                alt=""
-                width={120}
-                height={32}
-                className="h-7 w-auto dark-mode:invert md:h-8"
-                style={{
-                  imageRendering: "crisp-edges",
-                  filter: currentTheme === "dark" ? "invert(1)" : "none",
-                }}
-              />
-            </a>
-          ) : (
           <NextLink
-            href="/"
+            href={homeHref}
             className="flex items-center gap-2 text-[var(--content-primary)] no-underline transition-opacity hover:opacity-80"
           >
             <img
@@ -206,7 +188,6 @@ export function Header(): JSX.Element {
               }}
             />
           </NextLink>
-          )}
 
           {/* Desktop Navigation */}
           <nav
