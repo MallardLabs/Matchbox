@@ -26,6 +26,12 @@ export const getBaseUrl = () => {
   return baseUrl.replace(/\/$/, "")
 }
 
+export const getAppUrl = (path = "") => {
+  const base = process.env.NEXT_PUBLIC_APP_URL
+  if (!base) return path
+  return `${base}${path}`
+}
+
 export const getOgImageUrl = () => {
   return `${getBaseUrl()}/ogx.png`
 }

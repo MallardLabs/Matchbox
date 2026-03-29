@@ -1,5 +1,5 @@
 import { InitialLoader } from "@/components/InitialLoader"
-import { getBaseUrl, getOgImageUrl } from "@/utils/seo"
+import { getAppUrl, getOgImageUrl } from "@/utils/seo"
 import dynamic from "next/dynamic"
 import Head from "next/head"
 
@@ -9,9 +9,8 @@ const BoostPage = dynamic(() => import("@/components/pages/BoostPage"), {
 })
 
 export default function Boost() {
-  const baseUrl = getBaseUrl()
   const ogImageUrl = getOgImageUrl()
-  const pageUrl = `${baseUrl}/boost`
+  const pageUrl = getAppUrl("/boost")
   const title = "veMEZO | Matchbox"
   const description =
     "Maximize your yields by boosting gauges with your veMEZO. Participate in the Matchbox ecosystem and earn more rewards."

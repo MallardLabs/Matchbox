@@ -1,5 +1,5 @@
 import { InitialLoader } from "@/components/InitialLoader"
-import { getBaseUrl, getOgImageUrl } from "@/utils/seo"
+import { getAppUrl, getOgImageUrl } from "@/utils/seo"
 import dynamic from "next/dynamic"
 import Head from "next/head"
 
@@ -9,9 +9,8 @@ const GaugesPage = dynamic(() => import("@/components/pages/GaugesPage"), {
 })
 
 export default function Gauges() {
-  const baseUrl = getBaseUrl()
   const ogImageUrl = getOgImageUrl()
-  const pageUrl = `${baseUrl}/gauges`
+  const pageUrl = getAppUrl("/gauges")
   const title = "Gauges | Matchbox"
   const description =
     "Explore active gauges on Mezo, view current boost multipliers, and allocate your voting power to maximize incentives."

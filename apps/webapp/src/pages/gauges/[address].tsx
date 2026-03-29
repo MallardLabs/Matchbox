@@ -1,6 +1,6 @@
 import { InitialLoader } from "@/components/InitialLoader"
 import type { GaugeProfile } from "@/config/supabase"
-import { getBaseUrl, getOgImageUrl } from "@/utils/seo"
+import { getAppUrl, getOgImageUrl } from "@/utils/seo"
 import { createClient } from "@supabase/supabase-js"
 import type { GetServerSideProps } from "next"
 import dynamic from "next/dynamic"
@@ -49,9 +49,8 @@ export const getServerSideProps: GetServerSideProps<GaugePageProps> = async (
 }
 
 export default function GaugeDetail({ address, profile }: GaugePageProps) {
-  const baseUrl = getBaseUrl()
   const ogImageUrl = getOgImageUrl()
-  const pageUrl = `${baseUrl}/gauges/${address}`
+  const pageUrl = getAppUrl(`/gauges/${address}`)
 
   const displayName = profile?.display_name ?? `Gauge ${address.slice(0, 8)}...`
   const description =

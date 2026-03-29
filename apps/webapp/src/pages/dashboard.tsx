@@ -1,5 +1,5 @@
 import { InitialLoader } from "@/components/InitialLoader"
-import { getBaseUrl, getOgImageUrl } from "@/utils/seo"
+import { getAppUrl, getOgImageUrl } from "@/utils/seo"
 import dynamic from "next/dynamic"
 import Head from "next/head"
 
@@ -12,9 +12,8 @@ const DashboardPage = dynamic(
 )
 
 export default function Dashboard() {
-  const baseUrl = getBaseUrl()
   const ogImageUrl = getOgImageUrl()
-  const pageUrl = `${baseUrl}/dashboard`
+  const pageUrl = getAppUrl("/dashboard")
   const title = "Dashboard | Matchbox"
   const description =
     "Manage your veMEZO positions, track your voting power, and monitor your rewards on the Matchbox dashboard."

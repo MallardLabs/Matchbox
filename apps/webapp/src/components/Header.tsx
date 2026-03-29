@@ -4,7 +4,7 @@ import { useWalletAccount } from "@mezo-org/passport"
 import dynamic from "next/dynamic"
 import NextLink from "next/link"
 import { useRouter } from "next/router"
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { HeaderTicker } from "./HeaderTicker"
 
 const ConnectWalletDrawer = dynamic(
@@ -132,6 +132,13 @@ export function Header(): JSX.Element {
 
   const isHomePage = router.pathname === "/"
 
+  const isAppDomain = useMemo(() => {
+    if (typeof window === "undefined") return false
+    return window.location.hostname === "app.matchbox.markets"
+  }, [])
+
+  const homeHref = isAppDomain ? "https://matchbox.markets" : "/"
+
   // Format address for display (works for both BTC and EVM addresses)
   const formatAddress = (addr: string | undefined) => {
     if (!addr) return ""
@@ -165,6 +172,24 @@ export function Header(): JSX.Element {
       <header className="sticky top-0 z-50 border-b border-[var(--border)] bg-[var(--surface)]/95 backdrop-blur-sm">
         <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4 md:h-16 md:px-6 lg:px-8">
           {/* Logo */}
+          {isAppDomain ? (
+            <a
+              href={homeHref}
+              className="flex items-center gap-2 text-[var(--content-primary)] no-underline transition-opacity hover:opacity-80"
+            >
+              <img
+                src="/matchbox.png"
+                alt=""
+                width={120}
+                height={32}
+                className="h-7 w-auto dark-mode:invert md:h-8"
+                style={{
+                  imageRendering: "crisp-edges",
+                  filter: currentTheme === "dark" ? "invert(1)" : "none",
+                }}
+              />
+            </a>
+          ) : (
           <NextLink
             href="/"
             className="flex items-center gap-2 text-[var(--content-primary)] no-underline transition-opacity hover:opacity-80"
@@ -181,6 +206,7 @@ export function Header(): JSX.Element {
               }}
             />
           </NextLink>
+          )}
 
           {/* Desktop Navigation */}
           <nav
@@ -229,7 +255,7 @@ export function Header(): JSX.Element {
             )}
 
             <a
-              href="https://matchbox.trellium.org/docs"
+              href="https://matchbox.markets/docs"
               target="_blank"
               rel="noopener noreferrer"
               className="flex h-10 w-10 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--content-secondary)] transition-colors hover:bg-[var(--surface-secondary)] hover:text-[var(--content-primary)]"
@@ -292,7 +318,7 @@ export function Header(): JSX.Element {
           {/* Mobile Actions */}
           <div className="flex items-center gap-2 md:hidden">
             <a
-              href="https://matchbox.trellium.org/docs"
+              href="https://matchbox.markets/docs"
               target="_blank"
               rel="noopener noreferrer"
               className="flex h-11 w-11 items-center justify-center rounded-lg text-[var(--content-secondary)] transition-colors hover:bg-[var(--surface-secondary)] hover:text-[var(--content-primary)]"

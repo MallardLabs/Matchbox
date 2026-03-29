@@ -2,8 +2,8 @@ import { HeaderTicker } from "@/components/HeaderTicker"
 
 import { SpringIn } from "@/components/SpringIn"
 import { useTheme } from "@/contexts/ThemeContext"
+import { getAppUrl } from "@/utils/seo"
 import { Button } from "@mezo-org/mezo-clay"
-import Link from "next/link"
 import { useAccount } from "wagmi"
 
 function ArrowRightIcon(): JSX.Element {
@@ -102,14 +102,12 @@ function ActionCard({
       </p>
 
       {/* Action button */}
-      <Link href={href} passHref legacyBehavior>
-        <Button kind={variant} $as="a">
-          <span className="flex items-center gap-2">
-            {buttonText}
-            <ArrowRightIcon />
-          </span>
-        </Button>
-      </Link>
+      <Button kind={variant} $as="a" href={href}>
+        <span className="flex items-center gap-2">
+          {buttonText}
+          <ArrowRightIcon />
+        </span>
+      </Button>
     </article>
   )
 }
@@ -159,7 +157,7 @@ export default function HomePage(): JSX.Element {
             command="status --all"
             description="Monitor your boosts, fees earned, and gauge performance over time."
             buttonText="View Dashboard"
-            href="/dashboard"
+            href={getAppUrl("/dashboard")}
             variant="secondary"
             accentColor="#22C55E"
           />
@@ -171,7 +169,7 @@ export default function HomePage(): JSX.Element {
             command="vote --boost"
             description="Vote on veBTC gauges to boost their voting power and earn incentives in return."
             buttonText="Vote to Boost"
-            href="/boost"
+            href={getAppUrl("/boost")}
             accentColor="#EF4444"
           />
         </SpringIn>
@@ -182,7 +180,7 @@ export default function HomePage(): JSX.Element {
             command="gauge --manage"
             description="Manage your gauge profile, add incentives, and set your strategy to attract veMEZO votes."
             buttonText="Manage Gauge"
-            href="/incentives"
+            href={getAppUrl("/incentives")}
             accentColor="#F7931A"
           />
         </SpringIn>

@@ -1,5 +1,5 @@
 import { InitialLoader } from "@/components/InitialLoader"
-import { getBaseUrl, getOgImageUrl } from "@/utils/seo"
+import { getAppUrl, getOgImageUrl } from "@/utils/seo"
 import dynamic from "next/dynamic"
 import Head from "next/head"
 
@@ -12,9 +12,8 @@ const IncentivesPage = dynamic(
 )
 
 export default function Incentives() {
-  const baseUrl = getBaseUrl()
   const ogImageUrl = getOgImageUrl()
-  const pageUrl = `${baseUrl}/incentives`
+  const pageUrl = getAppUrl("/incentives")
   const title = "veBTC | Matchbox"
   const description =
     "Create and manage incentives for Mezo gauges to attract veMEZO liquidity to your project through the Matchbox incentive layer."
