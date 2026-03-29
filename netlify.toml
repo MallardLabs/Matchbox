@@ -10,14 +10,6 @@
   NEXT_PUBLIC_SITE_URL = "https://matchbox.markets"
   NEXT_PUBLIC_APP_URL = "https://app.matchbox.markets"
 
-# Redirect docs.matchbox.markets to matchbox.markets/docs
-[[redirects]]
-  from = "/*"
-  to = "https://matchbox.markets/docs/:splat"
-  status = 301
-  force = true
-  conditions = {Host = ["docs.matchbox.markets"]}
-
 # Proxy /docs/* to the docs site (hosted separately on Netlify)
 [[redirects]]
   from = "/docs/*"
