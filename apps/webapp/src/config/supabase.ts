@@ -60,3 +60,32 @@ export type ProfileTransfer = {
   epoch_start: number
   transferred_at: string
 }
+
+export type SavedProfile = {
+  id: number
+  owner_address: string
+  name: string
+  source: "manual" | "expired_gauge"
+  source_gauge_address: string | null
+  source_vebtc_token_id: string | null
+  profile_picture_url: string | null
+  display_name: string | null
+  description: string | null
+  website_url: string | null
+  social_links: SocialLinks | null
+  incentive_strategy: string | null
+  voting_strategy: string | null
+  tags: string[] | null
+  created_at: string
+  updated_at: string
+}
+
+export type ProfileReset = {
+  id: number
+  gauge_address: string
+  vebtc_token_id: string
+  previous_owner: string
+  new_owner: string
+  reset_reason: "nft_transfer" | "nft_burned"
+  reset_at: string
+}

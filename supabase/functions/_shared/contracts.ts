@@ -111,6 +111,25 @@ export const VOTING_ESCROW_ABI = [
     stateMutability: "view",
     type: "function",
   },
+  {
+    inputs: [{ internalType: "uint256", name: "_tokenId", type: "uint256" }],
+    name: "ownerOf",
+    outputs: [{ internalType: "address", name: "", type: "address" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [{ internalType: "uint256", name: "_tokenId", type: "uint256" }],
+    name: "locked",
+    outputs: [
+      { internalType: "int128", name: "amount", type: "int128" },
+      { internalType: "uint256", name: "end", type: "uint256" },
+      { internalType: "bool", name: "isPermanent", type: "bool" },
+      { internalType: "uint256", name: "boost", type: "uint256" },
+    ],
+    stateMutability: "view",
+    type: "function",
+  },
 ] as const
 
 export const NON_STAKING_GAUGE_ABI = [

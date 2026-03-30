@@ -1,7 +1,9 @@
+import { getContractConfig } from "@/config/contracts"
 import type {
   GaugeHistory,
   GaugeProfile,
   ProfileTransfer,
+  SavedProfile,
   SocialLinks,
 } from "@/config/supabase"
 import { supabase } from "@/config/supabase"
@@ -9,8 +11,10 @@ import {
   useAllGaugeProfilesFromContext,
   useGaugeProfileFromContext,
 } from "@/contexts/GaugeProfilesContext"
+import { useNetwork } from "@/contexts/NetworkContext"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import type { Address } from "viem"
+import { useReadContract } from "wagmi"
 
 /**
  * Get profiles for a list of gauge addresses.
@@ -394,6 +398,203 @@ export function useTransferGaugeProfile() {
     transferProfile,
     isLoading,
     error,
+  }
+}
+
+/**
+ * Fetch saved profile templates for a wallet address.
+ * Returns both manually saved templates and auto-saved expired gauge templates.
+ */
+export function useSavedProfiles(ownerAddress: Address | undefined) {
+  const [profiles, setProfiles] = useState<SavedProfile[]>([])
+  const [isLoading, setIsLoading] = useState(false)
+
+  const fetchProfiles = useCallback(async () => {
+    if (!ownerAddress) {
+      setProfiles([])
+      return
+    }
+
+    setIsLoading(true)
+
+    const { data, error } = await supabase
+      .from("saved_profiles")
+      .select("*")
+      .eq("owner_address", ownerAddress.toLowerCase())
+      .order("updated_at", { ascending: false })
+
+    if (error) {
+      console.error("Error fetching saved profiles:", error)
+      setProfiles([])
+    } else {
+      setProfiles((data as unknown as SavedProfile[]) ?? [])
+    }
+
+    setIsLoading(false)
+  }, [ownerAddress])
+
+  useEffect(() => {
+    fetchProfiles()
+  }, [fetchProfiles])
+
+  return {
+    profiles,
+    isLoading,
+    refetch: fetchProfiles,
+  }
+}
+
+export type SaveProfileTemplateParams = {
+  ownerAddress: Address
+  name: string
+  profilePictureUrl?: string | null
+  displayName?: string | null
+  description?: string | null
+  websiteUrl?: string | null
+  socialLinks?: SocialLinks | null
+  incentiveStrategy?: string | null
+  votingStrategy?: string | null
+  tags?: string[] | null
+  source?: "manual" | "expired_gauge"
+  sourceGaugeAddress?: string | null
+  sourceVebtcTokenId?: string | null
+}
+
+/**
+ * Save or update a profile template.
+ * Uses upsert on (owner_address, name) unique constraint.
+ */
+export function useSaveProfileTemplate() {
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<Error | null>(null)
+
+  const saveTemplate = useCallback(
+    async ({
+      ownerAddress,
+      name,
+      profilePictureUrl,
+      displayName,
+      description,
+      websiteUrl,
+      socialLinks,
+      incentiveStrategy,
+      votingStrategy,
+      tags,
+      source = "manual",
+      sourceGaugeAddress,
+      sourceVebtcTokenId,
+    }: SaveProfileTemplateParams) => {
+      setIsLoading(true)
+      setError(null)
+
+      const { data, error: upsertError } = await supabase
+        .from("saved_profiles")
+        .upsert(
+          {
+            owner_address: ownerAddress.toLowerCase(),
+            name,
+            source,
+            source_gauge_address: sourceGaugeAddress ?? null,
+            source_vebtc_token_id: sourceVebtcTokenId ?? null,
+            profile_picture_url: profilePictureUrl ?? null,
+            display_name: displayName ?? null,
+            description: description ?? null,
+            website_url: websiteUrl ?? null,
+            social_links: socialLinks ?? null,
+            incentive_strategy: incentiveStrategy ?? null,
+            voting_strategy: votingStrategy ?? null,
+            tags: tags ?? null,
+          },
+          { onConflict: "owner_address,name" },
+        )
+        .select()
+        .single()
+
+      if (upsertError) {
+        console.error("Error saving profile template:", upsertError)
+        setError(new Error(upsertError.message))
+        setIsLoading(false)
+        return null
+      }
+
+      setIsLoading(false)
+      return data as unknown as SavedProfile
+    },
+    [],
+  )
+
+  return {
+    saveTemplate,
+    isLoading,
+    error,
+  }
+}
+
+/**
+ * Delete a saved profile template by ID.
+ */
+export function useDeleteProfileTemplate() {
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<Error | null>(null)
+
+  const deleteTemplate = useCallback(async (id: number) => {
+    setIsLoading(true)
+    setError(null)
+
+    const { error: deleteError } = await supabase
+      .from("saved_profiles")
+      .delete()
+      .eq("id", id)
+
+    if (deleteError) {
+      console.error("Error deleting profile template:", deleteError)
+      setError(new Error(deleteError.message))
+    }
+
+    setIsLoading(false)
+    return !deleteError
+  }, [])
+
+  return {
+    deleteTemplate,
+    isLoading,
+    error,
+  }
+}
+
+/**
+ * Check on-chain ownership of a gauge's veBTC NFT.
+ * Returns whether the stored owner matches the current on-chain owner.
+ */
+export function useGaugeOwnershipCheck(
+  veBTCTokenId: string | undefined,
+  storedOwner: string | undefined,
+) {
+  const { chainId, isNetworkReady } = useNetwork()
+  const contracts = getContractConfig(chainId)
+
+  const tokenIdBigInt =
+    veBTCTokenId !== undefined ? BigInt(veBTCTokenId) : undefined
+
+  const { data, isLoading } = useReadContract({
+    ...contracts.veBTC,
+    functionName: "ownerOf",
+    args: tokenIdBigInt !== undefined ? [tokenIdBigInt] : undefined,
+    query: {
+      enabled: isNetworkReady && tokenIdBigInt !== undefined,
+    },
+  })
+
+  const currentOwner = data as Address | undefined
+  const isOwnershipValid =
+    currentOwner !== undefined && storedOwner !== undefined
+      ? currentOwner.toLowerCase() === storedOwner.toLowerCase()
+      : undefined
+
+  return {
+    currentOwner,
+    isOwnershipValid,
+    isLoading,
   }
 }
 

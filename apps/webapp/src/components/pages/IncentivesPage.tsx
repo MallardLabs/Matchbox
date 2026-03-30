@@ -7,11 +7,15 @@ import { SpringIn } from "@/components/SpringIn"
 import { TokenIcon } from "@/components/TokenIcon"
 import { TokenSelector } from "@/components/TokenSelector"
 import type { SocialLinks } from "@/config/supabase"
+import type { SavedProfile } from "@/config/supabase"
 import { formatAPY, useGaugeAPY } from "@/hooks/useAPY"
 import { useBtcPrice } from "@/hooks/useBtcPrice"
 import {
   useAllGaugeProfiles,
+  useGaugeOwnershipCheck,
   useGaugeProfile,
+  useSaveProfileTemplate,
+  useSavedProfiles,
   useUploadProfilePicture,
   useUpsertGaugeProfile,
 } from "@/hooks/useGaugeProfiles"
@@ -194,6 +198,24 @@ export default function IncentivesPage(): JSX.Element {
   const { upsertProfile, isLoading: isSavingProfile } = useUpsertGaugeProfile()
   const { uploadPicture, isLoading: isUploadingPicture } =
     useUploadProfilePicture()
+
+  // Saved profile templates
+  const {
+    profiles: savedTemplates,
+    isLoading: _isLoadingTemplates,
+    refetch: refetchTemplates,
+  } = useSavedProfiles(walletAddress)
+  const { saveTemplate, isLoading: isSavingTemplate } = useSaveProfileTemplate()
+  const [templateName, setTemplateName] = useState("")
+  const [showSaveTemplateInput, setShowSaveTemplateInput] = useState(false)
+
+  // On-chain ownership check
+  const { isOwnershipValid, isLoading: _isCheckingOwnership } =
+    useGaugeOwnershipCheck(
+      gaugeProfile?.vebtc_token_id,
+      gaugeProfile?.owner_address,
+    )
+  const ownershipMismatch = isOwnershipValid === false
 
   // Sync profile data when loaded
   useEffect(() => {
@@ -417,6 +439,47 @@ export default function IncentivesPage(): JSX.Element {
     if (formattedTokenBalance) {
       setIncentiveAmount(formattedTokenBalance)
     }
+  }
+
+  const handleApplyTemplate = (template: SavedProfile) => {
+    setProfileDisplayName(template.display_name ?? "")
+    setProfileDescription(template.description ?? "")
+    setProfilePicturePreview(template.profile_picture_url)
+    setPendingPictureFile(null)
+    setWebsiteUrl(template.website_url ?? "")
+    setTwitterUrl(template.social_links?.twitter ?? "")
+    setDiscordUrl(template.social_links?.discord ?? "")
+    setTelegramUrl(template.social_links?.telegram ?? "")
+    setGithubUrl(template.social_links?.github ?? "")
+    setIncentiveStrategy(template.incentive_strategy ?? "")
+    setVotingStrategy(template.voting_strategy ?? "")
+    setSelectedTags(template.tags ?? [])
+  }
+
+  const handleSaveAsTemplate = async () => {
+    if (!walletAddress || !templateName.trim()) return
+
+    await saveTemplate({
+      ownerAddress: walletAddress,
+      name: templateName.trim(),
+      profilePictureUrl: profilePicturePreview,
+      displayName: profileDisplayName || null,
+      description: profileDescription || null,
+      websiteUrl: websiteUrl || null,
+      socialLinks: {
+        ...(twitterUrl ? { twitter: twitterUrl } : {}),
+        ...(discordUrl ? { discord: discordUrl } : {}),
+        ...(telegramUrl ? { telegram: telegramUrl } : {}),
+        ...(githubUrl ? { github: githubUrl } : {}),
+      },
+      incentiveStrategy: incentiveStrategy || null,
+      votingStrategy: votingStrategy || null,
+      tags: selectedTags.length > 0 ? selectedTags : null,
+    })
+
+    setShowSaveTemplateInput(false)
+    setTemplateName("")
+    refetchTemplates()
   }
 
   const handleFileSelect = useCallback(
@@ -715,298 +778,446 @@ export default function IncentivesPage(): JSX.Element {
 
                 {/* Profile Tab */}
                 {activeTab === "profile" && (
-                  <SpringIn delay={2} variant="card">
-                    <Card withBorder overrides={{}}>
-                      <div className="flex flex-col gap-6 py-4">
-                        {/* Basic Info Section */}
-                        <div>
-                          <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-[var(--content-primary)]">
-                            <span className="flex h-6 w-6 items-center justify-center rounded bg-[rgba(247,147,26,0.15)] text-xs text-[#F7931A]">
-                              1
-                            </span>
-                            Basic Information
-                          </h3>
+                  <>
+                    {/* Ownership mismatch banner */}
+                    {ownershipMismatch && (
+                      <div className="rounded-lg border border-[var(--negative-subtle)] bg-[var(--negative-subtle)] p-4">
+                        <p className="text-sm font-semibold text-[var(--negative)]">
+                          Ownership Changed
+                        </p>
+                        <p className="mt-1 text-sm text-[var(--negative)]">
+                          This gauge&apos;s veBTC NFT has been transferred to a
+                          different wallet. Profile editing is disabled.
+                        </p>
+                      </div>
+                    )}
 
-                          {isLoadingProfile ? (
-                            <Skeleton width="100%" height="200px" animation />
-                          ) : (
-                            <div className="grid gap-4 md:grid-cols-2">
-                              {/* Profile Picture */}
-                              <div className="md:col-span-2">
-                                <p className="mb-2 text-2xs uppercase tracking-wider text-[var(--content-tertiary)]">
-                                  Profile Picture
-                                </p>
-                                <div className="flex items-center gap-4">
-                                  <div className="flex h-24 w-24 flex-shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-[var(--border)] bg-[var(--surface-secondary)]">
-                                    {profilePicturePreview ? (
+                    {/* Apply Template Section */}
+                    {savedTemplates.length > 0 && !ownershipMismatch && (
+                      <SpringIn delay={2} variant="card">
+                        <Card
+                          title="Apply Profile Template"
+                          withBorder
+                          overrides={{}}
+                        >
+                          <div className="flex flex-col gap-3 py-4">
+                            <p className="text-sm text-[var(--content-secondary)]">
+                              Quickly apply a saved or expired gauge profile to
+                              this gauge.
+                            </p>
+                            <div className="grid gap-2 sm:grid-cols-2">
+                              {savedTemplates.map((template) => (
+                                <button
+                                  key={template.id}
+                                  type="button"
+                                  onClick={() => handleApplyTemplate(template)}
+                                  className="flex items-center gap-3 rounded-lg border border-[var(--border)] p-3 text-left transition-colors hover:bg-[var(--surface-secondary)]"
+                                >
+                                  <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-[var(--surface-secondary)]">
+                                    {template.profile_picture_url ? (
                                       <img
-                                        src={profilePicturePreview}
-                                        alt="Gauge profile"
+                                        src={template.profile_picture_url}
+                                        alt={template.name}
                                         className="h-full w-full object-cover"
                                       />
                                     ) : (
-                                      <span className="text-xs text-[var(--content-secondary)]">
-                                        No image
+                                      <span className="text-xs text-[var(--content-tertiary)]">
+                                        #
                                       </span>
                                     )}
                                   </div>
-                                  <div>
-                                    <input
-                                      type="file"
-                                      ref={fileInputRef}
-                                      accept="image/*"
-                                      onChange={handleFileSelect}
-                                      className="hidden"
-                                    />
-                                    <Button
-                                      kind="secondary"
-                                      size="small"
-                                      onClick={() =>
-                                        fileInputRef.current?.click()
-                                      }
-                                    >
-                                      {profilePicturePreview
-                                        ? "Change Picture"
-                                        : "Upload Picture"}
-                                    </Button>
-                                    <ParagraphSmall
-                                      color="var(--content-secondary)"
-                                      marginTop="scale200"
-                                    >
-                                      Square image, at least 200x200px
-                                    </ParagraphSmall>
+                                  <div className="min-w-0 flex-1">
+                                    <p className="truncate text-sm font-medium text-[var(--content-primary)]">
+                                      {template.display_name ?? template.name}
+                                    </p>
+                                    <div className="flex items-center gap-1">
+                                      <Tag
+                                        closeable={false}
+                                        color={
+                                          template.source === "expired_gauge"
+                                            ? "yellow"
+                                            : "green"
+                                        }
+                                      >
+                                        {template.source === "expired_gauge"
+                                          ? `Expired Gauge`
+                                          : "Saved"}
+                                      </Tag>
+                                      {template.source === "expired_gauge" &&
+                                        template.source_vebtc_token_id && (
+                                          <span className="text-2xs text-[var(--content-tertiary)]">
+                                            veBTC #
+                                            {template.source_vebtc_token_id}
+                                          </span>
+                                        )}
+                                    </div>
+                                  </div>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </Card>
+                      </SpringIn>
+                    )}
+
+                    <SpringIn
+                      delay={savedTemplates.length > 0 ? 3 : 2}
+                      variant="card"
+                    >
+                      <Card withBorder overrides={{}}>
+                        <div className="flex flex-col gap-6 py-4">
+                          {/* Basic Info Section */}
+                          <div>
+                            <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-[var(--content-primary)]">
+                              <span className="flex h-6 w-6 items-center justify-center rounded bg-[rgba(247,147,26,0.15)] text-xs text-[#F7931A]">
+                                1
+                              </span>
+                              Basic Information
+                            </h3>
+
+                            {isLoadingProfile ? (
+                              <Skeleton width="100%" height="200px" animation />
+                            ) : (
+                              <div className="grid gap-4 md:grid-cols-2">
+                                {/* Profile Picture */}
+                                <div className="md:col-span-2">
+                                  <p className="mb-2 text-2xs uppercase tracking-wider text-[var(--content-tertiary)]">
+                                    Profile Picture
+                                  </p>
+                                  <div className="flex items-center gap-4">
+                                    <div className="flex h-24 w-24 flex-shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-[var(--border)] bg-[var(--surface-secondary)]">
+                                      {profilePicturePreview ? (
+                                        <img
+                                          src={profilePicturePreview}
+                                          alt="Gauge profile"
+                                          className="h-full w-full object-cover"
+                                        />
+                                      ) : (
+                                        <span className="text-xs text-[var(--content-secondary)]">
+                                          No image
+                                        </span>
+                                      )}
+                                    </div>
+                                    <div>
+                                      <input
+                                        type="file"
+                                        ref={fileInputRef}
+                                        accept="image/*"
+                                        onChange={handleFileSelect}
+                                        className="hidden"
+                                      />
+                                      <Button
+                                        kind="secondary"
+                                        size="small"
+                                        onClick={() =>
+                                          fileInputRef.current?.click()
+                                        }
+                                      >
+                                        {profilePicturePreview
+                                          ? "Change Picture"
+                                          : "Upload Picture"}
+                                      </Button>
+                                      <ParagraphSmall
+                                        color="var(--content-secondary)"
+                                        marginTop="scale200"
+                                      >
+                                        Square image, at least 200x200px
+                                      </ParagraphSmall>
+                                    </div>
                                   </div>
                                 </div>
-                              </div>
 
-                              {/* Display Name */}
+                                {/* Display Name */}
+                                <div>
+                                  <label
+                                    htmlFor="gauge-display-name"
+                                    className="mb-1 block text-2xs uppercase tracking-wider text-[var(--content-tertiary)]"
+                                  >
+                                    Display Name
+                                  </label>
+                                  <Input
+                                    id="gauge-display-name"
+                                    value={profileDisplayName}
+                                    onChange={(e) =>
+                                      setProfileDisplayName(e.target.value)
+                                    }
+                                    placeholder={`veBTC #${selectedLock?.tokenId?.toString() ?? ""}`}
+                                  />
+                                </div>
+
+                                {/* Website */}
+                                <div>
+                                  <label
+                                    htmlFor="gauge-website"
+                                    className="mb-1 block text-2xs uppercase tracking-wider text-[var(--content-tertiary)]"
+                                  >
+                                    Website URL
+                                  </label>
+                                  <Input
+                                    id="gauge-website"
+                                    value={websiteUrl}
+                                    onChange={(e) =>
+                                      setWebsiteUrl(e.target.value)
+                                    }
+                                    placeholder="https://yourproject.com"
+                                  />
+                                </div>
+
+                                {/* Description */}
+                                <div className="md:col-span-2">
+                                  <label
+                                    htmlFor="gauge-description"
+                                    className="mb-1 block text-2xs uppercase tracking-wider text-[var(--content-tertiary)]"
+                                  >
+                                    Description
+                                  </label>
+                                  <Textarea
+                                    id="gauge-description"
+                                    value={profileDescription}
+                                    onChange={(e) =>
+                                      setProfileDescription(e.target.value)
+                                    }
+                                    placeholder="Tell voters about your gauge. What makes it special?"
+                                    overrides={{
+                                      Root: {
+                                        style: {
+                                          minHeight: "80px",
+                                        },
+                                      },
+                                    }}
+                                  />
+                                </div>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Social Links Section */}
+                          <div>
+                            <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-[var(--content-primary)]">
+                              <span className="flex h-6 w-6 items-center justify-center rounded bg-[rgba(247,147,26,0.15)] text-xs text-[#F7931A]">
+                                2
+                              </span>
+                              Social Links
+                            </h3>
+
+                            <div className="grid gap-4 sm:grid-cols-2">
                               <div>
-                                <label
-                                  htmlFor="gauge-display-name"
-                                  className="mb-1 block text-2xs uppercase tracking-wider text-[var(--content-tertiary)]"
-                                >
-                                  Display Name
+                                <label className="mb-1 flex items-center gap-2 text-2xs uppercase tracking-wider text-[var(--content-tertiary)]">
+                                  <TwitterIcon size={14} />
+                                  Twitter / X
                                 </label>
                                 <Input
-                                  id="gauge-display-name"
-                                  value={profileDisplayName}
+                                  value={twitterUrl}
                                   onChange={(e) =>
-                                    setProfileDisplayName(e.target.value)
+                                    setTwitterUrl(e.target.value)
                                   }
-                                  placeholder={`veBTC #${selectedLock?.tokenId?.toString() ?? ""}`}
+                                  placeholder="https://twitter.com/yourproject"
                                 />
                               </div>
 
-                              {/* Website */}
                               <div>
-                                <label
-                                  htmlFor="gauge-website"
-                                  className="mb-1 block text-2xs uppercase tracking-wider text-[var(--content-tertiary)]"
-                                >
-                                  Website URL
+                                <label className="mb-1 flex items-center gap-2 text-2xs uppercase tracking-wider text-[var(--content-tertiary)]">
+                                  <DiscordIcon size={14} />
+                                  Discord
                                 </label>
                                 <Input
-                                  id="gauge-website"
-                                  value={websiteUrl}
+                                  value={discordUrl}
                                   onChange={(e) =>
-                                    setWebsiteUrl(e.target.value)
+                                    setDiscordUrl(e.target.value)
                                   }
-                                  placeholder="https://yourproject.com"
+                                  placeholder="https://discord.gg/invite"
                                 />
                               </div>
 
-                              {/* Description */}
-                              <div className="md:col-span-2">
+                              <div>
+                                <label className="mb-1 flex items-center gap-2 text-2xs uppercase tracking-wider text-[var(--content-tertiary)]">
+                                  <TelegramIcon size={14} />
+                                  Telegram
+                                </label>
+                                <Input
+                                  value={telegramUrl}
+                                  onChange={(e) =>
+                                    setTelegramUrl(e.target.value)
+                                  }
+                                  placeholder="https://t.me/yourproject"
+                                />
+                              </div>
+
+                              <div>
+                                <label className="mb-1 flex items-center gap-2 text-2xs uppercase tracking-wider text-[var(--content-tertiary)]">
+                                  <GithubIcon size={14} />
+                                  GitHub
+                                </label>
+                                <Input
+                                  value={githubUrl}
+                                  onChange={(e) => setGithubUrl(e.target.value)}
+                                  placeholder="https://github.com/yourproject"
+                                />
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Strategy Section */}
+                          <div>
+                            <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-[var(--content-primary)]">
+                              <span className="flex h-6 w-6 items-center justify-center rounded bg-[rgba(247,147,26,0.15)] text-xs text-[#F7931A]">
+                                3
+                              </span>
+                              Strategy & Goals
+                            </h3>
+
+                            <div className="grid gap-4">
+                              <div>
                                 <label
-                                  htmlFor="gauge-description"
+                                  htmlFor="incentive-strategy"
                                   className="mb-1 block text-2xs uppercase tracking-wider text-[var(--content-tertiary)]"
                                 >
-                                  Description
+                                  Incentive Strategy
                                 </label>
                                 <Textarea
-                                  id="gauge-description"
-                                  value={profileDescription}
+                                  id="incentive-strategy"
+                                  value={incentiveStrategy}
                                   onChange={(e) =>
-                                    setProfileDescription(e.target.value)
+                                    setIncentiveStrategy(e.target.value)
                                   }
-                                  placeholder="Tell voters about your gauge. What makes it special?"
+                                  placeholder="Describe how you plan to incentivize voters. What rewards do you offer? How often? What's your target APY?"
                                   overrides={{
-                                    Root: {
-                                      style: {
-                                        minHeight: "80px",
-                                      },
-                                    },
+                                    Root: { style: { minHeight: "100px" } },
+                                  }}
+                                />
+                              </div>
+
+                              <div>
+                                <label
+                                  htmlFor="voting-strategy"
+                                  className="mb-1 block text-2xs uppercase tracking-wider text-[var(--content-tertiary)]"
+                                >
+                                  Voting Strategy & Goals
+                                </label>
+                                <Textarea
+                                  id="voting-strategy"
+                                  value={votingStrategy}
+                                  onChange={(e) =>
+                                    setVotingStrategy(e.target.value)
+                                  }
+                                  placeholder="Explain your voting goals. What boost level are you targeting? How will you use the boosted voting power?"
+                                  overrides={{
+                                    Root: { style: { minHeight: "100px" } },
                                   }}
                                 />
                               </div>
                             </div>
+                          </div>
+
+                          {/* Tags Section */}
+                          <div>
+                            <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-[var(--content-primary)]">
+                              <span className="flex h-6 w-6 items-center justify-center rounded bg-[rgba(247,147,26,0.15)] text-xs text-[#F7931A]">
+                                4
+                              </span>
+                              Tags
+                            </h3>
+
+                            <p className="mb-3 text-xs text-[var(--content-secondary)]">
+                              Select tags that describe your project
+                            </p>
+
+                            <div className="flex flex-wrap gap-2">
+                              {availableTags.map((tag) => (
+                                <button
+                                  key={tag}
+                                  type="button"
+                                  onClick={() => toggleTag(tag)}
+                                  className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-all ${
+                                    selectedTags.includes(tag)
+                                      ? "border-[#F7931A] bg-[rgba(247,147,26,0.15)] text-[#F7931A]"
+                                      : "border-[var(--border)] text-[var(--content-secondary)] hover:border-[var(--content-tertiary)]"
+                                  }`}
+                                >
+                                  {tag}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Save Button */}
+                          <div className="flex items-center justify-between border-t border-[var(--border)] pt-4">
+                            <div>
+                              {hasProfileChanges && (
+                                <span className="text-xs text-[var(--warning)]">
+                                  You have unsaved changes
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex gap-2">
+                              <Button
+                                kind="primary"
+                                onClick={handleSaveProfile}
+                                isLoading={
+                                  isSavingProfile || isUploadingPicture
+                                }
+                                disabled={
+                                  !hasProfileChanges || ownershipMismatch
+                                }
+                              >
+                                Save Profile
+                              </Button>
+                              <Button
+                                kind="secondary"
+                                onClick={() => setShowSaveTemplateInput(true)}
+                                disabled={ownershipMismatch}
+                              >
+                                Save as Template
+                              </Button>
+                            </div>
+                          </div>
+
+                          {/* Save as Template inline input */}
+                          {showSaveTemplateInput && (
+                            <div className="flex items-end gap-2 border-t border-[var(--border)] pt-4">
+                              <div className="flex-1">
+                                <label
+                                  htmlFor="template-name"
+                                  className="mb-1 block text-2xs uppercase tracking-wider text-[var(--content-tertiary)]"
+                                >
+                                  Template Name
+                                </label>
+                                <Input
+                                  id="template-name"
+                                  value={templateName}
+                                  onChange={(e) =>
+                                    setTemplateName(e.target.value)
+                                  }
+                                  placeholder={
+                                    profileDisplayName || "My Profile"
+                                  }
+                                />
+                              </div>
+                              <Button
+                                kind="primary"
+                                size="small"
+                                onClick={handleSaveAsTemplate}
+                                isLoading={isSavingTemplate}
+                                disabled={!templateName.trim()}
+                              >
+                                Save
+                              </Button>
+                              <Button
+                                kind="tertiary"
+                                size="small"
+                                onClick={() => {
+                                  setShowSaveTemplateInput(false)
+                                  setTemplateName("")
+                                }}
+                              >
+                                Cancel
+                              </Button>
+                            </div>
                           )}
                         </div>
-
-                        {/* Social Links Section */}
-                        <div>
-                          <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-[var(--content-primary)]">
-                            <span className="flex h-6 w-6 items-center justify-center rounded bg-[rgba(247,147,26,0.15)] text-xs text-[#F7931A]">
-                              2
-                            </span>
-                            Social Links
-                          </h3>
-
-                          <div className="grid gap-4 sm:grid-cols-2">
-                            <div>
-                              <label className="mb-1 flex items-center gap-2 text-2xs uppercase tracking-wider text-[var(--content-tertiary)]">
-                                <TwitterIcon size={14} />
-                                Twitter / X
-                              </label>
-                              <Input
-                                value={twitterUrl}
-                                onChange={(e) => setTwitterUrl(e.target.value)}
-                                placeholder="https://twitter.com/yourproject"
-                              />
-                            </div>
-
-                            <div>
-                              <label className="mb-1 flex items-center gap-2 text-2xs uppercase tracking-wider text-[var(--content-tertiary)]">
-                                <DiscordIcon size={14} />
-                                Discord
-                              </label>
-                              <Input
-                                value={discordUrl}
-                                onChange={(e) => setDiscordUrl(e.target.value)}
-                                placeholder="https://discord.gg/invite"
-                              />
-                            </div>
-
-                            <div>
-                              <label className="mb-1 flex items-center gap-2 text-2xs uppercase tracking-wider text-[var(--content-tertiary)]">
-                                <TelegramIcon size={14} />
-                                Telegram
-                              </label>
-                              <Input
-                                value={telegramUrl}
-                                onChange={(e) => setTelegramUrl(e.target.value)}
-                                placeholder="https://t.me/yourproject"
-                              />
-                            </div>
-
-                            <div>
-                              <label className="mb-1 flex items-center gap-2 text-2xs uppercase tracking-wider text-[var(--content-tertiary)]">
-                                <GithubIcon size={14} />
-                                GitHub
-                              </label>
-                              <Input
-                                value={githubUrl}
-                                onChange={(e) => setGithubUrl(e.target.value)}
-                                placeholder="https://github.com/yourproject"
-                              />
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Strategy Section */}
-                        <div>
-                          <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-[var(--content-primary)]">
-                            <span className="flex h-6 w-6 items-center justify-center rounded bg-[rgba(247,147,26,0.15)] text-xs text-[#F7931A]">
-                              3
-                            </span>
-                            Strategy & Goals
-                          </h3>
-
-                          <div className="grid gap-4">
-                            <div>
-                              <label
-                                htmlFor="incentive-strategy"
-                                className="mb-1 block text-2xs uppercase tracking-wider text-[var(--content-tertiary)]"
-                              >
-                                Incentive Strategy
-                              </label>
-                              <Textarea
-                                id="incentive-strategy"
-                                value={incentiveStrategy}
-                                onChange={(e) =>
-                                  setIncentiveStrategy(e.target.value)
-                                }
-                                placeholder="Describe how you plan to incentivize voters. What rewards do you offer? How often? What's your target APY?"
-                                overrides={{
-                                  Root: { style: { minHeight: "100px" } },
-                                }}
-                              />
-                            </div>
-
-                            <div>
-                              <label
-                                htmlFor="voting-strategy"
-                                className="mb-1 block text-2xs uppercase tracking-wider text-[var(--content-tertiary)]"
-                              >
-                                Voting Strategy & Goals
-                              </label>
-                              <Textarea
-                                id="voting-strategy"
-                                value={votingStrategy}
-                                onChange={(e) =>
-                                  setVotingStrategy(e.target.value)
-                                }
-                                placeholder="Explain your voting goals. What boost level are you targeting? How will you use the boosted voting power?"
-                                overrides={{
-                                  Root: { style: { minHeight: "100px" } },
-                                }}
-                              />
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Tags Section */}
-                        <div>
-                          <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-[var(--content-primary)]">
-                            <span className="flex h-6 w-6 items-center justify-center rounded bg-[rgba(247,147,26,0.15)] text-xs text-[#F7931A]">
-                              4
-                            </span>
-                            Tags
-                          </h3>
-
-                          <p className="mb-3 text-xs text-[var(--content-secondary)]">
-                            Select tags that describe your project
-                          </p>
-
-                          <div className="flex flex-wrap gap-2">
-                            {availableTags.map((tag) => (
-                              <button
-                                key={tag}
-                                type="button"
-                                onClick={() => toggleTag(tag)}
-                                className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-all ${
-                                  selectedTags.includes(tag)
-                                    ? "border-[#F7931A] bg-[rgba(247,147,26,0.15)] text-[#F7931A]"
-                                    : "border-[var(--border)] text-[var(--content-secondary)] hover:border-[var(--content-tertiary)]"
-                                }`}
-                              >
-                                {tag}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-
-                        {/* Save Button */}
-                        <div className="flex items-center justify-between border-t border-[var(--border)] pt-4">
-                          <div>
-                            {hasProfileChanges && (
-                              <span className="text-xs text-[var(--warning)]">
-                                You have unsaved changes
-                              </span>
-                            )}
-                          </div>
-                          <Button
-                            kind="primary"
-                            onClick={handleSaveProfile}
-                            isLoading={isSavingProfile || isUploadingPicture}
-                            disabled={!hasProfileChanges}
-                          >
-                            Save Profile
-                          </Button>
-                        </div>
-                      </div>
-                    </Card>
-                  </SpringIn>
+                      </Card>
+                    </SpringIn>
+                  </>
                 )}
 
                 {/* Incentives Tab */}

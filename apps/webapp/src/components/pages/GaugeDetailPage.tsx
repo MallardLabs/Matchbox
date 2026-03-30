@@ -5,7 +5,11 @@ import { getContractConfig } from "@/config/contracts"
 import { useNetwork } from "@/contexts/NetworkContext"
 import { formatAPY, useGaugeAPY } from "@/hooks/useAPY"
 import { useBtcPrice } from "@/hooks/useBtcPrice"
-import { useGaugeHistory, useGaugeProfile } from "@/hooks/useGaugeProfiles"
+import {
+  useGaugeHistory,
+  useGaugeOwnershipCheck,
+  useGaugeProfile,
+} from "@/hooks/useGaugeProfiles"
 import { useBoostInfo } from "@/hooks/useGauges"
 import { useMezoPrice } from "@/hooks/useMezoPrice"
 import { formatUsdValue, getTokenValueUsd } from "@/hooks/useTokenPrices"
@@ -254,6 +258,13 @@ export default function GaugeDetailPage(): JSX.Element {
   // Fetch gauge profile
   const { profile, isLoading: isLoadingProfile } = useGaugeProfile(gaugeAddress)
 
+  // Check on-chain ownership
+  const { isOwnershipValid } = useGaugeOwnershipCheck(
+    profile?.vebtc_token_id,
+    profile?.owner_address,
+  )
+  const ownershipMismatch = isOwnershipValid === false
+
   // Fetch gauge history
   const { history, isLoading: isLoadingHistory } = useGaugeHistory(gaugeAddress)
 
@@ -341,6 +352,16 @@ export default function GaugeDetailPage(): JSX.Element {
             </svg>
             Back
           </button>
+
+          {/* Ownership mismatch banner */}
+          {ownershipMismatch && (
+            <div className="rounded-lg border border-[var(--warning-subtle)] bg-[var(--warning-subtle)] p-4">
+              <p className="text-sm text-[var(--warning)]">
+                This gauge&apos;s profile was reset due to an NFT ownership
+                change.
+              </p>
+            </div>
+          )}
 
           {/* Profile Header */}
           <SpringIn delay={0} variant="card">
