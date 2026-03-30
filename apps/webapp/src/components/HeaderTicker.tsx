@@ -103,7 +103,7 @@ function TickerItem({
   )
 }
 
-interface HeaderTickerProps {
+type HeaderTickerProps = {
   showInline?: boolean
 }
 
@@ -185,6 +185,14 @@ export function HeaderTicker({
     },
   ]
 
+  const visibleMetrics = showInline
+    ? metrics.filter((metric) => metric.id !== "rpc")
+    : metrics
+
+  if (visibleMetrics.length === 0) {
+    return <></>
+  }
+
   useEffect(() => {
     const interval = setInterval(() => {
       setIsTransitioning(true)
@@ -192,7 +200,7 @@ export function HeaderTicker({
 
       // After transition starts, update to next index
       setTimeout(() => {
-        setCurrentIndex((prev) => (prev + 1) % metrics.length)
+        setCurrentIndex((prev) => (prev + 1) % visibleMetrics.length)
       }, 50)
 
       // Reset transition state after animation completes
@@ -203,13 +211,18 @@ export function HeaderTicker({
     }, CYCLE_INTERVAL_MS)
 
     return () => clearInterval(interval)
-  }, [currentIndex, metrics.length])
+  }, [currentIndex, visibleMetrics.length])
 
-  const safeCurrentIndex = currentIndex % metrics.length
-  const currentMetric: TickerMetric = metrics[safeCurrentIndex] as TickerMetric
+  const firstMetric = visibleMetrics[0]
+  if (firstMetric === undefined) {
+    return <></>
+  }
+
+  const safeCurrentIndex = currentIndex % visibleMetrics.length
+  const currentMetric = visibleMetrics[safeCurrentIndex] ?? firstMetric
   const prevMetric: TickerMetric | null =
     prevIndex !== null
-      ? (metrics[prevIndex % metrics.length] as TickerMetric)
+      ? (visibleMetrics[prevIndex % visibleMetrics.length] ?? firstMetric)
       : null
 
   const [isHovered, setIsHovered] = useState(false)

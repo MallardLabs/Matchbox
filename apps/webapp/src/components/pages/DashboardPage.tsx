@@ -15,6 +15,10 @@ import { useBatchGaugeData, useBoostGauges } from "@/hooks/useGauges"
 import { useVeBTCLocks, useVeMEZOLocks } from "@/hooks/useLocks"
 import { useMezoPrice } from "@/hooks/useMezoPrice"
 import {
+  type ClaimLockRequest,
+  useMultiLockClaimBribes,
+} from "@/hooks/useMultiLockClaimBribes"
+import {
   type ClaimableBribe,
   type VoteAllocation,
   useAllUsedWeights,
@@ -429,6 +433,7 @@ function ClaimableRewardRow({
   onClaim,
   isPending,
   isConfirming,
+  isClaimDisabled = false,
   isLast,
   claimableUSD,
   usedWeight,
@@ -442,6 +447,7 @@ function ClaimableRewardRow({
   onClaim: () => void
   isPending: boolean
   isConfirming: boolean
+  isClaimDisabled?: boolean
   isLast: boolean
   claimableUSD: number
   usedWeight: bigint | undefined
@@ -574,7 +580,7 @@ function ClaimableRewardRow({
           size="small"
           kind="secondary"
           isLoading={isPending || isConfirming}
-          disabled={isPending || isConfirming}
+          disabled={isClaimDisabled || isPending || isConfirming}
           overrides={{
             Root: {
               style: {
@@ -602,7 +608,7 @@ function ClaimableRewardRow({
             <div className="flex flex-col gap-2">
               {rewardsByToken.map((reward) => {
                 const tokenAmount =
-                  Number(reward.amount) / Math.pow(10, reward.decimals)
+                  Number(reward.amount) / 10 ** reward.decimals
                 const price =
                   getTokenUsdPrice(
                     reward.tokenAddress,
@@ -856,13 +862,12 @@ export default function DashboardPage(): JSX.Element {
 
   const { gaugeDataMap, isLoading: isLoadingBatchGaugeData } =
     useBatchGaugeData(veBTCTokenIds)
-  const { voteStateMap, isLoading: isLoadingBatchVoteState } =
-    useBatchVoteState(veMEZOTokenIds)
+  const { voteStateMap } = useBatchVoteState(veMEZOTokenIds)
 
   const {
     claimableBribes,
     totalClaimable,
-    isLoading: isLoadingClaimableBribes,
+    isRefreshing: isRefreshingClaimableBribes,
     refetch: refetchBribes,
   } = useClaimableBribes(veMEZOTokenIds, {
     enabled: isConnected && veMEZOTokenIds.length > 0,
@@ -874,13 +879,45 @@ export default function DashboardPage(): JSX.Element {
     isConfirming: isClaimConfirming,
     isSuccess: isClaimSuccess,
   } = useClaimBribes()
+  const [claimAllSnapshot, setClaimAllSnapshot] = useState<ClaimLockRequest[]>(
+    [],
+  )
+  const {
+    claimAll,
+    lockStates: multiClaimLockStates,
+    currentIndex: multiClaimCurrentIndex,
+    totalLocks: multiClaimTotalLocks,
+    successCount: multiClaimSuccessCount,
+    errorCount: multiClaimErrorCount,
+    isInProgress: isMultiClaimInProgress,
+    isDone: isMultiClaimDone,
+    hasErrors: multiClaimHasErrors,
+    clear: clearMultiClaim,
+  } = useMultiLockClaimBribes()
 
   // Refetch bribes after successful claim
   useEffect(() => {
     if (isClaimSuccess) {
-      refetchBribes()
+      void refetchBribes()
     }
   }, [isClaimSuccess, refetchBribes])
+
+  useEffect(() => {
+    if (isMultiClaimDone && multiClaimSuccessCount > 0) {
+      void refetchBribes()
+    }
+  }, [isMultiClaimDone, multiClaimSuccessCount, refetchBribes])
+
+  useEffect(() => {
+    if (isMultiClaimDone && !multiClaimHasErrors) {
+      const timer = setTimeout(() => {
+        clearMultiClaim()
+        setClaimAllSnapshot([])
+      }, 1500)
+
+      return () => clearTimeout(timer)
+    }
+  }, [clearMultiClaim, isMultiClaimDone, multiClaimHasErrors])
 
   // Group claimable bribes by tokenId
   const bribesGroupedByTokenId = useMemo(() => {
@@ -898,7 +935,7 @@ export default function DashboardPage(): JSX.Element {
   const totalClaimableUSD = useMemo(() => {
     let total = 0
     for (const [tokenAddr, info] of totalClaimable.entries()) {
-      const tokenAmount = Number(info.amount) / Math.pow(10, info.decimals)
+      const tokenAmount = Number(info.amount) / 10 ** info.decimals
       const price =
         getTokenUsdPrice(tokenAddr, info.symbol, btcPrice, mezoPrice) ?? 0
       total += tokenAmount * price
@@ -913,8 +950,7 @@ export default function DashboardPage(): JSX.Element {
       const tokenIdKey = bribe.tokenId.toString()
       let usdValue = 0
       for (const reward of bribe.rewards) {
-        const tokenAmount =
-          Number(reward.earned) / Math.pow(10, reward.decimals)
+        const tokenAmount = Number(reward.earned) / 10 ** reward.decimals
         const price =
           getTokenUsdPrice(
             reward.tokenAddress,
@@ -930,6 +966,25 @@ export default function DashboardPage(): JSX.Element {
     return map
   }, [claimableBribes, btcPrice, mezoPrice])
 
+  const claimAllRequests = useMemo(() => {
+    return veMEZOLocks.flatMap((lock) => {
+      const bribesForToken = bribesGroupedByTokenId.get(lock.tokenId.toString())
+      if (!bribesForToken || bribesForToken.length === 0) {
+        return []
+      }
+
+      return [
+        {
+          tokenId: lock.tokenId,
+          bribes: bribesForToken.map((bribe) => ({
+            bribeAddress: bribe.bribeAddress,
+            tokens: bribe.rewards.map((reward) => reward.tokenAddress),
+          })),
+        },
+      ]
+    })
+  }, [bribesGroupedByTokenId, veMEZOLocks])
+
   const handleClaimBribes = (tokenId: bigint) => {
     const bribesForToken = bribesGroupedByTokenId.get(tokenId.toString()) ?? []
     if (bribesForToken.length === 0) return
@@ -941,6 +996,40 @@ export default function DashboardPage(): JSX.Element {
 
     claimBribes(tokenId, bribesData)
   }
+
+  const handleClaimAll = useCallback(() => {
+    if (claimAllRequests.length === 0) {
+      return
+    }
+
+    setClaimAllSnapshot(claimAllRequests)
+    claimAll(claimAllRequests)
+  }, [claimAll, claimAllRequests])
+
+  const handleCloseMultiClaim = useCallback(() => {
+    clearMultiClaim()
+    setClaimAllSnapshot([])
+  }, [clearMultiClaim])
+
+  const handleRetryFailedClaims = useCallback(() => {
+    const failedTokenIds = new Set(
+      multiClaimLockStates
+        .filter((state) => state.status === "error")
+        .map((state) => state.tokenId.toString()),
+    )
+
+    const retryClaims = claimAllSnapshot.filter((claim) =>
+      failedTokenIds.has(claim.tokenId.toString()),
+    )
+
+    if (retryClaims.length === 0) {
+      return
+    }
+
+    clearMultiClaim()
+    setClaimAllSnapshot(retryClaims)
+    claimAll(retryClaims)
+  }, [claimAll, claimAllSnapshot, clearMultiClaim, multiClaimLockStates])
 
   const isLoadingCore = isLoadingVeBTC || isLoadingVeMEZO
 
@@ -982,15 +1071,13 @@ export default function DashboardPage(): JSX.Element {
   }, [allGauges])
 
   // Get aggregated vote allocations across all veMEZO tokens
-  const {
-    allocationsByToken,
-    aggregatedAllocations,
-    isLoading: isLoadingAllocations,
-  } = useAllVoteAllocations(veMEZOTokenIds, allGaugeAddresses)
+  const { allocationsByToken, aggregatedAllocations } = useAllVoteAllocations(
+    veMEZOTokenIds,
+    allGaugeAddresses,
+  )
 
   // Get total used weight across all veMEZO tokens
-  const { totalUsedWeight, isLoading: isLoadingUsedWeights } =
-    useAllUsedWeights(veMEZOTokenIds)
+  const { totalUsedWeight } = useAllUsedWeights(veMEZOTokenIds)
 
   // Calculate upcoming APY based on aggregated vote proportions
   const { upcomingAPY, projectedIncentivesUSD } = useUpcomingVotingAPY(
@@ -1001,14 +1088,11 @@ export default function DashboardPage(): JSX.Element {
 
   const hasClaimableRewards = claimableBribes.length > 0
   const hasFutureRewards = projectedIncentivesUSD > 0
-  const isLoadingRewardsSection =
-    isLoadingClaimableBribes ||
-    isLoadingGauges ||
-    isLoadingAPY ||
-    isLoadingBatchVoteState ||
-    isLoadingAllocations ||
-    isLoadingUsedWeights
-  const showRewardsSection = hasClaimableRewards || hasFutureRewards
+  const showRewardsSection =
+    hasClaimableRewards ||
+    hasFutureRewards ||
+    isMultiClaimInProgress ||
+    isMultiClaimDone
 
   // Get all gauge profiles for transfer modal
   const { profiles: allGaugeProfiles, refetch: refetchProfiles } =
@@ -1226,7 +1310,7 @@ export default function DashboardPage(): JSX.Element {
         ) : (
           <>
             {/* Claimable Rewards Section */}
-            {showRewardsSection && !isLoadingRewardsSection && (
+            {showRewardsSection && (
               <SpringIn delay={0} variant="card">
                 <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
                   {/* Header with total rewards */}
@@ -1285,8 +1369,7 @@ export default function DashboardPage(): JSX.Element {
                             {Array.from(totalClaimable.entries()).map(
                               ([tokenAddr, info]) => {
                                 const tokenAmount =
-                                  Number(info.amount) /
-                                  Math.pow(10, info.decimals)
+                                  Number(info.amount) / 10 ** info.decimals
                                 const price =
                                   getTokenUsdPrice(
                                     tokenAddr,
@@ -1355,21 +1438,120 @@ export default function DashboardPage(): JSX.Element {
                         )}
                       </div>
 
-                      {hasClaimableRewards && (
-                        <div className="flex items-center gap-2 self-start rounded-full border border-[rgba(var(--positive-rgb),0.3)] bg-[rgba(var(--positive-rgb),0.1)] px-4 py-2">
-                          <div className="h-2.5 w-2.5 animate-pulse rounded-full bg-[var(--positive)] shadow-[0_0_10px_var(--positive)]" />
-                          <span className="text-sm font-medium text-[var(--positive)]">
-                            {bribesGroupedByTokenId.size}{" "}
-                            {bribesGroupedByTokenId.size === 1
-                              ? "position"
-                              : "positions"}{" "}
-                            ready
-                          </span>
-                        </div>
-                      )}
+                      {hasClaimableRewards &&
+                        !isMultiClaimInProgress &&
+                        !isMultiClaimDone && (
+                          <Button
+                            kind="primary"
+                            onClick={handleClaimAll}
+                            disabled={
+                              claimAllRequests.length === 0 ||
+                              isClaimPending ||
+                              isClaimConfirming ||
+                              isRefreshingClaimableBribes
+                            }
+                          >
+                            Claim all
+                          </Button>
+                        )}
                     </div>
-                  </div>
 
+                    {(isMultiClaimInProgress || isMultiClaimDone) && (
+                      <div className="mt-5 border-t border-[var(--border)] pt-5">
+                        <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
+                          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                            <div>
+                              <p className="text-2xs uppercase tracking-wider text-[var(--content-tertiary)]">
+                                Claim Progress
+                              </p>
+                              <p className="text-sm font-medium text-[var(--content-primary)]">
+                                {isMultiClaimInProgress
+                                  ? `Signing transactions (${multiClaimCurrentIndex + 1}/${multiClaimTotalLocks})`
+                                  : multiClaimHasErrors
+                                    ? `${multiClaimSuccessCount} of ${multiClaimTotalLocks} succeeded`
+                                    : "All transactions confirmed"}
+                              </p>
+                            </div>
+                            {isMultiClaimDone && !multiClaimHasErrors && (
+                              <Tag color="green" closeable={false}>
+                                Done
+                              </Tag>
+                            )}
+                          </div>
+
+                          <div className="mb-3 flex h-2 gap-0.5 overflow-hidden rounded-full">
+                            {multiClaimLockStates.map((state) => (
+                              <div
+                                key={state.tokenId.toString()}
+                                className={`flex-1 transition-colors ${
+                                  state.status === "success"
+                                    ? "bg-[var(--positive)]"
+                                    : state.status === "error"
+                                      ? "bg-[var(--negative)]"
+                                      : state.status === "signing" ||
+                                          state.status === "confirming"
+                                        ? "animate-pulse bg-[#F7931A]"
+                                        : "bg-[var(--border)]"
+                                }`}
+                              />
+                            ))}
+                          </div>
+
+                          <ol className="flex flex-col gap-2">
+                            {multiClaimLockStates.map((state) => (
+                              <li
+                                key={state.tokenId.toString()}
+                                className="flex items-center justify-between text-xs"
+                              >
+                                <span className="font-mono text-[var(--content-primary)]">
+                                  veMEZO #{state.tokenId.toString()}
+                                </span>
+                                <span
+                                  className={`flex items-center gap-1.5 ${
+                                    state.status === "success"
+                                      ? "text-[var(--positive)]"
+                                      : state.status === "error"
+                                        ? "text-[var(--negative)]"
+                                        : state.status === "signing" ||
+                                            state.status === "confirming"
+                                          ? "text-[#F7931A]"
+                                          : "text-[var(--content-secondary)]"
+                                  }`}
+                                >
+                                  {state.status === "success"
+                                    ? "Claimed"
+                                    : state.status === "error"
+                                      ? "Failed"
+                                      : state.status === "signing"
+                                        ? "Awaiting signature"
+                                        : state.status === "confirming"
+                                          ? "Confirming"
+                                          : "Pending"}
+                                </span>
+                              </li>
+                            ))}
+                          </ol>
+
+                          {isMultiClaimDone && multiClaimHasErrors && (
+                            <div className="mt-4 flex flex-wrap gap-2">
+                              <Button
+                                kind="secondary"
+                                onClick={handleCloseMultiClaim}
+                              >
+                                Close
+                              </Button>
+                              <Button
+                                kind="primary"
+                                onClick={handleRetryFailedClaims}
+                              >
+                                Retry Failed ({multiClaimErrorCount})
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                   {/* Reward rows */}
                   {(hasClaimableRewards || hasFutureRewards) && (
                     <div className="px-7 py-1 pb-2">
@@ -1378,7 +1560,7 @@ export default function DashboardPage(): JSX.Element {
                         const tokensWithPendingOnly: Array<{
                           tokenId: bigint
                         }> = []
-                        veMEZOLocks.forEach((lock) => {
+                        for (const lock of veMEZOLocks) {
                           const tokenIdStr = lock.tokenId.toString()
                           const hasClaimable =
                             bribesGroupedByTokenId.has(tokenIdStr)
@@ -1387,7 +1569,7 @@ export default function DashboardPage(): JSX.Element {
                               tokenId: lock.tokenId,
                             })
                           }
-                        })
+                        }
 
                         // Calculate total rows to determine last one
                         const totalClaimableRows = bribesGroupedByTokenId.size
@@ -1401,11 +1583,9 @@ export default function DashboardPage(): JSX.Element {
                         return (
                           <>
                             {/* Claimable rewards section */}
-                            {hasClaimableRewards && (
-                              <>
-                                {Array.from(
-                                  bribesGroupedByTokenId.entries(),
-                                ).map(([tokenIdStr, bribes]) => {
+                            {hasClaimableRewards &&
+                              Array.from(bribesGroupedByTokenId.entries()).map(
+                                ([tokenIdStr, bribes]) => {
                                   const tokenState =
                                     voteStateMap.get(tokenIdStr)
                                   const tokenAllocations =
@@ -1421,6 +1601,7 @@ export default function DashboardPage(): JSX.Element {
                                       }
                                       isPending={isClaimPending}
                                       isConfirming={isClaimConfirming}
+                                      isClaimDisabled={isMultiClaimInProgress}
                                       isLast={currentRowIndex === totalRows}
                                       claimableUSD={
                                         claimableUSDByTokenId.get(tokenIdStr) ??
@@ -1433,9 +1614,8 @@ export default function DashboardPage(): JSX.Element {
                                       mezoPrice={mezoPrice}
                                     />
                                   )
-                                })}
-                              </>
-                            )}
+                                },
+                              )}
 
                             {/* Projected rewards section - only for tokens without claimable rewards */}
                             {tokensWithPendingOnly.map(({ tokenId }) => {
@@ -1643,8 +1823,6 @@ export default function DashboardPage(): JSX.Element {
           </>
         )}
       </div>
-
-      {/* All Gauges */}
       <SpringIn
         delay={
           (showRewardsSection ? 8 : 7) + veMEZOLocks.length + veBTCLocks.length
@@ -1779,8 +1957,6 @@ export default function DashboardPage(): JSX.Element {
           )}
         </div>
       </SpringIn>
-
-      {/* Transfer Profile Modal */}
       {isTransferModalOpen && (
         <TransferProfileModal
           isOpen={isTransferModalOpen}

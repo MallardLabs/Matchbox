@@ -939,6 +939,7 @@ export function useClaimableBribes(
     { symbol: string; decimals: number; amount: bigint }
   >
   isLoading: boolean
+  isRefreshing: boolean
   refetch: RefetchFn
 } {
   const { chainId, isNetworkReady } = useNetwork()
@@ -947,6 +948,7 @@ export function useClaimableBribes(
   const {
     topology,
     isLoading: isLoadingTopology,
+    isFetching: isFetchingTopology,
     refetch: refetchTopology,
   } = useGaugeTopology({
     enabled,
@@ -960,6 +962,28 @@ export function useClaimableBribes(
         .join(","),
     [veMEZOTokenIds],
   )
+
+  const topologyQueryKey = useMemo(() => {
+    if (!topology) {
+      return "no-topology"
+    }
+
+    return topology.gauges
+      .map((gauge) => {
+        const rewardTokens = gauge.rewardTokens
+          .map((token) => token.tokenAddress.toLowerCase())
+          .sort()
+          .join(",")
+
+        return [
+          gauge.gaugeAddress.toLowerCase(),
+          gauge.bribeAddress?.toLowerCase() ?? "none",
+          rewardTokens,
+        ].join(":")
+      })
+      .sort()
+      .join("|")
+  }, [topology])
 
   const earnedQueries = useMemo(() => {
     if (!enabled || !topology || veMEZOTokenIds.length === 0) {
@@ -995,7 +1019,7 @@ export function useClaimableBribes(
       "claimable-bribes-earned",
       chainId,
       tokenIdsKey,
-      topology?.generatedAt ?? "no-topology",
+      topologyQueryKey,
     ],
     queryFn: async () => {
       if (!publicClient || earnedQueries.length === 0) {
@@ -1094,9 +1118,14 @@ export function useClaimableBribes(
 
   const isLoading =
     (enabled && veMEZOTokenIds.length > 0 && isLoadingTopology) ||
+    (enabled && earnedQueries.length > 0 && earnedQuery.isLoading)
+
+  const isRefreshing =
+    (enabled && !!topology && isFetchingTopology && !isLoadingTopology) ||
     (enabled &&
       earnedQueries.length > 0 &&
-      (earnedQuery.isLoading || earnedQuery.isFetching))
+      earnedQuery.isFetching &&
+      !earnedQuery.isLoading)
 
   const refetch = async () => {
     await Promise.all([refetchTopology(), earnedQuery.refetch()])
@@ -1106,6 +1135,7 @@ export function useClaimableBribes(
     claimableBribes,
     totalClaimable,
     isLoading,
+    isRefreshing,
     refetch,
   }
 }
