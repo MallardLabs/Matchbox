@@ -1,3 +1,4 @@
+import IncentiveWarningModal from "@/components/IncentiveWarningModal"
 import {
   LockCarouselSelector,
   type VeBTCLockData,
@@ -18,6 +19,7 @@ import {
   useBatchGaugeData,
   useBoostGaugeForToken,
   useBoostInfo,
+  useGaugeWeight,
 } from "@/hooks/useGauges"
 import { useVeBTCLocks } from "@/hooks/useLocks"
 import { useMezoPrice } from "@/hooks/useMezoPrice"
@@ -46,9 +48,10 @@ import {
 } from "@mezo-org/mezo-clay"
 import { getTokenUsdPrice } from "@repo/shared"
 import Link from "next/link"
+import { useRouter } from "next/router"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { formatUnits, parseUnits } from "viem"
-import { useAccount } from "wagmi"
+import { useAccount, useReadContract } from "wagmi"
 
 type IncentiveWithUSD = BribeIncentive & { usdValue: number | null }
 
@@ -122,6 +125,7 @@ function ExternalLinkIcon({ size = 14 }: { size?: number }) {
 type ManageTab = "profile" | "incentives" | "analytics"
 
 export default function IncentivesPage(): JSX.Element {
+  const router = useRouter()
   const { isConnected, address: walletAddress } = useAccount()
   const { locks: veBTCLocks, isLoading: isLoadingLocks } = useVeBTCLocks()
 
@@ -133,6 +137,7 @@ export default function IncentivesPage(): JSX.Element {
   // Incentive form state
   const [incentiveToken, setIncentiveToken] = useState<Token | undefined>()
   const [incentiveAmount, setIncentiveAmount] = useState("")
+  const [showIncentiveWarning, setShowIncentiveWarning] = useState(false)
 
   // Gauge profile state
   const [profileDisplayName, setProfileDisplayName] = useState("")
@@ -174,6 +179,10 @@ export default function IncentivesPage(): JSX.Element {
     refetch: refetchGauge,
   } = useBoostGaugeForToken(selectedLock?.tokenId)
   const { boostMultiplier } = useBoostInfo(selectedLock?.tokenId)
+
+  // Check if gauge has any votes (weight > 0)
+  const { weight: gaugeWeight } = useGaugeWeight(gaugeAddress)
+  const gaugeHasNoVotes = gaugeWeight !== undefined && gaugeWeight === 0n
 
   // Fetch existing gauge profile
   const {
@@ -312,6 +321,32 @@ export default function IncentivesPage(): JSX.Element {
   const needsApproval =
     allowance !== undefined && boostVoterAddress && parsedAmount > allowance
 
+  // Fetch user's balance of the selected incentive token
+  const { data: tokenBalanceData, refetch: refetchTokenBalance } =
+    useReadContract({
+      address: incentiveToken?.address,
+      abi: [
+        {
+          inputs: [{ name: "account", type: "address" }],
+          name: "balanceOf",
+          outputs: [{ name: "", type: "uint256" }],
+          stateMutability: "view",
+          type: "function",
+        },
+      ] as const,
+      functionName: "balanceOf",
+      args: walletAddress ? [walletAddress] : undefined,
+      query: {
+        enabled: !!incentiveToken?.address && !!walletAddress,
+      },
+    })
+
+  const tokenBalance = tokenBalanceData as bigint | undefined
+  const formattedTokenBalance =
+    incentiveToken && tokenBalance !== undefined
+      ? formatUnits(tokenBalance, incentiveToken.decimals)
+      : undefined
+
   const {
     approve,
     isPending: isApproving,
@@ -339,9 +374,10 @@ export default function IncentivesPage(): JSX.Element {
   useEffect(() => {
     if (isAddIncentivesSuccess) {
       refetchIncentives()
+      refetchTokenBalance()
       setIncentiveAmount("")
     }
-  }, [isAddIncentivesSuccess, refetchIncentives])
+  }, [isAddIncentivesSuccess, refetchIncentives, refetchTokenBalance])
 
   const handleCreateGauge = () => {
     if (!selectedLock) return
@@ -356,8 +392,31 @@ export default function IncentivesPage(): JSX.Element {
   const handleAddIncentives = () => {
     if (!gaugeAddress || !incentiveToken || !incentiveAmount) return
 
+    if (gaugeHasNoVotes) {
+      setShowIncentiveWarning(true)
+      return
+    }
+
     const amount = parseUnits(incentiveAmount, incentiveToken.decimals)
     addIncentives(gaugeAddress, [incentiveToken.address], [amount])
+  }
+
+  const handleConfirmAddIncentives = () => {
+    if (!gaugeAddress || !incentiveToken || !incentiveAmount) return
+    setShowIncentiveWarning(false)
+    const amount = parseUnits(incentiveAmount, incentiveToken.decimals)
+    addIncentives(gaugeAddress, [incentiveToken.address], [amount])
+  }
+
+  const handleVoteFirst = () => {
+    setShowIncentiveWarning(false)
+    router.push("/boost")
+  }
+
+  const handleMaxAmount = () => {
+    if (formattedTokenBalance) {
+      setIncentiveAmount(formattedTokenBalance)
+    }
   }
 
   const handleFileSelect = useCallback(
@@ -1065,14 +1124,46 @@ export default function IncentivesPage(): JSX.Element {
                               </ParagraphSmall>
                             </div>
                           )}
+                          {gaugeHasNoVotes && (
+                            <div className="rounded-lg border border-[var(--warning-subtle)] bg-[var(--warning-subtle)] p-3">
+                              <ParagraphSmall color="var(--warning)">
+                                <strong>Warning:</strong> This gauge currently
+                                has no votes. Incentives added to unvoted gauges
+                                cannot be reclaimed.
+                              </ParagraphSmall>
+                            </div>
+                          )}
                           <div>
-                            <label
-                              htmlFor="incentive-amount"
-                              className="mb-1 block text-2xs uppercase tracking-wider text-[var(--content-tertiary)]"
-                            >
-                              Amount
-                              {incentiveToken && ` (${incentiveToken.symbol})`}
-                            </label>
+                            <div className="mb-1 flex items-center justify-between">
+                              <label
+                                htmlFor="incentive-amount"
+                                className="block text-2xs uppercase tracking-wider text-[var(--content-tertiary)]"
+                              >
+                                Amount
+                                {incentiveToken &&
+                                  ` (${incentiveToken.symbol})`}
+                              </label>
+                              {incentiveToken &&
+                                formattedTokenBalance !== undefined && (
+                                  <div className="flex items-center gap-1">
+                                    <span className="text-2xs text-[var(--content-tertiary)]">
+                                      Balance:{" "}
+                                      {Number(
+                                        formattedTokenBalance,
+                                      ).toLocaleString(undefined, {
+                                        maximumFractionDigits: 6,
+                                      })}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={handleMaxAmount}
+                                      className="rounded px-1.5 py-0.5 text-2xs font-semibold uppercase text-[var(--accent)] hover:bg-[var(--surface-secondary)]"
+                                    >
+                                      MAX
+                                    </button>
+                                  </div>
+                                )}
+                            </div>
                             <Input
                               id="incentive-amount"
                               value={incentiveAmount}
@@ -1184,6 +1275,12 @@ export default function IncentivesPage(): JSX.Element {
             ))}
         </>
       )}
+      <IncentiveWarningModal
+        isOpen={showIncentiveWarning}
+        onClose={() => setShowIncentiveWarning(false)}
+        onContinue={handleConfirmAddIncentives}
+        onVoteFirst={handleVoteFirst}
+      />
     </div>
   )
 }
