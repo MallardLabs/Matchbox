@@ -1202,114 +1202,165 @@ export default function BoostPage(): JSX.Element {
                       label="Select veMEZO Locks"
                     />
 
-                    {selectedLocks.length > 0 && (
-                      <div className="rounded-lg bg-[var(--surface-secondary)] p-4">
-                        <div className="grid grid-cols-4 gap-4 max-md:grid-cols-2 max-sm:grid-cols-1 max-sm:gap-3">
-                          <div>
-                            <p className="text-xs text-[var(--content-secondary)]">
-                              Locks Selected
-                            </p>
-                            <p className="font-mono text-sm font-medium tabular-nums text-[var(--content-primary)]">
-                              {selectedLocks.length}
+                    {selectedLocks.length > 0 && (() => {
+                      const usagePercent =
+                        totalVotingPower > 0n
+                          ? Number(
+                              (totalUsedWeight * 10000n) / totalVotingPower,
+                            ) / 100
+                          : 0
+                      const remaining =
+                        totalVotingPower > totalUsedWeight
+                          ? totalVotingPower - totalUsedWeight
+                          : 0n
+
+                      return (
+                        <section className="flex flex-col gap-4 rounded-xl border border-[var(--border)] bg-[var(--surface-secondary)] p-5">
+                          <dl className="grid grid-cols-4 gap-4 max-md:grid-cols-2 max-sm:grid-cols-1 max-sm:gap-3">
+                            <div>
+                              <dt className="text-2xs font-medium uppercase tracking-wider text-[var(--content-tertiary)]">
+                                Locks
+                              </dt>
+                              <dd className="mt-1 font-mono text-lg font-semibold tabular-nums text-[var(--content-primary)]">
+                                {selectedLocks.length}
+                              </dd>
+                            </div>
+                            <div>
+                              <dt className="text-2xs font-medium uppercase tracking-wider text-[var(--content-tertiary)]">
+                                Voting Power
+                              </dt>
+                              <dd className="mt-1 font-mono text-lg font-semibold tabular-nums text-[var(--content-primary)]">
+                                {formatUnits(totalVotingPower, 18).slice(0, 10)}
+                              </dd>
+                            </div>
+                            <div>
+                              <dt className="text-2xs font-medium uppercase tracking-wider text-[var(--content-tertiary)]">
+                                Used
+                              </dt>
+                              <dd className="mt-1 font-mono text-lg font-semibold tabular-nums text-[var(--content-primary)]">
+                                {totalUsedWeight > 0n
+                                  ? formatUnits(totalUsedWeight, 18).slice(
+                                      0,
+                                      10,
+                                    )
+                                  : "0"}
+                              </dd>
+                            </div>
+                            <div>
+                              <dt className="text-2xs font-medium uppercase tracking-wider text-[var(--content-tertiary)]">
+                                Available
+                              </dt>
+                              <dd className="mt-1 font-mono text-lg font-semibold tabular-nums text-[var(--positive)]">
+                                {formatUnits(remaining, 18).slice(0, 10)}
+                              </dd>
+                            </div>
+                          </dl>
+
+                          <div className="flex flex-col gap-1.5">
+                            <div
+                              className="h-2 w-full overflow-hidden rounded-full bg-[var(--surface)]"
+                              role="progressbar"
+                              tabIndex={0}
+                              aria-valuenow={usagePercent}
+                              aria-valuemin={0}
+                              aria-valuemax={100}
+                              aria-label="Voting power usage"
+                            >
+                              <div
+                                className="h-full rounded-full bg-[#F7931A] transition-all duration-300"
+                                style={{
+                                  width: `${Math.min(usagePercent, 100)}%`,
+                                }}
+                              />
+                            </div>
+                            <p className="flex justify-between text-2xs tabular-nums text-[var(--content-tertiary)]">
+                              <span>
+                                {usagePercent.toFixed(1)}% used
+                              </span>
+                              <span>
+                                {(100 - usagePercent).toFixed(1)}% available
+                              </span>
                             </p>
                           </div>
-                          <div>
-                            <p className="text-xs text-[var(--content-secondary)]">
-                              Combined Voting Power
-                            </p>
-                            <p className="font-mono text-sm font-medium tabular-nums text-[var(--content-primary)]">
-                              {formatUnits(totalVotingPower, 18).slice(0, 10)}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-[var(--content-secondary)]">
-                              Total Used
-                            </p>
-                            <p className="font-mono text-sm font-medium tabular-nums text-[var(--content-primary)]">
-                              {totalUsedWeight > 0n
-                                ? formatUnits(totalUsedWeight, 18).slice(0, 10)
-                                : "0"}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-[var(--content-secondary)]">
-                              Remaining
-                            </p>
-                            <p className="font-mono text-sm font-medium tabular-nums text-[var(--content-primary)]">
-                              {formatUnits(
-                                totalVotingPower > totalUsedWeight
-                                  ? totalVotingPower - totalUsedWeight
-                                  : 0n,
-                                18,
-                              ).slice(0, 10)}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          {votableLocks.length < selectedLocks.length && (
-                            <Tag color="yellow" closeable={false}>
-                              {selectedLocks.length - votableLocks.length} lock
-                              {selectedLocks.length - votableLocks.length > 1
-                                ? "s"
-                                : ""}{" "}
-                              already voted — will be skipped
-                            </Tag>
-                          )}
-                          {votableLocks.length > 0 && (
-                            <Tag color="green" closeable={false}>
-                              {votableLocks.length} of {selectedLocks.length}{" "}
-                              eligible to vote
-                            </Tag>
-                          )}
-                          {!anyInVotingWindow &&
-                            !anyVotedThisEpoch &&
-                            selectedLocks.length > 0 && (
+
+                          <div className="flex flex-wrap gap-2">
+                            {votableLocks.length < selectedLocks.length && (
                               <Tag color="yellow" closeable={false}>
-                                Outside voting window
+                                {selectedLocks.length - votableLocks.length}{" "}
+                                lock
+                                {selectedLocks.length - votableLocks.length > 1
+                                  ? "s"
+                                  : ""}{" "}
+                                already voted — will be skipped
                               </Tag>
                             )}
-                        </div>
-                        {currentAllocations.length > 0 && (
-                          <div className="mt-3">
-                            <p className="mb-2 text-xs text-[var(--content-secondary)]">
-                              Current Vote Allocations (aggregated)
-                            </p>
-                            <div className="flex flex-col gap-2">
-                              {currentAllocations.map((allocation) => {
-                                const gauge = gauges.find(
-                                  (g) =>
-                                    g.address.toLowerCase() ===
-                                    allocation.gaugeAddress.toLowerCase(),
-                                )
-                                return (
-                                  <div
-                                    key={allocation.gaugeAddress}
-                                    className="flex items-center justify-between"
-                                  >
-                                    <span className="text-xs">
-                                      <AddressLink
-                                        address={
-                                          allocation.gaugeAddress as Address
-                                        }
-                                      />
-                                      {gauge &&
-                                        gauge.veBTCTokenId > 0n &&
-                                        ` (veBTC #${gauge.veBTCTokenId.toString()})`}
-                                    </span>
-                                    <span className="font-mono text-sm font-medium tabular-nums text-[var(--content-primary)]">
-                                      {formatUnits(allocation.weight, 18).slice(
-                                        0,
-                                        10,
-                                      )}
-                                    </span>
-                                  </div>
-                                )
-                              })}
-                            </div>
+                            {votableLocks.length > 0 && (
+                              <Tag color="green" closeable={false}>
+                                {votableLocks.length} of{" "}
+                                {selectedLocks.length} eligible to vote
+                              </Tag>
+                            )}
+                            {!anyInVotingWindow &&
+                              !anyVotedThisEpoch &&
+                              selectedLocks.length > 0 && (
+                                <Tag color="yellow" closeable={false}>
+                                  Outside voting window
+                                </Tag>
+                              )}
                           </div>
-                        )}
-                      </div>
-                    )}
+
+                          {currentAllocations.length > 0 && (
+                            <div className="flex flex-col gap-2">
+                              <p className="text-2xs font-medium uppercase tracking-wider text-[var(--content-tertiary)]">
+                                Current Allocations
+                              </p>
+                              <table className="w-full text-xs">
+                                <thead>
+                                  <tr className="border-b border-[var(--border)] text-left text-2xs text-[var(--content-tertiary)]">
+                                    <th className="pb-2 font-medium">Gauge</th>
+                                    <th className="pb-2 text-right font-medium">
+                                      Weight
+                                    </th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {currentAllocations.map((allocation) => {
+                                    const gauge = gauges.find(
+                                      (g) =>
+                                        g.address.toLowerCase() ===
+                                        allocation.gaugeAddress.toLowerCase(),
+                                    )
+                                    return (
+                                      <tr
+                                        key={allocation.gaugeAddress}
+                                        className="border-b border-[var(--border)] last:border-0"
+                                      >
+                                        <td className="py-2 text-[var(--content-secondary)]">
+                                          <AddressLink
+                                            address={
+                                              allocation.gaugeAddress as Address
+                                            }
+                                          />
+                                          {gauge &&
+                                            gauge.veBTCTokenId > 0n &&
+                                            ` (veBTC #${gauge.veBTCTokenId.toString()})`}
+                                        </td>
+                                        <td className="py-2 text-right font-mono font-medium tabular-nums text-[var(--content-primary)]">
+                                          {formatUnits(
+                                            allocation.weight,
+                                            18,
+                                          ).slice(0, 10)}
+                                        </td>
+                                      </tr>
+                                    )
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </section>
+                      )
+                    })()}
                   </div>
                 </div>
               </Card>

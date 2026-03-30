@@ -887,31 +887,6 @@ export function LockCarouselSelector<T extends LockItem>({
               }}
               aria-pressed={isSelected}
             >
-              {multiSelect && (
-                <div
-                  className={`absolute right-3 top-3 z-10 flex h-5 w-5 items-center justify-center rounded border-2 transition-colors ${
-                    isSelected
-                      ? "border-[#F7931A] bg-[#F7931A]"
-                      : "border-[var(--content-tertiary)] bg-transparent"
-                  }`}
-                >
-                  {isSelected && (
-                    <svg
-                      width="12"
-                      height="12"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="#0B0B0B"
-                      strokeWidth="3"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      aria-hidden="true"
-                    >
-                      <polyline points="20 6 9 17 4 12" />
-                    </svg>
-                  )}
-                </div>
-              )}
               <Card
                 withBorder
                 overrides={{
