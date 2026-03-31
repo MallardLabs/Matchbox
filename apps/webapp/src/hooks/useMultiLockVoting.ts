@@ -99,7 +99,17 @@ export function useMultiLockVoting(): UseMultiLockVotingReturn {
           updateLockState(i, { status: "confirming", hash })
 
           if (publicClient) {
-            await publicClient.waitForTransactionReceipt({ hash })
+            const receipt = await publicClient.waitForTransactionReceipt({
+              hash,
+            })
+            if (receipt.status === "reverted") {
+              updateLockState(i, {
+                status: "error",
+                hash,
+                error: new Error("Transaction reverted on-chain"),
+              })
+              continue
+            }
           }
           updateLockState(i, { status: "success", hash })
         } catch (err) {

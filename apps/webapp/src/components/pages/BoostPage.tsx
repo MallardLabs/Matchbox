@@ -125,14 +125,12 @@ export default function BoostPage(): JSX.Element {
   // Derive aggregated vote state from batch data
   const {
     totalVotingPower,
-    totalUsedWeight,
     votableLocks,
     anyVotedThisEpoch,
     allVotedThisEpoch,
     currentAllocations,
   } = useMemo(() => {
     let power = 0n
-    let used = 0n
     const votable: typeof selectedLocks = []
     let anyVoted = false
     let allVoted = selectedLocks.length > 0
@@ -140,7 +138,6 @@ export default function BoostPage(): JSX.Element {
     for (const lock of selectedLocks) {
       power += lock.votingPower
       const state = voteStateMap.get(lock.tokenId.toString())
-      used += state?.usedWeight ?? 0n
       if (state?.canVoteInCurrentEpoch) votable.push(lock)
       if (state?.hasVotedThisEpoch) anyVoted = true
       if (!state?.hasVotedThisEpoch) allVoted = false
@@ -169,7 +166,6 @@ export default function BoostPage(): JSX.Element {
 
     return {
       totalVotingPower: power,
-      totalUsedWeight: used,
       votableLocks: votable,
       anyVotedThisEpoch: anyVoted,
       allVotedThisEpoch: allVoted,
@@ -632,17 +628,23 @@ export default function BoostPage(): JSX.Element {
     voteAll(tokenIds, gaugeAddrs, weights)
   }
 
-  const handleReset = () => {
-    // Only reset locks that have used weight
-    const locksToReset = selectedLocks
-      .filter((lock) => {
+  // Only locks that have used weight AND can vote this epoch are resettable
+  const resettableLocks = useMemo(
+    () =>
+      selectedLocks.filter((lock) => {
         const state = voteStateMap.get(lock.tokenId.toString())
-        return state?.usedWeight && state.usedWeight > 0n
-      })
-      .map((l) => l.tokenId)
+        return (
+          state?.usedWeight &&
+          state.usedWeight > 0n &&
+          state.canVoteInCurrentEpoch
+        )
+      }),
+    [selectedLocks, voteStateMap],
+  )
 
-    if (locksToReset.length === 0) return
-    resetAll(locksToReset)
+  const handleReset = () => {
+    if (resettableLocks.length === 0) return
+    resetAll(resettableLocks.map((l) => l.tokenId))
   }
 
   const handleToggleLock = useCallback((index: number) => {
@@ -1075,8 +1077,7 @@ export default function BoostPage(): JSX.Element {
                   {cartStatusMessage ?? "Ready to vote."}
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {selectedLocks.length > 0 &&
-                    totalUsedWeight > 0n &&
+                  {resettableLocks.length > 0 &&
                     !isMultiVoteInProgress && (
                       <Button
                         kind="secondary"
@@ -1084,8 +1085,8 @@ export default function BoostPage(): JSX.Element {
                         isLoading={isMultiVoteInProgress}
                       >
                         Reset{" "}
-                        {selectedLocks.length > 1
-                          ? `${selectedLocks.length} Locks`
+                        {resettableLocks.length > 1
+                          ? `${resettableLocks.length} Locks`
                           : "Vote"}
                       </Button>
                     )}

@@ -110,7 +110,17 @@ export function useMultiLockClaimBribes(): UseMultiLockClaimBribesReturn {
           })
 
           if (publicClient) {
-            await publicClient.waitForTransactionReceipt({ hash })
+            const receipt = await publicClient.waitForTransactionReceipt({
+              hash,
+            })
+            if (receipt.status === "reverted") {
+              updateLockState(index, {
+                status: "error",
+                hash,
+                error: new Error("Transaction reverted on-chain"),
+              })
+              continue
+            }
           }
 
           updateLockState(index, {
