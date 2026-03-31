@@ -1,5 +1,7 @@
 import { QUERY_PROFILES } from "@/config/queryProfiles"
+import { useNetwork } from "@/contexts/NetworkContext"
 import { MEZO_FALLBACK_PRICE } from "@repo/shared"
+import { CHAIN_ID } from "@repo/shared/contracts"
 import { useQuery } from "@tanstack/react-query"
 
 export type MezoPriceResult = {
@@ -31,15 +33,32 @@ async function fetchMezoPrice(
   return (await response.json()) as MezoPriceResponse
 }
 
+// Toggle to enable Aerodrome price on testnet (once a testnet pool exists)
+const USE_AERODROME_ON_TESTNET = false
+
 export function useMezoPrice(): MezoPriceResult {
+  const { chainId } = useNetwork()
+  const isMainnet = chainId === CHAIN_ID.mainnet
+  const useAerodrome = isMainnet || USE_AERODROME_ON_TESTNET
+
   const { data, isLoading, isError } = useQuery({
     queryKey: ["mezo-price"],
     queryFn: ({ signal }) => fetchMezoPrice(signal),
+    enabled: useAerodrome,
     ...QUERY_PROFILES.SHORT_CACHE,
   })
 
+  // Testnet: always use fallback
+  if (!useAerodrome) {
+    return {
+      price: MEZO_FALLBACK_PRICE,
+      isLoading: false,
+      isError: false,
+      source: "fallback",
+    }
+  }
+
   if (isLoading) {
-    // Return fallback while loading so APY calculations don't stall
     return {
       price: MEZO_FALLBACK_PRICE,
       isLoading: true,
