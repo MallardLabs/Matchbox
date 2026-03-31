@@ -13,7 +13,9 @@ export function middleware(request: NextRequest) {
 
   if (host === DOCS_HOST) {
     return NextResponse.redirect(
-      new URL(`https://${MARKETING_HOST}/docs${pathname === "/" ? "" : pathname}${request.nextUrl.search}`),
+      new URL(
+        `https://${MARKETING_HOST}/docs${pathname === "/" ? "" : pathname}${request.nextUrl.search}`,
+      ),
       301,
     )
   }

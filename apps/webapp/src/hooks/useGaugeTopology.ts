@@ -1,9 +1,11 @@
 import { QUERY_PROFILES } from "@/config/queryProfiles"
 import { useNetwork } from "@/contexts/NetworkContext"
+import { getContractConfig } from "@/config/contracts"
 import type { GaugeTopologyResponse } from "@/types/gaugeTopology"
 import { useQuery } from "@tanstack/react-query"
 import { useMemo } from "react"
 import type { Address } from "viem"
+import { useReadContract } from "wagmi"
 
 type UseGaugeTopologyOptions = {
   enabled?: boolean
@@ -31,9 +33,27 @@ async function fetchGaugeTopology(
 export function useGaugeTopology(options: UseGaugeTopologyOptions = {}) {
   const { chainId, isNetworkReady } = useNetwork()
   const enabled = (options.enabled ?? true) && isNetworkReady
+  const contracts = getContractConfig(chainId)
+
+  // Fetch epochStart so cache key invalidates at epoch boundaries
+  const now = useMemo(() => BigInt(Math.floor(Date.now() / 1000)), [])
+  const { data: epochNextData } = useReadContract({
+    ...contracts.boostVoter,
+    functionName: "epochNext",
+    args: [now],
+    query: {
+      ...QUERY_PROFILES.LONG_CACHE,
+      enabled: isNetworkReady,
+    },
+  })
+  const epochStart =
+    epochNextData !== undefined
+      ? (epochNextData as bigint) - 604800n
+      : undefined
+  const epochKey = epochStart?.toString() ?? "unknown"
 
   const query = useQuery({
-    queryKey: ["gauge-topology", chainId],
+    queryKey: ["gauge-topology", chainId, epochKey],
     queryFn: ({ signal }) => fetchGaugeTopology(chainId, signal),
     enabled,
     ...QUERY_PROFILES.SHORT_CACHE,

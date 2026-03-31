@@ -119,11 +119,15 @@ export function useVoteState(tokenId: bigint | undefined): VoteStateResult {
 export type BatchVoteState = {
   tokenId: bigint
   usedWeight: bigint | undefined
+  lastVoted: bigint | undefined
+  hasVotedThisEpoch: boolean | undefined
   canVoteInCurrentEpoch: boolean
 }
 
 export function useBatchVoteState(tokenIds: bigint[]): {
   voteStateMap: Map<string, BatchVoteState>
+  isInVotingWindow: boolean
+  epochStart: bigint | undefined
   isLoading: boolean
 } {
   const { chainId, isNetworkReady } = useNetwork()
@@ -205,6 +209,8 @@ export function useBatchVoteState(tokenIds: bigint[]): {
       map.set(tokenId.toString(), {
         tokenId,
         usedWeight,
+        lastVoted,
+        hasVotedThisEpoch,
         canVoteInCurrentEpoch,
       })
     })
@@ -214,6 +220,8 @@ export function useBatchVoteState(tokenIds: bigint[]): {
 
   return {
     voteStateMap,
+    isInVotingWindow,
+    epochStart,
     isLoading: isLoadingEpochNext || isLoadingLastVoted || isLoadingUsedWeights,
   }
 }

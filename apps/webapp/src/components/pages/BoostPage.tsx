@@ -108,8 +108,11 @@ export default function BoostPage(): JSX.Element {
     () => veMEZOLocks.map((lock) => lock.tokenId),
     [veMEZOLocks],
   )
-  const { voteStateMap, isLoading: isLoadingVoteState } =
-    useBatchVoteState(allVeMEZOTokenIds)
+  const {
+    voteStateMap,
+    isInVotingWindow,
+    isLoading: isLoadingVoteState,
+  } = useBatchVoteState(allVeMEZOTokenIds)
   const { claimableBribes, isLoading: isLoadingBribes } =
     useClaimableBribes(allVeMEZOTokenIds)
 
@@ -125,32 +128,22 @@ export default function BoostPage(): JSX.Element {
     totalUsedWeight,
     votableLocks,
     anyVotedThisEpoch,
-    anyInVotingWindow,
+    allVotedThisEpoch,
     currentAllocations,
   } = useMemo(() => {
     let power = 0n
     let used = 0n
     const votable: typeof selectedLocks = []
     let anyVoted = false
-    let anyInWindow = false
+    let allVoted = selectedLocks.length > 0
 
     for (const lock of selectedLocks) {
       power += lock.votingPower
       const state = voteStateMap.get(lock.tokenId.toString())
       used += state?.usedWeight ?? 0n
       if (state?.canVoteInCurrentEpoch) votable.push(lock)
-      if (
-        state &&
-        "hasVotedThisEpoch" in state &&
-        (state as { hasVotedThisEpoch?: boolean }).hasVotedThisEpoch
-      )
-        anyVoted = true
-      if (
-        state &&
-        "isInVotingWindow" in state &&
-        (state as { isInVotingWindow?: boolean }).isInVotingWindow
-      )
-        anyInWindow = true
+      if (state?.hasVotedThisEpoch) anyVoted = true
+      if (!state?.hasVotedThisEpoch) allVoted = false
     }
 
     // Aggregate current allocations across all selected locks
@@ -179,7 +172,7 @@ export default function BoostPage(): JSX.Element {
       totalUsedWeight: used,
       votableLocks: votable,
       anyVotedThisEpoch: anyVoted,
-      anyInVotingWindow: anyInWindow,
+      allVotedThisEpoch: allVoted,
       currentAllocations: Array.from(allocMap.values()).filter(
         (a) => a.weight > 0n,
       ),
@@ -218,14 +211,8 @@ export default function BoostPage(): JSX.Element {
       const lockAllocations =
         allocationsByToken.get(lock.tokenId.toString()) ?? []
 
-      // Calculate CURRENT APY from claimable rewards (like Dashboard)
       const claimableUSD =
         claimableUSDByTokenId.get(lock.tokenId.toString()) ?? 0
-      const currentAPY = calculateAPYFromData(
-        claimableUSD,
-        lockUsedWeight,
-        mezoPrice,
-      )
 
       // Calculate UPCOMING APY from vote allocations
       let upcomingAPY: number | null = null
@@ -297,7 +284,7 @@ export default function BoostPage(): JSX.Element {
 
       const result: VeMEZOLockData = {
         ...lock,
-        currentAPY,
+        claimableUSD: claimableUSD > 0 ? claimableUSD : null,
         upcomingAPY,
         projectedAPY,
         isLoadingUsedWeight: isLoadingVoteState,
@@ -305,6 +292,12 @@ export default function BoostPage(): JSX.Element {
       }
       if (batchVoteState?.canVoteInCurrentEpoch !== undefined) {
         result.canVote = batchVoteState.canVoteInCurrentEpoch
+      }
+      if (batchVoteState?.hasVotedThisEpoch !== undefined) {
+        result.hasVotedThisEpoch = batchVoteState.hasVotedThisEpoch
+      }
+      if (batchVoteState?.lastVoted !== undefined) {
+        result.lastVoted = batchVoteState.lastVoted
       }
       if (lockUsedWeight !== undefined) {
         result.usedWeight = lockUsedWeight
@@ -1202,89 +1195,60 @@ export default function BoostPage(): JSX.Element {
                       label="Select veMEZO Locks"
                     />
 
-                    {selectedLocks.length > 0 && (() => {
-                      const usagePercent =
-                        totalVotingPower > 0n
-                          ? Number(
-                              (totalUsedWeight * 10000n) / totalVotingPower,
-                            ) / 100
-                          : 0
-                      const remaining =
-                        totalVotingPower > totalUsedWeight
-                          ? totalVotingPower - totalUsedWeight
-                          : 0n
-
-                      return (
-                        <section className="flex flex-col gap-4 rounded-xl border border-[var(--border)] bg-[var(--surface-secondary)] p-5">
-                          <dl className="grid grid-cols-4 gap-4 max-md:grid-cols-2 max-sm:grid-cols-1 max-sm:gap-3">
-                            <div>
-                              <dt className="text-2xs font-medium uppercase tracking-wider text-[var(--content-tertiary)]">
-                                Locks
-                              </dt>
-                              <dd className="mt-1 font-mono text-lg font-semibold tabular-nums text-[var(--content-primary)]">
-                                {selectedLocks.length}
-                              </dd>
-                            </div>
-                            <div>
-                              <dt className="text-2xs font-medium uppercase tracking-wider text-[var(--content-tertiary)]">
-                                Voting Power
-                              </dt>
-                              <dd className="mt-1 font-mono text-lg font-semibold tabular-nums text-[var(--content-primary)]">
-                                {formatUnits(totalVotingPower, 18).slice(0, 10)}
-                              </dd>
-                            </div>
-                            <div>
-                              <dt className="text-2xs font-medium uppercase tracking-wider text-[var(--content-tertiary)]">
-                                Used
-                              </dt>
-                              <dd className="mt-1 font-mono text-lg font-semibold tabular-nums text-[var(--content-primary)]">
-                                {totalUsedWeight > 0n
-                                  ? formatUnits(totalUsedWeight, 18).slice(
-                                      0,
-                                      10,
-                                    )
-                                  : "0"}
-                              </dd>
-                            </div>
-                            <div>
-                              <dt className="text-2xs font-medium uppercase tracking-wider text-[var(--content-tertiary)]">
-                                Available
-                              </dt>
-                              <dd className="mt-1 font-mono text-lg font-semibold tabular-nums text-[var(--positive)]">
-                                {formatUnits(remaining, 18).slice(0, 10)}
-                              </dd>
-                            </div>
-                          </dl>
-
-                          <div className="flex flex-col gap-1.5">
-                            <div
-                              className="h-2 w-full overflow-hidden rounded-full bg-[var(--surface)]"
-                              role="progressbar"
-                              tabIndex={0}
-                              aria-valuenow={usagePercent}
-                              aria-valuemin={0}
-                              aria-valuemax={100}
-                              aria-label="Voting power usage"
-                            >
-                              <div
-                                className="h-full rounded-full bg-[#F7931A] transition-all duration-300"
-                                style={{
-                                  width: `${Math.min(usagePercent, 100)}%`,
-                                }}
-                              />
-                            </div>
-                            <p className="flex justify-between text-2xs tabular-nums text-[var(--content-tertiary)]">
-                              <span>
-                                {usagePercent.toFixed(1)}% used
-                              </span>
-                              <span>
-                                {(100 - usagePercent).toFixed(1)}% available
-                              </span>
-                            </p>
+                    {selectedLocks.length > 0 && (
+                      <section className="flex flex-col gap-4 rounded-xl border border-[var(--border)] bg-[var(--surface-secondary)] p-5">
+                        <dl className="grid grid-cols-4 gap-4 max-md:grid-cols-2 max-sm:grid-cols-1 max-sm:gap-3">
+                          <div>
+                            <dt className="text-2xs font-medium uppercase tracking-wider text-[var(--content-tertiary)]">
+                              Locks
+                            </dt>
+                            <dd className="mt-1 font-mono text-lg font-semibold tabular-nums text-[var(--content-primary)]">
+                              {selectedLocks.length}
+                            </dd>
                           </div>
+                          <div>
+                            <dt className="text-2xs font-medium uppercase tracking-wider text-[var(--content-tertiary)]">
+                              Voting Power
+                            </dt>
+                            <dd className="mt-1 font-mono text-lg font-semibold tabular-nums text-[var(--content-primary)]">
+                              {formatUnits(totalVotingPower, 18).slice(0, 10)}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt className="text-2xs font-medium uppercase tracking-wider text-[var(--content-tertiary)]">
+                              Eligible to Vote
+                            </dt>
+                            <dd className="mt-1 text-lg font-semibold text-[var(--content-primary)]">
+                              {votableLocks.length} of {selectedLocks.length}{" "}
+                              lock
+                              {selectedLocks.length !== 1 ? "s" : ""}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt className="text-2xs font-medium uppercase tracking-wider text-[var(--content-tertiary)]">
+                              Epoch Status
+                            </dt>
+                            <dd className="mt-1">
+                              {allVotedThisEpoch ? (
+                                <span className="text-lg font-semibold text-[var(--content-tertiary)]">
+                                  Already Voted
+                                </span>
+                              ) : isInVotingWindow ? (
+                                <span className="text-lg font-semibold text-[var(--positive)]">
+                                  Voting Open
+                                </span>
+                              ) : (
+                                <span className="text-lg font-semibold text-[var(--warning)]">
+                                  Window Closed
+                                </span>
+                              )}
+                            </dd>
+                          </div>
+                        </dl>
 
-                          <div className="flex flex-wrap gap-2">
-                            {votableLocks.length < selectedLocks.length && (
+                        {votableLocks.length < selectedLocks.length &&
+                          votableLocks.length > 0 && (
+                            <div className="flex flex-wrap gap-2">
                               <Tag color="yellow" closeable={false}>
                                 {selectedLocks.length - votableLocks.length}{" "}
                                 lock
@@ -1293,74 +1257,69 @@ export default function BoostPage(): JSX.Element {
                                   : ""}{" "}
                                 already voted — will be skipped
                               </Tag>
-                            )}
-                            {votableLocks.length > 0 && (
-                              <Tag color="green" closeable={false}>
-                                {votableLocks.length} of{" "}
-                                {selectedLocks.length} eligible to vote
-                              </Tag>
-                            )}
-                            {!anyInVotingWindow &&
-                              !anyVotedThisEpoch &&
-                              selectedLocks.length > 0 && (
-                                <Tag color="yellow" closeable={false}>
-                                  Outside voting window
-                                </Tag>
-                              )}
-                          </div>
-
-                          {currentAllocations.length > 0 && (
-                            <div className="flex flex-col gap-2">
-                              <p className="text-2xs font-medium uppercase tracking-wider text-[var(--content-tertiary)]">
-                                Current Allocations
-                              </p>
-                              <table className="w-full text-xs">
-                                <thead>
-                                  <tr className="border-b border-[var(--border)] text-left text-2xs text-[var(--content-tertiary)]">
-                                    <th className="pb-2 font-medium">Gauge</th>
-                                    <th className="pb-2 text-right font-medium">
-                                      Weight
-                                    </th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {currentAllocations.map((allocation) => {
-                                    const gauge = gauges.find(
-                                      (g) =>
-                                        g.address.toLowerCase() ===
-                                        allocation.gaugeAddress.toLowerCase(),
-                                    )
-                                    return (
-                                      <tr
-                                        key={allocation.gaugeAddress}
-                                        className="border-b border-[var(--border)] last:border-0"
-                                      >
-                                        <td className="py-2 text-[var(--content-secondary)]">
-                                          <AddressLink
-                                            address={
-                                              allocation.gaugeAddress as Address
-                                            }
-                                          />
-                                          {gauge &&
-                                            gauge.veBTCTokenId > 0n &&
-                                            ` (veBTC #${gauge.veBTCTokenId.toString()})`}
-                                        </td>
-                                        <td className="py-2 text-right font-mono font-medium tabular-nums text-[var(--content-primary)]">
-                                          {formatUnits(
-                                            allocation.weight,
-                                            18,
-                                          ).slice(0, 10)}
-                                        </td>
-                                      </tr>
-                                    )
-                                  })}
-                                </tbody>
-                              </table>
                             </div>
                           )}
-                        </section>
-                      )
-                    })()}
+
+                        {currentAllocations.length > 0 && (
+                          <div className="flex flex-col gap-2">
+                            <div>
+                              <p className="text-2xs font-medium uppercase tracking-wider text-[var(--content-tertiary)]">
+                                On-Chain Allocations
+                              </p>
+                              <p className="mt-0.5 text-2xs text-[var(--content-tertiary)]">
+                                {allVotedThisEpoch
+                                  ? "Updated this epoch"
+                                  : anyVotedThisEpoch
+                                    ? "Some locks have not voted this epoch — allocations may be from a prior vote"
+                                    : "From previous vote — will persist until you vote again"}
+                              </p>
+                            </div>
+                            <table className="w-full text-xs">
+                              <thead>
+                                <tr className="border-b border-[var(--border)] text-left text-2xs text-[var(--content-tertiary)]">
+                                  <th className="pb-2 font-medium">Gauge</th>
+                                  <th className="pb-2 text-right font-medium">
+                                    Weight
+                                  </th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {currentAllocations.map((allocation) => {
+                                  const gauge = gauges.find(
+                                    (g) =>
+                                      g.address.toLowerCase() ===
+                                      allocation.gaugeAddress.toLowerCase(),
+                                  )
+                                  return (
+                                    <tr
+                                      key={allocation.gaugeAddress}
+                                      className="border-b border-[var(--border)] last:border-0"
+                                    >
+                                      <td className="py-2 text-[var(--content-secondary)]">
+                                        <AddressLink
+                                          address={
+                                            allocation.gaugeAddress as Address
+                                          }
+                                        />
+                                        {gauge &&
+                                          gauge.veBTCTokenId > 0n &&
+                                          ` (veBTC #${gauge.veBTCTokenId.toString()})`}
+                                      </td>
+                                      <td className="py-2 text-right font-mono font-medium tabular-nums text-[var(--content-primary)]">
+                                        {formatUnits(
+                                          allocation.weight,
+                                          18,
+                                        ).slice(0, 10)}
+                                      </td>
+                                    </tr>
+                                  )
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </section>
+                    )}
                   </div>
                 </div>
               </Card>

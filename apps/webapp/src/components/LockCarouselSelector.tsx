@@ -100,10 +100,11 @@ export interface LockItem {
 export interface VeMEZOLockData extends LockItem {
   canVote?: boolean
   usedWeight?: bigint
-  currentAPY?: number | null
+  lastVoted?: bigint
+  hasVotedThisEpoch?: boolean
+  claimableUSD?: number | null
   upcomingAPY?: number | null
   projectedAPY?: number | null // Dynamic APY based on pending vote allocations
-  claimableUSD?: number | null
   isLoadingUsedWeight?: boolean
   isLoadingAPY?: boolean
 }
@@ -142,10 +143,12 @@ function DashboardVeMEZOCard({
   const unlockDate = lock.end ? new Date(Number(lock.end) * 1000) : null
   const isExpired = unlockDate ? unlockDate < new Date() : false
 
+  const hasClaimable =
+    lock.claimableUSD !== null &&
+    lock.claimableUSD !== undefined &&
+    lock.claimableUSD > 0
   const hasAPY =
-    (lock.currentAPY !== null &&
-      lock.currentAPY !== undefined &&
-      lock.currentAPY > 0) ||
+    hasClaimable ||
     (lock.upcomingAPY !== null &&
       lock.upcomingAPY !== undefined &&
       lock.upcomingAPY > 0) ||
@@ -197,20 +200,7 @@ function DashboardVeMEZOCard({
                       className="inline-flex items-center rounded border border-[rgba(247,147,26,0.4)] bg-[rgba(247,147,26,0.15)] px-1.5 py-0.5 text-[11px] font-semibold text-[#F7931A]"
                       title="Projected APY based on your pending votes"
                     >
-                      {formatAPY(lock.projectedAPY)} APY ↓
-                    </span>
-                  )}
-                {/* Current APY from earned rewards */}
-                {lock.currentAPY !== null &&
-                  lock.currentAPY !== undefined &&
-                  lock.currentAPY > 0 &&
-                  !(
-                    lock.projectedAPY !== null &&
-                    lock.projectedAPY !== undefined &&
-                    lock.projectedAPY > 0
-                  ) && (
-                    <span className="inline-flex items-center rounded border border-[rgba(var(--positive-rgb),0.3)] bg-[rgba(var(--positive-rgb),0.15)] px-1.5 py-0.5 text-[11px] font-semibold text-[var(--positive)]">
-                      {formatAPY(lock.currentAPY)} APY
+                      {formatAPY(lock.projectedAPY)} APY
                     </span>
                   )}
                 {/* Upcoming APY from on-chain votes (shown when no projected) */}
@@ -222,18 +212,23 @@ function DashboardVeMEZOCard({
                     lock.projectedAPY !== undefined &&
                     lock.projectedAPY > 0
                   ) && (
-                    <>
-                      {lock.currentAPY !== null &&
-                        lock.currentAPY !== undefined &&
-                        lock.currentAPY > 0 && (
-                          <span className="text-[8px] text-[var(--content-tertiary)]">
-                            →
-                          </span>
-                        )}
-                      <span className="inline-flex items-center rounded-sm border border-[var(--border)] bg-[var(--surface-secondary)] px-1 py-0.5 text-[9px] font-medium text-[var(--content-secondary)]">
-                        {formatAPY(lock.upcomingAPY)}
-                      </span>
-                    </>
+                    <span className="inline-flex items-center rounded border border-[rgba(var(--positive-rgb),0.3)] bg-[rgba(var(--positive-rgb),0.15)] px-1.5 py-0.5 text-[11px] font-semibold text-[var(--positive)]">
+                      {formatAPY(lock.upcomingAPY)} APY
+                    </span>
+                  )}
+                {/* Claimable rewards USD */}
+                {hasClaimable &&
+                  !(
+                    lock.projectedAPY !== null &&
+                    lock.projectedAPY !== undefined &&
+                    lock.projectedAPY > 0
+                  ) && (
+                    <span
+                      className="inline-flex items-center rounded-sm border border-[var(--border)] bg-[var(--surface-secondary)] px-1 py-0.5 text-[9px] font-medium text-[var(--content-secondary)]"
+                      title="Total unclaimed rewards"
+                    >
+                      ${(lock.claimableUSD ?? 0).toFixed(2)} claimable
+                    </span>
                   )}
               </div>
             )
@@ -270,14 +265,28 @@ function DashboardVeMEZOCard({
         </div>
         <div>
           <p className="mb-1 text-2xs uppercase tracking-wider text-[var(--content-secondary)]">
-            Used Weight
+            {lock.isLoadingUsedWeight
+              ? "Allocation"
+              : lock.hasVotedThisEpoch
+                ? "Allocated"
+                : lock.usedWeight && lock.usedWeight > 0n
+                  ? "Prior Allocation"
+                  : "Allocation"}
           </p>
           {lock.isLoadingUsedWeight ? (
             <span className="font-mono text-sm text-[var(--content-tertiary)]">
               —
             </span>
           ) : (
-            <span className="font-mono text-sm font-medium tabular-nums text-[var(--content-primary)]">
+            <span
+              className={`font-mono text-sm font-medium tabular-nums ${
+                lock.hasVotedThisEpoch
+                  ? "text-[var(--content-primary)]"
+                  : lock.usedWeight && lock.usedWeight > 0n
+                    ? "text-[var(--content-tertiary)]"
+                    : "text-[var(--content-primary)]"
+              }`}
+            >
               {lock.usedWeight ? formatTokenValue(lock.usedWeight, 18) : "0"}
             </span>
           )}
@@ -288,15 +297,17 @@ function DashboardVeMEZOCard({
           </p>
           {lock.isLoadingUsedWeight ? (
             <span className="text-sm text-[var(--content-tertiary)]">—</span>
+          ) : lock.canVote ? (
+            <span className="text-sm font-medium text-[var(--positive)]">
+              Vote Now
+            </span>
+          ) : lock.hasVotedThisEpoch ? (
+            <span className="text-sm font-medium text-[var(--content-tertiary)]">
+              Voted
+            </span>
           ) : (
-            <span
-              className={`text-sm font-medium ${
-                lock.canVote
-                  ? "text-[var(--positive)]"
-                  : "text-[var(--warning)]"
-              }`}
-            >
-              {lock.canVote ? "Yes" : "Next Epoch"}
+            <span className="text-sm font-medium text-[var(--warning)]">
+              Window Closed
             </span>
           )}
         </div>

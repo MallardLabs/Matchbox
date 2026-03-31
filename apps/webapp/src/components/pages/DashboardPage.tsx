@@ -7,7 +7,6 @@ import {
   formatAPY,
   useGaugesAPY,
   useUpcomingVotingAPY,
-  useVotingAPY,
 } from "@/hooks/useAPY"
 import { useBtcPrice } from "@/hooks/useBtcPrice"
 import { useAllGaugeProfiles } from "@/hooks/useGaugeProfiles"
@@ -320,13 +319,12 @@ function VeMEZOLockCard({
   allocations: VoteAllocation[]
   apyMap: Map<string, GaugeAPYData>
 }): JSX.Element {
-  const { apy } = useVotingAPY(claimableUSD, usedWeight)
-
   // Calculate projected APY based on vote allocations
   const { upcomingAPY } = useUpcomingVotingAPY(allocations, apyMap, usedWeight)
 
   const unlockDate = new Date(Number(lock.end) * 1000)
   const isExpired = unlockDate < new Date()
+  const hasClaimable = claimableUSD > 0
 
   return (
     <Card withBorder overrides={{ Root: { style: { height: "100%" } } }}>
@@ -336,27 +334,17 @@ function VeMEZOLockCard({
             <span className="text-sm font-medium text-[var(--content-primary)]">
               veMEZO #{lock.tokenId.toString()}
             </span>
-            {(apy !== null && apy > 0) ||
-            (upcomingAPY !== null && upcomingAPY > 0) ? (
+            {(upcomingAPY !== null && upcomingAPY > 0) || hasClaimable ? (
               <div className="mt-1 flex items-center gap-1.5">
-                {/* Current APY */}
-                {apy !== null && apy > 0 && (
+                {upcomingAPY !== null && upcomingAPY > 0 && (
                   <span className="inline-flex items-center rounded border border-[rgba(var(--positive-rgb),0.3)] bg-[rgba(var(--positive-rgb),0.15)] px-1.5 py-0.5 text-[11px] font-semibold text-[var(--positive)]">
-                    {formatAPY(apy)} APY
+                    {formatAPY(upcomingAPY)} APY
                   </span>
                 )}
-                {/* Upcoming/Projected APY */}
-                {upcomingAPY !== null && upcomingAPY > 0 && (
-                  <>
-                    {apy !== null && apy > 0 && (
-                      <span className="text-[8px] text-[var(--content-tertiary)]">
-                        →
-                      </span>
-                    )}
-                    <span className="inline-flex items-center rounded-sm border border-[var(--border)] bg-[var(--surface-secondary)] px-1 py-0.5 text-[9px] font-medium text-[var(--content-secondary)]">
-                      {formatAPY(upcomingAPY)}
-                    </span>
-                  </>
+                {hasClaimable && (
+                  <span className="inline-flex items-center rounded-sm border border-[var(--border)] bg-[var(--surface-secondary)] px-1 py-0.5 text-[9px] font-medium text-[var(--content-secondary)]">
+                    ${claimableUSD.toFixed(2)} claimable
+                  </span>
                 )}
               </div>
             ) : (
@@ -456,7 +444,6 @@ function ClaimableRewardRow({
   btcPrice: number | null
   mezoPrice: number | null
 }): JSX.Element | null {
-  const { apy } = useVotingAPY(claimableUSD, usedWeight)
   const { upcomingAPY, projectedIncentivesUSD, projectedRewardsByToken } =
     useUpcomingVotingAPY(allocations, apyMap, usedWeight)
 
@@ -524,26 +511,11 @@ function ClaimableRewardRow({
             <span className="text-sm font-medium text-[var(--content-primary)]">
               veMEZO
             </span>
-            {((apy !== null && apy > 0) ||
-              (upcomingAPY !== null && upcomingAPY > 0)) && (
+            {upcomingAPY !== null && upcomingAPY > 0 && (
               <div className="flex items-center gap-1">
-                {apy !== null && apy > 0 && (
-                  <span className="inline-flex items-center rounded-sm border border-[rgba(var(--positive-rgb),0.3)] bg-[rgba(var(--positive-rgb),0.15)] px-1 py-0.5 text-[9px] font-semibold text-[var(--positive)]">
-                    {formatAPY(apy)}
-                  </span>
-                )}
-                {upcomingAPY !== null && upcomingAPY > 0 && (
-                  <>
-                    {apy !== null && apy > 0 && (
-                      <span className="text-[8px] text-[var(--content-tertiary)]">
-                        →
-                      </span>
-                    )}
-                    <span className="inline-flex items-center rounded-sm border border-[var(--border)] bg-[var(--surface-secondary)] px-1 py-0.5 text-[9px] font-medium text-[var(--content-secondary)]">
-                      {formatAPY(upcomingAPY)}
-                    </span>
-                  </>
-                )}
+                <span className="inline-flex items-center rounded-sm border border-[rgba(var(--positive-rgb),0.3)] bg-[rgba(var(--positive-rgb),0.15)] px-1 py-0.5 text-[9px] font-semibold text-[var(--positive)]">
+                  {formatAPY(upcomingAPY)} APY
+                </span>
               </div>
             )}
           </div>
@@ -1042,12 +1014,6 @@ export default function DashboardPage(): JSX.Element {
     0n,
   )
 
-  // Calculate total APY based on total claimable and total veMEZO voting power
-  const { apy: totalAPY } = useVotingAPY(
-    totalClaimableUSD,
-    totalVeMEZOVotingPower,
-  )
-
   // Get lightweight gauge registry for APY and vote allocations
   const { gauges: allGauges, isLoading: isLoadingGauges } = useBoostGauges({
     includeOwnership: false,
@@ -1321,33 +1287,10 @@ export default function DashboardPage(): JSX.Element {
                           <p className="text-2xs font-medium uppercase tracking-wider text-[var(--content-secondary)]">
                             Total Claimable
                           </p>
-                          {((totalAPY !== null && totalAPY > 0) ||
-                            (upcomingAPY !== null && upcomingAPY > 0)) && (
-                            <div className="inline-flex items-center gap-1.5">
-                              {totalAPY !== null && totalAPY > 0 && (
-                                <span className="inline-flex items-center rounded-full border border-[rgba(var(--positive-rgb),0.4)] bg-[rgba(var(--positive-rgb),0.15)] px-2.5 py-1 text-xs font-semibold text-[var(--positive)]">
-                                  {formatAPY(totalAPY)} APY
-                                </span>
-                              )}
-                              {upcomingAPY !== null && upcomingAPY > 0 && (
-                                <>
-                                  {totalAPY !== null && totalAPY > 0 && (
-                                    <span className="text-xs text-[var(--content-tertiary)]">
-                                      →
-                                    </span>
-                                  )}
-                                  <span
-                                    className={`inline-flex items-center rounded-full border px-2.5 py-1 font-medium ${
-                                      totalAPY === null || totalAPY === 0
-                                        ? "border-[rgba(var(--positive-rgb),0.4)] bg-[rgba(var(--positive-rgb),0.15)] text-xs font-semibold text-[var(--positive)]"
-                                        : "border-[var(--border)] bg-[var(--surface)] text-[11px] text-[var(--content-secondary)]"
-                                    }`}
-                                  >
-                                    {formatAPY(upcomingAPY)}
-                                  </span>
-                                </>
-                              )}
-                            </div>
+                          {upcomingAPY !== null && upcomingAPY > 0 && (
+                            <span className="inline-flex items-center rounded-full border border-[rgba(var(--positive-rgb),0.4)] bg-[rgba(var(--positive-rgb),0.15)] px-2.5 py-1 text-xs font-semibold text-[var(--positive)]">
+                              {formatAPY(upcomingAPY)} APY
+                            </span>
                           )}
                         </div>
 
