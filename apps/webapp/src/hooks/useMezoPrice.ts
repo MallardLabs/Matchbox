@@ -1,76 +1,66 @@
-import { useNetwork } from "@/contexts/NetworkContext"
-import {
-  MEZO_FALLBACK_PRICE,
-  MEZO_PYTH_PRICE_FEED_ID,
-  PYTH_MAX_PRICE_AGE,
-  PYTH_ORACLE_ABI,
-  type PythPrice,
-  USE_PYTH_ORACLE,
-  getPythOracleAddress,
-  pythPriceToNumber,
-} from "@repo/shared"
-import { useReadContract } from "wagmi"
+import { QUERY_PROFILES } from "@/config/queryProfiles"
+import { MEZO_FALLBACK_PRICE } from "@repo/shared"
+import { useQuery } from "@tanstack/react-query"
 
 export type MezoPriceResult = {
   price: number | null
   isLoading: boolean
   isError: boolean
-  source: "pyth" | "fallback"
+  source: "aerodrome-cl" | "fallback"
+}
+
+type MezoPriceResponse = {
+  price: number
+  source: "aerodrome-cl" | "fallback"
+  reason?: string
+  timestamp: number
+}
+
+async function fetchMezoPrice(
+  signal: AbortSignal,
+): Promise<MezoPriceResponse> {
+  const response = await fetch("/api/pricing/mezo", {
+    method: "GET",
+    signal,
+  })
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch MEZO price (${response.status})`)
+  }
+
+  return (await response.json()) as MezoPriceResponse
 }
 
 export function useMezoPrice(): MezoPriceResult {
-  const { chainId } = useNetwork()
-  const pythAddress = getPythOracleAddress(chainId)
-
-  const {
-    data: pythPriceData,
-    isLoading: isPythLoading,
-    isError: isPythError,
-  } = useReadContract({
-    address: pythAddress,
-    abi: PYTH_ORACLE_ABI,
-    functionName: "getPriceNoOlderThan",
-    args: [MEZO_PYTH_PRICE_FEED_ID, PYTH_MAX_PRICE_AGE],
-    query: {
-      enabled: USE_PYTH_ORACLE,
-      retry: false,
-    },
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ["mezo-price"],
+    queryFn: ({ signal }) => fetchMezoPrice(signal),
+    ...QUERY_PROFILES.SHORT_CACHE,
   })
 
-  if (!USE_PYTH_ORACLE) {
+  if (isLoading) {
+    // Return fallback while loading so APY calculations don't stall
     return {
       price: MEZO_FALLBACK_PRICE,
-      isLoading: false,
+      isLoading: true,
       isError: false,
       source: "fallback",
     }
   }
 
-  if (isPythLoading) {
+  if (isError || !data) {
     return {
-      price: null,
-      isLoading: true,
-      isError: false,
-      source: "pyth",
-    }
-  }
-
-  if (isPythError || !pythPriceData) {
-    return {
-      price: null,
+      price: MEZO_FALLBACK_PRICE,
       isLoading: false,
       isError: true,
-      source: "pyth",
+      source: "fallback",
     }
   }
 
-  const pythPrice = pythPriceData as PythPrice
-  const priceUsd = pythPriceToNumber(pythPrice)
-
   return {
-    price: priceUsd,
+    price: data.price,
     isLoading: false,
     isError: false,
-    source: "pyth",
+    source: data.source,
   }
 }
