@@ -1,4 +1,5 @@
 import { TokenIcon } from "@/components/TokenIcon"
+import { useVeSupply } from "@/hooks/useVeSupply"
 import { useCallback, useEffect, useRef, useState } from "react"
 
 type LockState = "NONE" | "MEZO" | "BTC"
@@ -325,6 +326,8 @@ function BoostSlider({ value, onChange, disabled }: BoostSliderProps) {
 import { AnimatedNumber } from "@/components/AnimatedNumber"
 
 export function BoostCalculator() {
+  const { totalVeBtc: liveVeBtc, totalVeMezo: liveVeMezo } = useVeSupply()
+
   const [lockState, setLockState] = useState<LockState>("MEZO")
   const [userMezo, setUserMezo] = useState<string>(() =>
     formatNumber(calcInitialMezo(), 0),
@@ -336,6 +339,7 @@ export function BoostCalculator() {
   const [maxVeBtc, setMaxVeBtc] = useState<number>(INITIAL_MAX_VEBTC)
   const [boost, setBoost] = useState<number>(INITIAL_BOOST)
   const [systemTotalsOpen, setSystemTotalsOpen] = useState<boolean>(false)
+  const hasInitFromChain = useRef(false)
 
   const systemTotalsRef = useRef<HTMLDivElement>(null)
   const [contentHeight, setContentHeight] = useState(0)
@@ -482,6 +486,15 @@ export function BoostCalculator() {
       solveForBtc,
     ],
   )
+
+  useEffect(() => {
+    if (hasInitFromChain.current) return
+    if (liveVeBtc === undefined || liveVeMezo === undefined) return
+    hasInitFromChain.current = true
+    handleTotalChange(liveVeBtc, liveVeMezo)
+    if (liveVeBtc * 5 > maxVeBtc) setMaxVeBtc(liveVeBtc * 5)
+    if (liveVeMezo * 5 > maxVeMezo) setMaxVeMezo(liveVeMezo * 5)
+  }, [liveVeBtc, liveVeMezo, maxVeBtc, maxVeMezo, handleTotalChange])
 
   const toggleLock = useCallback(
     (target: LockState) => {
