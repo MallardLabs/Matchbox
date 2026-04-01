@@ -14,9 +14,18 @@ const formatNumber = (num: number | string, maxDecimals = 2): string => {
   if (num === "" || num === undefined || num === null) return ""
   const n = typeof num === "string" ? Number.parseFloat(num) : num
   if (Number.isNaN(n)) return ""
+
+  // Scale decimal places based on magnitude so small values (e.g. 0.00012 BTC) don't round to 0
+  const abs = Math.abs(n)
+  let decimals = maxDecimals
+  if (abs > 0 && abs < 1) {
+    // Find how many leading zeros after the decimal point, then show 2 significant digits
+    const leadingZeros = Math.max(0, -Math.floor(Math.log10(abs)))
+    decimals = Math.min(8, leadingZeros + 2)
+  }
   return new Intl.NumberFormat("en-US", {
     minimumFractionDigits: 0,
-    maximumFractionDigits: maxDecimals,
+    maximumFractionDigits: decimals,
   }).format(n)
 }
 
