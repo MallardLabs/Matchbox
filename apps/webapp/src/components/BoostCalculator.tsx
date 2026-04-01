@@ -326,7 +326,17 @@ import { AnimatedNumber } from "@/components/AnimatedNumber"
 import { useVeSupply } from "@/hooks/useVeSupply"
 
 export function BoostCalculator() {
-  const { totalVeBtc: liveVeBtc, totalVeMezo: liveVeMezo } = useVeSupply()
+  const {
+    totalVeBtc: liveVeBtc,
+    totalVeMezo: liveVeMezo,
+    isLoading: supplyLoading,
+  } = useVeSupply()
+
+  const supplyStatus = supplyLoading
+    ? "loading"
+    : liveVeBtc !== undefined
+      ? "success"
+      : "error"
 
   const [lockState, setLockState] = useState<LockState>("MEZO")
   const [userMezo, setUserMezo] = useState<string>(() =>
@@ -340,8 +350,14 @@ export function BoostCalculator() {
   const [boost, setBoost] = useState<number>(INITIAL_BOOST)
   const [systemTotalsOpen, setSystemTotalsOpen] = useState<boolean>(false)
 
+  // "loading" | "visible" | "fading" | "hidden"
+  const [tickState, setTickState] = useState<
+    "loading" | "visible" | "fading" | "hidden"
+  >("loading")
+
   const systemTotalsRef = useRef<HTMLDivElement>(null)
   const [contentHeight, setContentHeight] = useState(0)
+  const tickShownRef = useRef(false)
 
   useEffect(() => {
     if (systemTotalsRef.current) {
@@ -353,6 +369,23 @@ export function BoostCalculator() {
     if (liveVeBtc !== undefined) setTotalVeBtc(liveVeBtc)
     if (liveVeMezo !== undefined) setTotalVeMezo(liveVeMezo)
   }, [liveVeBtc, liveVeMezo])
+
+  // Show tick once on first successful load, then fade; hide on error
+  useEffect(() => {
+    if (supplyStatus === "error") {
+      setTickState("hidden")
+      return
+    }
+    if (supplyStatus !== "success" || tickShownRef.current) return
+    tickShownRef.current = true
+    setTickState("visible")
+    const fadeTimer = setTimeout(() => setTickState("fading"), 2000)
+    const hideTimer = setTimeout(() => setTickState("hidden"), 2300)
+    return () => {
+      clearTimeout(fadeTimer)
+      clearTimeout(hideTimer)
+    }
+  }, [supplyStatus])
 
   const calculateBoost = useCallback(
     (btc: number, mezo: number, tBtc: number, tMezo: number) => {
@@ -540,8 +573,47 @@ export function BoostCalculator() {
           onClick={() => setSystemTotalsOpen(!systemTotalsOpen)}
           className="group flex w-full items-center justify-between py-1"
         >
-          <span className="text-[10px] font-semibold uppercase tracking-widest text-[var(--content-secondary)] sm:text-xs">
+          <span className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-widest text-[var(--content-secondary)] sm:text-xs">
             System Totals
+            {tickState === "loading" && (
+              <svg
+                className="h-3 w-3 animate-spin text-[var(--content-secondary)]"
+                fill="none"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+              >
+                <circle
+                  className="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  strokeWidth="3"
+                />
+                <path
+                  className="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
+                />
+              </svg>
+            )}
+            {(tickState === "visible" || tickState === "fading") && (
+              <svg
+                className="h-3 w-3 text-[#F7931A] transition-opacity duration-300"
+                style={{ opacity: tickState === "fading" ? 0 : 1 }}
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2.5}
+                aria-hidden="true"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M5 13l4 4L19 7"
+                />
+              </svg>
+            )}
           </span>
           <svg
             className={`h-3.5 w-3.5 text-[var(--content-secondary)] transition-transform duration-300 sm:h-4 sm:w-4 ${
