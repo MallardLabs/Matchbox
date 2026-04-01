@@ -27,11 +27,11 @@ function isSupportedMezoChainId(chainId: number): chainId is SupportedChainId {
 
 function readSavedNetwork(): SupportedChainId {
   if (typeof window === "undefined") {
-    return CHAIN_ID.testnet
+    return CHAIN_ID.mainnet
   }
 
   const saved = window.localStorage.getItem(NETWORK_STORAGE_KEY)
-  return saved === "mainnet" ? CHAIN_ID.mainnet : CHAIN_ID.testnet
+  return saved === "testnet" ? CHAIN_ID.testnet : CHAIN_ID.mainnet
 }
 
 function writeSavedNetwork(chainId: SupportedChainId) {
