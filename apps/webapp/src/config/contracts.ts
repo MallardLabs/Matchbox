@@ -18,25 +18,31 @@ export function getContractConfig(
     mezoToken: {
       address: addresses.mezoToken,
       abi: ERC20_ABI,
+      chainId,
     },
     veMEZO: {
       address: addresses.veMEZO,
       abi: VOTING_ESCROW_ABI,
+      chainId,
     },
     veBTC: {
       address: addresses.veBTC,
       abi: VOTING_ESCROW_ABI,
+      chainId,
     },
     boostVoter: {
       address: addresses.boostVoter,
       abi: BOOST_VOTER_ABI,
+      chainId,
     },
     poolsVoter: {
       address: addresses.poolsVoter,
       abi: POOLS_VOTER_ABI,
+      chainId,
     },
     gaugeFactory: {
       address: addresses.gaugeFactory,
+      chainId,
     },
   }
 }
