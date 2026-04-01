@@ -3,6 +3,7 @@ import { useNetwork } from "@/contexts/NetworkContext"
 import { MEZO_FALLBACK_PRICE } from "@repo/shared"
 import { CHAIN_ID } from "@repo/shared/contracts"
 import { useQuery } from "@tanstack/react-query"
+import { z } from "zod"
 
 export type MezoPriceResult = {
   price: number | null
@@ -11,16 +12,17 @@ export type MezoPriceResult = {
   source: "aerodrome-cl" | "fallback"
 }
 
-type MezoPriceResponse = {
-  price: number
-  source: "aerodrome-cl" | "fallback"
-  reason?: string
-  timestamp: number
-}
+const mezoPriceResponseSchema = z.object({
+  price: z.number().nullable(),
+  source: z.enum(["aerodrome-cl", "fallback"]),
+  reason: z.string().optional(),
+  timestamp: z.number(),
+  liquidity: z.string().optional(),
+})
 
 async function fetchMezoPrice(
   signal: AbortSignal,
-): Promise<MezoPriceResponse> {
+): Promise<z.infer<typeof mezoPriceResponseSchema>> {
   const response = await fetch("/api/pricing/mezo", {
     method: "GET",
     signal,
@@ -30,7 +32,8 @@ async function fetchMezoPrice(
     throw new Error(`Failed to fetch MEZO price (${response.status})`)
   }
 
-  return (await response.json()) as MezoPriceResponse
+  const unknownJson: unknown = await response.json()
+  return mezoPriceResponseSchema.parse(unknownJson)
 }
 
 // Toggle to enable Aerodrome price on testnet (once a testnet pool exists)
@@ -48,7 +51,6 @@ export function useMezoPrice(): MezoPriceResult {
     ...QUERY_PROFILES.SHORT_CACHE,
   })
 
-  // Testnet: always use fallback
   if (!useAerodrome) {
     return {
       price: MEZO_FALLBACK_PRICE,
@@ -60,16 +62,21 @@ export function useMezoPrice(): MezoPriceResult {
 
   if (isLoading) {
     return {
-      price: MEZO_FALLBACK_PRICE,
+      price: null,
       isLoading: true,
       isError: false,
       source: "fallback",
     }
   }
 
-  if (isError || !data) {
+  if (
+    isError ||
+    !data ||
+    data.source !== "aerodrome-cl" ||
+    data.price === null
+  ) {
     return {
-      price: MEZO_FALLBACK_PRICE,
+      price: null,
       isLoading: false,
       isError: true,
       source: "fallback",
@@ -80,6 +87,6 @@ export function useMezoPrice(): MezoPriceResult {
     price: data.price,
     isLoading: false,
     isError: false,
-    source: data.source,
+    source: "aerodrome-cl",
   }
 }
