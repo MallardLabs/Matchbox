@@ -3,6 +3,7 @@ import {
   LockCarouselSelector,
   type VeBTCLockData,
 } from "@/components/LockCarouselSelector"
+import OnboardingCard from "@/components/OnboardingCard"
 import { SpringIn } from "@/components/SpringIn"
 import { TokenIcon } from "@/components/TokenIcon"
 import { TokenSelector } from "@/components/TokenSelector"
@@ -1491,6 +1492,28 @@ export default function IncentivesPage(): JSX.Element {
         onClose={() => setShowIncentiveWarning(false)}
         onContinue={handleConfirmAddIncentives}
         onVoteFirst={handleVoteFirst}
+      />
+
+      <OnboardingCard
+        storageKey="matchbox-onboarding-incentives"
+        heading="gauge --guide"
+        steps={[
+          {
+            title: "Select your lock",
+            description:
+              "The carousel shows your veBTC NFT positions. Click one to manage it. Each veBTC lock can own exactly one gauge on Matchbox.",
+          },
+          {
+            title: "Set up your gauge profile",
+            description:
+              "Fill in your gauge's name, description, profile picture, and socials. A complete profile attracts significantly more veMEZO voters than a bare gauge.",
+          },
+          {
+            title: "Add incentives to attract votes",
+            description:
+              "Deposit tokens (BTC, MEZO, mUSD) into your bribe pool. More incentives → higher APY → more votes → higher boost multiplier (up to 5x).",
+          },
+        ]}
       />
     </div>
   )

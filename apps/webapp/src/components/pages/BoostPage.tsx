@@ -5,6 +5,7 @@ import {
   LockCarouselSelector,
   type VeMEZOLockData,
 } from "@/components/LockCarouselSelector"
+import OnboardingCard from "@/components/OnboardingCard"
 import { SpringIn } from "@/components/SpringIn"
 import Tooltip from "@/components/Tooltip"
 import {
@@ -1638,6 +1639,28 @@ export default function BoostPage(): JSX.Element {
           </div>
         </div>
       )}
+
+      <OnboardingCard
+        storageKey="matchbox-onboarding-boost"
+        heading="boost --guide"
+        steps={[
+          {
+            title: "Select your lock(s)",
+            description:
+              "The carousel at the top shows your veMEZO NFT positions. Click a card to select it — you can pick multiple locks to vote with at once.",
+          },
+          {
+            title: "Find a gauge",
+            description:
+              "Browse the table sorted by APY. Click any gauge to see its full profile, incentive breakdown, and strategy. Higher APY = more bribe rewards per vote.",
+          },
+          {
+            title: "Vote and earn",
+            description:
+              "Enter a Vote % for each gauge (total ≤ 100%), then click Checkout → Vote. After the epoch ends each Thursday, claim your bribe rewards on the Dashboard.",
+          },
+        ]}
+      />
     </div>
   )
 }
