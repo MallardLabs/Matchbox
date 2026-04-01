@@ -50,6 +50,8 @@ export default function OnboardingCard({
   const step = steps[currentStep]
   const isLast = currentStep === steps.length - 1
 
+  if (!step) return null
+
   return (
     <section
       className={`fixed bottom-4 right-4 z-40 w-72 rounded-xl border border-[var(--border)] bg-[var(--surface)] shadow-terminal-lg transition-all duration-300 ${
