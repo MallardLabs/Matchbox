@@ -2,9 +2,7 @@ import { useBtcPrice } from "@/hooks/useBtcPrice"
 import { useEpochCountdown } from "@/hooks/useEpochCountdown"
 import { useMezoPrice } from "@/hooks/useMezoPrice"
 import { useRpcHealth } from "@/hooks/useRpcHealth"
-import { CHAIN_ID } from "@repo/shared/contracts"
 import { useEffect, useRef, useState } from "react"
-import { useChainId } from "wagmi"
 
 const CYCLE_INTERVAL_MS = 4000 // 4 seconds per metric
 
@@ -119,8 +117,6 @@ export function HeaderTicker({
   const { timeRemaining } = useEpochCountdown()
 
   const { status: rpcStatus } = useRpcHealth()
-  const chainId = useChainId()
-  const isMainnet = chainId === CHAIN_ID.mainnet
 
   const [currentIndex, setCurrentIndex] = useState(0)
   const [prevIndex, setPrevIndex] = useState<number | null>(null)
@@ -156,13 +152,11 @@ export function HeaderTicker({
     {
       id: "mezo",
       label: "MEZO",
-      value: isMainnet
-        ? "N/A"
-        : mezoLoading
-          ? "..."
-          : mezoError
-            ? "N/A"
-            : `$${formatPrice(mezoPrice)}`,
+      value: mezoLoading
+        ? "..."
+        : mezoError
+          ? "N/A"
+          : `$${formatPrice(mezoPrice)}`,
       icon: "/token icons/Mezo.svg",
     },
     {
