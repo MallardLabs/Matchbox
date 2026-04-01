@@ -116,6 +116,13 @@ export const VOTING_ESCROW_ABI = [
   },
   {
     inputs: [],
+    name: "supply",
+    outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [],
     name: "totalVotingPower",
     outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
     stateMutability: "view",

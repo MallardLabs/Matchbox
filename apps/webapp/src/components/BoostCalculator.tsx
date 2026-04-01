@@ -323,8 +323,11 @@ function BoostSlider({ value, onChange, disabled }: BoostSliderProps) {
 }
 
 import { AnimatedNumber } from "@/components/AnimatedNumber"
+import { useVeSupply } from "@/hooks/useVeSupply"
 
 export function BoostCalculator() {
+  const { totalVeBtc: liveVeBtc, totalVeMezo: liveVeMezo } = useVeSupply()
+
   const [lockState, setLockState] = useState<LockState>("MEZO")
   const [userMezo, setUserMezo] = useState<string>(() =>
     formatNumber(calcInitialMezo(), 0),
@@ -345,6 +348,11 @@ export function BoostCalculator() {
       setContentHeight(systemTotalsRef.current.scrollHeight)
     }
   }, [])
+
+  useEffect(() => {
+    if (liveVeBtc !== undefined) setTotalVeBtc(liveVeBtc)
+    if (liveVeMezo !== undefined) setTotalVeMezo(liveVeMezo)
+  }, [liveVeBtc, liveVeMezo])
 
   const calculateBoost = useCallback(
     (btc: number, mezo: number, tBtc: number, tMezo: number) => {
