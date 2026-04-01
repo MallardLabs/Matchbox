@@ -1,6 +1,7 @@
 import { AnimatedNumber } from "@/components/AnimatedNumber"
 import GaugeCard from "@/components/GaugeCard"
 import { SpringIn } from "@/components/SpringIn"
+import Tooltip from "@/components/Tooltip"
 import type { GaugeProfile } from "@/config/supabase"
 import {
   type GaugeAPYData,
@@ -232,8 +233,12 @@ function VeBTCLockCard({
               </span>
             </div>
             <div>
-              <p className="mb-1 text-2xs uppercase tracking-wider text-[var(--content-secondary)]">
+              <p className="mb-1 flex items-center gap-1 text-2xs uppercase tracking-wider text-[var(--content-secondary)]">
                 Current Boost
+                <Tooltip
+                  id={`dashboard-boost-${lock.tokenId.toString()}`}
+                  content="Your gauge's current boost multiplier (1x–5x). Increases as more veMEZO voting weight is directed to your gauge. Max boost amplifies your BTC yield."
+                />
               </p>
               <span
                 className={`font-mono text-sm font-medium tabular-nums ${
@@ -337,8 +342,12 @@ function VeMEZOLockCard({
             {(upcomingAPY !== null && upcomingAPY > 0) || hasClaimable ? (
               <div className="mt-1 flex items-center gap-1.5">
                 {upcomingAPY !== null && upcomingAPY > 0 && (
-                  <span className="inline-flex items-center rounded border border-[rgba(var(--positive-rgb),0.3)] bg-[rgba(var(--positive-rgb),0.15)] px-1.5 py-0.5 text-[11px] font-semibold text-[var(--positive)]">
+                  <span className="inline-flex items-center gap-1 rounded border border-[rgba(var(--positive-rgb),0.3)] bg-[rgba(var(--positive-rgb),0.15)] px-1.5 py-0.5 text-[11px] font-semibold text-[var(--positive)]">
                     {formatAPY(upcomingAPY)} APY
+                    <Tooltip
+                      id={`dashboard-vemezo-apy-${lock.tokenId.toString()}`}
+                      content="Estimated annualized yield based on your current vote allocations and gauge incentive pools. Actual rewards depend on epoch-end incentive totals."
+                    />
                   </span>
                 )}
                 {hasClaimable && (

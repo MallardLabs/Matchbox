@@ -6,6 +6,7 @@ import { Tag } from "@mezo-org/mezo-clay"
 import Link from "next/link"
 import type { ReactNode } from "react"
 import { formatUnits } from "viem"
+import Tooltip from "./Tooltip"
 
 type GaugeCardProps = {
   gauge: BoostGauge
@@ -107,13 +108,25 @@ export default function GaugeCard({
           </dd>
         </div>
         <div>
-          <dt className="text-[var(--content-tertiary)]">Boost</dt>
+          <dt className="flex items-center gap-1 text-[var(--content-tertiary)]">
+            Boost
+            <Tooltip
+              id={`gc-boost-${gauge.address}`}
+              content="The gauge's boost multiplier (1x–5x). Increases as more veMEZO votes are allocated relative to the gauge's veBTC weight."
+            />
+          </dt>
           <dd className="font-mono text-[var(--content-primary)]">
             {formatMultiplier(gauge.boostMultiplier)}
           </dd>
         </div>
         <div>
-          <dt className="text-[var(--content-tertiary)]">APY</dt>
+          <dt className="flex items-center gap-1 text-[var(--content-tertiary)]">
+            APY
+            <Tooltip
+              id={`gc-apy-${gauge.address}`}
+              content="Estimated annualized yield from this gauge's bribe pool divided by total veMEZO voting weight. Higher incentives or fewer voters means higher APY."
+            />
+          </dt>
           <dd
             className={`font-mono ${
               displayAPY && displayAPY > 0
@@ -127,7 +140,13 @@ export default function GaugeCard({
           </dd>
         </div>
         <div>
-          <dt className="text-[var(--content-tertiary)]">Optimal veMEZO</dt>
+          <dt className="flex items-center gap-1 text-[var(--content-tertiary)]">
+            Optimal veMEZO
+            <Tooltip
+              id={`gc-optimal-${gauge.address}`}
+              content="Additional veMEZO weight needed to push this gauge to maximum (5x) boost efficiency. Low = nearly at max. High = room for more voters."
+            />
+          </dt>
           <dd className="font-mono text-[var(--content-primary)]">
             {gauge.optimalAdditionalVeMEZO !== undefined
               ? formatFixedPoint(gauge.optimalAdditionalVeMEZO)

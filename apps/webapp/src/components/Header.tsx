@@ -120,6 +120,7 @@ const navItems = [
   { href: "/dashboard", label: "dashboard" },
   { href: "/boost", label: "veMEZO" },
   { href: "/incentives", label: "veBTC" },
+  { href: "/how-to", label: "how-to" },
 ]
 
 export function Header(): JSX.Element {

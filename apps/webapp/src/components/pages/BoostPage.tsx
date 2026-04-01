@@ -6,6 +6,7 @@ import {
   type VeMEZOLockData,
 } from "@/components/LockCarouselSelector"
 import { SpringIn } from "@/components/SpringIn"
+import Tooltip from "@/components/Tooltip"
 import {
   calculateAPYFromData,
   calculateProjectedAPY,
@@ -879,8 +880,13 @@ export default function BoostPage(): JSX.Element {
                                   {profile.description}
                                 </p>
                               )}
-                              <p className="mt-2 text-2xs text-[var(--content-secondary)]">
-                                APY:{" "}
+                              <p className="mt-2 flex items-center gap-1 text-2xs text-[var(--content-secondary)]">
+                                APY
+                                <Tooltip
+                                  id={`boost-apy-${gaugeIndex}`}
+                                  content="Projected APY if your current allocation is applied. Based on this gauge's incentive pool divided by the resulting total veMEZO weight."
+                                />
+                                :{" "}
                                 <span
                                   className={
                                     displayAPY && displayAPY > 0
@@ -1072,24 +1078,32 @@ export default function BoostPage(): JSX.Element {
                       .join(", ")}
                   </div>
                 )}
+              {!isMultiVoteInProgress && !isMultiVoteDone && (
+                <p className="flex items-center gap-1 text-xs text-[var(--content-secondary)]">
+                  Votes lock for this epoch. You can reset and re-vote once.
+                  <Tooltip
+                    id="vote-epoch-hint"
+                    content="Each veMEZO lock can vote once per epoch. After voting, you may reset your allocation and vote again once more in the same epoch."
+                  />
+                </p>
+              )}
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="text-xs text-[var(--content-secondary)]">
                   {cartStatusMessage ?? "Ready to vote."}
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {resettableLocks.length > 0 &&
-                    !isMultiVoteInProgress && (
-                      <Button
-                        kind="secondary"
-                        onClick={handleReset}
-                        isLoading={isMultiVoteInProgress}
-                      >
-                        Reset{" "}
-                        {resettableLocks.length > 1
-                          ? `${resettableLocks.length} Locks`
-                          : "Vote"}
-                      </Button>
-                    )}
+                  {resettableLocks.length > 0 && !isMultiVoteInProgress && (
+                    <Button
+                      kind="secondary"
+                      onClick={handleReset}
+                      isLoading={isMultiVoteInProgress}
+                    >
+                      Reset{" "}
+                      {resettableLocks.length > 1
+                        ? `${resettableLocks.length} Locks`
+                        : "Vote"}
+                    </Button>
+                  )}
                   {isMultiVoteDone && multiVoteHasErrors ? (
                     <>
                       <Button
