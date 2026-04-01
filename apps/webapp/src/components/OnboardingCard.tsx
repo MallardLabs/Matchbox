@@ -1,3 +1,4 @@
+import NextLink from "next/link"
 import { useEffect, useState } from "react"
 
 export interface OnboardingStep {
@@ -126,15 +127,50 @@ export default function OnboardingCard({
         </p>
       </div>
 
+      {/* how-to link */}
+      <div className="px-4 pb-3">
+        <NextLink
+          href="/how-to"
+          onClick={dismiss}
+          className="font-mono text-2xs text-[var(--content-tertiary)] no-underline transition-colors hover:text-[#F7931A]"
+        >
+          $ man matchbox →
+        </NextLink>
+      </div>
+
       {/* Actions */}
       <div className="flex items-center justify-between border-t border-[var(--border)] px-4 py-3">
-        <button
-          type="button"
-          onClick={dismiss}
-          className="font-mono text-xs text-[var(--content-tertiary)] transition-colors hover:text-[var(--content-secondary)]"
-        >
-          skip
-        </button>
+        {currentStep > 0 ? (
+          <button
+            type="button"
+            onClick={() => setCurrentStep((s) => s - 1)}
+            className="flex items-center gap-1 font-mono text-xs text-[var(--content-tertiary)] transition-colors hover:text-[var(--content-secondary)]"
+          >
+            <svg
+              width="10"
+              height="10"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <line x1="19" y1="12" x2="5" y2="12" />
+              <polyline points="12 19 5 12 12 5" />
+            </svg>
+            back
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={dismiss}
+            className="font-mono text-xs text-[var(--content-tertiary)] transition-colors hover:text-[var(--content-secondary)]"
+          >
+            skip
+          </button>
+        )}
         <button
           type="button"
           onClick={handleNext}
