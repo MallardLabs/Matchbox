@@ -134,7 +134,7 @@ export default function OnboardingCard({
           onClick={dismiss}
           className="font-mono text-2xs text-[var(--content-tertiary)] no-underline transition-colors hover:text-[#F7931A]"
         >
-          $ man matchbox →
+          $ how2 matchbox →
         </NextLink>
       </div>
 

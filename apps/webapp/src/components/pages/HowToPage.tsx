@@ -277,7 +277,7 @@ export default function HowToPage() {
             <span style={{ color: "#F7931A" }} aria-hidden="true">
               $
             </span>
-            <span>man matchbox</span>
+            <span>how2 matchbox</span>
             <span
               className="ml-1 inline-block h-6 w-2.5 animate-cursor-blink"
               style={{ backgroundColor: "#F7931A" }}
@@ -489,7 +489,7 @@ export default function HowToPage() {
               <span style={{ color: "#F7931A" }} aria-hidden="true">
                 $
               </span>
-              <span>man matchbox --faq</span>
+              <span>how2 matchbox --faq</span>
               <span
                 className="ml-0.5 inline-block h-4 w-2 animate-cursor-blink"
                 style={{ backgroundColor: "#F7931A" }}
