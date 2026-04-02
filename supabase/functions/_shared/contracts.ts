@@ -95,8 +95,14 @@ export function getMezoNetworkConfig(options?: {
     getNetworkFromRpcUrl(Deno.env.get("MEZO_RPC_URL")) ??
     "mainnet"
 
+  const envRpcUrl = Deno.env.get("MEZO_RPC_URL")
+  const envRpcNetwork = getNetworkFromRpcUrl(envRpcUrl)
   const rpcUrl =
-    options?.rpcUrl ?? Deno.env.get("MEZO_RPC_URL") ?? RPC_URLS[network]
+    options?.rpcUrl ??
+    (envRpcNetwork === null || envRpcNetwork === network
+      ? envRpcUrl
+      : undefined) ??
+    RPC_URLS[network]
 
   return {
     network,
