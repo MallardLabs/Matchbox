@@ -8,8 +8,9 @@ export const config = {
 
 const BASE_RPC_URL = process.env.BASE_RPC_URL ?? "https://base.llamarpc.com"
 
-// Aerodrome Slipstream pool: MEZO / MUSD on Base
-const POOL_ADDRESS = getAddress("0x0dd2076128fae11da3d0f5522d3a52b532af3741")
+// Aerodrome Slipstream pool: MEZO / MUSD on Base.
+// Use the active liquid pool rather than the older near-empty one.
+const POOL_ADDRESS = getAddress("0xfCd3F5cA230E7c1Bd5b415eb85d5186346De0fec")
 
 // This pool is fixed and both assets use 18 decimals.
 // We intentionally keep reads minimal to avoid Base RPC rate limits.
