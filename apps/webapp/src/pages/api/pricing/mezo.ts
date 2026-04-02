@@ -6,7 +6,12 @@ export const config = {
   runtime: "edge",
 }
 
-const BASE_RPC_URL = process.env.BASE_RPC_URL ?? "https://base.llamarpc.com"
+const BASE_RPC_URLS = [
+  process.env.BASE_RPC_URL,
+  "https://mainnet.base.org",
+  "https://base.llamarpc.com",
+  "https://base-rpc.publicnode.com",
+].filter((url): url is string => Boolean(url))
 
 // Aerodrome Slipstream pool: MEZO / MUSD on Base.
 // Use the active liquid pool rather than the older near-empty one.
@@ -68,52 +73,74 @@ function json(data: unknown, init?: ResponseInit): Response {
 }
 
 export default async function handler() {
-  try {
-    const client = createPublicClient({
-      chain: base,
-      transport: http(BASE_RPC_URL),
-    })
+  const rpcErrors: string[] = []
 
-    const [slot0Result, liquidityResult] = await Promise.all([
-      client.readContract({
-        address: POOL_ADDRESS,
-        abi: SLIPSTREAM_POOL_ABI,
-        functionName: "slot0",
-      }),
-      client.readContract({
-        address: POOL_ADDRESS,
-        abi: SLIPSTREAM_POOL_ABI,
-        functionName: "liquidity",
-      }),
-    ])
+  for (const rpcUrl of BASE_RPC_URLS) {
+    try {
+      const client = createPublicClient({
+        chain: base,
+        transport: http(rpcUrl),
+      })
 
-    const sqrtPriceX96 = slot0Result[0]
-    const liquidity = liquidityResult
+      const [slot0Result, liquidityResult] = await Promise.all([
+        client.readContract({
+          address: POOL_ADDRESS,
+          abi: SLIPSTREAM_POOL_ABI,
+          functionName: "slot0",
+        }),
+        client.readContract({
+          address: POOL_ADDRESS,
+          abi: SLIPSTREAM_POOL_ABI,
+          functionName: "liquidity",
+        }),
+      ])
 
-    if (liquidity === 0n || sqrtPriceX96 === 0n) {
-      return json(
-        {
-          price: MEZO_FALLBACK_PRICE,
-          source: "fallback",
-          reason: "pool-empty",
-          timestamp: Date.now(),
-        },
-        {
-          status: 200,
-          headers: {
-            "Cache-Control": "public, s-maxage=60, stale-while-revalidate=120",
+      const sqrtPriceX96 = slot0Result[0]
+      const liquidity = liquidityResult
+
+      if (liquidity === 0n || sqrtPriceX96 === 0n) {
+        return json(
+          {
+            price: MEZO_FALLBACK_PRICE,
+            source: "fallback",
+            reason: "pool-empty",
+            timestamp: Date.now(),
           },
-        },
-      )
-    }
-    const price = sqrtPriceX96ToPrice(sqrtPriceX96)
+          {
+            status: 200,
+            headers: {
+              "Cache-Control":
+                "public, s-maxage=60, stale-while-revalidate=120",
+            },
+          },
+        )
+      }
 
-    if (price <= 0 || price > 1_000_000 || !Number.isFinite(price)) {
+      const price = sqrtPriceX96ToPrice(sqrtPriceX96)
+
+      if (price <= 0 || price > 1_000_000 || !Number.isFinite(price)) {
+        return json(
+          {
+            price: MEZO_FALLBACK_PRICE,
+            source: "fallback",
+            reason: "price-out-of-range",
+            timestamp: Date.now(),
+          },
+          {
+            status: 200,
+            headers: {
+              "Cache-Control": "public, s-maxage=30, stale-while-revalidate=60",
+            },
+          },
+        )
+      }
+
       return json(
         {
-          price: MEZO_FALLBACK_PRICE,
-          source: "fallback",
-          reason: "price-out-of-range",
+          price,
+          source: "aerodrome-cl",
+          liquidity: liquidity.toString(),
+          rpc: rpcUrl,
           timestamp: Date.now(),
         },
         {
@@ -123,36 +150,26 @@ export default async function handler() {
           },
         },
       )
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : typeof err === "string" ? err : ""
+      rpcErrors.push(`${rpcUrl}: ${message}`.slice(0, 240))
     }
-
-    return json(
-      {
-        price,
-        source: "aerodrome-cl",
-        liquidity: liquidity.toString(),
-        timestamp: Date.now(),
-      },
-      {
-        status: 200,
-        headers: {
-          "Cache-Control": "public, s-maxage=30, stale-while-revalidate=60",
-        },
-      },
-    )
-  } catch (_err) {
-    return json(
-      {
-        price: MEZO_FALLBACK_PRICE,
-        source: "fallback",
-        reason: "rpc-error",
-        timestamp: Date.now(),
-      },
-      {
-        status: 200,
-        headers: {
-          "Cache-Control": "public, s-maxage=10, stale-while-revalidate=30",
-        },
-      },
-    )
   }
+
+  return json(
+    {
+      price: MEZO_FALLBACK_PRICE,
+      source: "fallback",
+      reason: "rpc-error",
+      errors: rpcErrors,
+      timestamp: Date.now(),
+    },
+    {
+      status: 200,
+      headers: {
+        "Cache-Control": "public, s-maxage=10, stale-while-revalidate=30",
+      },
+    },
+  )
 }
