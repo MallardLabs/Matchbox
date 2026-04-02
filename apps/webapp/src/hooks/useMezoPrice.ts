@@ -62,7 +62,7 @@ export function useMezoPrice(): MezoPriceResult {
 
   if (isLoading) {
     return {
-      price: null,
+      price: MEZO_FALLBACK_PRICE,
       isLoading: true,
       isError: false,
       source: "fallback",
@@ -72,13 +72,12 @@ export function useMezoPrice(): MezoPriceResult {
   if (
     isError ||
     !data ||
-    data.source !== "aerodrome-cl" ||
     data.price === null
   ) {
     return {
-      price: null,
+      price: MEZO_FALLBACK_PRICE,
       isLoading: false,
-      isError: true,
+      isError: isError,
       source: "fallback",
     }
   }
@@ -87,6 +86,6 @@ export function useMezoPrice(): MezoPriceResult {
     price: data.price,
     isLoading: false,
     isError: false,
-    source: "aerodrome-cl",
+    source: data.source,
   }
 }
