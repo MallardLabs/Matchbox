@@ -1,7 +1,9 @@
 // Supabase Edge Function: verify-gauge-ownership
 // Periodic function that:
-// 1. Detects NFT transfers and resets gauge profiles
+// 1. Detects confirmed NFT transfers and resets gauge profiles
 // 2. Auto-saves expired gauge profiles to saved_profiles before clearing
+// Only performs destructive resets when the token still maps to the stored
+// gauge on the active chain and ownerOf returns a non-zero owner.
 // Run alongside record-gauge-history (daily or per-epoch)
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
@@ -9,28 +11,13 @@ import {
   createPublicClient,
   http,
   type Address,
-  type Chain,
 } from "https://esm.sh/viem@2"
 import {
+  BOOST_VOTER_ABI,
   VOTING_ESCROW_ABI,
-  CONTRACTS,
-  RPC_URLS,
+  getMezoNetworkConfig,
 } from "../_shared/contracts.ts"
 import { corsHeaders, handleCors } from "../_shared/cors.ts"
-
-const mezoTestnet: Chain = {
-  id: 31611,
-  name: "Mezo Testnet",
-  nativeCurrency: { name: "BTC", symbol: "BTC", decimals: 18 },
-  rpcUrls: {
-    default: { http: ["https://rpc.test.mezo.org"] },
-  },
-  contracts: {
-    multicall3: {
-      address: "0xcA11bde05977b3631167028862bE2a173976CA11",
-    },
-  },
-}
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
 
@@ -167,7 +154,6 @@ Deno.serve(async (req) => {
   if (corsResponse) return corsResponse
 
   try {
-    const rpcUrl = Deno.env.get("MEZO_RPC_URL") || RPC_URLS.testnet
     const supabaseUrl = Deno.env.get("SUPABASE_URL")
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")
 
@@ -175,17 +161,20 @@ Deno.serve(async (req) => {
       throw new Error("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY")
     }
 
+    const { chain, contracts, network, rpcUrl } = getMezoNetworkConfig()
+
     const supabase = createClient(supabaseUrl, supabaseKey, {
       auth: { autoRefreshToken: false, persistSession: false },
     })
 
     const publicClient = createPublicClient({
-      chain: mezoTestnet,
+      chain,
       transport: http(rpcUrl),
     })
 
-    const contracts = CONTRACTS.testnet
     const veBTCAddress = contracts.veBTC as Address
+    const boostVoterAddress = contracts.boostVoter as Address
+    console.log(`Checking gauge ownership on ${network} (${rpcUrl})`)
 
     // Fetch all gauge profiles with content
     const { data: profiles, error: fetchError } = await supabase
@@ -206,11 +195,30 @@ Deno.serve(async (req) => {
     let transferResets = 0
     let burnedResets = 0
     let expiredAutoSaves = 0
+    let skippedUnverifiable = 0
 
     for (const profile of profilesWithContent) {
       const tokenId = BigInt(profile.vebtc_token_id)
 
       try {
+        const mappedGauge = (await publicClient.readContract({
+          address: boostVoterAddress,
+          abi: BOOST_VOTER_ABI,
+          functionName: "boostableTokenIdToGauge",
+          args: [tokenId],
+        })) as Address
+
+        if (
+          mappedGauge === ZERO_ADDRESS ||
+          mappedGauge.toLowerCase() !== profile.gauge_address.toLowerCase()
+        ) {
+          console.warn(
+            `Skipping reset for gauge ${profile.gauge_address}: token ${tokenId} maps to ${mappedGauge} on ${network}`,
+          )
+          skippedUnverifiable++
+          continue
+        }
+
         // Check current on-chain owner
         const currentOwner = (await publicClient.readContract({
           address: veBTCAddress,
@@ -218,6 +226,14 @@ Deno.serve(async (req) => {
           functionName: "ownerOf",
           args: [tokenId],
         })) as Address
+
+        if (currentOwner === ZERO_ADDRESS) {
+          console.warn(
+            `Skipping reset for gauge ${profile.gauge_address}: ownerOf(${tokenId}) returned zero address on ${network}`,
+          )
+          skippedUnverifiable++
+          continue
+        }
 
         if (
           currentOwner.toLowerCase() !== profile.owner_address.toLowerCase()
@@ -268,28 +284,12 @@ Deno.serve(async (req) => {
             )
           }
         }
-      } catch {
-        // ownerOf reverted -- token is burned/withdrawn
-        console.log(
-          `NFT burned/withdrawn for gauge ${profile.gauge_address} (token ${tokenId})`,
+      } catch (error) {
+        console.warn(
+          `Skipping reset for gauge ${profile.gauge_address}: could not verify token ${tokenId} on ${network}`,
+          error,
         )
-
-        // Auto-save before clearing
-        await autoSaveToTemplates(supabase, profile, "nft_burned")
-        await clearGaugeProfile(
-          supabase,
-          profile.gauge_address,
-          ZERO_ADDRESS,
-        )
-        await recordReset(
-          supabase,
-          profile.gauge_address,
-          profile.vebtc_token_id,
-          profile.owner_address,
-          ZERO_ADDRESS,
-          "nft_burned",
-        )
-        burnedResets++
+        skippedUnverifiable++
       }
     }
 
@@ -299,6 +299,8 @@ Deno.serve(async (req) => {
       transfer_resets: transferResets,
       burned_resets: burnedResets,
       expired_auto_saves: expiredAutoSaves,
+      skipped_unverifiable: skippedUnverifiable,
+      network,
     }
 
     console.log("Verification complete:", summary)

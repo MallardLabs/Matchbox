@@ -335,6 +335,7 @@ export function useTransferGaugeProfile() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<Error | null>(null)
   const { refetch } = useAllGaugeProfilesFromContext()
+  const { chainId } = useNetwork()
 
   const transferProfile = useCallback(
     async ({
@@ -365,6 +366,7 @@ export function useTransferGaugeProfile() {
               toGaugeAddress: toGaugeAddress.toLowerCase(),
               ownerAddress: ownerAddress.toLowerCase(),
               toVeBTCTokenId: toVeBTCTokenId.toString(),
+              chainId,
             }),
           },
         )
@@ -391,7 +393,7 @@ export function useTransferGaugeProfile() {
         return { success: false, error: errorMessage }
       }
     },
-    [refetch],
+    [chainId, refetch],
   )
 
   return {

@@ -7,31 +7,16 @@ import {
   createPublicClient,
   http,
   type Address,
-  type Chain,
 } from "https://esm.sh/viem@2"
 import {
   BOOST_VOTER_ABI,
   VOTING_ESCROW_ABI,
   NON_STAKING_GAUGE_ABI,
+  CHAIN_ID,
   CONTRACTS,
-  RPC_URLS,
+  getMezoNetworkConfig,
 } from "../_shared/contracts.ts"
 import { corsHeaders, handleCors } from "../_shared/cors.ts"
-
-// Define Mezo testnet chain
-const mezoTestnet: Chain = {
-  id: 31611,
-  name: "Mezo Testnet",
-  nativeCurrency: { name: "BTC", symbol: "BTC", decimals: 18 },
-  rpcUrls: {
-    default: { http: ["https://rpc.test.mezo.org"] },
-  },
-  contracts: {
-    multicall3: {
-      address: "0xcA11bde05977b3631167028862bE2a173976CA11",
-    },
-  },
-}
 
 // Constants
 const EPOCH_DURATION = 7 * 24 * 60 * 60 // 7 days in seconds
@@ -59,6 +44,7 @@ type TransferRequest = {
   toGaugeAddress: string
   ownerAddress: string
   toVeBTCTokenId: string // The veBTC token ID for the destination gauge
+  chainId?: number
 }
 
 // Verify that an address owns a gauge by checking:
@@ -68,7 +54,7 @@ async function verifyGaugeOwnership(
   publicClient: ReturnType<typeof createPublicClient>,
   gaugeAddress: Address,
   ownerAddress: Address,
-  contracts: typeof CONTRACTS.testnet
+  contracts: (typeof CONTRACTS)[keyof typeof CONTRACTS]
 ): Promise<{ isOwner: boolean; tokenId: bigint | null }> {
   const boostVoterAddress = contracts.boostVoter as Address
   const veBTCAddress = contracts.veBTC as Address
@@ -168,7 +154,6 @@ Deno.serve(async (req) => {
     console.log(`Transfer request: ${fromAddr} -> ${toAddr} by ${ownerAddr}`)
 
     // Get environment variables
-    const rpcUrl = Deno.env.get("MEZO_RPC_URL") || RPC_URLS.testnet
     const supabaseUrl = Deno.env.get("SUPABASE_URL")
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")
 
@@ -176,17 +161,23 @@ Deno.serve(async (req) => {
       throw new Error("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY")
     }
 
+    const { chain, contracts, network, rpcUrl } = getMezoNetworkConfig({
+      chainId:
+        body.chainId === CHAIN_ID.testnet || body.chainId === CHAIN_ID.mainnet
+          ? body.chainId
+          : undefined,
+    })
+
     // Initialize clients
     const supabase = createClient(supabaseUrl, supabaseKey, {
       auth: { autoRefreshToken: false, persistSession: false },
     })
 
     const publicClient = createPublicClient({
-      chain: mezoTestnet,
+      chain,
       transport: http(rpcUrl),
     })
-
-    const contracts = CONTRACTS.testnet
+    console.log(`Transfer request on ${network} (${rpcUrl})`)
 
     // Get current epoch
     const now = Math.floor(Date.now() / 1000)
