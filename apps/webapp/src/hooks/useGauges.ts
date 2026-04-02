@@ -243,7 +243,7 @@ export function useBoostGauges(options: UseBoostGaugesOptions = {}) {
   )
 
   // Fetch veBTC voting power for each token
-  const { data: veBTCVotingPowers } = useReadContracts({
+  const { data: veBTCVotingPowers, isLoading: isLoadingVotingPowers } = useReadContracts({
     contracts: tokenIds
       .filter((id): id is bigint => id !== undefined && id > 0n)
       .map((tokenId) => ({
@@ -402,7 +402,10 @@ export function useBoostGauges(options: UseBoostGaugesOptions = {}) {
     (addresses.length > 0 && isLoadingGaugeData) ||
     (includeOwnership && uniqueBeneficiaries.length > 0 && isLoadingBalances) ||
     (includeOwnership && tokenIdQueries.length > 0 && isLoadingTokenIds) ||
-    (includeOwnership && allTokenIds.length > 0 && isLoadingTokenMap)
+    (includeOwnership && allTokenIds.length > 0 && isLoadingTokenMap) ||
+    (includeOwnership &&
+      tokenIds.some((id) => id !== undefined && id > 0n) &&
+      isLoadingVotingPowers)
 
   return {
     gauges,

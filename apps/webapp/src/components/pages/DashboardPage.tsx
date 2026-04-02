@@ -1023,9 +1023,9 @@ export default function DashboardPage(): JSX.Element {
     0n,
   )
 
-  // Get lightweight gauge registry for APY and vote allocations
+  // Get gauge registry with ownership data so veBTC weights are available
   const { gauges: allGauges, isLoading: isLoadingGauges } = useBoostGauges({
-    includeOwnership: false,
+    includeOwnership: true,
     enabled: true,
   })
 
