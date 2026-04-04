@@ -279,16 +279,17 @@ export function useBoostGauges(options: UseBoostGaugesOptions = {}) {
   })
 
   // Fetch totals for optimal veMEZO calculation
+  // Uses supply() to match the BoostCalculator, which uses useVeSupply()
   const { data: totalsData } = useReadContracts({
     contracts: includeOwnership
       ? [
           {
             ...contracts.veMEZO,
-            functionName: "totalVotingPower",
+            functionName: "supply",
           },
           {
             ...contracts.veBTC,
-            functionName: "totalVotingPower",
+            functionName: "supply",
           },
         ]
       : [],
@@ -298,8 +299,8 @@ export function useBoostGauges(options: UseBoostGaugesOptions = {}) {
     },
   })
 
-  const veMEZOTotalVotingPower = totalsData?.[0]?.result as bigint | undefined
-  const veBTCTotalVotingPower = totalsData?.[1]?.result as bigint | undefined
+  const veMEZOSupply = totalsData?.[0]?.result as bigint | undefined
+  const veBTCSupply = totalsData?.[1]?.result as bigint | undefined
 
   // Build maps of token ID to voting power and boost
   const tokenIdToVotingPower = new Map<string, bigint>()
@@ -320,21 +321,21 @@ export function useBoostGauges(options: UseBoostGaugesOptions = {}) {
   }
 
   // Calculate optimal additional veMEZO for each gauge
-  // Formula: (gaugeVeBTCWeight * veMEZOTotalVotingPower) / veBTCTotalVotingPower
+  // Formula: (gaugeVeBTCWeight * veMEZOSupply) / veBTCSupply
   // Uses Rational for precise division, then manually converts to 18-decimal fixed point
   const calculateOptimalAdditionalVeMEZO = (
     gaugeVeBTCWeight: bigint | undefined,
   ): bigint | undefined => {
     if (
-      !veMEZOTotalVotingPower ||
-      !veBTCTotalVotingPower ||
+      !veMEZOSupply ||
+      !veBTCSupply ||
       !gaugeVeBTCWeight ||
       gaugeVeBTCWeight === 0n
     ) {
       return undefined
     }
 
-    if (veBTCTotalVotingPower === 0n) {
+    if (veBTCSupply === 0n) {
       return undefined
     }
 
@@ -343,8 +344,8 @@ export function useBoostGauges(options: UseBoostGaugesOptions = {}) {
       // All values are 18-decimal fixed point, so represent as rationals with 10^18 denominator
       const scale = 10n ** 18n
       const veBTCWeight = Rational(gaugeVeBTCWeight, scale)
-      const veMEZOTotal = Rational(veMEZOTotalVotingPower, scale)
-      const veBTCTotal = Rational(veBTCTotalVotingPower, scale)
+      const veMEZOTotal = Rational(veMEZOSupply, scale)
+      const veBTCTotal = Rational(veBTCSupply, scale)
 
       // Calculate (veBTCWeight * veMEZOTotal) / veBTCTotal
       // Result is a rational representing the actual value (not scaled)
@@ -360,8 +361,8 @@ export function useBoostGauges(options: UseBoostGaugesOptions = {}) {
     } catch (error) {
       console.error("calculateOptimalAdditionalVeMEZO error:", {
         gaugeVeBTCWeight: gaugeVeBTCWeight.toString(),
-        veMEZOTotalVotingPower: veMEZOTotalVotingPower.toString(),
-        veBTCTotalVotingPower: veBTCTotalVotingPower.toString(),
+        veMEZOSupply: veMEZOSupply.toString(),
+        veBTCSupply: veBTCSupply.toString(),
         error,
       })
       return undefined

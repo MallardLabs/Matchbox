@@ -22,29 +22,50 @@ type TokenList = {
 const DEFAULT_TOKEN_LIST_URL =
   "https://tokens.coingecko.com/uniswap/all.json" as const
 
-// Default tokens that are always available for selection on Mezo
-const DEFAULT_TOKENS: Token[] = [
-  {
-    chainId: CHAIN_ID.testnet,
-    address: CONTRACTS.testnet.mezoToken,
-    name: "Mezo",
-    symbol: "MEZO",
-    decimals: 18,
-    logoURI: "/token icons/Mezo.svg",
-  },
-  {
-    chainId: CHAIN_ID.testnet,
-    address: getAddress("0x7b7C000000000000000000000000000000000000"),
-    name: "Bitcoin",
-    symbol: "BTC",
-    decimals: 18,
-    logoURI: "/token icons/Bitcoin.svg",
-  },
-]
+// Default tokens that are always available for selection on Mezo, per network
+const DEFAULT_TOKENS: Record<number, Token[]> = {
+  [CHAIN_ID.testnet]: [
+    {
+      chainId: CHAIN_ID.testnet,
+      address: CONTRACTS.testnet.mezoToken,
+      name: "Mezo",
+      symbol: "MEZO",
+      decimals: 18,
+      logoURI: "/token icons/Mezo.svg",
+    },
+    {
+      chainId: CHAIN_ID.testnet,
+      address: getAddress("0x7b7C000000000000000000000000000000000000"),
+      name: "Bitcoin",
+      symbol: "BTC",
+      decimals: 18,
+      logoURI: "/token icons/Bitcoin.svg",
+    },
+  ],
+  [CHAIN_ID.mainnet]: [
+    {
+      chainId: CHAIN_ID.mainnet,
+      address: CONTRACTS.mainnet.mezoToken,
+      name: "Mezo",
+      symbol: "MEZO",
+      decimals: 18,
+      logoURI: "/token icons/Mezo.svg",
+    },
+    {
+      chainId: CHAIN_ID.mainnet,
+      address: getAddress("0x7b7C000000000000000000000000000000000000"),
+      name: "Bitcoin",
+      symbol: "BTC",
+      decimals: 18,
+      logoURI: "/token icons/Bitcoin.svg",
+    },
+  ],
+}
 
 export function useTokenList(tokenListUrl?: string) {
   const { chainId } = useNetwork()
-  const [tokens, setTokens] = useState<Token[]>(DEFAULT_TOKENS)
+  const defaultTokens = DEFAULT_TOKENS[chainId] ?? []
+  const [tokens, setTokens] = useState<Token[]>(defaultTokens)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
 
@@ -62,25 +83,26 @@ export function useTokenList(tokenListUrl?: string) {
           (token) => token.chainId === chainId,
         )
         // Combine default tokens with fetched tokens, avoiding duplicates
+        const networkDefaultTokens = DEFAULT_TOKENS[chainId] ?? []
         const defaultAddresses = new Set(
-          DEFAULT_TOKENS.map((t) => t.address.toLowerCase()),
+          networkDefaultTokens.map((t) => t.address.toLowerCase()),
         )
         const filteredChainTokens = chainTokens.filter(
           (token) => !defaultAddresses.has(token.address.toLowerCase()),
         )
-        setTokens([...DEFAULT_TOKENS, ...filteredChainTokens])
+        setTokens([...networkDefaultTokens, ...filteredChainTokens])
         setError(null)
       } catch (err) {
         setError(err instanceof Error ? err : new Error("Unknown error"))
         // Keep default tokens even on error
-        setTokens(DEFAULT_TOKENS)
+        setTokens(DEFAULT_TOKENS[chainId] ?? [])
       } finally {
         setIsLoading(false)
       }
     }
 
     fetchTokenList()
-  }, [tokenListUrl])
+  }, [tokenListUrl, chainId])
 
   return { tokens, isLoading, error }
 }
