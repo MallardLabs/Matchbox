@@ -78,6 +78,13 @@ export const wagmiConfig: Config = getDefaultConfig({
     }),
   },
   wallets,
+  // Web3Modal / AppKit: show wallet explorer + full directory (not only a small “featured” set)
+  walletConnectParameters: {
+    qrModalOptions: {
+      enableExplorer: true,
+      explorerRecommendedWalletIds: "NONE",
+    },
+  },
   multiInjectedProviderDiscovery: true,
   ssr: true,
 })
