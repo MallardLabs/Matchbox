@@ -1,5 +1,6 @@
 import { AddressLink } from "@/components/AddressLink"
 import { SpringIn } from "@/components/SpringIn"
+import type { GaugeProfile } from "@/config/supabase"
 import { TokenIcon } from "@/components/TokenIcon"
 import { getContractConfig } from "@/config/contracts"
 import { useNetwork } from "@/contexts/NetworkContext"
@@ -28,11 +29,15 @@ import { getTokenUsdPrice } from "@repo/shared"
 import { NON_STAKING_GAUGE_ABI } from "@repo/shared/contracts"
 import Link from "next/link"
 import { useRouter } from "next/router"
-import { useMemo } from "react"
+import { useEffect, useMemo, useState } from "react"
 import type { Address } from "viem"
 import { useReadContract, useReadContracts } from "wagmi"
 
 type IncentiveWithUSD = BribeIncentive & { usdValue: number | null }
+type GaugeDetailPageProps = {
+  address?: string
+  initialProfile?: GaugeProfile | null
+}
 
 function getIncentiveUsdValue(
   incentive: BribeIncentive,
@@ -147,10 +152,18 @@ function SocialLinkButton({
   )
 }
 
-export default function GaugeDetailPage(): JSX.Element {
+export default function GaugeDetailPage({
+  address: initialAddress,
+  initialProfile = null,
+}: GaugeDetailPageProps): JSX.Element {
   const router = useRouter()
-  const { address } = router.query
-  const gaugeAddress = address as Address | undefined
+  const routeAddress = router.query.address
+  const gaugeAddress =
+    typeof initialAddress === "string"
+      ? (initialAddress as Address)
+      : typeof routeAddress === "string"
+        ? (routeAddress as Address)
+        : undefined
 
   const { chainId } = useNetwork()
   const contracts = getContractConfig(chainId)
@@ -242,8 +255,11 @@ export default function GaugeDetailPage(): JSX.Element {
   }, [gaugeAddress, tokenIdList, mappedGaugesData])
 
   // Get boost info
-  const { boostMultiplier, isLoading: isLoadingBoost } =
-    useBoostInfo(veBTCTokenId)
+  const {
+    boost,
+    boostMultiplier,
+    isLoading: isLoadingBoost,
+  } = useBoostInfo(veBTCTokenId)
 
   // Get veBTC voting power
   const { data: veBTCVotingPower } = useReadContract({
@@ -257,11 +273,12 @@ export default function GaugeDetailPage(): JSX.Element {
 
   // Fetch gauge profile
   const { profile, isLoading: isLoadingProfile } = useGaugeProfile(gaugeAddress)
+  const resolvedProfile = profile ?? initialProfile
 
   // Check on-chain ownership
   const { isOwnershipValid } = useGaugeOwnershipCheck(
-    profile?.vebtc_token_id,
-    profile?.owner_address,
+    resolvedProfile?.vebtc_token_id,
+    resolvedProfile?.owner_address,
   )
   const ownershipMismatch = isOwnershipValid === false
 
@@ -298,21 +315,29 @@ export default function GaugeDetailPage(): JSX.Element {
 
   // Check if profile has meaningful content
   const hasProfileContent =
-    profile?.display_name ||
-    profile?.description ||
-    profile?.profile_picture_url
+    resolvedProfile?.display_name ||
+    resolvedProfile?.description ||
+    resolvedProfile?.profile_picture_url
 
   // Check if there are social links
   const hasSocialLinks =
-    profile?.website_url ||
-    profile?.social_links?.twitter ||
-    profile?.social_links?.discord ||
-    profile?.social_links?.telegram ||
-    profile?.social_links?.github
+    resolvedProfile?.website_url ||
+    resolvedProfile?.social_links?.twitter ||
+    resolvedProfile?.social_links?.discord ||
+    resolvedProfile?.social_links?.telegram ||
+    resolvedProfile?.social_links?.github
 
-  const isLoading = isLoadingGauge || isLoadingProfile || isLoadingBoost
+  const isInitialLoading =
+    !gaugeAddress || isLoadingGauge || (!resolvedProfile && isLoadingProfile)
+  const [hasShownContent, setHasShownContent] = useState(false)
 
-  if (!gaugeAddress) {
+  useEffect(() => {
+    if (!isInitialLoading) {
+      setHasShownContent(true)
+    }
+  }, [isInitialLoading])
+
+  if (!gaugeAddress && router.isReady) {
     return (
       <div className="p-12 text-center">
         <p className="text-sm text-[var(--content-secondary)]">
@@ -322,9 +347,18 @@ export default function GaugeDetailPage(): JSX.Element {
     )
   }
 
+  if (!gaugeAddress) {
+    return (
+      <div className="flex flex-col gap-4">
+        <Skeleton width="100%" height="200px" animation />
+        <Skeleton width="100%" height="150px" animation />
+      </div>
+    )
+  }
+
   return (
     <div className="flex flex-col gap-6">
-      {isLoading ? (
+      {!hasShownContent ? (
         <div className="flex flex-col gap-4">
           <Skeleton width="100%" height="200px" animation />
           <Skeleton width="100%" height="150px" animation />
@@ -370,9 +404,9 @@ export default function GaugeDetailPage(): JSX.Element {
                 {/* Profile Picture */}
                 <div className="flex flex-shrink-0 items-center justify-center md:items-start">
                   <div className="flex h-[140px] w-[140px] items-center justify-center overflow-hidden rounded-2xl border-[3px] border-[var(--border)] bg-[var(--surface-secondary)]">
-                    {profile?.profile_picture_url ? (
+                    {resolvedProfile?.profile_picture_url ? (
                       <img
-                        src={profile.profile_picture_url}
+                        src={resolvedProfile.profile_picture_url}
                         alt={`Gauge ${veBTCTokenId?.toString() ?? gaugeAddress}`}
                         className="h-full w-full object-cover"
                       />
@@ -399,10 +433,10 @@ export default function GaugeDetailPage(): JSX.Element {
                           : "text-[var(--content-secondary)]"
                       }`}
                     >
-                      {profile?.display_name ||
+                      {resolvedProfile?.display_name ||
                         `veBTC #${veBTCTokenId?.toString() ?? "Unknown"}`}
                     </h2>
-                    {profile?.display_name && veBTCTokenId && (
+                    {resolvedProfile?.display_name && veBTCTokenId && (
                       <span className="inline-flex items-center rounded-md border border-[rgba(247,147,26,0.3)] bg-[rgba(247,147,26,0.15)] px-2.5 py-1 font-mono text-xs font-semibold tracking-wide text-[#F7931A]">
                         #{veBTCTokenId.toString()}
                       </span>
@@ -410,7 +444,7 @@ export default function GaugeDetailPage(): JSX.Element {
                     <Tag color={isAlive ? "green" : "red"} closeable={false}>
                       {isAlive ? "Active" : "Inactive"}
                     </Tag>
-                    {profile?.is_featured && (
+                    {resolvedProfile?.is_featured && (
                       <Tag color="blue" closeable={false}>
                         Featured
                       </Tag>
@@ -421,9 +455,9 @@ export default function GaugeDetailPage(): JSX.Element {
                     <AddressLink address={gaugeAddress} />
                   </div>
 
-                  {profile?.description ? (
+                  {resolvedProfile?.description ? (
                     <p className="mb-4 whitespace-pre-wrap break-words text-sm text-[var(--content-secondary)] md:text-base">
-                      {profile.description}
+                      {resolvedProfile.description}
                     </p>
                   ) : (
                     <p className="mb-4 text-sm italic text-[var(--content-tertiary)]">
@@ -432,9 +466,9 @@ export default function GaugeDetailPage(): JSX.Element {
                   )}
 
                   {/* Tags */}
-                  {profile?.tags && profile.tags.length > 0 && (
+                  {resolvedProfile?.tags && resolvedProfile.tags.length > 0 && (
                     <div className="mb-4 flex flex-wrap gap-2">
-                      {profile.tags.map((tag) => (
+                      {resolvedProfile.tags.map((tag) => (
                         <span
                           key={tag}
                           className="rounded-full border border-[var(--border)] bg-[var(--surface-secondary)] px-3 py-1 text-xs text-[var(--content-secondary)]"
@@ -448,37 +482,37 @@ export default function GaugeDetailPage(): JSX.Element {
                   {/* Social Links */}
                   {hasSocialLinks && (
                     <div className="flex flex-wrap gap-2">
-                      {profile?.website_url && (
+                      {resolvedProfile?.website_url && (
                         <SocialLinkButton
-                          href={profile.website_url}
+                          href={resolvedProfile.website_url}
                           icon={<GlobeIcon size={16} />}
                           label="Website"
                         />
                       )}
-                      {profile?.social_links?.twitter && (
+                      {resolvedProfile?.social_links?.twitter && (
                         <SocialLinkButton
-                          href={profile.social_links.twitter}
+                          href={resolvedProfile.social_links.twitter}
                           icon={<TwitterIcon size={16} />}
                           label="Twitter"
                         />
                       )}
-                      {profile?.social_links?.discord && (
+                      {resolvedProfile?.social_links?.discord && (
                         <SocialLinkButton
-                          href={profile.social_links.discord}
+                          href={resolvedProfile.social_links.discord}
                           icon={<DiscordIcon size={16} />}
                           label="Discord"
                         />
                       )}
-                      {profile?.social_links?.telegram && (
+                      {resolvedProfile?.social_links?.telegram && (
                         <SocialLinkButton
-                          href={profile.social_links.telegram}
+                          href={resolvedProfile.social_links.telegram}
                           icon={<TelegramIcon size={16} />}
                           label="Telegram"
                         />
                       )}
-                      {profile?.social_links?.github && (
+                      {resolvedProfile?.social_links?.github && (
                         <SocialLinkButton
-                          href={profile.social_links.github}
+                          href={resolvedProfile.social_links.github}
                           icon={<GithubIcon size={16} />}
                           label="GitHub"
                         />
@@ -542,7 +576,9 @@ export default function GaugeDetailPage(): JSX.Element {
                     Current Boost
                   </p>
                   <h3 className="font-mono text-lg font-semibold tabular-nums text-[var(--content-primary)] md:text-xl">
-                    {formatMultiplier(boostMultiplier)}
+                    {isLoadingBoost && boost === undefined
+                      ? "..."
+                      : formatMultiplier(boostMultiplier)}
                   </h3>
                 </div>
               </Card>
@@ -624,11 +660,12 @@ export default function GaugeDetailPage(): JSX.Element {
           </div>
 
           {/* Strategy Section */}
-          {(profile?.incentive_strategy || profile?.voting_strategy) && (
+          {(resolvedProfile?.incentive_strategy ||
+            resolvedProfile?.voting_strategy) && (
             <SpringIn delay={7} variant="card">
               <Card title="Strategy & Goals" withBorder overrides={{}}>
                 <div className="grid gap-6 py-4 md:grid-cols-2">
-                  {profile?.incentive_strategy && (
+                  {resolvedProfile?.incentive_strategy && (
                     <div>
                       <h4 className="mb-2 flex items-center gap-2 text-sm font-semibold text-[var(--content-primary)]">
                         <span className="flex h-6 w-6 items-center justify-center rounded bg-[rgba(34,197,94,0.15)] text-xs">
@@ -637,11 +674,11 @@ export default function GaugeDetailPage(): JSX.Element {
                         Incentive Strategy
                       </h4>
                       <p className="whitespace-pre-wrap text-sm leading-relaxed text-[var(--content-secondary)]">
-                        {profile.incentive_strategy}
+                        {resolvedProfile.incentive_strategy}
                       </p>
                     </div>
                   )}
-                  {profile?.voting_strategy && (
+                  {resolvedProfile?.voting_strategy && (
                     <div>
                       <h4 className="mb-2 flex items-center gap-2 text-sm font-semibold text-[var(--content-primary)]">
                         <span className="flex h-6 w-6 items-center justify-center rounded bg-[rgba(59,130,246,0.15)] text-xs">
@@ -650,7 +687,7 @@ export default function GaugeDetailPage(): JSX.Element {
                         Voting Strategy
                       </h4>
                       <p className="whitespace-pre-wrap text-sm leading-relaxed text-[var(--content-secondary)]">
-                        {profile.voting_strategy}
+                        {resolvedProfile.voting_strategy}
                       </p>
                     </div>
                   )}

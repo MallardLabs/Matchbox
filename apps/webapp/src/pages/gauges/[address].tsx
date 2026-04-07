@@ -80,7 +80,7 @@ export default function GaugeDetail({ address, profile }: GaugePageProps) {
         <meta name="twitter:description" content={description} />
         <meta name="twitter:image" content={ogImageUrl} />
       </Head>
-      <GaugeDetailPage />
+      <GaugeDetailPage address={address} initialProfile={profile} />
     </>
   )
 }
