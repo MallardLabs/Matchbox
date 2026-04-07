@@ -1,7 +1,6 @@
 import { useBtcPrice } from "@/hooks/useBtcPrice"
 import { useEpochCountdown } from "@/hooks/useEpochCountdown"
 import { useMezoPrice } from "@/hooks/useMezoPrice"
-import { useRpcHealth } from "@/hooks/useRpcHealth"
 import { useEffect, useRef, useState } from "react"
 
 const CYCLE_INTERVAL_MS = 4000 // 4 seconds per metric
@@ -11,7 +10,6 @@ type TickerMetric = {
   label: string
   value: string
   icon?: string
-  statusColor?: string
   isClockIcon?: boolean
 }
 
@@ -74,19 +72,6 @@ function TickerItem({
           <polyline points="12 6 12 12 16 14" />
         </svg>
       )}
-      {metric.statusColor && (
-        <span
-          className={
-            isInline
-              ? "h-2.5 w-2.5 rounded-full md:h-3 md:w-3"
-              : "h-2 w-2 rounded-full"
-          }
-          style={{
-            backgroundColor: metric.statusColor,
-            boxShadow: `0 0 ${isInline ? "8" : "6"}px ${metric.statusColor}`,
-          }}
-        />
-      )}
       <span
         className={`whitespace-nowrap font-mono ${isInline ? "text-xs md:text-sm" : "text-xs"} text-[var(--content-secondary)]`}
       >
@@ -116,37 +101,9 @@ export function HeaderTicker({
   } = useMezoPrice()
   const { timeRemaining } = useEpochCountdown()
 
-  const { status: rpcStatus } = useRpcHealth()
-
   const [currentIndex, setCurrentIndex] = useState(0)
   const [prevIndex, setPrevIndex] = useState<number | null>(null)
   const [isTransitioning, setIsTransitioning] = useState(false)
-
-  const getStatusColor = (status: string): string => {
-    switch (status) {
-      case "connected":
-        return "#22C55E"
-      case "delayed":
-        return "#EAB308"
-      case "disconnected":
-        return "#EF4444"
-      default:
-        return "#22C55E"
-    }
-  }
-
-  const getStatusLabel = (status: string): string => {
-    switch (status) {
-      case "connected":
-        return "Synced"
-      case "delayed":
-        return "Delayed"
-      case "disconnected":
-        return "Offline"
-      default:
-        return "Synced"
-    }
-  }
 
   const metrics: TickerMetric[] = [
     {
@@ -171,19 +128,9 @@ export function HeaderTicker({
       value: timeRemaining,
       isClockIcon: true,
     },
-    {
-      id: "rpc",
-      label: "RPC",
-      value: getStatusLabel(rpcStatus),
-      statusColor: getStatusColor(rpcStatus),
-    },
   ]
 
-  const visibleMetrics = showInline
-    ? metrics.filter((metric) => metric.id !== "rpc")
-    : metrics
-
-  if (visibleMetrics.length === 0) {
+  if (metrics.length === 0) {
     return <></>
   }
 
@@ -194,7 +141,7 @@ export function HeaderTicker({
 
       // After transition starts, update to next index
       setTimeout(() => {
-        setCurrentIndex((prev) => (prev + 1) % visibleMetrics.length)
+        setCurrentIndex((prev) => (prev + 1) % metrics.length)
       }, 50)
 
       // Reset transition state after animation completes
@@ -205,18 +152,18 @@ export function HeaderTicker({
     }, CYCLE_INTERVAL_MS)
 
     return () => clearInterval(interval)
-  }, [currentIndex, visibleMetrics.length])
+  }, [currentIndex, metrics.length])
 
-  const firstMetric = visibleMetrics[0]
+  const firstMetric = metrics[0]
   if (firstMetric === undefined) {
     return <></>
   }
 
-  const safeCurrentIndex = currentIndex % visibleMetrics.length
-  const currentMetric = visibleMetrics[safeCurrentIndex] ?? firstMetric
+  const safeCurrentIndex = currentIndex % metrics.length
+  const currentMetric = metrics[safeCurrentIndex] ?? firstMetric
   const prevMetric: TickerMetric | null =
     prevIndex !== null
-      ? (visibleMetrics[prevIndex % visibleMetrics.length] ?? firstMetric)
+      ? (metrics[prevIndex % metrics.length] ?? firstMetric)
       : null
 
   const [isHovered, setIsHovered] = useState(false)
@@ -347,15 +294,6 @@ export function HeaderTicker({
                     <circle cx="12" cy="12" r="10" />
                     <polyline points="12 6 12 12 16 14" />
                   </svg>
-                )}
-                {metric.statusColor && !metric.icon && !metric.isClockIcon && (
-                  <span
-                    className="h-2.5 w-2.5 rounded-full"
-                    style={{
-                      backgroundColor: metric.statusColor,
-                      boxShadow: `0 0 6px ${metric.statusColor}`,
-                    }}
-                  />
                 )}
               </div>
               <div className="flex flex-col">
