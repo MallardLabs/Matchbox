@@ -12,6 +12,7 @@ import {
   walletConnectWallet,
   zerionWallet,
 } from "@rainbow-me/rainbowkit/wallets"
+import { mainnet } from "viem/chains"
 import { http, type Config } from "wagmi"
 
 /** EVM wallets shown in the connect wallet drawer (order preserved; WC + injected sorted last in UI). */
@@ -66,7 +67,10 @@ export const wagmiConfig: Config = getDefaultConfig({
   appName: "Matchbox",
   appDescription: "Mezo Gauge Voting & veMEZO Management",
   projectId: WALLET_CONNECT_PROJECT_ID,
-  chains: [mezoTestnet, mezoMainnet],
+  // Include Ethereum mainnet so WalletConnect / AppKit can list wallets that only register
+  // support for eip155:1. Mezo-only sessions hide most of the directory; connection still
+  // targets the selected Mezo chain via ConnectWalletDrawer + switch after connect.
+  chains: [mezoTestnet, mezoMainnet, mainnet],
   transports: {
     [mezoMainnet.id]: http(undefined, {
       batch: true,
@@ -76,15 +80,14 @@ export const wagmiConfig: Config = getDefaultConfig({
       batch: true,
       fetchOptions: { cache: "no-store" },
     }),
+    [mainnet.id]: http(),
   },
   wallets,
-  // Web3Modal / AppKit: show wallet explorer + full directory (not only a small “featured” set)
   walletConnectParameters: {
     qrModalOptions: {
-      enableExplorer: true,
       explorerRecommendedWalletIds: "NONE",
     },
   },
   multiInjectedProviderDiscovery: true,
   ssr: true,
-})
+}) 
