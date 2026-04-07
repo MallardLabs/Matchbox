@@ -4,7 +4,7 @@ import { useNetwork } from "@/contexts/NetworkContext"
 import { useGaugeTopology } from "@/hooks/useGaugeTopology"
 import { chunkArray } from "@/utils/chunk"
 import { useQuery } from "@tanstack/react-query"
-import { useMemo } from "react"
+import { useCallback, useMemo } from "react"
 import type { Address, Hex } from "viem"
 import {
   useAccount,
@@ -129,6 +129,7 @@ export function useBatchVoteState(tokenIds: bigint[]): {
   isInVotingWindow: boolean
   epochStart: bigint | undefined
   isLoading: boolean
+  refetch: () => Promise<void>
 } {
   const { chainId, isNetworkReady } = useNetwork()
   const contracts = getContractConfig(chainId)
@@ -138,47 +139,56 @@ export function useBatchVoteState(tokenIds: bigint[]): {
   }, [])
 
   // Fetch epochNext (shared for all tokens)
-  const { data: epochNextData, isLoading: isLoadingEpochNext } =
-    useReadContract({
-      ...contracts.boostVoter,
-      functionName: "epochNext",
-      args: [now],
-      query: {
-        ...QUERY_PROFILES.SHORT_CACHE,
-        enabled: isNetworkReady,
-      },
-    })
+  const {
+    data: epochNextData,
+    isLoading: isLoadingEpochNext,
+    refetch: refetchEpochNext,
+  } = useReadContract({
+    ...contracts.boostVoter,
+    functionName: "epochNext",
+    args: [now],
+    query: {
+      ...QUERY_PROFILES.SHORT_CACHE,
+      enabled: isNetworkReady,
+    },
+  })
 
   const epochNext = epochNextData as bigint | undefined
   const epochStart = epochNext !== undefined ? epochNext - 604800n : undefined
 
   // Batch fetch lastVoted for all tokens
-  const { data: lastVotedData, isLoading: isLoadingLastVoted } =
-    useReadContracts({
-      contracts: tokenIds.map((tokenId) => ({
-        ...contracts.boostVoter,
-        functionName: "lastVoted",
-        args: [tokenId],
-      })),
-      query: {
-        ...QUERY_PROFILES.SHORT_CACHE,
-        enabled: isNetworkReady && tokenIds.length > 0,
-      },
-    })
+  const {
+    data: lastVotedData,
+    isLoading: isLoadingLastVoted,
+    refetch: refetchLastVoted,
+  } = useReadContracts({
+    contracts: tokenIds.map((tokenId) => ({
+      ...contracts.boostVoter,
+      functionName: "lastVoted",
+      args: [tokenId],
+    })),
+    query: {
+      ...QUERY_PROFILES.SHORT_CACHE,
+      enabled: isNetworkReady && tokenIds.length > 0,
+    },
+  })
 
   // Batch fetch usedWeights for all tokens
-  const { data: usedWeightsData, isLoading: isLoadingUsedWeights } =
-    useReadContracts({
-      contracts: tokenIds.map((tokenId) => ({
-        ...contracts.boostVoter,
-        functionName: "usedWeights",
-        args: [tokenId],
-      })),
-      query: {
-        ...QUERY_PROFILES.SHORT_CACHE,
-        enabled: isNetworkReady && tokenIds.length > 0,
-      },
-    })
+  const {
+    data: usedWeightsData,
+    isLoading: isLoadingUsedWeights,
+    refetch: refetchUsedWeights,
+  } = useReadContracts({
+    contracts: tokenIds.map((tokenId) => ({
+      ...contracts.boostVoter,
+      functionName: "usedWeights",
+      args: [tokenId],
+    })),
+    query: {
+      ...QUERY_PROFILES.SHORT_CACHE,
+      enabled: isNetworkReady && tokenIds.length > 0,
+    },
+  })
 
   // Calculate voting window
   const currentTime = BigInt(Math.floor(Date.now() / 1000))
@@ -218,11 +228,21 @@ export function useBatchVoteState(tokenIds: bigint[]): {
     return map
   }, [tokenIds, lastVotedData, usedWeightsData, epochStart, isInVotingWindow])
 
+  const refetch = useCallback(async () => {
+    await Promise.all([
+      refetchEpochNext(),
+      ...(tokenIds.length > 0
+        ? [refetchLastVoted(), refetchUsedWeights()]
+        : []),
+    ])
+  }, [refetchEpochNext, refetchLastVoted, refetchUsedWeights, tokenIds.length])
+
   return {
     voteStateMap,
     isInVotingWindow,
     epochStart,
     isLoading: isLoadingEpochNext || isLoadingLastVoted || isLoadingUsedWeights,
+    refetch,
   }
 }
 
@@ -754,12 +774,13 @@ export function useAllVoteAllocations(
   allocationsByToken: Map<string, VoteAllocation[]>
   aggregatedAllocations: VoteAllocation[]
   isLoading: boolean
+  refetch: () => Promise<void>
 } {
   const { chainId, isNetworkReady } = useNetwork()
   const contracts = getContractConfig(chainId)
 
   // Query votes for all tokenId + gauge combinations
-  const { data, isLoading } = useReadContracts({
+  const { data, isLoading, refetch } = useReadContracts({
     contracts: tokenIds.flatMap((tokenId) =>
       gaugeAddresses.map((gaugeAddress) => ({
         ...contracts.boostVoter,
@@ -818,6 +839,9 @@ export function useAllVoteAllocations(
     allocationsByToken,
     aggregatedAllocations,
     isLoading,
+    refetch: async () => {
+      await refetch()
+    },
   }
 }
 

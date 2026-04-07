@@ -21,13 +21,21 @@ export type LockTxState = {
 
 type MultiLockVoteStatus = "idle" | "voting" | "done"
 
+export type MultiLockExecutionResult = {
+  totalLocks: number
+  successCount: number
+  errorCount: number
+  skippedCount: number
+  hasErrors: boolean
+}
+
 type UseMultiLockVotingReturn = {
   voteAll: (
     tokenIds: bigint[],
     gaugeAddresses: Address[],
     weights: bigint[],
-  ) => void
-  resetAll: (tokenIds: bigint[]) => void
+  ) => Promise<MultiLockExecutionResult>
+  resetAll: (tokenIds: bigint[]) => Promise<MultiLockExecutionResult>
   abort: () => void
   lockStates: LockTxState[]
   currentIndex: number
@@ -50,6 +58,21 @@ export function useMultiLockVoting(): UseMultiLockVotingReturn {
   const [lockStates, setLockStates] = useState<LockTxState[]>([])
   const [currentIndex, setCurrentIndex] = useState(0)
   const abortRef = useRef(false)
+  const lockStatesRef = useRef<LockTxState[]>([])
+
+  const buildExecutionResult = useCallback((states: LockTxState[]) => {
+    const successCount = states.filter((s) => s.status === "success").length
+    const errorCount = states.filter((s) => s.status === "error").length
+    const skippedCount = states.filter((s) => s.status === "skipped").length
+
+    return {
+      totalLocks: states.length,
+      successCount,
+      errorCount,
+      skippedCount,
+      hasErrors: errorCount > 0,
+    }
+  }, [])
 
   const updateLockState = useCallback(
     (index: number, update: Partial<LockTxState>) => {
@@ -59,6 +82,7 @@ export function useMultiLockVoting(): UseMultiLockVotingReturn {
         if (existing) {
           next[index] = { ...existing, ...update }
         }
+        lockStatesRef.current = next
         return next
       })
     },
@@ -69,12 +93,13 @@ export function useMultiLockVoting(): UseMultiLockVotingReturn {
     async (
       tokenIds: bigint[],
       executeFn: (tokenId: bigint) => Promise<Hex>,
-    ) => {
+    ): Promise<MultiLockExecutionResult> => {
       abortRef.current = false
       const initial: LockTxState[] = tokenIds.map((tokenId) => ({
         tokenId,
         status: "pending" as const,
       }))
+      lockStatesRef.current = initial
       setLockStates(initial)
       setCurrentIndex(0)
       setStatus("voting")
@@ -122,16 +147,22 @@ export function useMultiLockVoting(): UseMultiLockVotingReturn {
       }
 
       setStatus("done")
+
+      return buildExecutionResult(lockStatesRef.current)
     },
-    [publicClient, updateLockState],
+    [buildExecutionResult, publicClient, updateLockState],
   )
 
   const voteAll = useCallback(
-    (tokenIds: bigint[], gaugeAddresses: Address[], weights: bigint[]) => {
+    async (
+      tokenIds: bigint[],
+      gaugeAddresses: Address[],
+      weights: bigint[],
+    ): Promise<MultiLockExecutionResult> => {
       const { address, abi } = contracts.boostVoter
-      if (!address) return
+      if (!address) return buildExecutionResult([])
 
-      executeSequential(tokenIds, async (tokenId) => {
+      return executeSequential(tokenIds, async (tokenId) => {
         return writeContractAsync({
           address,
           abi,
@@ -140,15 +171,20 @@ export function useMultiLockVoting(): UseMultiLockVotingReturn {
         })
       })
     },
-    [contracts.boostVoter, executeSequential, writeContractAsync],
+    [
+      buildExecutionResult,
+      contracts.boostVoter,
+      executeSequential,
+      writeContractAsync,
+    ],
   )
 
   const resetAll = useCallback(
-    (tokenIds: bigint[]) => {
+    async (tokenIds: bigint[]): Promise<MultiLockExecutionResult> => {
       const { address, abi } = contracts.boostVoter
-      if (!address) return
+      if (!address) return buildExecutionResult([])
 
-      executeSequential(tokenIds, async (tokenId) => {
+      return executeSequential(tokenIds, async (tokenId) => {
         return writeContractAsync({
           address,
           abi,
@@ -157,7 +193,12 @@ export function useMultiLockVoting(): UseMultiLockVotingReturn {
         })
       })
     },
-    [contracts.boostVoter, executeSequential, writeContractAsync],
+    [
+      buildExecutionResult,
+      contracts.boostVoter,
+      executeSequential,
+      writeContractAsync,
+    ],
   )
 
   const abort = useCallback(() => {
@@ -167,6 +208,7 @@ export function useMultiLockVoting(): UseMultiLockVotingReturn {
   const clear = useCallback(() => {
     setStatus("idle")
     setLockStates([])
+    lockStatesRef.current = []
     setCurrentIndex(0)
     abortRef.current = false
   }, [])

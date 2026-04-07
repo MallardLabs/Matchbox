@@ -20,10 +20,16 @@ const mezoPriceResponseSchema = z.object({
   liquidity: z.string().optional(),
 })
 
+const MEZO_PRICE_API_PATH = "/api/pricing/mezo"
+const appBaseUrl = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "")
+const mezoPriceEndpoint = appBaseUrl
+  ? `${appBaseUrl}${MEZO_PRICE_API_PATH}`
+  : MEZO_PRICE_API_PATH
+
 async function fetchMezoPrice(
   signal: AbortSignal,
 ): Promise<z.infer<typeof mezoPriceResponseSchema>> {
-  const response = await fetch("/api/pricing/mezo", {
+  const response = await fetch(mezoPriceEndpoint, {
     method: "GET",
     signal,
   })
@@ -45,7 +51,7 @@ export function useMezoPrice(): MezoPriceResult {
   const useAerodrome = isMainnet || USE_AERODROME_ON_TESTNET
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ["mezo-price"],
+    queryKey: ["mezo-price", mezoPriceEndpoint],
     queryFn: ({ signal }) => fetchMezoPrice(signal),
     enabled: useAerodrome,
     ...QUERY_PROFILES.SHORT_CACHE,
@@ -69,11 +75,7 @@ export function useMezoPrice(): MezoPriceResult {
     }
   }
 
-  if (
-    isError ||
-    !data ||
-    data.price === null
-  ) {
+  if (isError || !data || data.price === null) {
     return {
       price: MEZO_FALLBACK_PRICE,
       isLoading: false,

@@ -6,6 +6,11 @@ export const config = {
   runtime: "edge",
 }
 
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, OPTIONS",
+} as const
+
 const BASE_RPC_URLS = [
   process.env.BASE_RPC_URL,
   "https://mainnet.base.org",
@@ -67,12 +72,20 @@ function json(data: unknown, init?: ResponseInit): Response {
     ...init,
     headers: {
       "Content-Type": "application/json",
+      ...CORS_HEADERS,
       ...init?.headers,
     },
   })
 }
 
-export default async function handler() {
+export default async function handler(request: Request) {
+  if (request.method === "OPTIONS") {
+    return new Response(null, {
+      status: 204,
+      headers: CORS_HEADERS,
+    })
+  }
+
   const rpcErrors: string[] = []
 
   for (const rpcUrl of BASE_RPC_URLS) {

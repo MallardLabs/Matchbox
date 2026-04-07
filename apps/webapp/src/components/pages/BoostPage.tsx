@@ -93,6 +93,9 @@ export default function BoostPage(): JSX.Element {
     new Map(),
   )
   const prevSelectedLockCountRef = useRef(0)
+  const multiVoteCleanupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  )
 
   const selectedLocks = useMemo(
     () =>
@@ -114,15 +117,14 @@ export default function BoostPage(): JSX.Element {
     voteStateMap,
     isInVotingWindow,
     isLoading: isLoadingVoteState,
+    refetch: refetchVoteState,
   } = useBatchVoteState(allVeMEZOTokenIds)
   const { claimableBribes, isLoading: isLoadingBribes } =
     useClaimableBribes(allVeMEZOTokenIds)
 
   // Batch fetch vote allocations for all locks to calculate APY for each
-  const { allocationsByToken } = useAllVoteAllocations(
-    allVeMEZOTokenIds,
-    gaugeAddresses,
-  )
+  const { allocationsByToken, refetch: refetchVoteAllocations } =
+    useAllVoteAllocations(allVeMEZOTokenIds, gaugeAddresses)
 
   // Derive aggregated vote state from batch data
   const {
@@ -342,19 +344,26 @@ export default function BoostPage(): JSX.Element {
   const [isCalculatorOpen, setIsCalculatorOpen] = useState(false)
   const [isCartOpen, setIsCartOpen] = useState(false)
 
-  // Close cart and clear allocations after fully successful multi-vote
-  useEffect(() => {
-    if (isMultiVoteDone && !multiVoteHasErrors) {
-      const timer = setTimeout(() => {
-        setIsCartOpen(false)
-        setGaugeAllocations(new Map())
-        setSelectedGaugeIndexes(new Set())
-        setCartSnapshots(new Map())
-        clearMultiVote()
-      }, 1500)
-      return () => clearTimeout(timer)
+  const clearMultiVoteCleanupTimer = useCallback(() => {
+    if (multiVoteCleanupTimerRef.current) {
+      clearTimeout(multiVoteCleanupTimerRef.current)
+      multiVoteCleanupTimerRef.current = null
     }
-  }, [isMultiVoteDone, multiVoteHasErrors, clearMultiVote])
+  }, [])
+
+  const scheduleMultiVoteCleanup = useCallback(
+    (callback?: () => void, delayMs = 1500) => {
+      clearMultiVoteCleanupTimer()
+      multiVoteCleanupTimerRef.current = setTimeout(() => {
+        callback?.()
+        clearMultiVote()
+        multiVoteCleanupTimerRef.current = null
+      }, delayMs)
+    },
+    [clearMultiVote, clearMultiVoteCleanupTimer],
+  )
+
+  useEffect(() => clearMultiVoteCleanupTimer, [clearMultiVoteCleanupTimer])
 
   const handleGaugeSort = useCallback(
     (column: GaugeSortColumn) => {
@@ -611,7 +620,7 @@ export default function BoostPage(): JSX.Element {
     setCartSnapshots(new Map())
   }, [])
 
-  const handleVote = () => {
+  const handleVote = async () => {
     if (votableLocks.length === 0 || selectedGaugeIndexes.size === 0) return
 
     const selectedGauges = Array.from(selectedGaugeIndexes)
@@ -627,7 +636,17 @@ export default function BoostPage(): JSX.Element {
     const weights = selectedGauges.map((entry) => BigInt(entry.weight))
     const tokenIds = votableLocks.map((l) => l.tokenId)
 
-    voteAll(tokenIds, gaugeAddrs, weights)
+    const result = await voteAll(tokenIds, gaugeAddrs, weights)
+    await Promise.allSettled([refetchVoteState(), refetchVoteAllocations()])
+
+    if (!result.hasErrors) {
+      scheduleMultiVoteCleanup(() => {
+        setIsCartOpen(false)
+        setGaugeAllocations(new Map())
+        setSelectedGaugeIndexes(new Set())
+        setCartSnapshots(new Map())
+      })
+    }
   }
 
   // Only locks that have used weight AND can vote this epoch are resettable
@@ -644,9 +663,14 @@ export default function BoostPage(): JSX.Element {
     [selectedLocks, voteStateMap],
   )
 
-  const handleReset = () => {
+  const handleReset = async () => {
     if (resettableLocks.length === 0) return
-    resetAll(resettableLocks.map((l) => l.tokenId))
+    const result = await resetAll(resettableLocks.map((l) => l.tokenId))
+    await Promise.allSettled([refetchVoteState(), refetchVoteAllocations()])
+
+    if (!result.hasErrors) {
+      scheduleMultiVoteCleanup()
+    }
   }
 
   const handleToggleLock = useCallback((index: number) => {
@@ -658,13 +682,24 @@ export default function BoostPage(): JSX.Element {
     })
   }, [])
 
-  const handleCheckoutOpen = useCallback(function handleCheckoutOpen() {
-    setIsCartOpen(true)
-  }, [])
+  const handleCheckoutOpen = useCallback(
+    function handleCheckoutOpen() {
+      clearMultiVoteCleanupTimer()
+      setIsCartOpen(true)
+    },
+    [clearMultiVoteCleanupTimer],
+  )
 
-  const handleCheckoutClose = useCallback(function handleCheckoutClose() {
-    setIsCartOpen(false)
-  }, [])
+  const handleCheckoutClose = useCallback(
+    function handleCheckoutClose() {
+      clearMultiVoteCleanupTimer()
+      setIsCartOpen(false)
+      if (!isMultiVoteInProgress) {
+        clearMultiVote()
+      }
+    },
+    [clearMultiVote, clearMultiVoteCleanupTimer, isMultiVoteInProgress],
+  )
 
   const isLoading = isLoadingLocks || isLoadingGauges
 
@@ -1093,18 +1128,20 @@ export default function BoostPage(): JSX.Element {
                   {cartStatusMessage ?? "Ready to vote."}
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {resettableLocks.length > 0 && !isMultiVoteInProgress && (
-                    <Button
-                      kind="secondary"
-                      onClick={handleReset}
-                      isLoading={isMultiVoteInProgress}
-                    >
-                      Reset{" "}
-                      {resettableLocks.length > 1
-                        ? `${resettableLocks.length} Locks`
-                        : "Vote"}
-                    </Button>
-                  )}
+                  {resettableLocks.length > 0 &&
+                    !isMultiVoteInProgress &&
+                    !isMultiVoteDone && (
+                      <Button
+                        kind="secondary"
+                        onClick={handleReset}
+                        isLoading={isMultiVoteInProgress}
+                      >
+                        Reset{" "}
+                        {resettableLocks.length > 1
+                          ? `${resettableLocks.length} Locks`
+                          : "Vote"}
+                      </Button>
+                    )}
                   {isMultiVoteDone && multiVoteHasErrors ? (
                     <>
                       <Button
@@ -1160,7 +1197,8 @@ export default function BoostPage(): JSX.Element {
                         gaugeAllocations.size === 0 ||
                         totalAllocation === 0 ||
                         !isAllocationValid ||
-                        isMultiVoteInProgress
+                        isMultiVoteInProgress ||
+                        isMultiVoteDone
                       }
                     >
                       {isMultiVoteInProgress

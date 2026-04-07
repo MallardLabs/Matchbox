@@ -1,5 +1,6 @@
 import { getContractConfig } from "@/config/contracts"
 import { QUERY_PROFILES } from "@/config/queryProfiles"
+import { useAllGaugeProfilesFromContext } from "@/contexts/GaugeProfilesContext"
 import { useNetwork } from "@/contexts/NetworkContext"
 import { NON_STAKING_GAUGE_ABI } from "@repo/shared/contracts"
 import { Rational } from "@thesis-co/cent"
@@ -24,6 +25,7 @@ export type UseBoostGaugesOptions = {
 
 export function useBoostGauges(options: UseBoostGaugesOptions = {}) {
   const { chainId, isNetworkReady } = useNetwork()
+  const { profiles: gaugeProfiles } = useAllGaugeProfilesFromContext()
   const includeOwnership = options.includeOwnership ?? false
   const enabled = (options.enabled ?? true) && isNetworkReady
   const contracts = getContractConfig(chainId)
@@ -237,28 +239,49 @@ export function useBoostGauges(options: UseBoostGaugesOptions = {}) {
     return map
   }, [tokenIdToGaugeResults, allTokenIds])
 
-  // Get token IDs for our gauge addresses
-  const tokenIds = addresses.map((addr) =>
-    gaugeToTokenId.get(addr.toLowerCase()),
+  const profileTokenIds = useMemo(() => {
+    const map = new Map<string, bigint>()
+
+    for (const [gaugeAddress, profile] of gaugeProfiles.entries()) {
+      try {
+        map.set(gaugeAddress, BigInt(profile.vebtc_token_id))
+      } catch {
+        // Ignore malformed profile records and fall back to on-chain discovery.
+      }
+    }
+
+    return map
+  }, [gaugeProfiles])
+
+  // Prefer the live on-chain mapping, but fall back to the stored gauge profile
+  // so public, logged-out sessions can still resolve veBTC-derived metadata.
+  const tokenIds = useMemo(
+    () =>
+      addresses.map((addr) => {
+        const gaugeKey = addr.toLowerCase()
+        return gaugeToTokenId.get(gaugeKey) ?? profileTokenIds.get(gaugeKey)
+      }),
+    [addresses, gaugeToTokenId, profileTokenIds],
   )
 
   // Fetch veBTC voting power for each token
-  const { data: veBTCVotingPowers, isLoading: isLoadingVotingPowers } = useReadContracts({
-    contracts: tokenIds
-      .filter((id): id is bigint => id !== undefined && id > 0n)
-      .map((tokenId) => ({
-        ...contracts.veBTC,
-        functionName: "votingPowerOfNFT",
-        args: [tokenId],
-      })),
-    query: {
-      ...QUERY_PROFILES.SHORT_CACHE,
-      enabled:
-        enabled &&
-        includeOwnership &&
-        tokenIds.some((id) => id !== undefined && id > 0n),
-    },
-  })
+  const { data: veBTCVotingPowers, isLoading: isLoadingVotingPowers } =
+    useReadContracts({
+      contracts: tokenIds
+        .filter((id): id is bigint => id !== undefined && id > 0n)
+        .map((tokenId) => ({
+          ...contracts.veBTC,
+          functionName: "votingPowerOfNFT",
+          args: [tokenId],
+        })),
+      query: {
+        ...QUERY_PROFILES.SHORT_CACHE,
+        enabled:
+          enabled &&
+          includeOwnership &&
+          tokenIds.some((id) => id !== undefined && id > 0n),
+      },
+    })
 
   // Fetch boost multipliers for each veBTC token
   const { data: boostData } = useReadContracts({
@@ -375,9 +398,7 @@ export function useBoostGauges(options: UseBoostGaugesOptions = {}) {
     const isAlive =
       (gaugeData?.[i * gaugeDataStride + 1]?.result as unknown as boolean) ??
       false
-    const veBTCTokenId = includeOwnership
-      ? (gaugeToTokenId.get(address.toLowerCase()) ?? 0n)
-      : 0n
+    const veBTCTokenId = includeOwnership ? (tokenIds[i] ?? 0n) : 0n
     const gaugeVeBTCWeight = tokenIdToVotingPower.get(veBTCTokenId.toString())
     const boost = tokenIdToBoost.get(veBTCTokenId.toString())
     const boostMultiplier =
