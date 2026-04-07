@@ -21,8 +21,11 @@ export function middleware(request: NextRequest) {
   }
 
   if (host === MARKETING_HOST) {
+    // Keep /api on the marketing host so same-origin fetches (e.g. pricing) are not
+    // redirected to app.* — cross-origin redirects break CORS for browser fetch().
     if (
       pathname !== "/" &&
+      !pathname.startsWith("/api") &&
       !MARKETING_PASSTHROUGH.some((prefix) => pathname.startsWith(prefix))
     ) {
       return NextResponse.redirect(

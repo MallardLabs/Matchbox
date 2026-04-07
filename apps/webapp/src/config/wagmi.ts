@@ -1,11 +1,34 @@
 import { getDefaultWallets, mezoMainnet, mezoTestnet } from "@mezo-org/passport"
 import { type WalletList, getDefaultConfig } from "@rainbow-me/rainbowkit"
 import {
+  bitgetWallet,
+  coinbaseWallet,
   injectedWallet,
+  metaMaskWallet,
+  okxWallet,
   rabbyWallet,
+  safeWallet,
   tahoWallet,
+  trustWallet,
+  walletConnectWallet,
+  zerionWallet,
 } from "@rainbow-me/rainbowkit/wallets"
 import { http, type Config } from "wagmi"
+
+/** EVM wallets shown in the connect wallet drawer (order preserved; WC + injected sorted last in UI). */
+const ethereumWalletConnectors = [
+  tahoWallet,
+  metaMaskWallet,
+  zerionWallet,
+  rabbyWallet,
+  bitgetWallet,
+  coinbaseWallet,
+  trustWallet,
+  okxWallet,
+  injectedWallet,
+  safeWallet,
+  walletConnectWallet,
+] as const
 
 export { mezoMainnet, mezoTestnet }
 
@@ -21,7 +44,7 @@ export const defaultWallets = rawDefaultWallets.map((group) => {
   if (group.groupName === "Ethereum") {
     return {
       ...group,
-      wallets: [...group.wallets, tahoWallet, rabbyWallet, injectedWallet],
+      wallets: [...ethereumWalletConnectors],
     }
   }
   return group

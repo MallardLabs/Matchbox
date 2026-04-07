@@ -1,8 +1,6 @@
-import { mezoTestnet } from "@/config/wagmi"
+import { useNetwork } from "@/contexts/NetworkContext"
 import { LinkExternal02 } from "@mezo-org/mezo-clay"
 import type { Address } from "viem"
-
-const DEFAULT_EXPLORER_URL = process.env.NEXT_PUBLIC_EXPLORER_URL ?? ""
 
 type AddressLinkProps = {
   address: Address
@@ -10,8 +8,10 @@ type AddressLinkProps = {
 }
 
 export function AddressLink({ address, label }: AddressLinkProps): JSX.Element {
-  const baseUrl =
-    mezoTestnet.blockExplorers?.default.url ?? DEFAULT_EXPLORER_URL
+  const { isMainnet } = useNetwork()
+  const baseUrl = isMainnet
+    ? "https://explorer.mezo.org"
+    : "https://explorer.test.mezo.org"
   const explorerUrl = `${baseUrl}/address/${address}`
   const shortAddress = `0x${address.slice(2, 6)}...${address.slice(-4)}`
 

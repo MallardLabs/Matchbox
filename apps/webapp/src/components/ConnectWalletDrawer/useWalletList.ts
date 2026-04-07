@@ -30,12 +30,16 @@ const WALLET_ICONS: Record<string, string> = {
   walletConnect: "https://avatars.githubusercontent.com/u/37784886?s=200&v=4",
 }
 
-// Wallets to skip if detected via EIP-6963 (to avoid duplicates)
+// EIP-6963 `rdns` ids — used to dedupe RainbowKit vs injected connectors
 const EIP6963_WALLET_IDS = new Set([
   "io.rabby",
   "com.taho",
   "io.metamask",
   "com.coinbase.wallet",
+  "io.zerion.wallet",
+  "com.bitget.web3",
+  "com.trustwallet.app",
+  "com.okex.wallet",
 ])
 
 const NETWORK_STORAGE_KEY = "mezo-network"
@@ -127,11 +131,10 @@ export function useWalletList(onConnected?: () => void) {
     // Skip generic injected connector with "Injected" name (keep "Browser Wallet" ones)
     if (connector.id === "injected" && connector.name === "Injected") continue
 
-    // Skip RainbowKit-added wallets if EIP-6963 version is detected
+    // Skip RainbowKit duplicate when the same wallet was already reported via EIP-6963
     const nameLower = connector.name.toLowerCase()
     if (
       !EIP6963_WALLET_IDS.has(connector.id) &&
-      (nameLower === "rabby wallet" || nameLower === "taho") &&
       eip6963DetectedNames.has(nameLower)
     ) {
       continue
