@@ -50,7 +50,14 @@ export function WalletRow({
     >
       <span className="flex items-center gap-3">
         {icon ? (
-          <img src={icon} alt="" className="h-10 w-10 rounded-lg" />
+          <img
+            src={icon}
+            alt=""
+            className="h-10 w-10 rounded-lg"
+            loading="eager"
+            decoding="sync"
+            fetchPriority="high"
+          />
         ) : (
           <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-[var(--border)] text-xs font-medium text-[var(--content-secondary)]">
             {name.slice(0, 2)}

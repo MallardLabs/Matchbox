@@ -92,6 +92,8 @@ function ConnectingView({
             src={wallet.icon}
             alt={wallet.name}
             className="h-20 w-20 rounded-2xl"
+            loading="eager"
+            decoding="sync"
           />
         ) : (
           <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-[var(--border)] text-2xl font-bold text-[var(--content-secondary)]">
@@ -113,7 +115,9 @@ function ConnectingView({
       <p className="mb-6 text-center text-sm text-[var(--content-secondary)]">
         {error
           ? error
-          : `Open the ${wallet.name} extension to connect your wallet.`}
+          : wallet.id === "walletConnect"
+            ? "Use the WalletConnect modal to scan a QR code or pick a wallet (including Safe)."
+            : `Open the ${wallet.name} extension to connect your wallet.`}
       </p>
 
       {/* Action buttons */}

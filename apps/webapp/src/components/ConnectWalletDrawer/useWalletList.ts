@@ -2,7 +2,9 @@ import { defaultWallets, mezoMainnet } from "@/config/wagmi"
 import { useNetwork } from "@/contexts/NetworkContext"
 import { CHAIN_ID, type SupportedChainId } from "@repo/shared/contracts"
 import { useCallback, useEffect, useState } from "react"
+import type { Connector } from "wagmi"
 import { useAccount, useConnect, useSwitchChain } from "wagmi"
+import { WALLET_ICON_DATA_URLS } from "./walletIconUrls"
 
 type WalletEntry = {
   id: string
@@ -17,17 +19,21 @@ type WalletGroup = {
   wallets: WalletEntry[]
 }
 
-// Known wallet icons for wallets that may not provide their own
-const WALLET_ICONS: Record<string, string> = {
-  "io.rabby": "/wallet%20logos/rabby.png",
-  rabby: "/wallet%20logos/rabby.png",
-  "rabby wallet": "/wallet%20logos/rabby.png",
-  "com.taho": "/wallet%20logos/taho.png",
-  taho: "/wallet%20logos/taho.png",
-  "taho wallet": "/wallet%20logos/taho.png",
-  injected:
-    "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'/%3E%3C/svg%3E",
-  walletConnect: "https://avatars.githubusercontent.com/u/37784886?s=200&v=4",
+const INJECTED_WALLET_ICON =
+  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'/%3E%3C/svg%3E"
+
+type RainbowKitConnectorFields = Connector & {
+  isWalletConnectModalConnector?: boolean
+  rkDetails?: { isWalletConnectModalConnector?: boolean }
+}
+
+/** RainbowKit adds a second WC connector with Web3Modal (`showQrModal`); it may live on `rkDetails`. */
+function isWalletConnectModalConnector(connector: Connector): boolean {
+  const c = connector as RainbowKitConnectorFields
+  return (
+    c.isWalletConnectModalConnector === true ||
+    c.rkDetails?.isWalletConnectModalConnector === true
+  )
 }
 
 // EIP-6963 `rdns` ids — used to dedupe RainbowKit vs injected connectors
@@ -81,21 +87,35 @@ export function useWalletList(onConnected?: () => void) {
     }
   }, [isConnected, pendingConnectorId, onConnected])
 
-  // Resolve icon from known icons or defaultWallets
+  // Prefer bundled SVG data URLs (sync, no network) over async RainbowKit iconUrl
   function resolveIcon(
     connectorId: string,
     connectorName: string,
     connectorIcon?: string,
   ): string | undefined {
-    // Check known wallet icons
-    if (WALLET_ICONS[connectorId]) {
-      return WALLET_ICONS[connectorId]
+    if (connectorId === "metaMask" || connectorId === "io.metamask") {
+      return WALLET_ICON_DATA_URLS.metaMask
+    }
+    if (connectorId === "coinbase" || connectorId === "com.coinbase.wallet") {
+      return WALLET_ICON_DATA_URLS.coinbase
+    }
+    if (connectorId === "walletConnect") {
+      return WALLET_ICON_DATA_URLS.walletConnect
+    }
+    if (connectorId === "io.rabby" || connectorId === "rabby") {
+      return WALLET_ICON_DATA_URLS.rabby
+    }
+    if (connectorId === "com.taho" || connectorId === "taho") {
+      return WALLET_ICON_DATA_URLS.taho
     }
 
-    // Check by lowercase name
     const nameLower = connectorName.toLowerCase()
-    if (nameLower.includes("rabby")) return WALLET_ICONS["io.rabby"]
-    if (nameLower.includes("taho")) return WALLET_ICONS["com.taho"]
+    if (nameLower.includes("rabby")) return WALLET_ICON_DATA_URLS.rabby
+    if (nameLower.includes("taho")) return WALLET_ICON_DATA_URLS.taho
+    if (nameLower.includes("metamask")) return WALLET_ICON_DATA_URLS.metaMask
+    if (nameLower.includes("coinbase")) return WALLET_ICON_DATA_URLS.coinbase
+
+    if (connectorId === "injected") return INJECTED_WALLET_ICON
 
     if (connectorIcon) return connectorIcon
 
@@ -127,6 +147,15 @@ export function useWalletList(onConnected?: () => void) {
   for (const connector of connectors) {
     // Deduplicate connectors by ID
     if (seenIds.has(connector.id)) continue
+
+    // RainbowKit registers two WalletConnect connectors: one opens Web3Modal (this one),
+    // one is for QR; we only list the QR entry and connect via the modal connector in handleConnect.
+    if (
+      connector.id === "walletConnect" &&
+      isWalletConnectModalConnector(connector)
+    ) {
+      continue
+    }
 
     // Skip generic injected connector with "Injected" name (keep "Browser Wallet" ones)
     if (connector.id === "injected" && connector.name === "Injected") continue
@@ -192,7 +221,13 @@ export function useWalletList(onConnected?: () => void) {
 
   const handleConnect = useCallback(
     (connectorId: string, walletEntry?: WalletEntry) => {
-      const connector = connectors.find((c) => c.id === connectorId)
+      const connector =
+        connectorId === "walletConnect"
+          ? (connectors.find(
+              (c) =>
+                c.id === "walletConnect" && isWalletConnectModalConnector(c),
+            ) ?? connectors.find((c) => c.id === connectorId))
+          : connectors.find((c) => c.id === connectorId)
       if (!connector) return
 
       setError(null)

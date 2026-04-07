@@ -7,7 +7,6 @@ import {
   metaMaskWallet,
   okxWallet,
   rabbyWallet,
-  safeWallet,
   tahoWallet,
   trustWallet,
   walletConnectWallet,
@@ -26,7 +25,6 @@ const ethereumWalletConnectors = [
   trustWallet,
   okxWallet,
   injectedWallet,
-  safeWallet,
   walletConnectWallet,
 ] as const
 
