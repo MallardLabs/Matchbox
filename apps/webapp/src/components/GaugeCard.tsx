@@ -14,14 +14,18 @@ function weightToOptimalRatio(weight: bigint, optimal: bigint): number {
   return Number((weight * 10000n) / optimal) / 10000
 }
 
-/**
- * At 1× optimal — max boost (5x) — full green. Past that, blends toward amber
- * only (no red): further past optimal → more `--warning`, capped at pure amber.
- */
-function atOrAboveOptimalBarColor(ratio: number): string {
+/** Red overlay width 0% at 1× optimal → 100% at 2×; stays full past 2×. */
+function oversubscribedRedWidthPercent(ratio: number): number {
+  if (ratio <= 1) return 0
+  return Math.min(100, (ratio - 1) * 100)
+}
+
+/** Text color: green at 1×, red at 2× and beyond. */
+function oversubscribedStressColor(ratio: number): string {
   if (ratio <= 1) return "var(--positive)"
-  const t = Math.min(1, Math.max(0, (ratio - 1) / 3))
-  return `color-mix(in oklab, var(--positive) ${(1 - t) * 100}%, var(--warning) ${t * 100}%)`
+  if (ratio >= 2) return "var(--negative)"
+  const t = ratio - 1
+  return `color-mix(in oklab, var(--positive) ${(1 - t) * 100}%, var(--negative) ${t * 100}%)`
 }
 
 type GaugeCardProps = {
@@ -71,7 +75,8 @@ export default function GaugeCard({
     optimalTarget !== undefined && optimalTarget > 0n
       ? weightToOptimalRatio(gauge.totalWeight, optimalTarget)
       : 1
-  const atOrAboveBarColor = atOrAboveOptimalBarColor(weightVsOptimalRatio)
+  const oversubRedBarPct = oversubscribedRedWidthPercent(weightVsOptimalRatio)
+  const oversubTextColor = oversubscribedStressColor(weightVsOptimalRatio)
   const optimalAdditional = gauge.optimalAdditionalVeMEZO
   const hasShortfall = optimalAdditional !== undefined && optimalAdditional > 0n
 
@@ -185,7 +190,7 @@ export default function GaugeCard({
             Optimal veMEZO
             <Tooltip
               id={`gc-optimal-${gauge.address}`}
-              content="VeMEZO voting weight on this gauge that reaches maximum (5x) boost. The target uses total veMEZO allocated in active votes system-wide—the same basis as on-chain boost—not idle supply. Below that, the bar fills in orange toward the goal. Once you’re at or above it, you’re at full boost — the bar is green at the target, then shifts toward amber the further past that you are (popular gauges often do; it mostly means rewards are split across more veMEZO)."
+              content="VeMEZO voting weight on this gauge that reaches maximum (5x) boost. The target uses total veMEZO allocated in active votes system-wide—the same basis as on-chain boost—not idle supply. Below that, the bar fills in orange toward the goal. At the target the bar is green. If oversubscribed, a red layer grows over the green from 0% at 1× to 100% at 2× the optimal weight (full red); beyond 2× the bar stays full red—more veMEZO dilutes rewards per voter."
             />
           </dt>
           <dd className="min-w-0 text-[var(--content-primary)]">
@@ -211,32 +216,41 @@ export default function GaugeCard({
                   {pastOptimal && (
                     <span
                       className="shrink-0 font-mono text-2xs tabular-nums"
-                      style={{ color: atOrAboveBarColor }}
-                      title={`About ${weightVsOptimalRatio.toFixed(2)}× this “optimal” weight — extra veMEZO beyond what’s needed for 5x boost; common on busy gauges.`}
+                      style={{ color: oversubTextColor }}
+                      title={`${weightVsOptimalRatio.toFixed(2)}× optimal weight — oversubscribed. Red stress goes from green (1×) to red (2×+).`}
                     >
-                      +{formatFixedPoint(optimalOverVeMEZO)} past optimal
+                      +{formatFixedPoint(optimalOverVeMEZO)} oversubscribed
                     </span>
                   )}
                 </div>
                 <div
-                  className={`h-1.5 w-full overflow-hidden rounded-full bg-[var(--surface-secondary)] ring-1 ring-inset ${
-                    atOrAboveOptimal
-                      ? "ring-[rgba(var(--positive-rgb),0.22)]"
-                      : "ring-[var(--border)]"
+                  className={`relative h-1.5 w-full overflow-hidden rounded-full bg-[var(--surface-secondary)] ring-1 ring-inset ${
+                    pastOptimal
+                      ? "ring-[color-mix(in_oklab,var(--negative)_28%,transparent)]"
+                      : atOrAboveOptimal
+                        ? "ring-[rgba(var(--positive-rgb),0.22)]"
+                        : "ring-[var(--border)]"
                   }`}
                   aria-hidden="true"
                 >
-                  <div
-                    className={`h-full rounded-full transition-[width] duration-300 ease-out ${
-                      hasShortfall ? "bg-[rgba(247,147,26,0.9)]" : ""
-                    }`}
-                    style={{
-                      width: `${atOrAboveOptimal ? 100 : optimalFillPercent}%`,
-                      ...(atOrAboveOptimal
-                        ? { backgroundColor: atOrAboveBarColor }
-                        : {}),
-                    }}
-                  />
+                  {hasShortfall ? (
+                    <div
+                      className="h-full rounded-full bg-[rgba(247,147,26,0.9)] transition-[width] duration-300 ease-out"
+                      style={{ width: `${optimalFillPercent}%` }}
+                    />
+                  ) : (
+                    atOrAboveOptimal && (
+                      <div className="relative h-full w-full">
+                        <div className="absolute inset-y-0 left-0 h-full w-full rounded-full bg-[var(--positive)]" />
+                        {pastOptimal && (
+                          <div
+                            className="absolute inset-y-0 left-0 h-full rounded-full bg-[var(--negative)] transition-[width] duration-300 ease-out"
+                            style={{ width: `${oversubRedBarPct}%` }}
+                          />
+                        )}
+                      </div>
+                    )
+                  )}
                 </div>
               </div>
             )}
