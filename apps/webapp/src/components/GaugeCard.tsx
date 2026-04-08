@@ -34,6 +34,12 @@ export default function GaugeCard({
       ? displayAPYOverride
       : (apyData?.apy ?? null)
 
+  const optimalTarget = gauge.optimalVeMEZO
+  const optimalFillPercent =
+    optimalTarget !== undefined && optimalTarget > 0n
+      ? Math.min(100, Number((gauge.totalWeight * 100n) / optimalTarget))
+      : 0
+
   return (
     <article
       className={`flex flex-col gap-3 rounded-xl border bg-[var(--surface)] p-4 ${
@@ -144,21 +150,43 @@ export default function GaugeCard({
             Optimal veMEZO
             <Tooltip
               id={`gc-optimal-${gauge.address}`}
-              content="Total veMEZO weight required for this gauge to reach maximum (5x) boost. When applicable, the smaller line shows how much veMEZO is still remaining to get there."
+              content="Total veMEZO weight required for this gauge to reach maximum (5x) boost. The bar fills as current veMEZO voting weight approaches that target; the right side shows how much veMEZO is still needed when below 5x."
             />
           </dt>
-          <dd className="font-mono text-[var(--content-primary)]">
-            {gauge.optimalVeMEZO !== undefined
-              ? formatFixedPoint(gauge.optimalVeMEZO)
-              : "-"}
-          </dd>
-          {gauge.optimalAdditionalVeMEZO !== undefined &&
-            gauge.optimalAdditionalVeMEZO > 0n && (
-              <div className="mt-1 text-2xs text-[var(--content-secondary)]">
-                {formatFixedPoint(gauge.optimalAdditionalVeMEZO)} remaining to
-                5x
+          <dd className="min-w-0 text-[var(--content-primary)]">
+            {optimalTarget === undefined ? (
+              <span className="font-mono">-</span>
+            ) : (
+              <div className="space-y-1.5">
+                <div className="flex min-w-0 items-baseline justify-between gap-2">
+                  <span
+                    className="min-w-0 truncate font-mono"
+                    title={formatFixedPoint(optimalTarget)}
+                  >
+                    {formatFixedPoint(optimalTarget)}
+                  </span>
+                  {gauge.optimalAdditionalVeMEZO !== undefined &&
+                    gauge.optimalAdditionalVeMEZO > 0n && (
+                      <span
+                        className="shrink-0 font-mono text-2xs text-[var(--content-secondary)] tabular-nums"
+                        title="veMEZO still needed to reach 5x boost on this gauge"
+                      >
+                        {formatFixedPoint(gauge.optimalAdditionalVeMEZO)} to 5x
+                      </span>
+                    )}
+                </div>
+                <div
+                  className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--surface-secondary)] ring-1 ring-inset ring-[var(--border)]"
+                  aria-hidden="true"
+                >
+                  <div
+                    className="h-full rounded-full bg-[rgba(247,147,26,0.9)] transition-[width] duration-300 ease-out"
+                    style={{ width: `${optimalFillPercent}%` }}
+                  />
+                </div>
               </div>
             )}
+          </dd>
         </div>
       </dl>
       {children}
