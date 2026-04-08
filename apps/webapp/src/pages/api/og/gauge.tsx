@@ -145,11 +145,11 @@ export default async function handler(req: NextRequest) {
           if (mappedGauge.toLowerCase() === gaugeAddress) {
             veBTCTokenId = tokenId
 
-            // Get veBTC voting power
+            // Show the baseline veBTC weight and the boost separately.
             const votingPower = (await client.readContract({
               address: contracts.veBTC,
               abi: VOTING_ESCROW_ABI,
-              functionName: "votingPowerOfNFT",
+              functionName: "unboostedVotingPowerOfNFT",
               args: [tokenId],
             })) as bigint
             veBTCWeight = votingPower

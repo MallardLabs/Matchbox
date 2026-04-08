@@ -144,14 +144,21 @@ export default function GaugeCard({
             Optimal veMEZO
             <Tooltip
               id={`gc-optimal-${gauge.address}`}
-              content="Additional veMEZO weight needed to push this gauge to maximum (5x) boost efficiency. Low = nearly at max. High = room for more voters."
+              content="Total veMEZO weight required for this gauge to reach maximum (5x) boost. When applicable, the smaller line shows how much veMEZO is still remaining to get there."
             />
           </dt>
           <dd className="font-mono text-[var(--content-primary)]">
-            {gauge.optimalAdditionalVeMEZO !== undefined
-              ? formatFixedPoint(gauge.optimalAdditionalVeMEZO)
+            {gauge.optimalVeMEZO !== undefined
+              ? formatFixedPoint(gauge.optimalVeMEZO)
               : "-"}
           </dd>
+          {gauge.optimalAdditionalVeMEZO !== undefined &&
+            gauge.optimalAdditionalVeMEZO > 0n && (
+              <div className="mt-1 text-2xs text-[var(--content-secondary)]">
+                {formatFixedPoint(gauge.optimalAdditionalVeMEZO)} remaining to
+                5x
+              </div>
+            )}
         </div>
       </dl>
       {children}

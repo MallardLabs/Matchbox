@@ -128,8 +128,8 @@ export default function GaugesPage(): JSX.Element {
             comparison = a.boostMultiplier - b.boostMultiplier
             break
           case "optimalVeMEZO": {
-            const aVal = a.optimalAdditionalVeMEZO ?? -1n
-            const bVal = b.optimalAdditionalVeMEZO ?? -1n
+            const aVal = a.optimalVeMEZO ?? -1n
+            const bVal = b.optimalVeMEZO ?? -1n
             comparison = aVal < bVal ? -1 : aVal > bVal ? 1 : 0
             break
           }
@@ -436,11 +436,20 @@ export default function GaugesPage(): JSX.Element {
                     }
                   >
                     {(gauge: BoostGauge) => (
-                      <span className="font-mono text-sm tabular-nums">
-                        {gauge.optimalAdditionalVeMEZO !== undefined
-                          ? formatFixedPoint(gauge.optimalAdditionalVeMEZO)
-                          : "-"}
-                      </span>
+                      <div className="leading-tight">
+                        <div className="font-mono text-sm tabular-nums">
+                          {gauge.optimalVeMEZO !== undefined
+                            ? formatFixedPoint(gauge.optimalVeMEZO)
+                            : "-"}
+                        </div>
+                        {gauge.optimalAdditionalVeMEZO !== undefined &&
+                          gauge.optimalAdditionalVeMEZO > 0n && (
+                            <div className="text-2xs text-[var(--content-secondary)]">
+                              {formatFixedPoint(gauge.optimalAdditionalVeMEZO)}{" "}
+                              remaining
+                            </div>
+                          )}
+                      </div>
                     )}
                   </TableBuilderColumn>
                   <TableBuilderColumn header="Status">

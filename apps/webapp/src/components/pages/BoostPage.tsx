@@ -517,8 +517,8 @@ export default function BoostPage(): JSX.Element {
             comparison = a.boostMultiplier - b.boostMultiplier
             break
           case "optimalVeMEZO": {
-            const aVal = a.optimalAdditionalVeMEZO ?? -1n
-            const bVal = b.optimalAdditionalVeMEZO ?? -1n
+            const aVal = a.optimalVeMEZO ?? -1n
+            const bVal = b.optimalVeMEZO ?? -1n
             comparison = aVal < bVal ? -1 : aVal > bVal ? 1 : 0
             break
           }

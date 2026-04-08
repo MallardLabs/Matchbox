@@ -253,7 +253,7 @@ const faqItems: FAQItemProps[] = [
   {
     question: 'What is the "Optimal veMEZO" field?',
     answer:
-      "This is the additional veMEZO voting weight that would bring the gauge to maximum boost efficiency (5x). A low number means the gauge is near full capacity. A high number means there is room for more voters — and potentially better per-voter APY.",
+      "This is the total veMEZO voting weight required for a gauge to reach maximum boost efficiency (5x). If the gauge is not there yet, Matchbox also shows how much veMEZO is still remaining to reach 5x.",
   },
   {
     question: "Can I vote for multiple gauges?",

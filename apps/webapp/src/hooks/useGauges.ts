@@ -14,6 +14,7 @@ export type BoostGauge = {
   veBTCWeight: bigint | undefined
   totalWeight: bigint
   isAlive: boolean
+  optimalVeMEZO: bigint | undefined
   optimalAdditionalVeMEZO: bigint | undefined
   boostMultiplier: number
 }
@@ -264,14 +265,15 @@ export function useBoostGauges(options: UseBoostGaugesOptions = {}) {
     [addresses, gaugeToTokenId, profileTokenIds],
   )
 
-  // Fetch veBTC voting power for each token
+  // Fetch unboosted veBTC voting power for each token so the displayed
+  // weight and optimal veMEZO target use the same baseline as the boost math.
   const { data: veBTCVotingPowers, isLoading: isLoadingVotingPowers } =
     useReadContracts({
       contracts: tokenIds
         .filter((id): id is bigint => id !== undefined && id > 0n)
         .map((tokenId) => ({
           ...contracts.veBTC,
-          functionName: "votingPowerOfNFT",
+          functionName: "unboostedVotingPowerOfNFT",
           args: [tokenId],
         })),
       query: {
@@ -301,18 +303,19 @@ export function useBoostGauges(options: UseBoostGaugesOptions = {}) {
     },
   })
 
-  // Fetch totals for optimal veMEZO calculation
-  // Uses supply() to match the BoostCalculator, which uses useVeSupply()
+  // Fetch system voting-power totals for optimal veMEZO calculation.
+  // We compare unboosted veBTC weight against total unboosted veBTC power and
+  // total veMEZO voting power to match the on-chain boost relationship.
   const { data: totalsData } = useReadContracts({
     contracts: includeOwnership
       ? [
           {
             ...contracts.veMEZO,
-            functionName: "supply",
+            functionName: "totalVotingPower",
           },
           {
             ...contracts.veBTC,
-            functionName: "supply",
+            functionName: "unboostedTotalVotingPower",
           },
         ]
       : [],
@@ -343,12 +346,14 @@ export function useBoostGauges(options: UseBoostGaugesOptions = {}) {
     }
   }
 
-  // Calculate optimal additional veMEZO for each gauge
-  // Formula: (gaugeVeBTCWeight * veMEZOSupply) / veBTCSupply
-  // Uses Rational for precise division, then manually converts to 18-decimal fixed point
-  const calculateOptimalAdditionalVeMEZO = (
+  // Calculate the total and remaining veMEZO needed for 5x boost.
+  // Formula:
+  //   targetVeMEZO = (gaugeVeBTCWeight * totalVeMEZOVotingPower) / totalUnboostedVeBTCVotingPower
+  //   additionalVeMEZO = max(targetVeMEZO - currentGaugeVeMEZOWeight, 0)
+  const calculateOptimalVeMEZO = (
     gaugeVeBTCWeight: bigint | undefined,
-  ): bigint | undefined => {
+    currentGaugeVeMEZOWeight: bigint,
+  ): { optimalVeMEZO: bigint; optimalAdditionalVeMEZO: bigint } | undefined => {
     if (
       !veMEZOSupply ||
       !veBTCSupply ||
@@ -370,20 +375,23 @@ export function useBoostGauges(options: UseBoostGaugesOptions = {}) {
       const veMEZOTotal = Rational(veMEZOSupply, scale)
       const veBTCTotal = Rational(veBTCSupply, scale)
 
-      // Calculate (veBTCWeight * veMEZOTotal) / veBTCTotal
-      // Result is a rational representing the actual value (not scaled)
+      // Calculate the total veMEZO target for 5x boost.
       const result = veBTCWeight.multiply(veMEZOTotal).divide(veBTCTotal)
-
-      // Simplify to reduce the numerator/denominator before scaling
-      // Without this, the rational accumulates huge unsimplified values
       const simplified = result.simplify()
+      const optimalTarget = (simplified.p * scale) / simplified.q
+      const optimalAdditionalVeMEZO =
+        optimalTarget > currentGaugeVeMEZOWeight
+          ? optimalTarget - currentGaugeVeMEZOWeight
+          : 0n
 
-      // Convert back to 18-decimal fixed point: multiply by 10^18
-      // Using (p * scale) / q ensures we get the correct bigint representation
-      return (simplified.p * scale) / simplified.q
+      return {
+        optimalVeMEZO: optimalTarget,
+        optimalAdditionalVeMEZO,
+      }
     } catch (error) {
-      console.error("calculateOptimalAdditionalVeMEZO error:", {
+      console.error("calculateOptimalVeMEZO error:", {
         gaugeVeBTCWeight: gaugeVeBTCWeight.toString(),
+        currentGaugeVeMEZOWeight: currentGaugeVeMEZOWeight.toString(),
         veMEZOSupply: veMEZOSupply.toString(),
         veBTCSupply: veBTCSupply.toString(),
         error,
@@ -403,6 +411,9 @@ export function useBoostGauges(options: UseBoostGaugesOptions = {}) {
     const boost = tokenIdToBoost.get(veBTCTokenId.toString())
     const boostMultiplier =
       includeOwnership && boost !== undefined ? Number(boost) / 1e18 : 1
+    const optimalVeMEZOData = includeOwnership
+      ? calculateOptimalVeMEZO(gaugeVeBTCWeight, totalWeight)
+      : undefined
 
     return {
       address,
@@ -410,9 +421,8 @@ export function useBoostGauges(options: UseBoostGaugesOptions = {}) {
       veBTCWeight: includeOwnership ? gaugeVeBTCWeight : undefined,
       totalWeight,
       isAlive,
-      optimalAdditionalVeMEZO: includeOwnership
-        ? calculateOptimalAdditionalVeMEZO(gaugeVeBTCWeight)
-        : undefined,
+      optimalVeMEZO: optimalVeMEZOData?.optimalVeMEZO,
+      optimalAdditionalVeMEZO: optimalVeMEZOData?.optimalAdditionalVeMEZO,
       boostMultiplier,
     }
   })
