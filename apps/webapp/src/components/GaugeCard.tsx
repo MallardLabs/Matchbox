@@ -8,6 +8,22 @@ import type { ReactNode } from "react"
 import { formatUnits } from "viem"
 import Tooltip from "./Tooltip"
 
+/** `totalWeight / optimal` — only meaningful when weight is at or above optimal. */
+function weightToOptimalRatio(weight: bigint, optimal: bigint): number {
+  if (optimal <= 0n) return 1
+  return Number((weight * 10000n) / optimal) / 10000
+}
+
+/**
+ * At 1× optimal — max boost (5x) — full green. Past that, blends toward amber
+ * only (no red): further past optimal → more `--warning`, capped at pure amber.
+ */
+function atOrAboveOptimalBarColor(ratio: number): string {
+  if (ratio <= 1) return "var(--positive)"
+  const t = Math.min(1, Math.max(0, (ratio - 1) / 3))
+  return `color-mix(in oklab, var(--positive) ${(1 - t) * 100}%, var(--warning) ${t * 100}%)`
+}
+
 type GaugeCardProps = {
   gauge: BoostGauge
   profile: GaugeProfile | null
@@ -39,18 +55,23 @@ export default function GaugeCard({
     optimalTarget !== undefined && optimalTarget > 0n
       ? Math.min(100, Number((gauge.totalWeight * 100n) / optimalTarget))
       : 0
-  const isOversubscribed =
+  const atOrAboveOptimal =
+    optimalTarget !== undefined &&
+    optimalTarget > 0n &&
+    gauge.totalWeight >= optimalTarget
+  const pastOptimal =
     optimalTarget !== undefined &&
     optimalTarget > 0n &&
     gauge.totalWeight > optimalTarget
   const optimalOverVeMEZO =
-    isOversubscribed && optimalTarget !== undefined
+    pastOptimal && optimalTarget !== undefined
       ? gauge.totalWeight - optimalTarget
       : 0n
-  const isAtOptimalFor5x =
-    optimalTarget !== undefined &&
-    optimalTarget > 0n &&
-    gauge.totalWeight === optimalTarget
+  const weightVsOptimalRatio =
+    optimalTarget !== undefined && optimalTarget > 0n
+      ? weightToOptimalRatio(gauge.totalWeight, optimalTarget)
+      : 1
+  const atOrAboveBarColor = atOrAboveOptimalBarColor(weightVsOptimalRatio)
   const optimalAdditional = gauge.optimalAdditionalVeMEZO
   const hasShortfall = optimalAdditional !== undefined && optimalAdditional > 0n
 
@@ -164,7 +185,7 @@ export default function GaugeCard({
             Optimal veMEZO
             <Tooltip
               id={`gc-optimal-${gauge.address}`}
-              content="Total veMEZO weight required for this gauge to reach maximum (5x) boost. The bar fills toward that target from the left. Below 5x, the right shows how much veMEZO is still needed. At the target, the bar is green. Beyond the target, the right shows how much veMEZO is over the optimal (oversubscribed)."
+              content="VeMEZO voting weight that hits maximum (5x) boost for this gauge. Below that, the bar fills in orange toward the goal. Once you’re at or above it, you’re at full boost — the bar is green at the target, then shifts toward amber the further past that you are (popular gauges often do; it mostly means rewards are split across more veMEZO)."
             />
           </dt>
           <dd className="min-w-0 text-[var(--content-primary)]">
@@ -187,39 +208,33 @@ export default function GaugeCard({
                       {formatFixedPoint(optimalAdditional)} to 5x
                     </span>
                   )}
-                  {isOversubscribed && (
+                  {pastOptimal && (
                     <span
-                      className="shrink-0 font-mono text-2xs text-[var(--warning)] tabular-nums"
-                      title="veMEZO voting weight on this gauge above the amount needed for 5x boost (dilutes per–veMEZO yield)"
+                      className="shrink-0 font-mono text-2xs tabular-nums"
+                      style={{ color: atOrAboveBarColor }}
+                      title={`About ${weightVsOptimalRatio.toFixed(2)}× this “optimal” weight — extra veMEZO beyond what’s needed for 5x boost; common on busy gauges.`}
                     >
-                      {formatFixedPoint(optimalOverVeMEZO)} over
+                      +{formatFixedPoint(optimalOverVeMEZO)} past optimal
                     </span>
                   )}
                 </div>
                 <div
                   className={`h-1.5 w-full overflow-hidden rounded-full bg-[var(--surface-secondary)] ring-1 ring-inset ${
-                    isAtOptimalFor5x
-                      ? "ring-[rgba(var(--positive-rgb),0.35)]"
-                      : isOversubscribed
-                        ? "ring-[rgba(234,179,8,0.45)]"
-                        : "ring-[var(--border)]"
+                    atOrAboveOptimal
+                      ? "ring-[rgba(var(--positive-rgb),0.22)]"
+                      : "ring-[var(--border)]"
                   }`}
                   aria-hidden="true"
                 >
                   <div
                     className={`h-full rounded-full transition-[width] duration-300 ease-out ${
-                      isAtOptimalFor5x
-                        ? "bg-[var(--positive)]"
-                        : isOversubscribed
-                          ? "bg-[var(--warning)]"
-                          : "bg-[rgba(247,147,26,0.9)]"
+                      hasShortfall ? "bg-[rgba(247,147,26,0.9)]" : ""
                     }`}
                     style={{
-                      width: `${
-                        isAtOptimalFor5x || isOversubscribed
-                          ? 100
-                          : optimalFillPercent
-                      }%`,
+                      width: `${atOrAboveOptimal ? 100 : optimalFillPercent}%`,
+                      ...(atOrAboveOptimal
+                        ? { backgroundColor: atOrAboveBarColor }
+                        : {}),
                     }}
                   />
                 </div>
