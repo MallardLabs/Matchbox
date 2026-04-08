@@ -332,18 +332,18 @@ function BoostSlider({ value, onChange, disabled }: BoostSliderProps) {
 }
 
 import { AnimatedNumber } from "@/components/AnimatedNumber"
-import { useVeSupply } from "@/hooks/useVeSupply"
+import { useBoostCalculatorTotals } from "@/hooks/useBoostCalculatorTotals"
 
 export function BoostCalculator() {
   const {
-    totalVeBtc: liveVeBtc,
-    totalVeMezo: liveVeMezo,
-    isLoading: supplyLoading,
-  } = useVeSupply()
+    totalUnboostedVeBtcVp: liveTotalVeBtcVp,
+    totalAllocatedVeMezoWeight: liveTotalVeMezoWeight,
+    isLoading: totalsLoading,
+  } = useBoostCalculatorTotals()
 
-  const supplyStatus = supplyLoading
+  const supplyStatus = totalsLoading
     ? "loading"
-    : liveVeBtc !== undefined
+    : liveTotalVeBtcVp !== undefined && liveTotalVeMezoWeight !== undefined
       ? "success"
       : "error"
 
@@ -375,9 +375,10 @@ export function BoostCalculator() {
   }, [])
 
   useEffect(() => {
-    if (liveVeBtc !== undefined) setTotalVeBtc(liveVeBtc)
-    if (liveVeMezo !== undefined) setTotalVeMezo(liveVeMezo)
-  }, [liveVeBtc, liveVeMezo])
+    if (liveTotalVeBtcVp !== undefined) setTotalVeBtc(liveTotalVeBtcVp)
+    if (liveTotalVeMezoWeight !== undefined)
+      setTotalVeMezo(liveTotalVeMezoWeight)
+  }, [liveTotalVeBtcVp, liveTotalVeMezoWeight])
 
   // Show tick once on first successful load, then fade; hide on error
   useEffect(() => {
@@ -654,6 +655,11 @@ export function BoostCalculator() {
             ref={systemTotalsRef}
             className="flex flex-col gap-4 px-1 pb-2 sm:gap-6"
           >
+            <p className="text-[10px] leading-snug text-[var(--content-secondary)] sm:text-xs">
+              Live defaults use unboosted veBTC voting power and total veMEZO
+              vote weight on the boost voter—the same bases as on-chain boost
+              and Optimal veMEZO—not raw token supply.
+            </p>
             <SystemRow
               label="veBTC"
               tokenSymbol="BTC"
