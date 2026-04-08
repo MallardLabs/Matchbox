@@ -39,11 +39,20 @@ export default function GaugeCard({
     optimalTarget !== undefined && optimalTarget > 0n
       ? Math.min(100, Number((gauge.totalWeight * 100n) / optimalTarget))
       : 0
-  const isMaxBoosted =
+  const isOversubscribed =
     optimalTarget !== undefined &&
     optimalTarget > 0n &&
-    gauge.optimalAdditionalVeMEZO !== undefined &&
-    gauge.optimalAdditionalVeMEZO === 0n
+    gauge.totalWeight > optimalTarget
+  const optimalOverVeMEZO =
+    isOversubscribed && optimalTarget !== undefined
+      ? gauge.totalWeight - optimalTarget
+      : 0n
+  const isAtOptimalFor5x =
+    optimalTarget !== undefined &&
+    optimalTarget > 0n &&
+    gauge.totalWeight === optimalTarget
+  const optimalAdditional = gauge.optimalAdditionalVeMEZO
+  const hasShortfall = optimalAdditional !== undefined && optimalAdditional > 0n
 
   return (
     <article
@@ -155,7 +164,7 @@ export default function GaugeCard({
             Optimal veMEZO
             <Tooltip
               id={`gc-optimal-${gauge.address}`}
-              content="Total veMEZO weight required for this gauge to reach maximum (5x) boost. The bar fills as current veMEZO voting weight approaches that target. When below 5x, the right side shows how much veMEZO is still needed."
+              content="Total veMEZO weight required for this gauge to reach maximum (5x) boost. The bar fills toward that target from the left. Below 5x, the right shows how much veMEZO is still needed. At the target, the bar is green. Beyond the target, the right shows how much veMEZO is over the optimal (oversubscribed)."
             />
           </dt>
           <dd className="min-w-0 text-[var(--content-primary)]">
@@ -170,24 +179,47 @@ export default function GaugeCard({
                   >
                     {formatFixedPoint(optimalTarget)}
                   </span>
-                  {gauge.optimalAdditionalVeMEZO !== undefined &&
-                    gauge.optimalAdditionalVeMEZO > 0n && (
-                      <span
-                        className="shrink-0 font-mono text-2xs text-[var(--content-secondary)] tabular-nums"
-                        title="veMEZO still needed to reach 5x boost on this gauge"
-                      >
-                        {formatFixedPoint(gauge.optimalAdditionalVeMEZO)} to 5x
-                      </span>
-                    )}
+                  {hasShortfall && (
+                    <span
+                      className="shrink-0 font-mono text-2xs text-[var(--content-secondary)] tabular-nums"
+                      title="veMEZO still needed to reach 5x boost on this gauge"
+                    >
+                      {formatFixedPoint(optimalAdditional)} to 5x
+                    </span>
+                  )}
+                  {isOversubscribed && (
+                    <span
+                      className="shrink-0 font-mono text-2xs text-[var(--warning)] tabular-nums"
+                      title="veMEZO voting weight on this gauge above the amount needed for 5x boost (dilutes per–veMEZO yield)"
+                    >
+                      {formatFixedPoint(optimalOverVeMEZO)} over
+                    </span>
+                  )}
                 </div>
                 <div
-                  className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--surface-secondary)] ring-1 ring-inset ring-[var(--border)]"
+                  className={`h-1.5 w-full overflow-hidden rounded-full bg-[var(--surface-secondary)] ring-1 ring-inset ${
+                    isAtOptimalFor5x
+                      ? "ring-[rgba(var(--positive-rgb),0.35)]"
+                      : isOversubscribed
+                        ? "ring-[rgba(234,179,8,0.45)]"
+                        : "ring-[var(--border)]"
+                  }`}
                   aria-hidden="true"
                 >
                   <div
-                    className="h-full rounded-full bg-[rgba(247,147,26,0.9)] transition-[width] duration-300 ease-out"
+                    className={`h-full rounded-full transition-[width] duration-300 ease-out ${
+                      isAtOptimalFor5x
+                        ? "bg-[var(--positive)]"
+                        : isOversubscribed
+                          ? "bg-[var(--warning)]"
+                          : "bg-[rgba(247,147,26,0.9)]"
+                    }`}
                     style={{
-                      width: `${isMaxBoosted ? 100 : optimalFillPercent}%`,
+                      width: `${
+                        isAtOptimalFor5x || isOversubscribed
+                          ? 100
+                          : optimalFillPercent
+                      }%`,
                     }}
                   />
                 </div>
