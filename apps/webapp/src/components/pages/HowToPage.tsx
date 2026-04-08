@@ -173,7 +173,7 @@ const veMEZOSteps: StepProps[] = [
     number: 3,
     title: "Evaluate gauges",
     description:
-      'The gauge table is sorted by APY by default. APY is calculated from total epoch incentives deposited divided by total veMEZO weight voting for the gauge, annualized (×52). Check "Optimal veMEZO" to see how many more votes a gauge can absorb before it\'s full.',
+      'The gauge table is sorted by APY by default. APY is calculated from total epoch incentives deposited divided by total veMEZO weight voting for the gauge, annualized (×52). Check "Optimal veMEZO" for how much veMEZO vote weight the gauge needs for max boost (5x)—using the same vote-weight totals as on-chain boost, not raw idle supply.',
   },
   {
     number: 4,
@@ -253,7 +253,7 @@ const faqItems: FAQItemProps[] = [
   {
     question: 'What is the "Optimal veMEZO" field?',
     answer:
-      "This is the total veMEZO voting weight required for a gauge to reach maximum boost efficiency (5x). If the gauge is not there yet, Matchbox also shows how much veMEZO is still remaining to reach 5x.",
+      "This is the total veMEZO voting weight that needs to be on a gauge for maximum boost (5x). The math uses the same idea as on-chain boost: it scales by total veMEZO that is actively allocated in votes across all gauges, not raw veMEZO supply from locks that have not voted. That keeps the target aligned with the boost multiplier you see. If the gauge is below target, Matchbox also shows how much veMEZO weight is still needed to reach 5x.",
   },
   {
     question: "Can I vote for multiple gauges?",

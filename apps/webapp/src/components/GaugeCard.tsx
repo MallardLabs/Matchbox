@@ -185,7 +185,7 @@ export default function GaugeCard({
             Optimal veMEZO
             <Tooltip
               id={`gc-optimal-${gauge.address}`}
-              content="VeMEZO voting weight that hits maximum (5x) boost for this gauge. Below that, the bar fills in orange toward the goal. Once you’re at or above it, you’re at full boost — the bar is green at the target, then shifts toward amber the further past that you are (popular gauges often do; it mostly means rewards are split across more veMEZO)."
+              content="VeMEZO voting weight on this gauge that reaches maximum (5x) boost. The target uses total veMEZO allocated in active votes system-wide—the same basis as on-chain boost—not idle supply. Below that, the bar fills in orange toward the goal. Once you’re at or above it, you’re at full boost — the bar is green at the target, then shifts toward amber the further past that you are (popular gauges often do; it mostly means rewards are split across more veMEZO)."
             />
           </dt>
           <dd className="min-w-0 text-[var(--content-primary)]">

@@ -123,7 +123,7 @@ A unique digital asset on the blockchain. veBTC and veMEZO positions are represe
 
 ### Optimal veMEZO
 
-The calculated amount of veMEZO votes needed for a gauge to reach maximum boost (5x). Displayed on gauge cards to help voters identify high-impact opportunities.
+The calculated total veMEZO vote weight on a gauge needed for maximum boost (5x). Matchbox scales this using **total veMEZO weight currently allocated in votes** system-wide (the same scope the boost logic uses), not raw supply from idle locks, so the number stays consistent with the displayed boost multiplier. Shown on gauge cards to help voters and gauge owners.
 
 ## P
 

@@ -69,7 +69,7 @@ More veMEZO votes relative to veBTC power = higher boost.
 
 ### Optimal veMEZO Target
 
-Each gauge has an "optimal" amount of veMEZO votes needed to reach maximum boost. Matchbox displays this metric to help:
+Each gauge has an "optimal" amount of veMEZO votes needed to reach maximum boost. The target is computed relative to **total veMEZO voting power that is actively allocated** to gauges (votes in flight), not the full supply sitting idle in locks—so it matches how boost is evaluated on-chain and stays aligned with the 1x–5x multiplier. Matchbox displays this metric to help:
 
 - **veBTC holders** understand how much support they need
 - **veMEZO voters** identify gauges that could benefit most from their votes
