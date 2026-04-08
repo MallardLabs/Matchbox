@@ -304,23 +304,13 @@ export function useBoostGauges(options: UseBoostGaugesOptions = {}) {
     },
   })
 
-  // Fetch system totals for optimal veMEZO calculation and boost (same as BoostCalculator).
-  // Boost on-chain uses gauge veMEZO weight vs *total active vote weight* across
-  // all gauges (`boostVoter.totalWeight`), not veMEZO escrow `totalVotingPower()`.
-  // Using the latter inflated "Optimal veMEZO" whenever much veMEZO was idle,
-  // which disagreed with `getBoost` (e.g. 5× boost while UI showed a large shortfall).
+  // System totals: ve token `supply()` — same as Boost calculator “System totals” (useVeSupply).
   const { data: totalsData, isLoading: isLoadingSystemTotals } =
     useReadContracts({
       contracts: includeOwnership
         ? [
-            {
-              ...contracts.boostVoter,
-              functionName: "totalWeight",
-            },
-            {
-              ...contracts.veBTC,
-              functionName: "unboostedTotalVotingPower",
-            },
+            { ...contracts.veBTC, functionName: "supply" },
+            { ...contracts.veMEZO, functionName: "supply" },
           ]
         : [],
       query: {
@@ -329,8 +319,8 @@ export function useBoostGauges(options: UseBoostGaugesOptions = {}) {
       },
     })
 
-  const veMEZOVoterTotalWeight = totalsData?.[0]?.result as bigint | undefined
-  const veBTCSupply = totalsData?.[1]?.result as bigint | undefined
+  const veBTCTokenSupply = totalsData?.[0]?.result as bigint | undefined
+  const veMEZOTokenSupply = totalsData?.[1]?.result as bigint | undefined
 
   // Build maps of token ID to voting power and boost
   const tokenIdToVotingPower = new Map<string, bigint>()
@@ -353,24 +343,24 @@ export function useBoostGauges(options: UseBoostGaugesOptions = {}) {
   }
 
   // Calculate the total and remaining veMEZO needed for 5x boost.
-  // Formula:
-  //   targetVeMEZO = (gaugeVeBTCWeight * boostVoterTotalWeight) / totalUnboostedVeBTCVotingPower
+  // Formula (same basis as Boost calculator):
+  //   targetVeMEZO = (unboosted NFT veBTC * veMEZO supply) / veBTC supply
   //   additionalVeMEZO = max(targetVeMEZO - currentGaugeVeMEZOWeight, 0)
   const calculateOptimalVeMEZO = (
     gaugeVeBTCWeight: bigint | undefined,
     currentGaugeVeMEZOWeight: bigint,
   ): { optimalVeMEZO: bigint; optimalAdditionalVeMEZO: bigint } | undefined => {
     if (
-      !veMEZOVoterTotalWeight ||
-      veMEZOVoterTotalWeight === 0n ||
-      !veBTCSupply ||
+      !veMEZOTokenSupply ||
+      veMEZOTokenSupply === 0n ||
+      !veBTCTokenSupply ||
       !gaugeVeBTCWeight ||
       gaugeVeBTCWeight === 0n
     ) {
       return undefined
     }
 
-    if (veBTCSupply === 0n) {
+    if (veBTCTokenSupply === 0n) {
       return undefined
     }
 
@@ -379,8 +369,8 @@ export function useBoostGauges(options: UseBoostGaugesOptions = {}) {
       // All values are 18-decimal fixed point, so represent as rationals with 10^18 denominator
       const scale = 10n ** 18n
       const veBTCWeight = Rational(gaugeVeBTCWeight, scale)
-      const veMEZOTotal = Rational(veMEZOVoterTotalWeight, scale)
-      const veBTCTotal = Rational(veBTCSupply, scale)
+      const veMEZOTotal = Rational(veMEZOTokenSupply, scale)
+      const veBTCTotal = Rational(veBTCTokenSupply, scale)
 
       // Calculate the total veMEZO target for 5x boost.
       const result = veBTCWeight.multiply(veMEZOTotal).divide(veBTCTotal)
@@ -399,8 +389,8 @@ export function useBoostGauges(options: UseBoostGaugesOptions = {}) {
       console.error("calculateOptimalVeMEZO error:", {
         gaugeVeBTCWeight: gaugeVeBTCWeight.toString(),
         currentGaugeVeMEZOWeight: currentGaugeVeMEZOWeight.toString(),
-        veMEZOVoterTotalWeight: veMEZOVoterTotalWeight.toString(),
-        veBTCSupply: veBTCSupply.toString(),
+        veMEZOTokenSupply: veMEZOTokenSupply.toString(),
+        veBTCTokenSupply: veBTCTokenSupply.toString(),
         error,
       })
       return undefined
@@ -420,17 +410,17 @@ export function useBoostGauges(options: UseBoostGaugesOptions = {}) {
     )
     const boostMultiplier =
       includeOwnership &&
-      veMEZOVoterTotalWeight !== undefined &&
-      veMEZOVoterTotalWeight > 0n &&
-      veBTCSupply !== undefined &&
-      veBTCSupply > 0n &&
+      veMEZOTokenSupply !== undefined &&
+      veMEZOTokenSupply > 0n &&
+      veBTCTokenSupply !== undefined &&
+      veBTCTokenSupply > 0n &&
       gaugeUnboostedVeBTCWeight !== undefined &&
       gaugeUnboostedVeBTCWeight > 0n
         ? boostMultiplierNumberFromCalculatorInputs({
             unboostedNftVp: gaugeUnboostedVeBTCWeight,
             gaugeVeMezoWeight: totalWeight,
-            unboostedVeBtcTotal: veBTCSupply,
-            boostVoterTotalWeight: veMEZOVoterTotalWeight,
+            veBtcSystemTotal: veBTCTokenSupply,
+            veMezoSystemTotal: veMEZOTokenSupply,
           })
         : 1
     const optimalVeMEZOData = includeOwnership

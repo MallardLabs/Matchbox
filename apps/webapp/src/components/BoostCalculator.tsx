@@ -330,19 +330,19 @@ function BoostSlider({ value, onChange, disabled }: BoostSliderProps) {
 }
 
 import { AnimatedNumber } from "@/components/AnimatedNumber"
-import { useBoostCalculatorTotals } from "@/hooks/useBoostCalculatorTotals"
+import { useVeSupply } from "@/hooks/useVeSupply"
 import { boostMultiplierFloatFromCalculatorInputs } from "@/utils/boostMultiplierFromCalculatorInputs"
 
 export function BoostCalculator() {
   const {
-    totalUnboostedVeBtcVp: liveTotalVeBtcVp,
-    totalAllocatedVeMezoWeight: liveTotalVeMezoWeight,
-    isLoading: totalsLoading,
-  } = useBoostCalculatorTotals()
+    totalVeBtc: liveVeBtc,
+    totalVeMezo: liveVeMezo,
+    isLoading: supplyLoading,
+  } = useVeSupply()
 
-  const supplyStatus = totalsLoading
+  const supplyStatus = supplyLoading
     ? "loading"
-    : liveTotalVeBtcVp !== undefined && liveTotalVeMezoWeight !== undefined
+    : liveVeBtc !== undefined
       ? "success"
       : "error"
 
@@ -374,10 +374,9 @@ export function BoostCalculator() {
   }, [])
 
   useEffect(() => {
-    if (liveTotalVeBtcVp !== undefined) setTotalVeBtc(liveTotalVeBtcVp)
-    if (liveTotalVeMezoWeight !== undefined)
-      setTotalVeMezo(liveTotalVeMezoWeight)
-  }, [liveTotalVeBtcVp, liveTotalVeMezoWeight])
+    if (liveVeBtc !== undefined) setTotalVeBtc(liveVeBtc)
+    if (liveVeMezo !== undefined) setTotalVeMezo(liveVeMezo)
+  }, [liveVeBtc, liveVeMezo])
 
   // Show tick once on first successful load, then fade; hide on error
   useEffect(() => {
@@ -650,9 +649,9 @@ export function BoostCalculator() {
             className="flex flex-col gap-4 px-1 pb-2 sm:gap-6"
           >
             <p className="text-[10px] leading-snug text-[var(--content-secondary)] sm:text-xs">
-              Live defaults use unboosted veBTC voting power and total veMEZO
-              vote weight on the boost voter—the same bases as on-chain boost
-              and Optimal veMEZO—not raw token supply.
+              Live defaults use total locked veBTC and veMEZO from escrow
+              <code className="mx-0.5">supply()</code>
+              —the same bases as Optimal veMEZO on gauge cards.
             </p>
             <SystemRow
               label="veBTC"
