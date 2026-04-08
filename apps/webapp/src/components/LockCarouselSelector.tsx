@@ -1,33 +1,7 @@
+import { TokenIcon } from "@/components/TokenIcon"
 import { Card, Tag } from "@mezo-org/mezo-clay"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { formatUnits } from "viem"
-
-// Token icon mapping
-const TOKEN_ICONS: Record<string, string> = {
-  BTC: "/token icons/Bitcoin.svg",
-  WBTC: "/token icons/Bitcoin.svg",
-  tBTC: "/token icons/Bitcoin.svg",
-  MEZO: "/token icons/Mezo.svg",
-  MUSD: "/token icons/MUSD.svg",
-}
-
-function TokenIcon({
-  symbol,
-  size = 16,
-}: { symbol: string; size?: number }): JSX.Element | null {
-  const iconPath = TOKEN_ICONS[symbol.toUpperCase()]
-  if (!iconPath) return null
-
-  return (
-    <img
-      src={iconPath}
-      alt={symbol}
-      width={size}
-      height={size}
-      className="inline-block flex-shrink-0 align-middle"
-    />
-  )
-}
 
 function ChevronLeftIcon({ size = 24 }: { size?: number }) {
   return (
@@ -788,8 +762,12 @@ export function LockCarouselSelector<T extends LockItem>({
             />
           </div>
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-[var(--content-tertiary)]">
-              {showSelectionPrompt ? "Choose a lock" : label}
+            <p className="text-xs font-semibold tracking-wider text-[var(--content-tertiary)]">
+              {showSelectionPrompt ? (
+                <span className="uppercase">Choose a lock</span>
+              ) : (
+                label
+              )}
             </p>
             <p className="text-2xs text-[var(--content-secondary)]">
               {showSelectionPrompt

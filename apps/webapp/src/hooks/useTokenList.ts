@@ -41,6 +41,32 @@ const DEFAULT_TOKENS: Record<number, Token[]> = {
       decimals: 18,
       logoURI: "/token icons/Bitcoin.svg",
     },
+    {
+      chainId: CHAIN_ID.testnet,
+      address: getAddress("0x118917a40FAF1CD7a13dB0Ef56C86De7973Ac503"),
+      name: "MUSD",
+      symbol: "MUSD",
+      decimals: 18,
+      logoURI: "/token icons/MUSD.svg",
+    },
+    {
+      chainId: CHAIN_ID.testnet,
+      address: getAddress("0x04671C72Aab5AC02A03c1098314b1BB6B560c197"),
+      name: "USD Coin",
+      // Mezo bridged USDC — symbol must stay mUSDC (leading "m"), not USDC
+      symbol: "mUSDC",
+      decimals: 6,
+      logoURI: "/token icons/mUSDC.svg",
+    },
+    {
+      chainId: CHAIN_ID.testnet,
+      address: getAddress("0xeB5a5d39dE4Ea42C2Aa6A57EcA2894376683bB8E"),
+      name: "Tether USD",
+      // Mezo bridged USDT — symbol must stay mUSDT (leading "m"), not USDT
+      symbol: "mUSDT",
+      decimals: 6,
+      logoURI: "/token icons/mUSDT.svg",
+    },
   ],
   [CHAIN_ID.mainnet]: [
     {
@@ -58,6 +84,32 @@ const DEFAULT_TOKENS: Record<number, Token[]> = {
       symbol: "BTC",
       decimals: 18,
       logoURI: "/token icons/Bitcoin.svg",
+    },
+    {
+      chainId: CHAIN_ID.mainnet,
+      address: getAddress("0xdD468A1DDc392dcdbEf6db6e34E89AA338F9F186"),
+      name: "MUSD",
+      symbol: "MUSD",
+      decimals: 18,
+      logoURI: "/token icons/MUSD.svg",
+    },
+    {
+      chainId: CHAIN_ID.mainnet,
+      address: getAddress("0x04671C72Aab5AC02A03c1098314b1BB6B560c197"),
+      name: "USD Coin",
+      // Mezo bridged USDC — symbol must stay mUSDC (leading "m"), not USDC
+      symbol: "mUSDC",
+      decimals: 6,
+      logoURI: "/token icons/mUSDC.svg",
+    },
+    {
+      chainId: CHAIN_ID.mainnet,
+      address: getAddress("0xeB5a5d39dE4Ea42C2Aa6A57EcA2894376683bB8E"),
+      name: "Tether USD",
+      // Mezo bridged USDT — symbol must stay mUSDT (leading "m"), not USDT
+      symbol: "mUSDT",
+      decimals: 6,
+      logoURI: "/token icons/mUSDT.svg",
     },
   ],
 }

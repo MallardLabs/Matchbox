@@ -4,6 +4,7 @@ import { SpringIn } from "@/components/SpringIn"
 import { useTheme } from "@/contexts/ThemeContext"
 import { getAppUrl } from "@/utils/seo"
 import { Button } from "@mezo-org/mezo-clay"
+import type { ReactNode } from "react"
 import { useAccount } from "wagmi"
 
 function ArrowRightIcon(): JSX.Element {
@@ -45,7 +46,7 @@ function TerminalIcon(): JSX.Element {
 }
 
 interface ActionCardProps {
-  title: string
+  title: ReactNode
   command: string
   description: string
   buttonText: string
@@ -79,7 +80,7 @@ function ActionCard({
             style={{ backgroundColor: accentColor }}
             aria-hidden="true"
           />
-          <span className="text-2xs uppercase tracking-wider text-[var(--content-tertiary)]">
+          <span className="text-2xs tracking-wider text-[var(--content-tertiary)]">
             {title}
           </span>
         </div>
@@ -153,7 +154,7 @@ export default function HomePage(): JSX.Element {
       <div className="grid w-full max-w-4xl gap-4 md:grid-cols-3 md:gap-5">
         <SpringIn delay={1} variant="card">
           <ActionCard
-            title="Analytics"
+            title={<span className="uppercase">Analytics</span>}
             command="status --all"
             description="Monitor your boosts, fees earned, and gauge performance over time."
             buttonText="View Dashboard"
@@ -165,7 +166,12 @@ export default function HomePage(): JSX.Element {
 
         <SpringIn delay={2} variant="card">
           <ActionCard
-            title="veMEZO Holders"
+            title={
+              <>
+                <span className="normal-case">veMEZO</span>
+                <span className="uppercase"> Holders</span>
+              </>
+            }
             command="vote --boost"
             description="Vote on veBTC gauges to boost their voting power and earn incentives in return."
             buttonText="Vote to Boost"
@@ -176,7 +182,12 @@ export default function HomePage(): JSX.Element {
 
         <SpringIn delay={3} variant="card">
           <ActionCard
-            title="veBTC Holders"
+            title={
+              <>
+                <span className="normal-case">veBTC</span>
+                <span className="uppercase"> Holders</span>
+              </>
+            }
             command="gauge --manage"
             description="Manage your gauge profile, add incentives, and set your strategy to attract veMEZO votes."
             buttonText="Manage Gauge"

@@ -57,15 +57,27 @@ const TOKEN_REGISTRY: Record<string, TokenRegistryEntry> = {
   // Stablecoins - pegged to $1 USD
   // ============================================================================
 
-  // mUSD - Mezo USD stablecoin (testnet)
-  "0xab2f9f25a2c5bde10078ebf48ee85af7e9a27e74": {
-    symbol: "mUSD",
+  // MUSD — Mezo USD (testnet / mainnet per Mezo docs)
+  "0x118917a40fa1cd7a13db0ef56c86de7973ac503": {
+    symbol: "MUSD",
     priceType: "stablecoin",
     fixedPrice: 1.0,
   },
-  // mUSD - Mezo USD stablecoin (mainnet) - same address pattern
-  "0x980fe4c37f420e9d6a0cb11e2f1f35c5e2739254": {
-    symbol: "mUSD",
+  "0xdd468a1ddc392dcdbef6db6e34e89aa338f9f186": {
+    symbol: "MUSD",
+    priceType: "stablecoin",
+    fixedPrice: 1.0,
+  },
+
+  // Bridged stablecoins on Mezo (same Mezo address on testnet and mainnet).
+  // Registry symbols use lowercase "m" — mUSDC / mUSDT — not USDC / USDT.
+  "0x04671c72aab5ac02a03c1098314b1bb6b560c197": {
+    symbol: "mUSDC",
+    priceType: "stablecoin",
+    fixedPrice: 1.0,
+  },
+  "0xeb5a5d39de4ea42c2aa6a57eca2894376683bb8e": {
+    symbol: "mUSDT",
     priceType: "stablecoin",
     fixedPrice: 1.0,
   },
@@ -131,6 +143,9 @@ const STABLECOIN_SYMBOLS = new Set([
   "SUSD",
   "MIM",
   "MUSD",
+  // Uppercase forms for symbol fallback (on-chain symbols are mUSDC / mUSDT)
+  "MUSDC",
+  "MUSDT",
   "USD",
   "USDC.E",
   "USDT.E",

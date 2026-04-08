@@ -1349,11 +1349,15 @@ export default function IncentivesPage(): JSX.Element {
                             <div className="mb-1 flex items-center justify-between">
                               <label
                                 htmlFor="incentive-amount"
-                                className="block text-2xs uppercase tracking-wider text-[var(--content-tertiary)]"
+                                className="block text-2xs tracking-wider text-[var(--content-tertiary)]"
                               >
-                                Amount
-                                {incentiveToken &&
-                                  ` (${incentiveToken.symbol})`}
+                                <span className="uppercase">Amount</span>
+                                {incentiveToken && (
+                                  <span className="normal-case">
+                                    {" "}
+                                    ({incentiveToken.symbol})
+                                  </span>
+                                )}
                               </label>
                               {incentiveToken &&
                                 formattedTokenBalance !== undefined && (
@@ -1398,7 +1402,10 @@ export default function IncentivesPage(): JSX.Element {
                                 isTokenAllowlisted === false
                               }
                             >
-                              Approve {incentiveToken?.symbol}
+                              Approve{" "}
+                              <span className="normal-case">
+                                {incentiveToken?.symbol}
+                              </span>
                             </Button>
                           ) : (
                             <Button

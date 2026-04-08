@@ -1,6 +1,7 @@
 import { AnimatedNumber } from "@/components/AnimatedNumber"
 import GaugeCard from "@/components/GaugeCard"
 import { SpringIn } from "@/components/SpringIn"
+import { TokenIcon } from "@/components/TokenIcon"
 import Tooltip from "@/components/Tooltip"
 import type { GaugeProfile } from "@/config/supabase"
 import {
@@ -71,15 +72,6 @@ function formatTokenValue(amount: bigint, decimals: number): string {
   })
 }
 
-// Token icon mapping
-const TOKEN_ICONS: Record<string, string> = {
-  BTC: "/token icons/Bitcoin.svg",
-  WBTC: "/token icons/Bitcoin.svg",
-  tBTC: "/token icons/Bitcoin.svg",
-  MEZO: "/token icons/Mezo.svg",
-  MUSD: "/token icons/MUSD.svg",
-}
-
 type GaugeSortColumn =
   | "veBTCWeight"
   | "veMEZOWeight"
@@ -89,16 +81,6 @@ type GaugeSortColumn =
   | null
 type SortDirection = "asc" | "desc"
 type StatusFilter = "all" | "active" | "inactive"
-
-function TokenIcon({
-  symbol,
-  size = 16,
-}: { symbol: string; size?: number }): JSX.Element | null {
-  const iconPath = TOKEN_ICONS[symbol.toUpperCase()]
-  if (!iconPath) return null
-
-  return <img src={iconPath} alt={symbol} width={size} height={size} />
-}
 
 function VeBTCLockCard({
   lock,

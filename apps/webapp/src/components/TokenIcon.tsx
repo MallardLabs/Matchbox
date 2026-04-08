@@ -4,6 +4,16 @@ const TOKEN_ICON_MAP: Record<string, string> = {
   TBTC: "/token icons/Bitcoin.svg",
   MEZO: "/token icons/Mezo.svg",
   MUSD: "/token icons/MUSD.svg",
+  // Mezo bridged stables — keep lowercase "m" prefix; do not resolve via toUpperCase()
+  mUSDC: "/token icons/mUSDC.svg",
+  mUSDT: "/token icons/mUSDT.svg",
+}
+
+function tokenIconUrl(symbol: string): string | undefined {
+  if (symbol === "mUSDC" || symbol === "mUSDT") {
+    return TOKEN_ICON_MAP[symbol]
+  }
+  return TOKEN_ICON_MAP[symbol] ?? TOKEN_ICON_MAP[symbol.toUpperCase()]
 }
 
 type TokenIconProps = {
@@ -17,8 +27,11 @@ export function TokenIcon({
   size = 20,
   className = "",
 }: TokenIconProps): JSX.Element {
-  const iconPath = symbol ? TOKEN_ICON_MAP[symbol.toUpperCase()] : undefined
-  const fallbackLabel = symbol?.slice(0, 1)?.toUpperCase() ?? "?"
+  const iconPath = symbol ? tokenIconUrl(symbol) : undefined
+  const fallbackLabel =
+    symbol === "mUSDC" || symbol === "mUSDT"
+      ? "m"
+      : (symbol?.slice(0, 1)?.toUpperCase() ?? "?")
 
   if (iconPath) {
     return (

@@ -3,12 +3,12 @@ import { useCallback, useEffect, useRef, useState } from "react"
 
 type LockState = "NONE" | "MEZO" | "BTC"
 
-const INITIAL_TOTAL_VEMEZO = 30_000_000
-const INITIAL_TOTAL_VEBTC = 200
+const INITIAL_TOTAL_VE_MEZO = 30_000_000
+const INITIAL_TOTAL_VE_BTC = 200
 const INITIAL_BTC = "21"
 const INITIAL_BOOST = 5.0
-const INITIAL_MAX_VEMEZO = 500_000_000
-const INITIAL_MAX_VEBTC = 1000
+const INITIAL_MAX_VE_MEZO = 500_000_000
+const INITIAL_MAX_VE_BTC = 1000
 
 const formatNumber = (num: number | string, maxDecimals = 2): string => {
   if (num === "" || num === undefined || num === null) return ""
@@ -76,7 +76,7 @@ const parseNumber = (str: string): number => {
 const calcInitialMezo = () => {
   const btc = Number.parseFloat(INITIAL_BTC)
   const boostCalc = INITIAL_BOOST - 1
-  return (boostCalc * INITIAL_TOTAL_VEMEZO * btc) / (4 * INITIAL_TOTAL_VEBTC)
+  return (boostCalc * INITIAL_TOTAL_VE_MEZO * btc) / (4 * INITIAL_TOTAL_VE_BTC)
 }
 
 interface InputRowProps {
@@ -351,10 +351,10 @@ export function BoostCalculator() {
     formatNumber(calcInitialMezo(), 0),
   )
   const [userBtc, setUserBtc] = useState<string>(INITIAL_BTC)
-  const [totalVeMezo, setTotalVeMezo] = useState<number>(INITIAL_TOTAL_VEMEZO)
-  const [totalVeBtc, setTotalVeBtc] = useState<number>(INITIAL_TOTAL_VEBTC)
-  const [maxVeMezo, setMaxVeMezo] = useState<number>(INITIAL_MAX_VEMEZO)
-  const [maxVeBtc, setMaxVeBtc] = useState<number>(INITIAL_MAX_VEBTC)
+  const [totalVeMezo, setTotalVeMezo] = useState<number>(INITIAL_TOTAL_VE_MEZO)
+  const [totalVeBtc, setTotalVeBtc] = useState<number>(INITIAL_TOTAL_VE_BTC)
+  const [maxVeMezo, setMaxVeMezo] = useState<number>(INITIAL_MAX_VE_MEZO)
+  const [maxVeBtc, setMaxVeBtc] = useState<number>(INITIAL_MAX_VE_BTC)
   const [boost, setBoost] = useState<number>(INITIAL_BOOST)
   const [systemTotalsOpen, setSystemTotalsOpen] = useState<boolean>(false)
 
