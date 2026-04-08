@@ -289,10 +289,7 @@ export default function IncentivesPage(): JSX.Element {
   )
 
   // Get APY data for the gauge
-  const { apy } = useGaugeAPY(
-    gaugeAddress,
-    0n, // We don't need totalWeight for just showing the APY
-  )
+  const { apy } = useGaugeAPY(gaugeAddress, gaugeWeight)
 
   // Create enriched veBTC locks with profile and gauge data for the carousel
   const enrichedVeBTCLocks: VeBTCLockData[] = useMemo(() => {
@@ -1402,10 +1399,7 @@ export default function IncentivesPage(): JSX.Element {
                                 isTokenAllowlisted === false
                               }
                             >
-                              Approve{" "}
-                              <span className="normal-case">
-                                {incentiveToken?.symbol}
-                              </span>
+                              {`Approve ${incentiveToken?.symbol ?? ""}`.trim()}
                             </Button>
                           ) : (
                             <Button

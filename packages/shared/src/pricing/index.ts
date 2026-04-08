@@ -53,12 +53,23 @@ const TOKEN_REGISTRY: Record<string, TokenRegistryEntry> = {
     priceType: "mezo",
   },
 
+  // Native BTC address used across the app and token lists on Mezo
+  "0x7b7c000000000000000000000000000000000000": {
+    symbol: "BTC",
+    priceType: "btc-pegged",
+  },
+
   // ============================================================================
   // Stablecoins - pegged to $1 USD
   // ============================================================================
 
   // MUSD — Mezo USD (testnet / mainnet per Mezo docs)
   "0x118917a40fa1cd7a13db0ef56c86de7973ac503": {
+    symbol: "MUSD",
+    priceType: "stablecoin",
+    fixedPrice: 1.0,
+  },
+  "0x118917a40faf1cd7a13db0ef56c86de7973ac503": {
     symbol: "MUSD",
     priceType: "stablecoin",
     fixedPrice: 1.0,
@@ -168,6 +179,31 @@ const BTC_PEGGED_SYMBOLS = new Set([
   "BTC",
 ])
 
+function normalizeTokenSymbol(symbol?: string): string | undefined {
+  if (!symbol) return undefined
+
+  const normalized = symbol.trim().toUpperCase()
+  return normalized.length > 0 ? normalized : undefined
+}
+
+function isStablecoinSymbol(symbol: string): boolean {
+  if (STABLECOIN_SYMBOLS.has(symbol)) {
+    return true
+  }
+
+  return (
+    symbol.includes("USD") || symbol.endsWith("USDC") || symbol.endsWith("USDT")
+  )
+}
+
+function isBtcPeggedSymbol(symbol: string): boolean {
+  if (BTC_PEGGED_SYMBOLS.has(symbol)) {
+    return true
+  }
+
+  return symbol === "BTC" || symbol.endsWith("BTC") || symbol.startsWith("BTC")
+}
+
 /**
  * Get token info from the registry by address
  */
@@ -197,8 +233,9 @@ export function getTokenPriceType(
   }
 
   // If symbol is provided, try to infer the type
-  if (symbol) {
-    const upperSymbol = symbol.toUpperCase()
+  const normalizedSymbol = normalizeTokenSymbol(symbol)
+  if (normalizedSymbol) {
+    const upperSymbol = normalizedSymbol
 
     // Check for MEZO token by symbol
     if (upperSymbol === "MEZO") {
@@ -206,12 +243,12 @@ export function getTokenPriceType(
     }
 
     // Check for stablecoins by symbol
-    if (STABLECOIN_SYMBOLS.has(upperSymbol)) {
+    if (isStablecoinSymbol(upperSymbol)) {
       return "stablecoin"
     }
 
     // Check for BTC-pegged tokens by symbol
-    if (BTC_PEGGED_SYMBOLS.has(upperSymbol)) {
+    if (isBtcPeggedSymbol(upperSymbol)) {
       return "btc-pegged"
     }
   }
