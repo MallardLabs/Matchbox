@@ -80,7 +80,13 @@ export const wagmiConfig: Config = getDefaultConfig({
       batch: true,
       fetchOptions: { cache: "no-store" },
     }),
-    [mainnet.id]: http(),
+    // viem's built-in Ethereum mainnet chain defaults to Merkle, which does not
+    // send CORS headers for browser requests. Keep mainnet available for wallet
+    // compatibility, but route it through a browser-safe public RPC instead.
+    [mainnet.id]: http("https://cloudflare-eth.com", {
+      batch: true,
+      fetchOptions: { cache: "no-store" },
+    }),
   },
   wallets,
   walletConnectParameters: {
@@ -90,4 +96,4 @@ export const wagmiConfig: Config = getDefaultConfig({
   },
   multiInjectedProviderDiscovery: true,
   ssr: true,
-}) 
+})
