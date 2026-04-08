@@ -73,8 +73,6 @@ const parseNumber = (str: string): number => {
   return Number.isNaN(num) ? 0 : num
 }
 
-const clampBoost = (val: number) => Math.min(5, Math.max(1, val))
-
 const calcInitialMezo = () => {
   const btc = Number.parseFloat(INITIAL_BTC)
   const boostCalc = INITIAL_BOOST - 1
@@ -333,6 +331,7 @@ function BoostSlider({ value, onChange, disabled }: BoostSliderProps) {
 
 import { AnimatedNumber } from "@/components/AnimatedNumber"
 import { useBoostCalculatorTotals } from "@/hooks/useBoostCalculatorTotals"
+import { boostMultiplierFloatFromCalculatorInputs } from "@/utils/boostMultiplierFromCalculatorInputs"
 
 export function BoostCalculator() {
   const {
@@ -398,13 +397,8 @@ export function BoostCalculator() {
   }, [supplyStatus])
 
   const calculateBoost = useCallback(
-    (btc: number, mezo: number, tBtc: number, tMezo: number) => {
-      if (btc <= 0 || mezo <= 0 || tBtc <= 0 || tMezo <= 0) return 1
-      const term1 = tBtc / btc
-      const term2 = mezo / tMezo
-      const boostCalc = 4 * term1 * term2
-      return clampBoost(1 + boostCalc)
-    },
+    (btc: number, mezo: number, tBtc: number, tMezo: number) =>
+      boostMultiplierFloatFromCalculatorInputs(btc, mezo, tBtc, tMezo),
     [],
   )
 
