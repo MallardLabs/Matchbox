@@ -1,8 +1,8 @@
 import { AddressLink } from "@/components/AddressLink"
 import { SpringIn } from "@/components/SpringIn"
-import type { GaugeProfile } from "@/config/supabase"
 import { TokenIcon } from "@/components/TokenIcon"
 import { getContractConfig } from "@/config/contracts"
+import type { GaugeProfile } from "@/config/supabase"
 import { useNetwork } from "@/contexts/NetworkContext"
 import { formatAPY, useGaugeAPY } from "@/hooks/useAPY"
 import { useBtcPrice } from "@/hooks/useBtcPrice"
@@ -293,10 +293,10 @@ export default function GaugeDetailPage({
     isLoading: isLoadingBoost,
   } = useBoostInfo(veBTCTokenId)
 
-  // Show the baseline veBTC weight and the boost separately.
+  // Show the boosted/effective veBTC weight on the page.
   const { data: veBTCVotingPower } = useReadContract({
     ...contracts.veBTC,
-    functionName: "unboostedVotingPowerOfNFT",
+    functionName: "votingPowerOfNFT",
     args: veBTCTokenId ? [veBTCTokenId] : undefined,
     query: {
       enabled: !!veBTCTokenId,

@@ -265,15 +265,14 @@ export function useBoostGauges(options: UseBoostGaugesOptions = {}) {
     [addresses, gaugeToTokenId, profileTokenIds],
   )
 
-  // Fetch unboosted veBTC voting power for each token so the displayed
-  // weight and optimal veMEZO target use the same baseline as the boost math.
+  // Fetch boosted/effective veBTC voting power for display.
   const { data: veBTCVotingPowers, isLoading: isLoadingVotingPowers } =
     useReadContracts({
       contracts: tokenIds
         .filter((id): id is bigint => id !== undefined && id > 0n)
         .map((tokenId) => ({
           ...contracts.veBTC,
-          functionName: "unboostedVotingPowerOfNFT",
+          functionName: "votingPowerOfNFT",
           args: [tokenId],
         })),
       query: {
@@ -284,6 +283,25 @@ export function useBoostGauges(options: UseBoostGaugesOptions = {}) {
           tokenIds.some((id) => id !== undefined && id > 0n),
       },
     })
+
+  // Fetch the unboosted baseline separately so optimal veMEZO keeps using the
+  // correct 5x target math without changing the displayed gauge weight.
+  const { data: unboostedVeBTCVotingPowers } = useReadContracts({
+    contracts: tokenIds
+      .filter((id): id is bigint => id !== undefined && id > 0n)
+      .map((tokenId) => ({
+        ...contracts.veBTC,
+        functionName: "unboostedVotingPowerOfNFT",
+        args: [tokenId],
+      })),
+    query: {
+      ...QUERY_PROFILES.SHORT_CACHE,
+      enabled:
+        enabled &&
+        includeOwnership &&
+        tokenIds.some((id) => id !== undefined && id > 0n),
+    },
+  })
 
   // Fetch boost multipliers for each veBTC token
   const { data: boostData } = useReadContracts({
@@ -330,6 +348,7 @@ export function useBoostGauges(options: UseBoostGaugesOptions = {}) {
 
   // Build maps of token ID to voting power and boost
   const tokenIdToVotingPower = new Map<string, bigint>()
+  const tokenIdToUnboostedVotingPower = new Map<string, bigint>()
   const tokenIdToBoost = new Map<string, bigint>()
   let vpIndex = 0
   for (const tokenId of tokenIds) {
@@ -337,6 +356,12 @@ export function useBoostGauges(options: UseBoostGaugesOptions = {}) {
       const vp = veBTCVotingPowers?.[vpIndex]?.result as bigint | undefined
       if (vp !== undefined) {
         tokenIdToVotingPower.set(tokenId.toString(), vp)
+      }
+      const unboostedVp = unboostedVeBTCVotingPowers?.[vpIndex]?.result as
+        | bigint
+        | undefined
+      if (unboostedVp !== undefined) {
+        tokenIdToUnboostedVotingPower.set(tokenId.toString(), unboostedVp)
       }
       const boost = boostData?.[vpIndex]?.result as bigint | undefined
       if (boost !== undefined) {
@@ -408,11 +433,14 @@ export function useBoostGauges(options: UseBoostGaugesOptions = {}) {
       false
     const veBTCTokenId = includeOwnership ? (tokenIds[i] ?? 0n) : 0n
     const gaugeVeBTCWeight = tokenIdToVotingPower.get(veBTCTokenId.toString())
+    const gaugeUnboostedVeBTCWeight = tokenIdToUnboostedVotingPower.get(
+      veBTCTokenId.toString(),
+    )
     const boost = tokenIdToBoost.get(veBTCTokenId.toString())
     const boostMultiplier =
       includeOwnership && boost !== undefined ? Number(boost) / 1e18 : 1
     const optimalVeMEZOData = includeOwnership
-      ? calculateOptimalVeMEZO(gaugeVeBTCWeight, totalWeight)
+      ? calculateOptimalVeMEZO(gaugeUnboostedVeBTCWeight, totalWeight)
       : undefined
 
     return {
