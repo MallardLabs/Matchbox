@@ -39,6 +39,11 @@ export default function GaugeCard({
     optimalTarget !== undefined && optimalTarget > 0n
       ? Math.min(100, Number((gauge.totalWeight * 100n) / optimalTarget))
       : 0
+  const isMaxBoosted =
+    optimalTarget !== undefined &&
+    optimalTarget > 0n &&
+    gauge.optimalAdditionalVeMEZO !== undefined &&
+    gauge.optimalAdditionalVeMEZO === 0n
 
   return (
     <article
@@ -145,12 +150,12 @@ export default function GaugeCard({
             {isProjected && " \u2193"}
           </dd>
         </div>
-        <div>
-          <dt className="flex items-center gap-1 text-[var(--content-tertiary)]">
+        <div className="col-span-2">
+          <dt className="flex flex-wrap items-center gap-1.5 text-[var(--content-tertiary)]">
             Optimal veMEZO
             <Tooltip
               id={`gc-optimal-${gauge.address}`}
-              content="Total veMEZO weight required for this gauge to reach maximum (5x) boost. The bar fills as current veMEZO voting weight approaches that target; the right side shows how much veMEZO is still needed when below 5x."
+              content="Total veMEZO weight required for this gauge to reach maximum (5x) boost. The bar fills as current veMEZO voting weight approaches that target; below the target value, the second line shows how much veMEZO is still needed."
             />
           </dt>
           <dd className="min-w-0 text-[var(--content-primary)]">
@@ -158,30 +163,36 @@ export default function GaugeCard({
               <span className="font-mono">-</span>
             ) : (
               <div className="space-y-1.5">
-                <div className="flex min-w-0 items-baseline justify-between gap-2">
-                  <span
-                    className="min-w-0 truncate font-mono"
-                    title={formatFixedPoint(optimalTarget)}
-                  >
-                    {formatFixedPoint(optimalTarget)}
-                  </span>
-                  {gauge.optimalAdditionalVeMEZO !== undefined &&
-                    gauge.optimalAdditionalVeMEZO > 0n && (
-                      <span
-                        className="shrink-0 font-mono text-2xs text-[var(--content-secondary)] tabular-nums"
-                        title="veMEZO still needed to reach 5x boost on this gauge"
-                      >
-                        {formatFixedPoint(gauge.optimalAdditionalVeMEZO)} to 5x
-                      </span>
-                    )}
-                </div>
+                <p
+                  className="font-mono text-sm leading-snug tracking-tight text-[var(--content-primary)] [overflow-wrap:anywhere]"
+                  title={formatFixedPoint(optimalTarget)}
+                >
+                  {formatFixedPoint(optimalTarget)}
+                </p>
+                {gauge.optimalAdditionalVeMEZO !== undefined &&
+                  gauge.optimalAdditionalVeMEZO > 0n && (
+                    <p
+                      className="text-right font-mono text-2xs text-[var(--content-secondary)] tabular-nums"
+                      title="veMEZO still needed to reach 5x boost on this gauge"
+                    >
+                      {formatFixedPoint(gauge.optimalAdditionalVeMEZO)} to 5x
+                    </p>
+                  )}
                 <div
-                  className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--surface-secondary)] ring-1 ring-inset ring-[var(--border)]"
+                  className={`h-1.5 w-full overflow-hidden rounded-full bg-[var(--surface-secondary)] ring-1 ring-inset ring-[var(--border)] ${
+                    isMaxBoosted ? "ring-[rgba(var(--positive-rgb),0.35)]" : ""
+                  }`}
                   aria-hidden="true"
                 >
                   <div
-                    className="h-full rounded-full bg-[rgba(247,147,26,0.9)] transition-[width] duration-300 ease-out"
-                    style={{ width: `${optimalFillPercent}%` }}
+                    className={`h-full rounded-full transition-[width] duration-300 ease-out ${
+                      isMaxBoosted
+                        ? "bg-[var(--positive)]"
+                        : "bg-[rgba(247,147,26,0.9)]"
+                    }`}
+                    style={{
+                      width: `${isMaxBoosted ? 100 : optimalFillPercent}%`,
+                    }}
                   />
                 </div>
               </div>
