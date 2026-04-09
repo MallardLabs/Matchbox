@@ -304,6 +304,25 @@ export function useBoostGauges(options: UseBoostGaugesOptions = {}) {
     },
   })
 
+  // Use the on-chain boost value as the display source of truth so the
+  // aggregate gauge views match the per-lock cards and gauge detail page.
+  const { data: boostResults, isLoading: isLoadingBoosts } = useReadContracts({
+    contracts: tokenIds
+      .filter((id): id is bigint => id !== undefined && id > 0n)
+      .map((tokenId) => ({
+        ...contracts.boostVoter,
+        functionName: "getBoost",
+        args: [tokenId],
+      })),
+    query: {
+      ...QUERY_PROFILES.SHORT_CACHE,
+      enabled:
+        enabled &&
+        includeOwnership &&
+        tokenIds.some((id) => id !== undefined && id > 0n),
+    },
+  })
+
   // System totals: ve token `supply()` — same as Boost calculator “System totals” (useVeSupply).
   const { data: totalsData, isLoading: isLoadingSystemTotals } =
     useReadContracts({
@@ -325,6 +344,7 @@ export function useBoostGauges(options: UseBoostGaugesOptions = {}) {
   // Build maps of token ID to voting power and boost
   const tokenIdToVotingPower = new Map<string, bigint>()
   const tokenIdToUnboostedVotingPower = new Map<string, bigint>()
+  const tokenIdToBoost = new Map<string, bigint>()
   let vpIndex = 0
   for (const tokenId of tokenIds) {
     if (tokenId !== undefined && tokenId > 0n) {
@@ -337,6 +357,10 @@ export function useBoostGauges(options: UseBoostGaugesOptions = {}) {
         | undefined
       if (unboostedVp !== undefined) {
         tokenIdToUnboostedVotingPower.set(tokenId.toString(), unboostedVp)
+      }
+      const boost = boostResults?.[vpIndex]?.result as bigint | undefined
+      if (boost !== undefined) {
+        tokenIdToBoost.set(tokenId.toString(), boost)
       }
       vpIndex++
     }
@@ -408,14 +432,17 @@ export function useBoostGauges(options: UseBoostGaugesOptions = {}) {
     const gaugeUnboostedVeBTCWeight = tokenIdToUnboostedVotingPower.get(
       veBTCTokenId.toString(),
     )
+    const gaugeBoost = tokenIdToBoost.get(veBTCTokenId.toString())
     const boostMultiplier =
-      includeOwnership &&
-      veMEZOTokenSupply !== undefined &&
-      veMEZOTokenSupply > 0n &&
-      veBTCTokenSupply !== undefined &&
-      veBTCTokenSupply > 0n &&
-      gaugeUnboostedVeBTCWeight !== undefined &&
-      gaugeUnboostedVeBTCWeight > 0n
+      gaugeBoost !== undefined
+        ? Number(gaugeBoost) / 1e18
+        : includeOwnership &&
+            veMEZOTokenSupply !== undefined &&
+            veMEZOTokenSupply > 0n &&
+            veBTCTokenSupply !== undefined &&
+            veBTCTokenSupply > 0n &&
+            gaugeUnboostedVeBTCWeight !== undefined &&
+            gaugeUnboostedVeBTCWeight > 0n
         ? boostMultiplierNumberFromCalculatorInputs({
             unboostedNftVp: gaugeUnboostedVeBTCWeight,
             gaugeVeMezoWeight: totalWeight,
@@ -449,7 +476,7 @@ export function useBoostGauges(options: UseBoostGaugesOptions = {}) {
     (includeOwnership && allTokenIds.length > 0 && isLoadingTokenMap) ||
     (includeOwnership &&
       tokenIds.some((id) => id !== undefined && id > 0n) &&
-      isLoadingVotingPowers) ||
+      (isLoadingVotingPowers || isLoadingBoosts)) ||
     (includeOwnership && isLoadingSystemTotals)
 
   return {
