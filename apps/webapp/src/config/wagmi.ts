@@ -1,4 +1,10 @@
-import { getDefaultWallets, mezoMainnet, mezoTestnet } from "@mezo-org/passport"
+import {
+  getOKXWallet,
+  getUnisatWallet,
+  getXverseWallet,
+  mezoMainnet as passportMezoMainnet,
+  mezoTestnet as passportMezoTestnet,
+} from "@mezo-org/passport"
 import { type WalletList, getDefaultConfig } from "@rainbow-me/rainbowkit"
 import {
   bitgetWallet,
@@ -35,19 +41,61 @@ export { mezoMainnet, mezoTestnet }
 const WALLET_CONNECT_PROJECT_ID =
   process.env.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID ?? ""
 
-// Get Bitcoin wallet connectors from Passport
-// Using mainnet config - matches production Bitcoin wallets
-const rawDefaultWallets = getDefaultWallets("mainnet")
+const MEZO_MAINNET_RPC_URL =
+  process.env.NEXT_PUBLIC_RPC_MAINNET_URL ?? "https://rpc-http.mezo.boar.network"
+const MEZO_TESTNET_RPC_URL =
+  process.env.NEXT_PUBLIC_RPC_TESTNET_URL ?? "https://rpc.test.mezo.org"
 
-export const defaultWallets = rawDefaultWallets.map((group) => {
-  if (group.groupName === "Ethereum") {
-    return {
-      ...group,
-      wallets: [...ethereumWalletConnectors],
-    }
+function withHttpRpc(
+  chain: typeof passportMezoMainnet,
+  rpcUrl: string,
+): typeof passportMezoMainnet {
+  return {
+    ...chain,
+    rpcUrls: {
+      ...chain.rpcUrls,
+      default: {
+        ...chain.rpcUrls.default,
+        http: [rpcUrl],
+      },
+      public: {
+        ...chain.rpcUrls.public,
+        http: [rpcUrl],
+      },
+    },
   }
-  return group
-})
+}
+
+const mezoMainnet = withHttpRpc(passportMezoMainnet, MEZO_MAINNET_RPC_URL)
+const mezoTestnet = withHttpRpc(passportMezoTestnet, MEZO_TESTNET_RPC_URL)
+
+// Build Bitcoin wallet connectors explicitly so OrangeKit uses the public Mezo RPC
+// instead of Passport's baked-in internal endpoint for mainnet.
+const bitcoinWalletConnectors = [
+  getUnisatWallet({
+    rpcUrl: MEZO_MAINNET_RPC_URL,
+    chainId: mezoMainnet.id,
+  }),
+  getOKXWallet({
+    rpcUrl: MEZO_MAINNET_RPC_URL,
+    chainId: mezoMainnet.id,
+  }),
+  getXverseWallet({
+    rpcUrl: MEZO_MAINNET_RPC_URL,
+    chainId: mezoMainnet.id,
+  }),
+] as const
+
+export const defaultWallets: WalletList = [
+  {
+    groupName: "Bitcoin",
+    wallets: [...bitcoinWalletConnectors],
+  },
+  {
+    groupName: "Ethereum",
+    wallets: [...ethereumWalletConnectors],
+  },
+]
 
 // Extract wallet groups safely
 const bitcoinWalletGroup = defaultWallets.find(
@@ -72,11 +120,11 @@ export const wagmiConfig: Config = getDefaultConfig({
   // targets the selected Mezo chain via ConnectWalletDrawer + switch after connect.
   chains: [mezoTestnet, mezoMainnet, mainnet],
   transports: {
-    [mezoMainnet.id]: http(undefined, {
+    [mezoMainnet.id]: http(MEZO_MAINNET_RPC_URL, {
       batch: true,
       fetchOptions: { cache: "no-store" },
     }),
-    [mezoTestnet.id]: http(undefined, {
+    [mezoTestnet.id]: http(MEZO_TESTNET_RPC_URL, {
       batch: true,
       fetchOptions: { cache: "no-store" },
     }),
