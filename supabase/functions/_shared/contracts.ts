@@ -10,7 +10,7 @@ export const CHAIN_ID = {
 
 export const RPC_URLS = {
   testnet: "https://rpc.test.mezo.org",
-  mainnet: "https://rpc.mezo.org",
+  mainnet: "https://rpc-http.mezo.boar.network",
 } as const
 
 export type SupportedNetwork = keyof typeof RPC_URLS
