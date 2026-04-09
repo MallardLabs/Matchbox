@@ -1,6 +1,8 @@
 import { AddressLink } from "@/components/AddressLink"
+import IncentiveWarningModal from "@/components/IncentiveWarningModal"
 import { SpringIn } from "@/components/SpringIn"
 import { TokenIcon } from "@/components/TokenIcon"
+import { TokenSelector } from "@/components/TokenSelector"
 import { getContractConfig } from "@/config/contracts"
 import type { GaugeProfile } from "@/config/supabase"
 import { useNetwork } from "@/contexts/NetworkContext"
@@ -13,25 +15,31 @@ import {
 } from "@/hooks/useGaugeProfiles"
 import { useBoostInfo } from "@/hooks/useGauges"
 import { useMezoPrice } from "@/hooks/useMezoPrice"
+import type { Token } from "@/hooks/useTokenList"
 import { formatUsdValue, getTokenValueUsd } from "@/hooks/useTokenPrices"
 import {
   type BribeIncentive,
+  useAddIncentives,
+  useApproveToken,
+  useBoostVoterAddress,
   useBribeAddress,
   useBribeIncentives,
+  useIsAllowlistedToken,
+  useTokenAllowance,
 } from "@/hooks/useVoting"
 import {
   formatFixedPoint,
   formatMultiplier,
   formatTokenAmount,
 } from "@/utils/format"
-import { Button, Card, Skeleton, Tag } from "@mezo-org/mezo-clay"
+import { Button, Card, Input, Skeleton, Tag } from "@mezo-org/mezo-clay"
 import { getTokenUsdPrice } from "@repo/shared"
 import { NON_STAKING_GAUGE_ABI } from "@repo/shared/contracts"
 import Link from "next/link"
 import { useRouter } from "next/router"
 import { useEffect, useMemo, useState } from "react"
-import type { Address } from "viem"
-import { useReadContract, useReadContracts } from "wagmi"
+import { type Address, formatUnits, parseUnits } from "viem"
+import { useAccount, useReadContract, useReadContracts } from "wagmi"
 
 type IncentiveWithUSD = BribeIncentive & { usdValue: number | null }
 type GaugeDetailPageProps = {
@@ -189,6 +197,7 @@ export default function GaugeDetailPage({
   initialProfile = null,
 }: GaugeDetailPageProps): JSX.Element {
   const router = useRouter()
+  const { address: walletAddress } = useAccount()
   const routeAddress = router.query.address
   const gaugeAddress =
     typeof initialAddress === "string"
@@ -319,10 +328,17 @@ export default function GaugeDetailPage({
 
   // Fetch bribes
   const { bribeAddress, hasBribe } = useBribeAddress(gaugeAddress)
-  const { incentives, isLoading: isLoadingIncentives } =
-    useBribeIncentives(bribeAddress)
+  const {
+    incentives,
+    isLoading: isLoadingIncentives,
+    refetch: refetchIncentives,
+  } = useBribeIncentives(bribeAddress)
   const { price: btcPrice } = useBtcPrice()
   const { price: mezoPrice } = useMezoPrice()
+  const boostVoterAddress = useBoostVoterAddress()
+  const [incentiveToken, setIncentiveToken] = useState<Token | undefined>()
+  const [incentiveAmount, setIncentiveAmount] = useState("")
+  const [showIncentiveWarning, setShowIncentiveWarning] = useState(false)
 
   const incentivesWithUSD: IncentiveWithUSD[] = useMemo(
     () =>
@@ -338,6 +354,74 @@ export default function GaugeDetailPage({
     () => incentivesWithUSD.reduce((sum, inc) => sum + (inc.usdValue ?? 0), 0),
     [incentivesWithUSD],
   )
+
+  const gaugeHasNoVotes = totalWeight !== undefined && totalWeight === 0n
+
+  const parsedAmount = useMemo(() => {
+    if (!incentiveToken || !incentiveAmount) return 0n
+
+    try {
+      return parseUnits(incentiveAmount, incentiveToken.decimals)
+    } catch {
+      return 0n
+    }
+  }, [incentiveAmount, incentiveToken])
+
+  const { isAllowlisted: isTokenAllowlisted } = useIsAllowlistedToken(
+    incentiveToken?.address,
+  )
+
+  const { allowance, refetch: refetchAllowance } = useTokenAllowance(
+    incentiveToken?.address,
+    boostVoterAddress,
+  )
+
+  const needsApproval =
+    allowance !== undefined && !!boostVoterAddress && parsedAmount > allowance
+
+  const { data: tokenBalanceData, refetch: refetchTokenBalance } =
+    useReadContract({
+      address: incentiveToken?.address,
+      abi: [
+        {
+          inputs: [{ name: "account", type: "address" }],
+          name: "balanceOf",
+          outputs: [{ name: "", type: "uint256" }],
+          stateMutability: "view",
+          type: "function",
+        },
+      ] as const,
+      functionName: "balanceOf",
+      args: walletAddress ? [walletAddress] : undefined,
+      query: {
+        enabled: !!incentiveToken?.address && !!walletAddress,
+      },
+    })
+
+  const tokenBalance = tokenBalanceData as bigint | undefined
+  const formattedTokenBalance =
+    incentiveToken && tokenBalance !== undefined
+      ? formatUnits(tokenBalance, incentiveToken.decimals)
+      : undefined
+  const hasInsufficientBalance =
+    tokenBalance !== undefined && parsedAmount > tokenBalance
+
+  const {
+    approve,
+    isPending: isApproving,
+    isConfirming: isConfirmingApproval,
+    isSuccess: isApprovalSuccess,
+    error: approvalError,
+    reset: resetApproval,
+  } = useApproveToken()
+
+  const {
+    addIncentives,
+    isPending: isAddingIncentives,
+    isConfirming: isConfirmingIncentives,
+    isSuccess: isAddIncentivesSuccess,
+    error: addIncentivesError,
+  } = useAddIncentives()
 
   // Calculate APY for this gauge
   const { apy, isLoading: isLoadingAPY } = useGaugeAPY(
@@ -368,6 +452,65 @@ export default function GaugeDetailPage({
       setHasShownContent(true)
     }
   }, [isInitialLoading])
+
+  useEffect(() => {
+    if (isApprovalSuccess) {
+      refetchAllowance().then(() => {
+        setTimeout(() => {
+          resetApproval()
+        }, 100)
+      })
+    }
+  }, [isApprovalSuccess, refetchAllowance, resetApproval])
+
+  useEffect(() => {
+    if (isAddIncentivesSuccess) {
+      void refetchTokenBalance()
+      void refetchAllowance()
+      void refetchIncentives()
+      setIncentiveAmount("")
+    }
+  }, [
+    isAddIncentivesSuccess,
+    refetchAllowance,
+    refetchIncentives,
+    refetchTokenBalance,
+  ])
+
+  const handleApprove = () => {
+    if (!incentiveToken || !boostVoterAddress) return
+    approve(incentiveToken.address, boostVoterAddress)
+  }
+
+  const submitAddIncentives = () => {
+    if (!gaugeAddress || !incentiveToken || parsedAmount === 0n) return
+    addIncentives(gaugeAddress, [incentiveToken.address], [parsedAmount])
+  }
+
+  const handleAddIncentives = () => {
+    if (gaugeHasNoVotes) {
+      setShowIncentiveWarning(true)
+      return
+    }
+
+    submitAddIncentives()
+  }
+
+  const handleConfirmAddIncentives = () => {
+    setShowIncentiveWarning(false)
+    submitAddIncentives()
+  }
+
+  const handleVoteFirst = () => {
+    setShowIncentiveWarning(false)
+    router.push("/boost")
+  }
+
+  const handleMaxAmount = () => {
+    if (formattedTokenBalance) {
+      setIncentiveAmount(formattedTokenBalance)
+    }
+  }
 
   if (!gaugeAddress && router.isReady) {
     return (
@@ -773,6 +916,140 @@ export default function GaugeDetailPage({
             </Card>
           </SpringIn>
 
+          {isAlive && (
+            <SpringIn delay={8.5} variant="card">
+              <Card title="Add Incentives" withBorder overrides={{}}>
+                <div className="flex flex-col gap-4 py-4">
+                  <p className="text-sm text-[var(--content-secondary)]">
+                    Fund this live gauge directly. Anyone can add allowlisted
+                    token incentives for active gauges.
+                  </p>
+
+                  <TokenSelector
+                    label="Incentive Token"
+                    value={incentiveToken}
+                    onChange={setIncentiveToken}
+                    placeholder="Select a token"
+                  />
+
+                  {incentiveToken && isTokenAllowlisted === false && (
+                    <div className="rounded-lg border border-[var(--negative)] bg-[rgba(239,68,68,0.1)] p-3">
+                      <p className="text-sm text-[var(--negative)]">
+                        This token is not allowlisted for incentives.
+                      </p>
+                    </div>
+                  )}
+
+                  {gaugeHasNoVotes && (
+                    <div className="rounded-lg border border-[var(--warning-subtle)] bg-[var(--warning-subtle)] p-3">
+                      <p className="text-sm text-[var(--warning)]">
+                        This gauge currently has no votes yet. If nobody votes
+                        this epoch, added incentives can be lost.
+                      </p>
+                    </div>
+                  )}
+
+                  <div>
+                    <div className="mb-1 flex items-center justify-between gap-3">
+                      <label
+                        htmlFor="gauge-incentive-amount"
+                        className="block text-2xs tracking-wider text-[var(--content-tertiary)]"
+                      >
+                        <span className="uppercase">Amount</span>
+                        {incentiveToken && (
+                          <span className="normal-case">
+                            {" "}
+                            ({incentiveToken.symbol})
+                          </span>
+                        )}
+                      </label>
+                      {incentiveToken &&
+                        formattedTokenBalance !== undefined && (
+                          <div className="flex items-center gap-1">
+                            <span className="text-2xs text-[var(--content-tertiary)]">
+                              Balance:{" "}
+                              {Number(formattedTokenBalance).toLocaleString(
+                                undefined,
+                                {
+                                  maximumFractionDigits: 6,
+                                },
+                              )}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={handleMaxAmount}
+                              className="rounded px-1.5 py-0.5 text-2xs font-semibold uppercase text-[var(--accent)] hover:bg-[var(--surface-secondary)]"
+                            >
+                              MAX
+                            </button>
+                          </div>
+                        )}
+                    </div>
+
+                    <Input
+                      id="gauge-incentive-amount"
+                      value={incentiveAmount}
+                      onChange={(e) => setIncentiveAmount(e.target.value)}
+                      placeholder="0.0"
+                      type="number"
+                    />
+                  </div>
+
+                  {hasInsufficientBalance && (
+                    <div className="rounded-lg border border-[var(--negative)] bg-[rgba(239,68,68,0.1)] p-3">
+                      <p className="text-sm text-[var(--negative)]">
+                        Insufficient balance for this incentive amount.
+                      </p>
+                    </div>
+                  )}
+
+                  {!walletAddress ? (
+                    <Button kind="primary" disabled>
+                      Connect Wallet to Add Incentives
+                    </Button>
+                  ) : needsApproval ? (
+                    <Button
+                      kind="primary"
+                      onClick={handleApprove}
+                      isLoading={isApproving || isConfirmingApproval}
+                      disabled={
+                        !incentiveToken ||
+                        parsedAmount === 0n ||
+                        !boostVoterAddress ||
+                        isTokenAllowlisted === false ||
+                        hasInsufficientBalance
+                      }
+                    >
+                      {`Approve ${incentiveToken?.symbol ?? ""}`.trim()}
+                    </Button>
+                  ) : (
+                    <Button
+                      kind="primary"
+                      onClick={handleAddIncentives}
+                      isLoading={isAddingIncentives || isConfirmingIncentives}
+                      disabled={
+                        !incentiveToken ||
+                        parsedAmount === 0n ||
+                        isTokenAllowlisted === false ||
+                        hasInsufficientBalance
+                      }
+                    >
+                      Add Incentives
+                    </Button>
+                  )}
+
+                  {(approvalError || addIncentivesError) && (
+                    <p className="text-sm text-[var(--negative)]">
+                      Error:{" "}
+                      {(addIncentivesError ?? approvalError)?.message ??
+                        "Transaction failed"}
+                    </p>
+                  )}
+                </div>
+              </Card>
+            </SpringIn>
+          )}
+
           {/* Historical Data */}
           <SpringIn delay={9} variant="card">
             <Card title="Historical Performance" withBorder overrides={{}}>
@@ -883,6 +1160,13 @@ export default function GaugeDetailPage({
           </SpringIn>
         </>
       )}
+
+      <IncentiveWarningModal
+        isOpen={showIncentiveWarning}
+        onClose={() => setShowIncentiveWarning(false)}
+        onContinue={handleConfirmAddIncentives}
+        onVoteFirst={handleVoteFirst}
+      />
     </div>
   )
 }
