@@ -303,10 +303,7 @@ export default function GaugesPage(): JSX.Element {
                   >
                     ✓
                   </span>
-                  <span>Needs boost</span>
-                  <span className="font-mono text-[10px] opacity-80">
-                    &lt;5x
-                  </span>
+                  <span>Needs Boost</span>
                 </button>
               </div>
 

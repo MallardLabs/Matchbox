@@ -1557,10 +1557,7 @@ export default function BoostPage(): JSX.Element {
                             >
                               ✓
                             </span>
-                            <span>Needs boost</span>
-                            <span className="font-mono text-[10px] opacity-80">
-                              &lt;5x
-                            </span>
+                            <span>Needs Boost</span>
                           </button>
                         </div>
 
@@ -1615,43 +1612,14 @@ export default function BoostPage(): JSX.Element {
                                         Vote setup
                                       </legend>
                                       <ol className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
-                                        <li className="flex w-full min-w-0 flex-col gap-1.5 sm:flex-1">
-                                          <div className="flex items-center justify-between gap-3 sm:justify-start">
-                                            <label
-                                              htmlFor={`gauge-vote-${gauge.originalIndex}`}
-                                              className="shrink-0 text-2xs text-[var(--content-secondary)]"
-                                            >
-                                              Vote %
-                                            </label>
-                                            <Input
-                                              id={`gauge-vote-${gauge.originalIndex}`}
-                                              value={votePercentage.toString()}
-                                              onChange={(e) =>
-                                                handleAllocationChange(
-                                                  gauge.originalIndex,
-                                                  Number(e.target.value) || 0,
-                                                )
-                                              }
-                                              placeholder="0"
-                                              type="number"
-                                              size="small"
-                                              positive={votePercentage > 0}
-                                              overrides={{
-                                                Root: {
-                                                  style: {
-                                                    width: "100%",
-                                                    maxWidth: "140px",
-                                                    minWidth: "0",
-                                                  },
-                                                },
-                                              }}
-                                            />
-                                          </div>
-                                          {selectedLocks.length > 0 &&
-                                            votePercentage > 0 && (
-                                              <p className="text-right text-2xs tabular-nums text-[var(--content-secondary)] sm:text-left">
-                                                ~{" "}
-                                                {formatTokenAmount(
+                                        <li className="flex w-full min-w-0 items-center justify-between gap-3 sm:flex-1 sm:justify-start">
+                                          <label
+                                            htmlFor={`gauge-vote-${gauge.originalIndex}`}
+                                            className="shrink-0 text-2xs tabular-nums text-[var(--content-secondary)]"
+                                          >
+                                            {selectedLocks.length > 0 &&
+                                            votePercentage > 0
+                                              ? `~ ${formatTokenAmount(
                                                   (BigInt(
                                                     Math.floor(
                                                       votePercentage * 100,
@@ -1660,10 +1628,32 @@ export default function BoostPage(): JSX.Element {
                                                     totalVotingPower) /
                                                     10000n,
                                                   18,
-                                                )}{" "}
-                                                veMEZO
-                                              </p>
-                                            )}
+                                                )} veMEZO`
+                                              : "Vote %"}
+                                          </label>
+                                          <Input
+                                            id={`gauge-vote-${gauge.originalIndex}`}
+                                            value={votePercentage.toString()}
+                                            onChange={(e) =>
+                                              handleAllocationChange(
+                                                gauge.originalIndex,
+                                                Number(e.target.value) || 0,
+                                              )
+                                            }
+                                            placeholder="0"
+                                            type="number"
+                                            size="small"
+                                            positive={votePercentage > 0}
+                                            overrides={{
+                                              Root: {
+                                                style: {
+                                                  width: "100%",
+                                                  maxWidth: "140px",
+                                                  minWidth: "0",
+                                                },
+                                              },
+                                            }}
+                                          />
                                         </li>
                                         <li className="w-full sm:w-auto">
                                           <Button
