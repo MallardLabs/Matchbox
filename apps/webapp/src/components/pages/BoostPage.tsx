@@ -25,6 +25,7 @@ import { useMultiLockVoting } from "@/hooks/useMultiLockVoting"
 import { usePagination } from "@/hooks/usePagination"
 import { useClaimableBribes } from "@/hooks/useVoting"
 import { useAllVoteAllocations, useBatchVoteState } from "@/hooks/useVoting"
+import { formatTokenAmount } from "@/utils/format"
 import {
   Button,
   Card,
@@ -1046,6 +1047,18 @@ export default function BoostPage(): JSX.Element {
                               )}
                             </Button>
                           </div>
+                          {selectedLocks.length > 0 && currentVote > 0 && (
+                            <p className="w-full text-right text-2xs text-[var(--content-secondary)]">
+                              ~
+                              {formatTokenAmount(
+                                (BigInt(Math.floor(currentVote * 100)) *
+                                  totalVotingPower) /
+                                  10000n,
+                                18,
+                              )}{" "}
+                              veMEZO
+                            </p>
+                          )}
                         </div>
                       </li>
                     )
@@ -1563,11 +1576,11 @@ export default function BoostPage(): JSX.Element {
                                       <legend className="text-2xs uppercase tracking-wider text-[var(--content-tertiary)]">
                                         Vote setup
                                       </legend>
-                                      <ol className="flex flex-wrap items-center justify-between gap-3">
-                                        <li className="flex flex-1 items-center gap-2">
+                                      <ol className="flex flex-wrap items-center justify-between gap-2 sm:gap-3">
+                                        <li className="flex min-w-0 flex-1 items-center gap-2">
                                           <label
                                             htmlFor={`gauge-vote-${gauge.originalIndex}`}
-                                            className="text-2xs text-[var(--content-secondary)]"
+                                            className="shrink-0 text-2xs text-[var(--content-secondary)]"
                                           >
                                             Vote %
                                           </label>
@@ -1586,7 +1599,10 @@ export default function BoostPage(): JSX.Element {
                                             positive={votePercentage > 0}
                                             overrides={{
                                               Root: {
-                                                style: { width: "96px" },
+                                                style: {
+                                                  width: "96px",
+                                                  minWidth: "72px",
+                                                },
                                               },
                                             }}
                                           />

@@ -82,7 +82,7 @@ export default function GaugeCard({
 
   return (
     <article
-      className={`flex flex-col gap-3 rounded-xl border bg-[var(--surface)] p-4 ${
+      className={`flex min-w-0 flex-col gap-3 overflow-hidden rounded-xl border bg-[var(--surface)] p-3 sm:p-4 ${
         isSelected ? "border-[var(--positive)]" : "border-[var(--border)]"
       }`}
     >
@@ -105,9 +105,9 @@ export default function GaugeCard({
             )}
           </div>
           <div className="min-w-0">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-1.5">
               <p
-                className={`text-sm font-semibold ${
+                className={`truncate text-sm font-semibold ${
                   profile?.display_name ||
                   profile?.description ||
                   profile?.profile_picture_url
@@ -198,16 +198,16 @@ export default function GaugeCard({
               <span className="font-mono">-</span>
             ) : (
               <div className="space-y-1.5">
-                <div className="flex min-w-0 items-baseline justify-between gap-2">
+                <div className="flex min-w-0 flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5">
                   <span
-                    className="min-w-0 flex-1 font-mono text-sm leading-snug tracking-tight text-[var(--content-primary)] [overflow-wrap:anywhere]"
+                    className="min-w-0 font-mono text-sm leading-snug tracking-tight text-[var(--content-primary)] [overflow-wrap:anywhere]"
                     title={formatFixedPoint(optimalTarget)}
                   >
                     {formatFixedPoint(optimalTarget)}
                   </span>
                   {hasShortfall && (
                     <span
-                      className="shrink-0 font-mono text-2xs text-[var(--content-secondary)] tabular-nums"
+                      className="font-mono text-2xs text-[var(--content-secondary)] tabular-nums"
                       title="veMEZO still needed to reach 5x boost on this gauge"
                     >
                       {formatFixedPoint(optimalAdditional)} to 5x
@@ -215,11 +215,11 @@ export default function GaugeCard({
                   )}
                   {pastOptimal && (
                     <span
-                      className="shrink-0 font-mono text-2xs tabular-nums"
+                      className="font-mono text-2xs tabular-nums"
                       style={{ color: oversubTextColor }}
                       title={`${weightVsOptimalRatio.toFixed(2)}× optimal weight — oversubscribed. Red stress goes from green (1×) to red (2×+).`}
                     >
-                      +{formatFixedPoint(optimalOverVeMEZO)} oversubscribed
+                      +{formatFixedPoint(optimalOverVeMEZO)} over
                     </span>
                   )}
                 </div>

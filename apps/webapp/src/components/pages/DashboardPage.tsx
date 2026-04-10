@@ -29,6 +29,7 @@ import {
   useBatchVoteState,
   useClaimBribes,
   useClaimableBribes,
+  usePokeBoost,
 } from "@/hooks/useVoting"
 import {
   Button,
@@ -110,6 +111,11 @@ function VeBTCLockCard({
 }): JSX.Element {
   const unlockDate = new Date(Number(lock.end) * 1000)
   const isExpired = unlockDate < new Date()
+  const {
+    pokeBoost,
+    isPending: isPokePending,
+    isConfirming: isPokeConfirming,
+  } = usePokeBoost()
 
   const cardContent = (
     <Card
@@ -203,7 +209,7 @@ function VeBTCLockCard({
         </div>
 
         <div className="flex-1">
-          <div className="grid grid-cols-2 gap-4 max-[480px]:gap-3">
+          <div className="grid grid-cols-2 gap-4 max-[360px]:grid-cols-1 max-[480px]:gap-3">
             <div>
               <p className="mb-1 text-2xs uppercase tracking-wider text-[var(--content-secondary)]">
                 Locked Amount
@@ -276,10 +282,34 @@ function VeBTCLockCard({
 
         {(lock.isPermanent || !isExpired) && (
           <div className="mt-4 border-t border-[var(--border)] pt-4">
-            <p className="text-xs text-[var(--content-secondary)]">
-              Unlocks:{" "}
-              {lock.isPermanent ? "Never" : unlockDate.toLocaleDateString()}
-            </p>
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-[var(--content-secondary)]">
+                Unlocks:{" "}
+                {lock.isPermanent ? "Never" : unlockDate.toLocaleDateString()}
+              </p>
+              {hasGauge && (
+                <div className="flex items-center gap-1">
+                  <Button
+                    kind="secondary"
+                    size="small"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      e.preventDefault()
+                      pokeBoost(lock.tokenId)
+                    }}
+                    disabled={isPokePending || isPokeConfirming}
+                  >
+                    {isPokePending || isPokeConfirming
+                      ? "Poking..."
+                      : "Poke Boost"}
+                  </Button>
+                  <Tooltip
+                    id={`poke-boost-${lock.tokenId.toString()}`}
+                    content="Poking refreshes your veBTC lock's boost multiplier. After veMEZO holders vote on your gauge, poke to recalculate your voting weight. Your updated boost (up to 5x) takes effect immediately."
+                  />
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>
@@ -358,7 +388,7 @@ function VeMEZOLockCard({
           </Tag>
         </div>
 
-        <div className="grid flex-1 grid-cols-2 gap-4">
+        <div className="grid flex-1 grid-cols-2 gap-4 max-[360px]:grid-cols-1">
           <div>
             <p className="mb-1 text-2xs uppercase tracking-wider text-[var(--content-secondary)]">
               Locked Amount
