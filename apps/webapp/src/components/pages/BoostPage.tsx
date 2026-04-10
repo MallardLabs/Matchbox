@@ -349,6 +349,7 @@ export default function BoostPage(): JSX.Element {
     useState<SortDirection>("desc")
   const [gaugeStatusFilter, setGaugeStatusFilter] =
     useState<StatusFilter>("active")
+  const [showNeedsBoostOnly, setShowNeedsBoostOnly] = useState(false)
   const [gaugeSearchQuery, setGaugeSearchQuery] = useState("")
   const deferredGaugeSearchQuery = useDeferredValue(gaugeSearchQuery)
 
@@ -485,6 +486,10 @@ export default function BoostPage(): JSX.Element {
       result = result.filter((g) => !g.isAlive)
     }
 
+    if (showNeedsBoostOnly) {
+      result = result.filter((g) => g.boostMultiplier < 5)
+    }
+
     // Filter by search query
     if (deferredGaugeSearchQuery.trim()) {
       const query = deferredGaugeSearchQuery.trim().toLowerCase()
@@ -554,6 +559,7 @@ export default function BoostPage(): JSX.Element {
     gaugeSortColumn,
     gaugeSortDirection,
     gaugeStatusFilter,
+    showNeedsBoostOnly,
     deferredGaugeSearchQuery,
     gaugeAllocations,
     gaugeProfiles,
@@ -572,6 +578,7 @@ export default function BoostPage(): JSX.Element {
     pageSize: GAUGES_PER_PAGE,
     resetDeps: [
       gaugeStatusFilter,
+      showNeedsBoostOnly,
       gaugeSortColumn,
       gaugeSortDirection,
       deferredGaugeSearchQuery,
@@ -1478,6 +1485,17 @@ export default function BoostPage(): JSX.Element {
                       >
                         Inactive
                       </Tag>
+                      <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface-secondary)] px-3 py-1.5 text-xs text-[var(--content-secondary)]">
+                        <input
+                          type="checkbox"
+                          checked={showNeedsBoostOnly}
+                          onChange={(e) =>
+                            setShowNeedsBoostOnly(e.target.checked)
+                          }
+                          className="h-3.5 w-3.5 accent-[#F7931A]"
+                        />
+                        Needs boost (&lt;5x)
+                      </label>
                     </div>
 
                     {/* Search field */}

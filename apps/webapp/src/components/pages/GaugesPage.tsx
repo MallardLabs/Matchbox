@@ -53,6 +53,7 @@ export default function GaugesPage(): JSX.Element {
   const [sortColumn, setSortColumn] = useState<SortColumn>("apy")
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc")
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all")
+  const [showNeedsBoostOnly, setShowNeedsBoostOnly] = useState(false)
 
   const handleSort = useCallback(
     (column: SortColumn) => {
@@ -108,6 +109,10 @@ export default function GaugesPage(): JSX.Element {
       result = result.filter((g) => !g.isAlive)
     }
 
+    if (showNeedsBoostOnly) {
+      result = result.filter((g) => g.boostMultiplier < 5)
+    }
+
     if (sortColumn) {
       result.sort((a, b) => {
         let comparison: number
@@ -149,7 +154,14 @@ export default function GaugesPage(): JSX.Element {
     }
 
     return result
-  }, [gauges, sortColumn, sortDirection, statusFilter, apyMap])
+  }, [
+    gauges,
+    sortColumn,
+    sortDirection,
+    statusFilter,
+    showNeedsBoostOnly,
+    apyMap,
+  ])
 
   return (
     <div className="flex flex-col gap-6">
@@ -265,6 +277,15 @@ export default function GaugesPage(): JSX.Element {
                 >
                   Inactive
                 </Tag>
+                <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface-secondary)] px-3 py-1.5 text-xs text-[var(--content-secondary)]">
+                  <input
+                    type="checkbox"
+                    checked={showNeedsBoostOnly}
+                    onChange={(e) => setShowNeedsBoostOnly(e.target.checked)}
+                    className="h-3.5 w-3.5 accent-[#F7931A]"
+                  />
+                  Needs boost (&lt;5x)
+                </label>
               </div>
 
               <div className="grid gap-3 md:hidden">

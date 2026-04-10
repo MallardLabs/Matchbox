@@ -851,6 +851,7 @@ export default function DashboardPage(): JSX.Element {
     useState<SortDirection>("desc")
   const [gaugeStatusFilter, setGaugeStatusFilter] =
     useState<StatusFilter>("active")
+  const [showNeedsBoostOnly, setShowNeedsBoostOnly] = useState(false)
   const [gaugeSearchQuery, setGaugeSearchQuery] = useState("")
   const deferredGaugeSearchQuery = useDeferredValue(gaugeSearchQuery)
 
@@ -1204,6 +1205,10 @@ export default function DashboardPage(): JSX.Element {
       result = result.filter((g) => !g.isAlive)
     }
 
+    if (showNeedsBoostOnly) {
+      result = result.filter((g) => g.boostMultiplier < 5)
+    }
+
     if (deferredGaugeSearchQuery.trim()) {
       const query = deferredGaugeSearchQuery.trim().toLowerCase()
       result = result.filter((g) => {
@@ -1270,6 +1275,7 @@ export default function DashboardPage(): JSX.Element {
     allGauges,
     allGaugeProfiles,
     gaugeStatusFilter,
+    showNeedsBoostOnly,
     deferredGaugeSearchQuery,
     gaugeSortColumn,
     gaugeSortDirection,
@@ -1288,6 +1294,7 @@ export default function DashboardPage(): JSX.Element {
     pageSize: GAUGES_PER_PAGE,
     resetDeps: [
       gaugeStatusFilter,
+      showNeedsBoostOnly,
       gaugeSortColumn,
       gaugeSortDirection,
       deferredGaugeSearchQuery,
@@ -1869,6 +1876,15 @@ export default function DashboardPage(): JSX.Element {
                   >
                     Inactive
                   </Tag>
+                  <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface-secondary)] px-3 py-1.5 text-xs text-[var(--content-secondary)]">
+                    <input
+                      type="checkbox"
+                      checked={showNeedsBoostOnly}
+                      onChange={(e) => setShowNeedsBoostOnly(e.target.checked)}
+                      className="h-3.5 w-3.5 accent-[#F7931A]"
+                    />
+                    Needs boost (&lt;5x)
+                  </label>
                 </div>
 
                 <div>
@@ -1929,22 +1945,17 @@ export default function DashboardPage(): JSX.Element {
               ) : (
                 <div className="flex flex-col gap-4">
                   <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                    {paginatedGauges.map((gauge, idx) => (
-                      <SpringIn
+                    {paginatedGauges.map((gauge) => (
+                      <GaugeCard
                         key={gauge.address}
-                        {...(idx < GAUGES_PER_PAGE ? { delay: idx } : {})}
-                        variant="card-subtle"
-                      >
-                        <GaugeCard
-                          gauge={gauge}
-                          profile={
-                            allGaugeProfiles.get(gauge.address.toLowerCase()) ??
-                            null
-                          }
-                          apyData={apyMap.get(gauge.address.toLowerCase())}
-                          isLoadingAPY={isLoadingAPY}
-                        />
-                      </SpringIn>
+                        gauge={gauge}
+                        profile={
+                          allGaugeProfiles.get(gauge.address.toLowerCase()) ??
+                          null
+                        }
+                        apyData={apyMap.get(gauge.address.toLowerCase())}
+                        isLoadingAPY={isLoadingAPY}
+                      />
                     ))}
                   </div>
                   <PaginationControls
