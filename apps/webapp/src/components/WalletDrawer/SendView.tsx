@@ -1,4 +1,5 @@
 import { TokenIcon } from "@/components/TokenIcon"
+import { getExplorerTransactionUrl } from "@/config/explorer"
 import { useNetwork } from "@/contexts/NetworkContext"
 import { type Token, useTokenList } from "@/hooks/useTokenList"
 import { useWalletAccount } from "@mezo-org/passport"
@@ -120,10 +121,6 @@ export function SendView({ onBack, onClose }: SendViewProps): JSX.Element {
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [txHash, setTxHash] = useState<`0x${string}` | undefined>()
   const [isTokenDropdownOpen, setIsTokenDropdownOpen] = useState(false)
-
-  const explorerBaseUrl = isMainnet
-    ? "https://explorer.mezo.org"
-    : "https://explorer.test.mezo.org"
 
   const isNativeToken = useMemo(
     () =>
@@ -307,7 +304,7 @@ export function SendView({ onBack, onClose }: SendViewProps): JSX.Element {
         </p>
         {txHash && (
           <a
-            href={`${explorerBaseUrl}/tx/${txHash}`}
+            href={getExplorerTransactionUrl(chainId, txHash)}
             target="_blank"
             rel="noopener noreferrer"
             className="mb-8 text-sm text-[var(--accent)] hover:underline"

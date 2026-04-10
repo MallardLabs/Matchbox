@@ -1,3 +1,4 @@
+import { getExplorerAddressUrl } from "@/config/explorer"
 import { useNetwork } from "@/contexts/NetworkContext"
 import { useWalletAccount } from "@mezo-org/passport"
 import { QRCodeSVG } from "qrcode.react"
@@ -68,12 +69,8 @@ export function ReceiveView({
   onBack: _onBack,
 }: ReceiveViewProps): JSX.Element {
   const { accountAddress } = useWalletAccount()
-  const { isMainnet } = useNetwork()
+  const { chainId, isMainnet } = useNetwork()
   const [copied, setCopied] = useState(false)
-
-  const explorerBaseUrl = isMainnet
-    ? "https://explorer.mezo.org"
-    : "https://explorer.test.mezo.org"
 
   const handleCopy = useCallback(async () => {
     if (!accountAddress) return
@@ -88,8 +85,8 @@ export function ReceiveView({
 
   const handleViewExplorer = useCallback(() => {
     if (!accountAddress) return
-    window.open(`${explorerBaseUrl}/address/${accountAddress}`, "_blank")
-  }, [accountAddress, explorerBaseUrl])
+    window.open(getExplorerAddressUrl(chainId, accountAddress), "_blank")
+  }, [accountAddress, chainId])
 
   return (
     <div className="flex flex-1 flex-col items-center px-4">

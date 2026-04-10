@@ -1,3 +1,4 @@
+import { getExplorerAddressUrl } from "@/config/explorer"
 import { useNetwork } from "@/contexts/NetworkContext"
 import { LinkExternal02 } from "@mezo-org/mezo-clay"
 import type { Address } from "viem"
@@ -8,11 +9,8 @@ type AddressLinkProps = {
 }
 
 export function AddressLink({ address, label }: AddressLinkProps): JSX.Element {
-  const { isMainnet } = useNetwork()
-  const baseUrl = isMainnet
-    ? "https://explorer.mezo.org"
-    : "https://explorer.test.mezo.org"
-  const explorerUrl = `${baseUrl}/address/${address}`
+  const { chainId } = useNetwork()
+  const explorerUrl = getExplorerAddressUrl(chainId, address)
   const shortAddress = `0x${address.slice(2, 6)}...${address.slice(-4)}`
 
   return (

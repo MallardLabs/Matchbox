@@ -405,8 +405,8 @@ export default function IncentivesPage(): JSX.Element {
   }
 
   const handleApprove = () => {
-    if (!incentiveToken || !boostVoterAddress) return
-    approve(incentiveToken.address, boostVoterAddress)
+    if (!incentiveToken || !boostVoterAddress || parsedAmount <= 0n) return
+    approve(incentiveToken.address, boostVoterAddress, parsedAmount)
   }
 
   const handleAddIncentives = () => {

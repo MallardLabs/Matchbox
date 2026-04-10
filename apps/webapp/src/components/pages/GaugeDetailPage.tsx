@@ -3,6 +3,7 @@ import { AddressLink } from "@/components/AddressLink"
 import { SpringIn } from "@/components/SpringIn"
 import { TokenIcon } from "@/components/TokenIcon"
 import { getContractConfig } from "@/config/contracts"
+import { getExplorerAddressUrl } from "@/config/explorer"
 import type { GaugeProfile } from "@/config/supabase"
 import { useNetwork } from "@/contexts/NetworkContext"
 import { formatAPY, useGaugeAPY } from "@/hooks/useAPY"
@@ -38,8 +39,6 @@ type GaugeDetailPageProps = {
   address?: string
   initialProfile?: GaugeProfile | null
 }
-
-const EXPLORER_URL = process.env.NEXT_PUBLIC_EXPLORER_URL ?? ""
 
 // Social link icons
 function TwitterIcon({ size = 18 }: { size?: number }) {
@@ -690,7 +689,7 @@ export default function GaugeDetailPage({
                   </p>
                   {resolvedBeneficiary ? (
                     <a
-                      href={`${EXPLORER_URL}/address/${resolvedBeneficiary}`}
+                      href={getExplorerAddressUrl(chainId, resolvedBeneficiary)}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="font-mono text-sm text-[var(--accent)] no-underline transition-opacity hover:opacity-80 hover:underline"

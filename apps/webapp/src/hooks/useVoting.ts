@@ -635,7 +635,11 @@ export function useTokenAllowance(
 }
 
 export function useApproveToken(): {
-  approve: (tokenAddress: Address, spenderAddress: Address) => void
+  approve: (
+    tokenAddress: Address,
+    spenderAddress: Address,
+    amount: bigint,
+  ) => void
   hash: Hex | undefined
   isPending: boolean
   isConfirming: boolean
@@ -655,7 +659,13 @@ export function useApproveToken(): {
     hash,
   })
 
-  const approve = (tokenAddress: Address, spenderAddress: Address) => {
+  const approve = (
+    tokenAddress: Address,
+    spenderAddress: Address,
+    amount: bigint,
+  ) => {
+    if (amount <= 0n) return
+
     writeContract({
       address: tokenAddress,
       abi: [
@@ -671,7 +681,7 @@ export function useApproveToken(): {
         },
       ] as const,
       functionName: "approve",
-      args: [spenderAddress, BigInt(2) ** BigInt(256) - BigInt(1)], // max approval
+      args: [spenderAddress, amount],
     })
   }
 

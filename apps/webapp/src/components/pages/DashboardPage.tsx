@@ -1,5 +1,6 @@
 import { AnimatedNumber } from "@/components/AnimatedNumber"
 import GaugeCard from "@/components/GaugeCard"
+import PaginationControls from "@/components/PaginationControls"
 import { SpringIn } from "@/components/SpringIn"
 import { TokenIcon } from "@/components/TokenIcon"
 import Tooltip from "@/components/Tooltip"
@@ -19,6 +20,7 @@ import {
   type ClaimLockRequest,
   useMultiLockClaimBribes,
 } from "@/hooks/useMultiLockClaimBribes"
+import { usePagination } from "@/hooks/usePagination"
 import {
   type ClaimableBribe,
   type VoteAllocation,
@@ -41,7 +43,13 @@ import {
 } from "@mezo-org/mezo-clay"
 import dynamic from "next/dynamic"
 import Link from "next/link"
-import { useCallback, useEffect, useMemo, useState } from "react"
+import {
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useState,
+} from "react"
 import { type Address, formatUnits } from "viem"
 import { useAccount } from "wagmi"
 
@@ -81,6 +89,7 @@ type GaugeSortColumn =
   | null
 type SortDirection = "asc" | "desc"
 type StatusFilter = "all" | "active" | "inactive"
+const GAUGES_PER_PAGE = 9
 
 function VeBTCLockCard({
   lock,
@@ -813,6 +822,7 @@ export default function DashboardPage(): JSX.Element {
   const [gaugeStatusFilter, setGaugeStatusFilter] =
     useState<StatusFilter>("active")
   const [gaugeSearchQuery, setGaugeSearchQuery] = useState("")
+  const deferredGaugeSearchQuery = useDeferredValue(gaugeSearchQuery)
 
   const veMEZOTokenIds = useMemo(
     () => veMEZOLocks.map((lock) => lock.tokenId),
@@ -1164,8 +1174,8 @@ export default function DashboardPage(): JSX.Element {
       result = result.filter((g) => !g.isAlive)
     }
 
-    if (gaugeSearchQuery.trim()) {
-      const query = gaugeSearchQuery.trim().toLowerCase()
+    if (deferredGaugeSearchQuery.trim()) {
+      const query = deferredGaugeSearchQuery.trim().toLowerCase()
       result = result.filter((g) => {
         const profile = allGaugeProfiles.get(g.address.toLowerCase())
         const displayName = profile?.display_name?.toLowerCase() ?? ""
@@ -1230,11 +1240,29 @@ export default function DashboardPage(): JSX.Element {
     allGauges,
     allGaugeProfiles,
     gaugeStatusFilter,
-    gaugeSearchQuery,
+    deferredGaugeSearchQuery,
     gaugeSortColumn,
     gaugeSortDirection,
     apyMap,
   ])
+
+  const {
+    pageStart: paginatedGaugeStart,
+    pageEnd: paginatedGaugeEnd,
+    paginatedItems: paginatedGauges,
+    currentPage: currentGaugePage,
+    totalPages: totalGaugePages,
+    goToPreviousPage: goToPreviousGaugePage,
+    goToNextPage: goToNextGaugePage,
+  } = usePagination(filteredAndSortedGauges, {
+    pageSize: GAUGES_PER_PAGE,
+    resetDeps: [
+      gaugeStatusFilter,
+      gaugeSortColumn,
+      gaugeSortDirection,
+      deferredGaugeSearchQuery,
+    ],
+  })
 
   return (
     <>
@@ -1860,31 +1888,36 @@ export default function DashboardPage(): JSX.Element {
                   </div>
                 </Card>
               ) : (
-                <div className="relative">
-                  <div className="pointer-events-none sticky top-0 z-10 h-6 bg-gradient-to-b from-[var(--background)] to-transparent" />
-                  <div className="max-h-[600px] overflow-y-auto">
-                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                      {filteredAndSortedGauges.map((gauge, idx) => (
-                        <SpringIn
-                          key={gauge.address}
-                          {...(idx < 9 ? { delay: idx } : {})}
-                          variant="card-subtle"
-                        >
-                          <GaugeCard
-                            gauge={gauge}
-                            profile={
-                              allGaugeProfiles.get(
-                                gauge.address.toLowerCase(),
-                              ) ?? null
-                            }
-                            apyData={apyMap.get(gauge.address.toLowerCase())}
-                            isLoadingAPY={isLoadingAPY}
-                          />
-                        </SpringIn>
-                      ))}
-                    </div>
+                <div className="flex flex-col gap-4">
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    {paginatedGauges.map((gauge, idx) => (
+                      <SpringIn
+                        key={gauge.address}
+                        {...(idx < GAUGES_PER_PAGE ? { delay: idx } : {})}
+                        variant="card-subtle"
+                      >
+                        <GaugeCard
+                          gauge={gauge}
+                          profile={
+                            allGaugeProfiles.get(gauge.address.toLowerCase()) ??
+                            null
+                          }
+                          apyData={apyMap.get(gauge.address.toLowerCase())}
+                          isLoadingAPY={isLoadingAPY}
+                        />
+                      </SpringIn>
+                    ))}
                   </div>
-                  <div className="pointer-events-none sticky bottom-0 z-10 h-6 bg-gradient-to-t from-[var(--background)] to-transparent" />
+                  <PaginationControls
+                    currentPage={currentGaugePage}
+                    totalPages={totalGaugePages}
+                    pageStart={paginatedGaugeStart}
+                    pageEnd={paginatedGaugeEnd}
+                    totalItems={filteredAndSortedGauges.length}
+                    itemLabel="gauge"
+                    onPrevious={goToPreviousGaugePage}
+                    onNext={goToNextGaugePage}
+                  />
                 </div>
               )}
             </>
