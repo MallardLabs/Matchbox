@@ -37,6 +37,8 @@ type GaugeCardProps = {
   displayAPY?: number | null
   isProjected?: boolean
   isSelected?: boolean
+  projectedVoteWeight?: bigint | undefined
+  projectedBoostMultiplier?: number | undefined
   children?: ReactNode
 }
 
@@ -48,6 +50,8 @@ export default function GaugeCard({
   displayAPY: displayAPYOverride,
   isProjected = false,
   isSelected = false,
+  projectedVoteWeight,
+  projectedBoostMultiplier,
   children,
 }: GaugeCardProps) {
   const displayAPY =
@@ -55,31 +59,49 @@ export default function GaugeCard({
       ? displayAPYOverride
       : (apyData?.apy ?? null)
 
+  const hasProjection =
+    projectedVoteWeight !== undefined && projectedVoteWeight > 0n
+  const effectiveWeight = hasProjection
+    ? gauge.totalWeight + projectedVoteWeight
+    : gauge.totalWeight
+
   const optimalTarget = gauge.optimalVeMEZO
   const optimalFillPercent =
     optimalTarget !== undefined && optimalTarget > 0n
-      ? Math.min(100, Number((gauge.totalWeight * 100n) / optimalTarget))
+      ? Math.min(100, Number((effectiveWeight * 100n) / optimalTarget))
       : 0
   const atOrAboveOptimal =
     optimalTarget !== undefined &&
     optimalTarget > 0n &&
-    gauge.totalWeight >= optimalTarget
+    effectiveWeight >= optimalTarget
   const pastOptimal =
     optimalTarget !== undefined &&
     optimalTarget > 0n &&
-    gauge.totalWeight > optimalTarget
+    effectiveWeight > optimalTarget
   const optimalOverVeMEZO =
     pastOptimal && optimalTarget !== undefined
-      ? gauge.totalWeight - optimalTarget
+      ? effectiveWeight - optimalTarget
       : 0n
   const weightVsOptimalRatio =
     optimalTarget !== undefined && optimalTarget > 0n
-      ? weightToOptimalRatio(gauge.totalWeight, optimalTarget)
+      ? weightToOptimalRatio(effectiveWeight, optimalTarget)
       : 1
   const oversubRedBarPct = oversubscribedRedWidthPercent(weightVsOptimalRatio)
   const oversubTextColor = oversubscribedStressColor(weightVsOptimalRatio)
-  const optimalAdditional = gauge.optimalAdditionalVeMEZO
-  const hasShortfall = optimalAdditional !== undefined && optimalAdditional > 0n
+  const projectedAdditional =
+    optimalTarget !== undefined && optimalTarget > effectiveWeight
+      ? optimalTarget - effectiveWeight
+      : 0n
+  const hasShortfall = projectedAdditional > 0n
+
+  const displayBoost =
+    hasProjection && projectedBoostMultiplier !== undefined
+      ? projectedBoostMultiplier
+      : gauge.boostMultiplier
+  const boostChanged =
+    hasProjection &&
+    projectedBoostMultiplier !== undefined &&
+    Math.abs(projectedBoostMultiplier - gauge.boostMultiplier) > 0.005
 
   return (
     <article
@@ -155,6 +177,20 @@ export default function GaugeCard({
           <dd className="font-mono text-[var(--content-primary)]">
             {formatUnits(gauge.totalWeight, 18).slice(0, 10)}
           </dd>
+          <div
+            className="grid transition-[grid-template-rows] duration-300 ease-out"
+            style={{
+              gridTemplateRows: hasProjection ? "1fr" : "0fr",
+            }}
+          >
+            <div className="overflow-hidden">
+              {hasProjection && (
+                <p className="pt-0.5 font-mono text-2xs font-medium tabular-nums text-[#F7931A]">
+                  +{formatUnits(projectedVoteWeight ?? 0n, 18).slice(0, 10)}
+                </p>
+              )}
+            </div>
+          </div>
         </div>
         <div>
           <dt className="flex items-center gap-1 text-[var(--content-tertiary)]">
@@ -164,8 +200,15 @@ export default function GaugeCard({
               content="The gauge's boost multiplier (1x–5x). Increases as more veMEZO votes are allocated relative to the gauge's veBTC weight."
             />
           </dt>
-          <dd className="font-mono text-[var(--content-primary)]">
-            {formatMultiplier(gauge.boostMultiplier)}
+          <dd
+            className={`font-mono ${
+              boostChanged
+                ? "text-[var(--positive)]"
+                : "text-[var(--content-primary)]"
+            }`}
+          >
+            {formatMultiplier(displayBoost)}
+            {boostChanged && " \u2191"}
           </dd>
         </div>
         <div>
@@ -213,7 +256,7 @@ export default function GaugeCard({
                       className="font-mono text-2xs text-[var(--content-secondary)] tabular-nums"
                       title="veMEZO still needed to reach 5x boost on this gauge"
                     >
-                      {formatFixedPoint(optimalAdditional)} to 5x
+                      {formatFixedPoint(projectedAdditional)} to 5x
                     </span>
                   )}
                   {pastOptimal && (

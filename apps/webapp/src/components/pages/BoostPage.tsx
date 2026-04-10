@@ -19,13 +19,14 @@ import {
 import { useBtcPrice } from "@/hooks/useBtcPrice"
 import { useAllGaugeProfiles } from "@/hooks/useGaugeProfiles"
 import type { BoostGauge } from "@/hooks/useGauges"
-import { useBoostGauges } from "@/hooks/useGauges"
+import { useBoostGauges, useVoterTotals } from "@/hooks/useGauges"
 import { useVeMEZOLocks } from "@/hooks/useLocks"
 import { useMezoPrice } from "@/hooks/useMezoPrice"
 import { useMultiLockVoting } from "@/hooks/useMultiLockVoting"
 import { usePagination } from "@/hooks/usePagination"
 import { useClaimableBribes } from "@/hooks/useVoting"
 import { useAllVoteAllocations, useBatchVoteState } from "@/hooks/useVoting"
+import { boostMultiplierNumberFromCalculatorInputs } from "@/utils/boostMultiplierFromCalculatorInputs"
 import { formatTokenAmount } from "@/utils/format"
 import {
   Button,
@@ -76,6 +77,11 @@ export default function BoostPage(): JSX.Element {
   })
 
   const gaugeAddresses = useMemo(() => gauges.map((g) => g.address), [gauges])
+
+  const {
+    veMEZOTotalVotingPower: veMEZOSystemTotal,
+    veBTCTotalVotingPower: veBTCSystemTotal,
+  } = useVoterTotals()
 
   // Fetch all gauge profiles from Supabase (pre-fetches all for faster loading)
   const { profiles: gaugeProfiles } = useAllGaugeProfiles()
@@ -1596,6 +1602,27 @@ export default function BoostPage(): JSX.Element {
                                 )
                                 const votePercentage =
                                   gaugeAllocations.get(gauge.originalIndex) ?? 0
+                                const userVoteWeight =
+                                  isProjected
+                                    ? (BigInt(
+                                        Math.floor(userVotePercentage * 100),
+                                      ) *
+                                        totalVotingPower) /
+                                      10000n
+                                    : 0n
+                                const projectedBoost =
+                                  userVoteWeight > 0n &&
+                                  gauge.veBTCWeight &&
+                                  veBTCSystemTotal &&
+                                  veMEZOSystemTotal
+                                    ? boostMultiplierNumberFromCalculatorInputs({
+                                        unboostedNftVp: gauge.veBTCWeight,
+                                        gaugeVeMezoWeight:
+                                          gauge.totalWeight + userVoteWeight,
+                                        veBtcSystemTotal: veBTCSystemTotal,
+                                        veMezoSystemTotal: veMEZOSystemTotal,
+                                      })
+                                    : undefined
                                 return (
                                   <GaugeCard
                                     key={gauge.address}
@@ -1606,6 +1633,20 @@ export default function BoostPage(): JSX.Element {
                                     displayAPY={displayAPY}
                                     isProjected={!!isProjected}
                                     isSelected={isSelected}
+                                    projectedVoteWeight={
+                                      userVoteWeight > 0n
+                                        ? userVoteWeight
+                                        : undefined
+                                    }
+                                    projectedBoostMultiplier={
+                                      projectedBoost !== undefined &&
+                                      Math.abs(
+                                        projectedBoost -
+                                          gauge.boostMultiplier,
+                                      ) > 0.005
+                                        ? projectedBoost
+                                        : undefined
+                                    }
                                   >
                                     <fieldset className="flex flex-col gap-3 rounded-lg bg-[var(--surface-secondary)] p-3">
                                       <legend className="text-2xs uppercase tracking-wider text-[var(--content-tertiary)]">
@@ -1615,21 +1656,9 @@ export default function BoostPage(): JSX.Element {
                                         <li className="flex w-full min-w-0 items-center justify-between gap-3 sm:flex-1 sm:justify-start">
                                           <label
                                             htmlFor={`gauge-vote-${gauge.originalIndex}`}
-                                            className="shrink-0 text-2xs tabular-nums text-[var(--content-secondary)]"
+                                            className="shrink-0 text-2xs text-[var(--content-secondary)]"
                                           >
-                                            {selectedLocks.length > 0 &&
-                                            votePercentage > 0
-                                              ? `~ ${formatTokenAmount(
-                                                  (BigInt(
-                                                    Math.floor(
-                                                      votePercentage * 100,
-                                                    ),
-                                                  ) *
-                                                    totalVotingPower) /
-                                                    10000n,
-                                                  18,
-                                                )} veMEZO`
-                                              : "Vote %"}
+                                            Vote %
                                           </label>
                                           <Input
                                             id={`gauge-vote-${gauge.originalIndex}`}
