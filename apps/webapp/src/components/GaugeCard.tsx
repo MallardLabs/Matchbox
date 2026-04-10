@@ -6,6 +6,7 @@ import { Tag } from "@mezo-org/mezo-clay"
 import Link from "next/link"
 import type { ReactNode } from "react"
 import { formatUnits } from "viem"
+import MarqueeText from "./MarqueeText"
 import Tooltip from "./Tooltip"
 
 /** `totalWeight / optimal` — only meaningful when weight is at or above optimal. */
@@ -105,9 +106,9 @@ export default function GaugeCard({
             )}
           </div>
           <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-1.5">
-              <p
-                className={`truncate text-sm font-semibold ${
+            <div className="flex items-center gap-1.5">
+              <MarqueeText
+                className={`min-w-0 flex-1 text-sm font-semibold ${
                   profile?.display_name ||
                   profile?.description ||
                   profile?.profile_picture_url
@@ -120,9 +121,9 @@ export default function GaugeCard({
                   : gauge.veBTCTokenId > 0n
                     ? `veBTC #${gauge.veBTCTokenId.toString()}`
                     : `${gauge.address.slice(0, 6)}...${gauge.address.slice(-4)}`}
-              </p>
+              </MarqueeText>
               {profile?.display_name && gauge.veBTCTokenId > 0n && (
-                <span className="inline-flex items-center rounded border border-[rgba(247,147,26,0.3)] bg-[rgba(247,147,26,0.15)] px-1.5 py-0.5 font-mono text-2xs font-semibold tracking-wide text-[#F7931A]">
+                <span className="inline-flex flex-shrink-0 items-center rounded border border-[rgba(247,147,26,0.3)] bg-[rgba(247,147,26,0.15)] px-1.5 py-0.5 font-mono text-2xs font-semibold tracking-wide text-[#F7931A]">
                   #{gauge.veBTCTokenId.toString()}
                 </span>
               )}

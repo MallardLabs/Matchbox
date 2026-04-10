@@ -1,3 +1,4 @@
+import MarqueeText from "@/components/MarqueeText"
 import { TokenIcon } from "@/components/TokenIcon"
 import { Card, Tag } from "@mezo-org/mezo-clay"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
@@ -330,17 +331,17 @@ function DashboardVeBTCCard({
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
-              <span
-                className={`truncate text-sm font-medium ${
+              <MarqueeText
+                className={`min-w-0 flex-1 text-sm font-medium ${
                   lock.displayName
                     ? "text-[var(--positive)]"
                     : "text-[var(--content-primary)]"
                 }`}
               >
                 {lock.displayName || `veBTC #${lock.tokenId.toString()}`}
-              </span>
+              </MarqueeText>
               {lock.displayName && (
-                <span className="inline-flex items-center rounded bg-[rgba(247,147,26,0.15)] border border-[rgba(247,147,26,0.3)] px-1.5 py-0.5 font-mono text-2xs font-semibold tracking-wide text-[#F7931A]">
+                <span className="inline-flex flex-shrink-0 items-center rounded bg-[rgba(247,147,26,0.15)] border border-[rgba(247,147,26,0.3)] px-1.5 py-0.5 font-mono text-2xs font-semibold tracking-wide text-[#F7931A]">
                   #{lock.tokenId.toString()}
                 </span>
               )}

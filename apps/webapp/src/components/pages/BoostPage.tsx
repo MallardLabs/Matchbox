@@ -5,6 +5,7 @@ import {
   LockCarouselSelector,
   type VeMEZOLockData,
 } from "@/components/LockCarouselSelector"
+import MarqueeText from "@/components/MarqueeText"
 import OnboardingCard from "@/components/OnboardingCard"
 import PaginationControls from "@/components/PaginationControls"
 import { SpringIn } from "@/components/SpringIn"
@@ -933,17 +934,19 @@ export default function BoostPage(): JSX.Element {
                               <div className="flex items-center gap-2">
                                 <Link
                                   href={`/gauges/${gauge.address}`}
-                                  className="text-sm font-semibold text-[var(--content-primary)] no-underline"
+                                  className="min-w-0 flex-1 no-underline"
                                 >
-                                  {profile?.display_name
-                                    ? profile.display_name
-                                    : gauge.veBTCTokenId > 0n
-                                      ? `veBTC #${gauge.veBTCTokenId.toString()}`
-                                      : `${gauge.address.slice(0, 6)}...${gauge.address.slice(-4)}`}
+                                  <MarqueeText className="text-sm font-semibold text-[var(--content-primary)]">
+                                    {profile?.display_name
+                                      ? profile.display_name
+                                      : gauge.veBTCTokenId > 0n
+                                        ? `veBTC #${gauge.veBTCTokenId.toString()}`
+                                        : `${gauge.address.slice(0, 6)}...${gauge.address.slice(-4)}`}
+                                  </MarqueeText>
                                 </Link>
                                 {profile?.display_name &&
                                   gauge.veBTCTokenId > 0n && (
-                                    <span className="inline-flex items-center rounded bg-[rgba(247,147,26,0.15)] border border-[rgba(247,147,26,0.3)] px-1.5 py-0.5 font-mono text-2xs font-semibold tracking-wide text-[#F7931A]">
+                                    <span className="inline-flex flex-shrink-0 items-center rounded bg-[rgba(247,147,26,0.15)] border border-[rgba(247,147,26,0.3)] px-1.5 py-0.5 font-mono text-2xs font-semibold tracking-wide text-[#F7931A]">
                                       #{gauge.veBTCTokenId.toString()}
                                     </span>
                                   )}

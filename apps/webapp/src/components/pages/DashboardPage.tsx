@@ -1,5 +1,6 @@
 import { AnimatedNumber } from "@/components/AnimatedNumber"
 import GaugeCard from "@/components/GaugeCard"
+import MarqueeText from "@/components/MarqueeText"
 import PaginationControls from "@/components/PaginationControls"
 import { SpringIn } from "@/components/SpringIn"
 import { TokenIcon } from "@/components/TokenIcon"
@@ -163,9 +164,9 @@ function VeBTCLockCard({
             </div>
             {/* Name and Description */}
             <div className="flex min-w-0 flex-col gap-0.5">
-              <div className="flex flex-wrap items-center gap-2">
-                <span
-                  className={`text-sm font-medium ${
+              <div className="flex items-center gap-2">
+                <MarqueeText
+                  className={`min-w-0 flex-1 text-sm font-medium ${
                     profile?.display_name ||
                     profile?.description ||
                     profile?.profile_picture_url
@@ -174,9 +175,9 @@ function VeBTCLockCard({
                   }`}
                 >
                   {profile?.display_name || `veBTC #${lock.tokenId.toString()}`}
-                </span>
+                </MarqueeText>
                 {profile?.display_name && (
-                  <span className="inline-flex items-center rounded bg-[rgba(247,147,26,0.15)] border border-[rgba(247,147,26,0.3)] px-1.5 py-0.5 font-mono text-2xs font-semibold tracking-wide text-[#F7931A]">
+                  <span className="inline-flex flex-shrink-0 items-center rounded bg-[rgba(247,147,26,0.15)] border border-[rgba(247,147,26,0.3)] px-1.5 py-0.5 font-mono text-2xs font-semibold tracking-wide text-[#F7931A]">
                     #{lock.tokenId.toString()}
                   </span>
                 )}

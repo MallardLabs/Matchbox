@@ -1,4 +1,5 @@
 import GaugeCard from "@/components/GaugeCard"
+import MarqueeText from "@/components/MarqueeText"
 import { SpringIn } from "@/components/SpringIn"
 import { formatAPY, useGaugesAPY } from "@/hooks/useAPY"
 import { useAllGaugeProfiles } from "@/hooks/useGaugeProfiles"
@@ -391,9 +392,9 @@ export default function GaugesPage(): JSX.Element {
                           </div>
                           {/* Gauge Info */}
                           <div className="flex min-w-0 flex-col gap-0.5">
-                            <div className="flex flex-wrap items-center gap-1.5">
-                              <span
-                                className={`text-xs font-medium ${
+                            <div className="flex items-center gap-1.5">
+                              <MarqueeText
+                                className={`min-w-0 flex-1 text-xs font-medium ${
                                   profile?.display_name ||
                                   profile?.description ||
                                   profile?.profile_picture_url
@@ -406,10 +407,10 @@ export default function GaugesPage(): JSX.Element {
                                   : gauge.veBTCTokenId > 0n
                                     ? `veBTC #${gauge.veBTCTokenId.toString()}`
                                     : `${gauge.address.slice(0, 6)}...${gauge.address.slice(-4)}`}
-                              </span>
+                              </MarqueeText>
                               {profile?.display_name &&
                                 gauge.veBTCTokenId > 0n && (
-                                  <span className="rounded bg-[rgba(247,147,26,0.15)] px-1.5 py-0.5 font-mono text-2xs font-semibold tracking-wide text-[#F7931A]">
+                                  <span className="flex-shrink-0 rounded bg-[rgba(247,147,26,0.15)] px-1.5 py-0.5 font-mono text-2xs font-semibold tracking-wide text-[#F7931A]">
                                     #{gauge.veBTCTokenId.toString()}
                                   </span>
                                 )}

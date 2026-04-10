@@ -848,3 +848,17 @@
 .carousel-content-fade-in {
   animation: carousel-content-fade-in 0.3s ease-out forwards;
 }
+
+/* ============================================
+   MARQUEE TEXT
+   Spotify-style continuous scroll for overflow
+   ============================================ */
+
+@keyframes marquee-scroll {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
