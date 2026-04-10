@@ -133,7 +133,7 @@ function DashboardVeMEZOCard({
   return (
     <div className="flex h-full flex-col">
       {/* Header */}
-      <div className="mb-3 flex items-start justify-between gap-2">
+      <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium text-[var(--content-primary)]">
@@ -217,7 +217,7 @@ function DashboardVeMEZOCard({
       </div>
 
       {/* Stats grid */}
-      <div className="mb-4 grid grid-cols-2 gap-3">
+      <div className="mb-4 grid grid-cols-1 gap-3 min-[420px]:grid-cols-2">
         <div>
           <p className="mb-1 text-2xs uppercase tracking-wider text-[var(--content-secondary)]">
             Locked Amount
@@ -312,7 +312,7 @@ function DashboardVeBTCCard({
   return (
     <div className="flex h-full flex-col">
       {/* Header with profile */}
-      <div className="mb-3 flex items-start justify-between gap-2">
+      <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex min-w-0 flex-1 items-center gap-2">
           {/* Profile Picture */}
           <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center overflow-hidden rounded-full border border-[var(--border)] bg-[var(--surface-secondary)]">
@@ -383,7 +383,7 @@ function DashboardVeBTCCard({
       </div>
 
       {/* Stats grid */}
-      <div className="mb-4 grid grid-cols-2 gap-3">
+      <div className="mb-4 grid grid-cols-1 gap-3 min-[420px]:grid-cols-2">
         <div>
           <p className="mb-1 text-2xs uppercase tracking-wider text-[var(--content-secondary)]">
             Locked Amount
@@ -461,7 +461,7 @@ function SimpleDashboardCard({
   return (
     <div className="flex h-full flex-col">
       {/* Header */}
-      <div className="mb-3 flex items-start justify-between gap-2">
+      <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium text-[var(--content-primary)]">
             {lockType} #{lock.tokenId.toString()}
@@ -493,7 +493,7 @@ function SimpleDashboardCard({
       </div>
 
       {/* Stats */}
-      <div className="mb-4 grid grid-cols-2 gap-3">
+      <div className="mb-4 grid grid-cols-1 gap-3 min-[420px]:grid-cols-2">
         <div>
           <p className="mb-1 text-2xs uppercase tracking-wider text-[var(--content-secondary)]">
             Locked Amount
@@ -576,7 +576,10 @@ export function LockCarouselSelector<T extends LockItem>({
     const container = scrollContainerRef.current
     if (!container) return
 
-    const cardWidth = 300 // card width + gap
+    const firstCard = container.querySelector(
+      "[data-carousel-card]",
+    ) as HTMLElement | null
+    const cardWidth = (firstCard?.offsetWidth ?? 280) + 16
     const scrollAmount = direction === "left" ? -cardWidth : cardWidth
 
     container.scrollBy({
@@ -749,7 +752,7 @@ export function LockCarouselSelector<T extends LockItem>({
   return (
     <div className="flex flex-col gap-4">
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
           <div
             className={`flex h-8 w-8 items-center justify-center rounded-full border border-[rgba(247,147,26,0.35)] bg-[rgba(247,147,26,0.15)] text-[#F7931A] ${
@@ -777,7 +780,7 @@ export function LockCarouselSelector<T extends LockItem>({
           </div>
         </div>
         {locks.length > 1 && (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 self-start sm:self-auto">
             {multiSelect && (
               <button
                 type="button"
@@ -829,13 +832,13 @@ export function LockCarouselSelector<T extends LockItem>({
       {/* Cards */}
       <div
         ref={scrollContainerRef}
-        className={`-mx-6 flex gap-4 overflow-x-auto px-6 pb-4 ${
+        className={`-mx-4 flex gap-4 overflow-x-auto px-4 pb-4 sm:-mx-6 sm:px-6 ${
           isDragging ? "cursor-grabbing" : "cursor-grab"
         }`}
         style={{
           scrollSnapType: isDragging ? "none" : "x proximity",
-          scrollPaddingLeft: "24px",
-          scrollPaddingRight: "24px",
+          scrollPaddingLeft: "16px",
+          scrollPaddingRight: "16px",
           scrollBehavior: isDragging ? "auto" : "smooth",
           userSelect: "none",
           WebkitUserSelect: "none",
@@ -872,7 +875,7 @@ export function LockCarouselSelector<T extends LockItem>({
               }`}
               style={{
                 scrollSnapAlign: "start",
-                width: "280px",
+                width: "min(280px, calc(100vw - 2.5rem))",
               }}
               aria-pressed={isSelected}
             >
@@ -882,7 +885,7 @@ export function LockCarouselSelector<T extends LockItem>({
                   Root: {
                     style: {
                       height: "100%",
-                      minHeight: "240px",
+                      minHeight: "clamp(210px, 48vw, 240px)",
                       cursor: isDragging ? "grabbing" : "pointer",
                       transition: isDragging
                         ? "none"

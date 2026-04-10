@@ -40,7 +40,7 @@ export default function PaginationControls({
         {totalItems === 1 ? "" : "s"}
       </p>
 
-      <div className="flex items-center gap-2 self-start sm:self-auto">
+      <div className="flex w-full flex-wrap items-center justify-between gap-2 sm:w-auto sm:flex-nowrap sm:justify-start sm:self-auto">
         <Button
           kind="secondary"
           size="small"

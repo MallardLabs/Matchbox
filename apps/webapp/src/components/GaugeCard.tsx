@@ -86,7 +86,7 @@ export default function GaugeCard({
         isSelected ? "border-[var(--positive)]" : "border-[var(--border)]"
       }`}
     >
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <Link
           href={`/gauges/${gauge.address}`}
           className="flex min-w-0 items-center gap-3 text-inherit no-underline"
@@ -134,11 +134,13 @@ export default function GaugeCard({
             )}
           </div>
         </Link>
-        <Tag color={gauge.isAlive ? "green" : "red"} closeable={false}>
-          {gauge.isAlive ? "Active" : "Inactive"}
-        </Tag>
+        <div className="self-start">
+          <Tag color={gauge.isAlive ? "green" : "red"} closeable={false}>
+            {gauge.isAlive ? "Active" : "Inactive"}
+          </Tag>
+        </div>
       </div>
-      <dl className="grid grid-cols-2 gap-3 text-xs">
+      <dl className="grid grid-cols-1 gap-3 text-xs min-[420px]:grid-cols-2">
         <div>
           <dt className="text-[var(--content-tertiary)]">veBTC Weight</dt>
           <dd className="font-mono text-[var(--content-primary)]">

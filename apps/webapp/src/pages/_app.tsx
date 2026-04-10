@@ -3,6 +3,7 @@ import "@mezo-org/mezo-clay/dist/mezo-clay.css"
 import { InitialLoader } from "@/components/InitialLoader"
 import type { AppProps } from "next/app"
 import dynamic from "next/dynamic"
+import Head from "next/head"
 
 // Dynamically import the client app with SSR disabled
 const ClientApp = dynamic(
@@ -14,5 +15,15 @@ const ClientApp = dynamic(
 )
 
 export default function App({ Component, pageProps }: AppProps) {
-  return <ClientApp Component={Component} pageProps={pageProps} />
+  return (
+    <>
+      <Head>
+        <meta
+          name="viewport"
+          content="width=device-width, initial-scale=1, viewport-fit=cover"
+        />
+      </Head>
+      <ClientApp Component={Component} pageProps={pageProps} />
+    </>
+  )
 }

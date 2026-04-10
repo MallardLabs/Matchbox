@@ -145,8 +145,8 @@ function VeBTCLockCard({
     >
       <div className="flex h-full flex-col py-2">
         {/* Header with Profile Picture, Name, and Status */}
-        <div className="mb-4 flex items-start justify-between">
-          <div className="flex items-center gap-3">
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex min-w-0 items-center gap-3">
             {/* Profile Picture */}
             <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center overflow-hidden rounded-full border border-[var(--border)] bg-[var(--surface-secondary)]">
               {profile?.profile_picture_url ? (
@@ -209,7 +209,7 @@ function VeBTCLockCard({
         </div>
 
         <div className="flex-1">
-          <div className="grid grid-cols-2 gap-4 max-[360px]:grid-cols-1 max-[480px]:gap-3">
+          <div className="grid grid-cols-1 gap-3 min-[520px]:grid-cols-2">
             <div>
               <p className="mb-1 text-2xs uppercase tracking-wider text-[var(--content-secondary)]">
                 Locked Amount
@@ -282,13 +282,13 @@ function VeBTCLockCard({
 
         {(lock.isPermanent || !isExpired) && (
           <div className="mt-4 border-t border-[var(--border)] pt-4">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-xs text-[var(--content-secondary)]">
                 Unlocks:{" "}
                 {lock.isPermanent ? "Never" : unlockDate.toLocaleDateString()}
               </p>
               {hasGauge && (
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1 self-start sm:self-auto">
                   <Button
                     kind="secondary"
                     size="small"
@@ -355,8 +355,8 @@ function VeMEZOLockCard({
   return (
     <Card withBorder overrides={{ Root: { style: { height: "100%" } } }}>
       <div className="flex h-full flex-col py-2">
-        <div className="mb-4 flex items-start justify-between">
-          <div>
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
             <span className="text-sm font-medium text-[var(--content-primary)]">
               veMEZO #{lock.tokenId.toString()}
             </span>
@@ -388,7 +388,7 @@ function VeMEZOLockCard({
           </Tag>
         </div>
 
-        <div className="grid flex-1 grid-cols-2 gap-4 max-[360px]:grid-cols-1">
+        <div className="grid flex-1 grid-cols-1 gap-3 min-[520px]:grid-cols-2">
           <div>
             <p className="mb-1 text-2xs uppercase tracking-wider text-[var(--content-secondary)]">
               Locked Amount
@@ -1756,18 +1756,27 @@ export default function DashboardPage(): JSX.Element {
               variant="card"
             >
               <div>
-                <div className="mb-4 flex items-center justify-between">
+                <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <h2 className="text-xl font-semibold text-[var(--content-primary)]">
                     Your veBTC Locks
                   </h2>
                   {canShowTransferButton && (
-                    <Button
-                      kind="secondary"
-                      size="small"
-                      onClick={() => setIsTransferModalOpen(true)}
-                    >
-                      Transfer Profile
-                    </Button>
+                    <div className="w-full sm:w-auto">
+                      <Button
+                        kind="secondary"
+                        size="small"
+                        onClick={() => setIsTransferModalOpen(true)}
+                        overrides={{
+                          BaseButton: {
+                            style: {
+                              width: "100%",
+                            },
+                          },
+                        }}
+                      >
+                        Transfer Profile
+                      </Button>
+                    </div>
                   )}
                 </div>
                 {veBTCLocks.length === 0 ? (

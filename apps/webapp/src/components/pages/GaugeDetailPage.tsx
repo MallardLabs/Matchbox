@@ -436,7 +436,7 @@ export default function GaugeDetailPage({
               <div className="flex flex-col gap-6 md:flex-row md:items-start">
                 {/* Profile Picture */}
                 <div className="flex flex-shrink-0 items-center justify-center md:items-start">
-                  <div className="flex h-[140px] w-[140px] items-center justify-center overflow-hidden rounded-2xl border-[3px] border-[var(--border)] bg-[var(--surface-secondary)]">
+                  <div className="flex h-28 w-28 items-center justify-center overflow-hidden rounded-2xl border-[3px] border-[var(--border)] bg-[var(--surface-secondary)] sm:h-[140px] sm:w-[140px]">
                     {resolvedProfile?.profile_picture_url ? (
                       <img
                         src={resolvedProfile.profile_picture_url}
@@ -487,12 +487,21 @@ export default function GaugeDetailPage({
                     </div>
 
                     {isAlive && (
-                      <Button
-                        kind="secondary"
-                        onClick={() => setIsAddIncentiveModalOpen(true)}
-                      >
-                        Add Incentives
-                      </Button>
+                      <div className="w-full md:w-auto">
+                        <Button
+                          kind="secondary"
+                          onClick={() => setIsAddIncentiveModalOpen(true)}
+                          overrides={{
+                            BaseButton: {
+                              style: {
+                                width: "100%",
+                              },
+                            },
+                          }}
+                        >
+                          Add Incentives
+                        </Button>
+                      </div>
                     )}
                   </div>
 
@@ -570,7 +579,7 @@ export default function GaugeDetailPage({
           </SpringIn>
 
           {/* Stats Grid */}
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 md:gap-4 lg:grid-cols-6">
+          <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 md:grid-cols-3 md:gap-4 lg:grid-cols-6">
             <SpringIn delay={1} variant="card">
               <Card
                 withBorder

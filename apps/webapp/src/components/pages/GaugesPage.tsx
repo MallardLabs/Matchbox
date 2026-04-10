@@ -1,3 +1,4 @@
+import GaugeCard from "@/components/GaugeCard"
 import { SpringIn } from "@/components/SpringIn"
 import { formatAPY, useGaugesAPY } from "@/hooks/useAPY"
 import { useAllGaugeProfiles } from "@/hooks/useGaugeProfiles"
@@ -266,8 +267,25 @@ export default function GaugesPage(): JSX.Element {
                 </Tag>
               </div>
 
+              <div className="grid gap-3 md:hidden">
+                {filteredAndSortedGauges.map((gauge) => {
+                  const profile = gaugeProfiles.get(gauge.address.toLowerCase())
+                  const apyData = apyMap.get(gauge.address.toLowerCase())
+
+                  return (
+                    <GaugeCard
+                      key={gauge.address}
+                      gauge={gauge}
+                      profile={profile ?? null}
+                      apyData={apyData}
+                      isLoadingAPY={isLoadingAPY}
+                    />
+                  )
+                })}
+              </div>
+
               {/* Table Container */}
-              <div className="-mx-4 overflow-x-auto px-4 md:-mx-3 md:px-3">
+              <div className="-mx-4 hidden overflow-x-auto px-4 md:-mx-3 md:block md:px-3">
                 <TableBuilder
                   data={filteredAndSortedGauges}
                   overrides={{

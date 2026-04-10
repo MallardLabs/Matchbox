@@ -1292,8 +1292,8 @@ export default function BoostPage(): JSX.Element {
                     />
 
                     {selectedLocks.length > 0 && (
-                      <section className="flex flex-col gap-4 rounded-xl border border-[var(--border)] bg-[var(--surface-secondary)] p-5">
-                        <dl className="grid grid-cols-4 gap-4 max-md:grid-cols-2 max-sm:grid-cols-1 max-sm:gap-3">
+                      <section className="flex flex-col gap-4 rounded-xl border border-[var(--border)] bg-[var(--surface-secondary)] p-4 sm:p-5">
+                        <dl className="grid grid-cols-1 gap-3 min-[520px]:grid-cols-2 xl:grid-cols-4">
                           <div>
                             <dt className="text-2xs font-medium uppercase tracking-wider text-[var(--content-tertiary)]">
                               Locks
@@ -1370,48 +1370,50 @@ export default function BoostPage(): JSX.Element {
                                     : "From previous vote — will persist until you vote again"}
                               </p>
                             </div>
-                            <table className="w-full text-xs">
-                              <thead>
-                                <tr className="border-b border-[var(--border)] text-left text-2xs text-[var(--content-tertiary)]">
-                                  <th className="pb-2 font-medium">Gauge</th>
-                                  <th className="pb-2 text-right font-medium">
-                                    Weight
-                                  </th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {currentAllocations.map((allocation) => {
-                                  const gauge = gauges.find(
-                                    (g) =>
-                                      g.address.toLowerCase() ===
-                                      allocation.gaugeAddress.toLowerCase(),
-                                  )
-                                  return (
-                                    <tr
-                                      key={allocation.gaugeAddress}
-                                      className="border-b border-[var(--border)] last:border-0"
-                                    >
-                                      <td className="py-2 text-[var(--content-secondary)]">
-                                        <AddressLink
-                                          address={
-                                            allocation.gaugeAddress as Address
-                                          }
-                                        />
-                                        {gauge &&
-                                          gauge.veBTCTokenId > 0n &&
-                                          ` (veBTC #${gauge.veBTCTokenId.toString()})`}
-                                      </td>
-                                      <td className="py-2 text-right font-mono font-medium tabular-nums text-[var(--content-primary)]">
-                                        {formatUnits(
-                                          allocation.weight,
-                                          18,
-                                        ).slice(0, 10)}
-                                      </td>
-                                    </tr>
-                                  )
-                                })}
-                              </tbody>
-                            </table>
+                            <div className="overflow-x-auto">
+                              <table className="w-full min-w-[320px] text-xs">
+                                <thead>
+                                  <tr className="border-b border-[var(--border)] text-left text-2xs text-[var(--content-tertiary)]">
+                                    <th className="pb-2 font-medium">Gauge</th>
+                                    <th className="pb-2 text-right font-medium">
+                                      Weight
+                                    </th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {currentAllocations.map((allocation) => {
+                                    const gauge = gauges.find(
+                                      (g) =>
+                                        g.address.toLowerCase() ===
+                                        allocation.gaugeAddress.toLowerCase(),
+                                    )
+                                    return (
+                                      <tr
+                                        key={allocation.gaugeAddress}
+                                        className="border-b border-[var(--border)] last:border-0"
+                                      >
+                                        <td className="py-2 pr-4 text-[var(--content-secondary)]">
+                                          <AddressLink
+                                            address={
+                                              allocation.gaugeAddress as Address
+                                            }
+                                          />
+                                          {gauge &&
+                                            gauge.veBTCTokenId > 0n &&
+                                            ` (veBTC #${gauge.veBTCTokenId.toString()})`}
+                                        </td>
+                                        <td className="py-2 text-right font-mono font-medium tabular-nums text-[var(--content-primary)]">
+                                          {formatUnits(
+                                            allocation.weight,
+                                            18,
+                                          ).slice(0, 10)}
+                                        </td>
+                                      </tr>
+                                    )
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
                           </div>
                         )}
                       </section>
@@ -1428,7 +1430,7 @@ export default function BoostPage(): JSX.Element {
               <Card title="Allocate Voting Power" withBorder overrides={{}}>
                 <div className="py-4">
                   <div className="flex flex-col gap-4">
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                       <p className="text-xs text-[var(--content-secondary)]">
                         {filteredAndSortedGauges.length} gauge
                         {filteredAndSortedGauges.length !== 1 ? "s" : ""}
@@ -1576,8 +1578,8 @@ export default function BoostPage(): JSX.Element {
                                       <legend className="text-2xs uppercase tracking-wider text-[var(--content-tertiary)]">
                                         Vote setup
                                       </legend>
-                                      <ol className="flex flex-wrap items-center justify-between gap-2 sm:gap-3">
-                                        <li className="flex min-w-0 flex-1 items-center gap-2">
+                                      <ol className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
+                                        <li className="flex w-full min-w-0 items-center justify-between gap-3 sm:flex-1 sm:justify-start">
                                           <label
                                             htmlFor={`gauge-vote-${gauge.originalIndex}`}
                                             className="shrink-0 text-2xs text-[var(--content-secondary)]"
@@ -1600,14 +1602,15 @@ export default function BoostPage(): JSX.Element {
                                             overrides={{
                                               Root: {
                                                 style: {
-                                                  width: "96px",
-                                                  minWidth: "72px",
+                                                  width: "100%",
+                                                  maxWidth: "140px",
+                                                  minWidth: "0",
                                                 },
                                               },
                                             }}
                                           />
                                         </li>
-                                        <li className="flex items-center gap-2">
+                                        <li className="w-full sm:w-auto">
                                           <Button
                                             kind={
                                               isSelected
@@ -1627,6 +1630,13 @@ export default function BoostPage(): JSX.Element {
                                             disabled={
                                               !isSelected && votePercentage <= 0
                                             }
+                                            overrides={{
+                                              BaseButton: {
+                                                style: {
+                                                  width: "100%",
+                                                },
+                                              },
+                                            }}
                                           >
                                             {isSelected
                                               ? "Remove"
@@ -1676,15 +1686,15 @@ export default function BoostPage(): JSX.Element {
       )}
 
       {selectedGaugeIndexes.size > 0 && (
-        <div className="fixed bottom-4 left-0 right-0 z-40 px-4">
-          <div className="mx-auto flex w-full max-w-3xl flex-col items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 shadow-lg">
+        <div className="fixed bottom-3 left-0 right-0 z-40 px-3 sm:bottom-4 sm:px-4">
+          <div className="mx-auto flex w-full max-w-3xl flex-col items-stretch gap-2 rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 shadow-lg">
             {selectedLocks.length === 0 && (
               <p className="text-xs font-medium text-[#F7931A]">
                 Select veMEZO locks above to finalize your vote
               </p>
             )}
-            <div className="flex w-full flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
+            <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-wrap items-center gap-3">
                 <span className="text-xs text-[var(--content-secondary)]">
                   Selections
                 </span>
@@ -1704,11 +1714,18 @@ export default function BoostPage(): JSX.Element {
                   {totalAllocation}%
                 </span>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex w-full gap-2 sm:w-auto">
                 <Button
                   kind="secondary"
                   size="small"
                   onClick={handleClearSelections}
+                  overrides={{
+                    BaseButton: {
+                      style: {
+                        flex: 1,
+                      },
+                    },
+                  }}
                 >
                   Clear
                 </Button>
@@ -1717,6 +1734,13 @@ export default function BoostPage(): JSX.Element {
                   size="small"
                   onClick={handleCheckoutOpen}
                   disabled={selectedLocks.length === 0}
+                  overrides={{
+                    BaseButton: {
+                      style: {
+                        flex: 1,
+                      },
+                    },
+                  }}
                 >
                   Checkout
                 </Button>
