@@ -165,7 +165,7 @@ function InputRow({
         onChange={handleChange}
         readOnly={readOnly}
         placeholder="0"
-        className={`h-full w-full bg-transparent pl-12 pr-[88px] text-right font-mono text-lg font-semibold outline-none transition-colors placeholder:text-[var(--content-secondary)]/50 sm:pl-16 sm:pr-28 sm:text-2xl ${
+        className={`h-full w-full bg-transparent pl-10 pr-[76px] text-right font-mono text-base font-semibold outline-none transition-colors placeholder:text-[var(--content-secondary)]/50 sm:pl-16 sm:pr-28 sm:text-2xl ${
           readOnly
             ? "cursor-default text-[var(--content-secondary)]"
             : "text-[var(--content-primary)]"

@@ -187,7 +187,7 @@ export default function GaugeCard({
             {isProjected && " \u2193"}
           </dd>
         </div>
-        <div className="col-span-2">
+        <div className="min-[420px]:col-span-2">
           <dt className="flex flex-wrap items-center gap-1.5 text-[var(--content-tertiary)]">
             Optimal veMEZO
             <Tooltip

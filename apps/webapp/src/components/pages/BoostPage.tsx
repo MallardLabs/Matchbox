@@ -1485,17 +1485,6 @@ export default function BoostPage(): JSX.Element {
                       >
                         Inactive
                       </Tag>
-                      <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface-secondary)] px-3 py-1.5 text-xs text-[var(--content-secondary)]">
-                        <input
-                          type="checkbox"
-                          checked={showNeedsBoostOnly}
-                          onChange={(e) =>
-                            setShowNeedsBoostOnly(e.target.checked)
-                          }
-                          className="h-3.5 w-3.5 accent-[#F7931A]"
-                        />
-                        Needs boost (&lt;5x)
-                      </label>
                     </div>
 
                     {/* Search field */}
@@ -1544,6 +1533,32 @@ export default function BoostPage(): JSX.Element {
                               {getGaugeSortIndicator(option.id)}
                             </button>
                           ))}
+                          <button
+                            type="button"
+                            aria-pressed={showNeedsBoostOnly}
+                            onClick={() =>
+                              setShowNeedsBoostOnly((value) => !value)
+                            }
+                            className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs transition-colors ${
+                              showNeedsBoostOnly
+                                ? "border-[rgba(247,147,26,0.35)] bg-[rgba(247,147,26,0.12)] text-[#F7931A]"
+                                : "border-[var(--border)] text-[var(--content-secondary)] hover:border-[var(--content-tertiary)] hover:text-[var(--content-primary)]"
+                            }`}
+                          >
+                            <span
+                              className={`flex h-3.5 w-3.5 items-center justify-center rounded-sm border text-[9px] leading-none ${
+                                showNeedsBoostOnly
+                                  ? "border-[#F7931A] bg-[#F7931A] text-white"
+                                  : "border-[var(--content-muted)] bg-transparent text-transparent"
+                              }`}
+                            >
+                              ✓
+                            </span>
+                            <span>Needs boost</span>
+                            <span className="font-mono text-[10px] opacity-80">
+                              &lt;5x
+                            </span>
+                          </button>
                         </div>
 
                         {filteredAndSortedGauges.length === 0 &&

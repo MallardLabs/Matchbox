@@ -55,7 +55,7 @@ export default function OnboardingCard({
 
   return (
     <section
-      className={`fixed bottom-4 right-4 z-40 w-72 rounded-xl border border-[var(--border)] bg-[var(--surface)] shadow-terminal-lg transition-all duration-300 ${
+      className={`fixed bottom-4 right-4 z-40 w-[calc(100vw-2rem)] max-w-72 rounded-xl border border-[var(--border)] bg-[var(--surface)] shadow-terminal-lg transition-all duration-300 ${
         visible ? "translate-y-0 opacity-100" : "translate-y-6 opacity-0"
       }`}
       aria-label="Getting started guide"
