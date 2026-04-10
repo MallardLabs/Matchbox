@@ -6,27 +6,20 @@ import { getContractConfig } from "@/config/contracts"
 import type { GaugeProfile } from "@/config/supabase"
 import { useNetwork } from "@/contexts/NetworkContext"
 import { formatAPY, useGaugeAPY } from "@/hooks/useAPY"
-import { useBtcPrice } from "@/hooks/useBtcPrice"
 import {
   useGaugeHistory,
   useGaugeOwnershipCheck,
   useGaugeProfile,
 } from "@/hooks/useGaugeProfiles"
+import { useGaugeTopology } from "@/hooks/useGaugeTopology"
 import { useBoostInfo } from "@/hooks/useGauges"
-import { useMezoPrice } from "@/hooks/useMezoPrice"
-import { formatUsdValue, getTokenValueUsd } from "@/hooks/useTokenPrices"
-import {
-  type BribeIncentive,
-  useBribeAddress,
-  useBribeIncentives,
-} from "@/hooks/useVoting"
+import { formatUsdValue } from "@/hooks/useTokenPrices"
 import {
   formatFixedPoint,
   formatMultiplier,
   formatTokenAmount,
 } from "@/utils/format"
 import { Button, Card, Skeleton, Tag } from "@mezo-org/mezo-clay"
-import { getTokenUsdPrice } from "@repo/shared"
 import { NON_STAKING_GAUGE_ABI } from "@repo/shared/contracts"
 import Link from "next/link"
 import { useRouter } from "next/router"
@@ -34,24 +27,16 @@ import { useEffect, useMemo, useState } from "react"
 import type { Address } from "viem"
 import { useReadContract, useReadContracts } from "wagmi"
 
-type IncentiveWithUSD = BribeIncentive & { usdValue: number | null }
+type IncentiveWithUSD = {
+  tokenAddress: string
+  symbol: string
+  decimals: number
+  amount: bigint
+  usdValue: number
+}
 type GaugeDetailPageProps = {
   address?: string
   initialProfile?: GaugeProfile | null
-}
-
-function getIncentiveUsdValue(
-  incentive: BribeIncentive,
-  btcPrice: number | null,
-  mezoPrice: number | null,
-): number | null {
-  const priceUsd = getTokenUsdPrice(
-    incentive.tokenAddress,
-    incentive.symbol,
-    btcPrice,
-    mezoPrice,
-  )
-  return getTokenValueUsd(incentive.amount, incentive.decimals, priceUsd)
 }
 
 const EXPLORER_URL = process.env.NEXT_PUBLIC_EXPLORER_URL ?? ""
@@ -200,6 +185,8 @@ export default function GaugeDetailPage({
 
   const { chainId } = useNetwork()
   const contracts = getContractConfig(chainId)
+  const { profile, isLoading: isLoadingProfile } = useGaugeProfile(gaugeAddress)
+  const resolvedProfile = profile ?? initialProfile
 
   // Fetch gauge data
   const { data: gaugeData, isLoading: isLoadingGauge } = useReadContracts({
@@ -231,6 +218,11 @@ export default function GaugeDetailPage({
   const totalWeight = gaugeData?.[0]?.result as bigint | undefined
   const isAlive = (gaugeData?.[1]?.result as boolean) ?? false
   const beneficiary = gaugeData?.[2]?.result as Address | undefined
+  const resolvedBeneficiary =
+    beneficiary ??
+    (resolvedProfile?.owner_address
+      ? (resolvedProfile.owner_address as Address)
+      : undefined)
 
   // Get veBTC token ID for this gauge
   const { data: veBTCBalance } = useReadContract({
@@ -287,26 +279,37 @@ export default function GaugeDetailPage({
     return undefined
   }, [gaugeAddress, tokenIdList, mappedGaugesData])
 
+  const profileVeBTCTokenId = useMemo(() => {
+    if (!resolvedProfile?.vebtc_token_id) return undefined
+
+    try {
+      return BigInt(resolvedProfile.vebtc_token_id)
+    } catch {
+      return undefined
+    }
+  }, [resolvedProfile?.vebtc_token_id])
+
+  // Prefer live on-chain discovery, but keep the saved profile as a fallback
+  // so public gauge pages still show owner-derived metadata when follow-up
+  // contract reads fail independently.
+  const resolvedVeBTCTokenId = veBTCTokenId ?? profileVeBTCTokenId
+
   // Get boost info
   const {
     boost,
     boostMultiplier,
     isLoading: isLoadingBoost,
-  } = useBoostInfo(veBTCTokenId)
+  } = useBoostInfo(resolvedVeBTCTokenId)
 
   // Show the boosted/effective veBTC weight on the page.
   const { data: veBTCVotingPower } = useReadContract({
     ...contracts.veBTC,
     functionName: "votingPowerOfNFT",
-    args: veBTCTokenId ? [veBTCTokenId] : undefined,
+    args: resolvedVeBTCTokenId ? [resolvedVeBTCTokenId] : undefined,
     query: {
-      enabled: !!veBTCTokenId,
+      enabled: !!resolvedVeBTCTokenId,
     },
   })
-
-  // Fetch gauge profile
-  const { profile, isLoading: isLoadingProfile } = useGaugeProfile(gaugeAddress)
-  const resolvedProfile = profile ?? initialProfile
 
   // Check on-chain ownership
   const { isOwnershipValid } = useGaugeOwnershipCheck(
@@ -317,39 +320,31 @@ export default function GaugeDetailPage({
 
   // Fetch gauge history
   const { history, isLoading: isLoadingHistory } = useGaugeHistory(gaugeAddress)
-
-  // Fetch bribes
-  const { bribeAddress, hasBribe } = useBribeAddress(gaugeAddress)
-  const {
-    incentives,
-    isLoading: isLoadingIncentives,
-    refetch: refetchIncentives,
-  } = useBribeIncentives(bribeAddress)
-  const { price: btcPrice } = useBtcPrice()
-  const { price: mezoPrice } = useMezoPrice()
   const [isAddIncentiveModalOpen, setIsAddIncentiveModalOpen] = useState(false)
-
-  const incentivesWithUSD: IncentiveWithUSD[] = useMemo(
-    () =>
-      incentives.map((incentive) => ({
-        ...incentive,
-        usdValue: getIncentiveUsdValue(incentive, btcPrice, mezoPrice),
-      })),
-    [btcPrice, mezoPrice, incentives],
-  )
-
-  // Calculate total incentives
-  const totalIncentivesUSD = useMemo(
-    () => incentivesWithUSD.reduce((sum, inc) => sum + (inc.usdValue ?? 0), 0),
-    [incentivesWithUSD],
-  )
+  const { refetch: refetchTopology } = useGaugeTopology({
+    enabled: !!gaugeAddress,
+  })
 
   const gaugeHasNoVotes = totalWeight !== undefined && totalWeight === 0n
 
   // Calculate APY for this gauge
-  const { apy, isLoading: isLoadingAPY } = useGaugeAPY(
-    gaugeAddress,
-    totalWeight,
+  const {
+    apy,
+    incentivesByToken,
+    totalIncentivesUSD,
+    isLoading: isLoadingAPY,
+  } = useGaugeAPY(gaugeAddress, totalWeight)
+
+  const incentivesWithUSD: IncentiveWithUSD[] = useMemo(
+    () =>
+      incentivesByToken.map((incentive) => ({
+        tokenAddress: incentive.tokenAddress,
+        symbol: incentive.symbol,
+        decimals: incentive.decimals,
+        amount: incentive.amount,
+        usdValue: incentive.usdValue,
+      })),
+    [incentivesByToken],
   )
 
   // Check if profile has meaningful content
@@ -446,7 +441,7 @@ export default function GaugeDetailPage({
                     {resolvedProfile?.profile_picture_url ? (
                       <img
                         src={resolvedProfile.profile_picture_url}
-                        alt={`Gauge ${veBTCTokenId?.toString() ?? gaugeAddress}`}
+                        alt={`Gauge ${resolvedVeBTCTokenId?.toString() ?? gaugeAddress}`}
                         className="h-full w-full object-cover"
                       />
                     ) : (
@@ -455,7 +450,7 @@ export default function GaugeDetailPage({
                           #
                         </span>
                         <span className="text-lg font-semibold text-[var(--content-tertiary)]">
-                          {veBTCTokenId?.toString() ?? "?"}
+                          {resolvedVeBTCTokenId?.toString() ?? "?"}
                         </span>
                       </div>
                     )}
@@ -474,13 +469,14 @@ export default function GaugeDetailPage({
                         }`}
                       >
                         {resolvedProfile?.display_name ||
-                          `veBTC #${veBTCTokenId?.toString() ?? "Unknown"}`}
+                          `veBTC #${resolvedVeBTCTokenId?.toString() ?? "Unknown"}`}
                       </h2>
-                      {resolvedProfile?.display_name && veBTCTokenId && (
-                        <span className="inline-flex items-center rounded-md border border-[rgba(247,147,26,0.3)] bg-[rgba(247,147,26,0.15)] px-2.5 py-1 font-mono text-xs font-semibold tracking-wide text-[#F7931A]">
-                          #{veBTCTokenId.toString()}
-                        </span>
-                      )}
+                      {resolvedProfile?.display_name &&
+                        resolvedVeBTCTokenId && (
+                          <span className="inline-flex items-center rounded-md border border-[rgba(247,147,26,0.3)] bg-[rgba(247,147,26,0.15)] px-2.5 py-1 font-mono text-xs font-semibold tracking-wide text-[#F7931A]">
+                            #{resolvedVeBTCTokenId.toString()}
+                          </span>
+                        )}
                       <Tag color={isAlive ? "green" : "red"} closeable={false}>
                         {isAlive ? "Active" : "Inactive"}
                       </Tag>
@@ -588,7 +584,7 @@ export default function GaugeDetailPage({
                     veBTC Weight
                   </p>
                   <h3 className="font-mono text-lg font-semibold tabular-nums text-[var(--content-primary)] md:text-xl">
-                    {veBTCVotingPower
+                    {veBTCVotingPower !== undefined
                       ? formatTokenAmount(veBTCVotingPower, 18)
                       : "-"}
                   </h3>
@@ -626,9 +622,11 @@ export default function GaugeDetailPage({
                     Current Boost
                   </p>
                   <h3 className="font-mono text-lg font-semibold tabular-nums text-[var(--content-primary)] md:text-xl">
-                    {isLoadingBoost && boost === undefined
+                    {isLoadingBoost && resolvedVeBTCTokenId !== undefined
                       ? "..."
-                      : formatMultiplier(boostMultiplier)}
+                      : boost !== undefined
+                        ? formatMultiplier(boostMultiplier)
+                        : "-"}
                   </h3>
                 </div>
               </Card>
@@ -670,7 +668,7 @@ export default function GaugeDetailPage({
                     Incentives
                   </p>
                   <h3 className="font-mono text-lg font-semibold tabular-nums text-[var(--content-primary)] md:text-xl">
-                    ${totalIncentivesUSD.toFixed(2)}
+                    {isLoadingAPY ? "..." : `$${totalIncentivesUSD.toFixed(2)}`}
                   </h3>
                   <p className="mt-0.5 text-2xs text-[var(--content-tertiary)]">
                     per week
@@ -690,14 +688,15 @@ export default function GaugeDetailPage({
                   <p className="mb-1 text-2xs uppercase tracking-wider text-[var(--content-tertiary)]">
                     Manager
                   </p>
-                  {beneficiary ? (
+                  {resolvedBeneficiary ? (
                     <a
-                      href={`${EXPLORER_URL}/address/${beneficiary}`}
+                      href={`${EXPLORER_URL}/address/${resolvedBeneficiary}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="font-mono text-sm text-[var(--accent)] no-underline transition-opacity hover:opacity-80 hover:underline"
                     >
-                      {beneficiary.slice(0, 6)}...{beneficiary.slice(-4)}
+                      {resolvedBeneficiary.slice(0, 6)}...
+                      {resolvedBeneficiary.slice(-4)}
                     </a>
                   ) : (
                     <span className="text-sm text-[var(--content-secondary)]">
@@ -750,9 +749,9 @@ export default function GaugeDetailPage({
           <SpringIn delay={8} variant="card">
             <Card title="Current Epoch Incentives" withBorder overrides={{}}>
               <div className="py-4">
-                {isLoadingIncentives ? (
+                {isLoadingAPY ? (
                   <Skeleton width="100%" height="60px" animation />
-                ) : !hasBribe || incentives.length === 0 ? (
+                ) : incentivesWithUSD.length === 0 ? (
                   <div className="rounded-lg bg-[var(--surface-secondary)] p-6 text-center">
                     <p className="text-sm text-[var(--content-secondary)]">
                       No incentives available for this epoch
@@ -909,14 +908,14 @@ export default function GaugeDetailPage({
           gaugeAddress={gaugeAddress}
           gaugeName={
             resolvedProfile?.display_name ||
-            `veBTC #${veBTCTokenId?.toString() ?? "Unknown"}`
+            `veBTC #${resolvedVeBTCTokenId?.toString() ?? "Unknown"}`
           }
-          gaugeTokenId={veBTCTokenId}
+          gaugeTokenId={resolvedVeBTCTokenId}
           gaugeImageUrl={resolvedProfile?.profile_picture_url}
           totalIncentivesUsd={totalIncentivesUSD}
           gaugeHasNoVotes={gaugeHasNoVotes}
           onIncentivesAdded={() => {
-            void refetchIncentives()
+            void refetchTopology()
           }}
         />
       )}
