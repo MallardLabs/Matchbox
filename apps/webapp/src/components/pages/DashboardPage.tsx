@@ -1232,12 +1232,6 @@ export default function DashboardPage(): JSX.Element {
       result.sort((a, b) => {
         let comparison = 0
 
-        const aHasProfile = hasGaugeProfile(a.address)
-        const bHasProfile = hasGaugeProfile(b.address)
-        if (aHasProfile !== bHasProfile) {
-          return aHasProfile ? -1 : 1
-        }
-
         switch (gaugeSortColumn) {
           case "veBTCWeight": {
             const aVal = a.veBTCWeight ?? 0n
@@ -1276,6 +1270,15 @@ export default function DashboardPage(): JSX.Element {
           }
           default:
             break
+        }
+
+        if (comparison === 0) {
+          // Tiebreaker: gauges with profiles before those without
+          const aHasProfile = hasGaugeProfile(a.address)
+          const bHasProfile = hasGaugeProfile(b.address)
+          if (aHasProfile !== bHasProfile) {
+            return aHasProfile ? -1 : 1
+          }
         }
 
         return gaugeSortDirection === "asc" ? comparison : -comparison
