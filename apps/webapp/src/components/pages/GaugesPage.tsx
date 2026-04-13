@@ -297,7 +297,7 @@ export default function GaugesPage(): JSX.Element {
                 <Tag
                   closeable={false}
                   onClick={() => handleSort("incentives")}
-                  color={sortColumn === "incentives" ? "orange" : "gray"}
+                  color={sortColumn === "incentives" ? "yellow" : "gray"}
                 >
                   Incentives
                   {sortColumn === "incentives"
