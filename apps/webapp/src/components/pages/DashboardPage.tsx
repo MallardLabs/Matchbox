@@ -87,6 +87,7 @@ type GaugeSortColumn =
   | "veMEZOWeight"
   | "boost"
   | "optimalVeMEZO"
+  | "incentives"
   | "apy"
   | null
 type SortDirection = "asc" | "desc"
@@ -847,7 +848,8 @@ export default function DashboardPage(): JSX.Element {
   const { price: btcPrice } = useBtcPrice()
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false)
   const { price: mezoPrice } = useMezoPrice()
-  const [gaugeSortColumn, setGaugeSortColumn] = useState<GaugeSortColumn>("apy")
+  const [gaugeSortColumn, setGaugeSortColumn] =
+    useState<GaugeSortColumn>("incentives")
   const [gaugeSortDirection, setGaugeSortDirection] =
     useState<SortDirection>("desc")
   const [gaugeStatusFilter, setGaugeStatusFilter] =
@@ -1262,6 +1264,14 @@ export default function DashboardPage(): JSX.Element {
             const aAPY = apyMap.get(a.address.toLowerCase())?.apy ?? -1
             const bAPY = apyMap.get(b.address.toLowerCase())?.apy ?? -1
             comparison = aAPY < bAPY ? -1 : aAPY > bAPY ? 1 : 0
+            break
+          }
+          case "incentives": {
+            const aInc =
+              apyMap.get(a.address.toLowerCase())?.totalIncentivesUSD ?? 0
+            const bInc =
+              apyMap.get(b.address.toLowerCase())?.totalIncentivesUSD ?? 0
+            comparison = aInc < bInc ? -1 : aInc > bInc ? 1 : 0
             break
           }
           default:
@@ -1905,6 +1915,7 @@ export default function DashboardPage(): JSX.Element {
                   </span>
                   {(
                     [
+                      { id: "incentives", label: "Incentives" },
                       { id: "apy", label: "APY" },
                       { id: "veMEZOWeight", label: "veMEZO Weight" },
                       { id: "veBTCWeight", label: "veBTC Weight" },
