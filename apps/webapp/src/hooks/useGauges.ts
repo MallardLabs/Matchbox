@@ -3,8 +3,8 @@ import { QUERY_PROFILES } from "@/config/queryProfiles"
 import { useAllGaugeProfilesFromContext } from "@/contexts/GaugeProfilesContext"
 import { useNetwork } from "@/contexts/NetworkContext"
 import { boostMultiplierNumberFromCalculatorInputs } from "@/utils/boostMultiplierFromCalculatorInputs"
+import { calculateOptimalVeMEZO } from "@/utils/optimalVeMEZO"
 import { NON_STAKING_GAUGE_ABI } from "@repo/shared/contracts"
-import { Rational } from "@thesis-co/cent"
 import { useMemo } from "react"
 import type { Address } from "viem"
 import { useReadContract, useReadContracts } from "wagmi"
@@ -366,61 +366,6 @@ export function useBoostGauges(options: UseBoostGaugesOptions = {}) {
     }
   }
 
-  // Calculate the total and remaining veMEZO needed for 5x boost.
-  // Formula (same basis as Boost calculator):
-  //   targetVeMEZO = (unboosted NFT veBTC * veMEZO supply) / veBTC supply
-  //   additionalVeMEZO = max(targetVeMEZO - currentGaugeVeMEZOWeight, 0)
-  const calculateOptimalVeMEZO = (
-    gaugeVeBTCWeight: bigint | undefined,
-    currentGaugeVeMEZOWeight: bigint,
-  ): { optimalVeMEZO: bigint; optimalAdditionalVeMEZO: bigint } | undefined => {
-    if (
-      !veMEZOTokenSupply ||
-      veMEZOTokenSupply === 0n ||
-      !veBTCTokenSupply ||
-      !gaugeVeBTCWeight ||
-      gaugeVeBTCWeight === 0n
-    ) {
-      return undefined
-    }
-
-    if (veBTCTokenSupply === 0n) {
-      return undefined
-    }
-
-    try {
-      // Use Rational for precise division math
-      // All values are 18-decimal fixed point, so represent as rationals with 10^18 denominator
-      const scale = 10n ** 18n
-      const veBTCWeight = Rational(gaugeVeBTCWeight, scale)
-      const veMEZOTotal = Rational(veMEZOTokenSupply, scale)
-      const veBTCTotal = Rational(veBTCTokenSupply, scale)
-
-      // Calculate the total veMEZO target for 5x boost.
-      const result = veBTCWeight.multiply(veMEZOTotal).divide(veBTCTotal)
-      const simplified = result.simplify()
-      const optimalTarget = (simplified.p * scale) / simplified.q
-      const optimalAdditionalVeMEZO =
-        optimalTarget > currentGaugeVeMEZOWeight
-          ? optimalTarget - currentGaugeVeMEZOWeight
-          : 0n
-
-      return {
-        optimalVeMEZO: optimalTarget,
-        optimalAdditionalVeMEZO,
-      }
-    } catch (error) {
-      console.error("calculateOptimalVeMEZO error:", {
-        gaugeVeBTCWeight: gaugeVeBTCWeight.toString(),
-        currentGaugeVeMEZOWeight: currentGaugeVeMEZOWeight.toString(),
-        veMEZOTokenSupply: veMEZOTokenSupply.toString(),
-        veBTCTokenSupply: veBTCTokenSupply.toString(),
-        error,
-      })
-      return undefined
-    }
-  }
-
   const gauges: BoostGauge[] = addresses.map((address, i) => {
     const totalWeight =
       (gaugeData?.[i * gaugeDataStride]?.result as unknown as bigint) ?? 0n
@@ -443,15 +388,20 @@ export function useBoostGauges(options: UseBoostGaugesOptions = {}) {
             veBTCTokenSupply > 0n &&
             gaugeUnboostedVeBTCWeight !== undefined &&
             gaugeUnboostedVeBTCWeight > 0n
-        ? boostMultiplierNumberFromCalculatorInputs({
-            unboostedNftVp: gaugeUnboostedVeBTCWeight,
-            gaugeVeMezoWeight: totalWeight,
-            veBtcSystemTotal: veBTCTokenSupply,
-            veMezoSystemTotal: veMEZOTokenSupply,
-          })
-        : 1
+          ? boostMultiplierNumberFromCalculatorInputs({
+              unboostedNftVp: gaugeUnboostedVeBTCWeight,
+              gaugeVeMezoWeight: totalWeight,
+              veBtcSystemTotal: veBTCTokenSupply,
+              veMezoSystemTotal: veMEZOTokenSupply,
+            })
+          : 1
     const optimalVeMEZOData = includeOwnership
-      ? calculateOptimalVeMEZO(gaugeUnboostedVeBTCWeight, totalWeight)
+      ? calculateOptimalVeMEZO(
+          gaugeUnboostedVeBTCWeight,
+          totalWeight,
+          veBTCTokenSupply,
+          veMEZOTokenSupply,
+        )
       : undefined
 
     return {

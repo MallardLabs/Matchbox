@@ -1,7 +1,9 @@
 import { AddGaugeIncentiveModal } from "@/components/AddGaugeIncentiveModal"
 import { AddressLink } from "@/components/AddressLink"
+import OptimalVeMEZOProgress from "@/components/OptimalVeMEZOProgress"
 import { SpringIn } from "@/components/SpringIn"
 import { TokenIcon } from "@/components/TokenIcon"
+import Tooltip from "@/components/Tooltip"
 import { getContractConfig } from "@/config/contracts"
 import { getExplorerAddressUrl } from "@/config/explorer"
 import type { GaugeProfile } from "@/config/supabase"
@@ -20,6 +22,7 @@ import {
   formatMultiplier,
   formatTokenAmount,
 } from "@/utils/format"
+import { calculateOptimalVeMEZO } from "@/utils/optimalVeMEZO"
 import { Button, Card, Skeleton, Tag } from "@mezo-org/mezo-clay"
 import { NON_STAKING_GAUGE_ABI } from "@repo/shared/contracts"
 import Link from "next/link"
@@ -309,6 +312,43 @@ export default function GaugeDetailPage({
       enabled: !!resolvedVeBTCTokenId,
     },
   })
+
+  // Unboosted veBTC voting power is the baseline used to compute the 5x
+  // optimal veMEZO target (same basis as the Boost calculator).
+  const { data: unboostedVeBTCVotingPower } = useReadContract({
+    ...contracts.veBTC,
+    functionName: "unboostedVotingPowerOfNFT",
+    args: resolvedVeBTCTokenId ? [resolvedVeBTCTokenId] : undefined,
+    query: {
+      enabled: !!resolvedVeBTCTokenId,
+    },
+  })
+
+  // System totals from escrow `supply()` — same source as Boost calculator.
+  const { data: systemSupplies } = useReadContracts({
+    contracts: [
+      { ...contracts.veBTC, functionName: "supply" },
+      { ...contracts.veMEZO, functionName: "supply" },
+    ],
+  })
+  const veBTCTokenSupply = systemSupplies?.[0]?.result as bigint | undefined
+  const veMEZOTokenSupply = systemSupplies?.[1]?.result as bigint | undefined
+
+  const optimalVeMEZOData = useMemo(
+    () =>
+      calculateOptimalVeMEZO(
+        unboostedVeBTCVotingPower as bigint | undefined,
+        totalWeight ?? 0n,
+        veBTCTokenSupply,
+        veMEZOTokenSupply,
+      ),
+    [
+      unboostedVeBTCVotingPower,
+      totalWeight,
+      veBTCTokenSupply,
+      veMEZOTokenSupply,
+    ],
+  )
 
   // Check on-chain ownership
   const { isOwnershipValid } = useGaugeOwnershipCheck(
@@ -715,6 +755,32 @@ export default function GaugeDetailPage({
               </Card>
             </SpringIn>
           </div>
+
+          {/* Optimal veMEZO progress — surfaces the 5x boost target */}
+          {optimalVeMEZOData && (
+            <SpringIn delay={7} variant="card">
+              <Card withBorder overrides={{}}>
+                <div className="flex flex-col gap-3 py-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-2xs uppercase tracking-wider text-[var(--content-tertiary)]">
+                        Optimal veMEZO
+                      </p>
+                      <Tooltip
+                        id={`gd-optimal-${gaugeAddress}`}
+                        content="veMEZO voting weight on this gauge that reaches maximum (5x) boost. System totals are veBTC and veMEZO supply() from escrow—the same bases as the Boost calculator. Below that, the bar fills in orange toward the goal. At the target the bar is green. If oversubscribed, a red layer grows over the green from 0% at 1× to 100% at 2× the optimal weight (full red); beyond 2× the bar stays full red—more veMEZO dilutes rewards per voter."
+                      />
+                    </div>
+                  </div>
+                  <OptimalVeMEZOProgress
+                    optimalTarget={optimalVeMEZOData.optimalVeMEZO}
+                    effectiveWeight={totalWeight ?? 0n}
+                    size="md"
+                  />
+                </div>
+              </Card>
+            </SpringIn>
+          )}
 
           {/* Strategy Section */}
           {(resolvedProfile?.incentive_strategy ||
