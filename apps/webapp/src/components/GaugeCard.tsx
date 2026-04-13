@@ -265,7 +265,9 @@ export default function GaugeCard({
               </dd>
             </div>
           )}
-        <div className="min-[420px]:col-span-2">
+      </dl>
+      <dl className="mt-auto text-xs">
+        <div>
           <dt className="flex flex-wrap items-center gap-1.5 text-[var(--content-tertiary)]">
             Optimal veMEZO
             <Tooltip

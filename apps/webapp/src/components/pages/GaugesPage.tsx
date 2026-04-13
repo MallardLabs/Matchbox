@@ -292,6 +292,36 @@ export default function GaugesPage(): JSX.Element {
 
               <div className="mb-4 flex flex-wrap items-center gap-2">
                 <span className="text-xs text-[var(--content-secondary)]">
+                  Sort:
+                </span>
+                <Tag
+                  closeable={false}
+                  onClick={() => handleSort("incentives")}
+                  color={sortColumn === "incentives" ? "orange" : "gray"}
+                >
+                  Incentives
+                  {sortColumn === "incentives"
+                    ? sortDirection === "asc"
+                      ? " ↑"
+                      : " ↓"
+                    : ""}
+                </Tag>
+                <Tag
+                  closeable={false}
+                  onClick={() => handleSort("apy")}
+                  color={sortColumn === "apy" ? "green" : "gray"}
+                >
+                  APY
+                  {sortColumn === "apy"
+                    ? sortDirection === "asc"
+                      ? " ↑"
+                      : " ↓"
+                    : ""}
+                </Tag>
+              </div>
+
+              <div className="mb-4 flex flex-wrap items-center gap-2">
+                <span className="text-xs text-[var(--content-secondary)]">
                   Options:
                 </span>
                 <button
