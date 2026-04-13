@@ -5,6 +5,7 @@ import { formatAPY, useGaugesAPY } from "@/hooks/useAPY"
 import { useAllGaugeProfiles } from "@/hooks/useGaugeProfiles"
 import { useBoostGauges, useVoterTotals } from "@/hooks/useGauges"
 import type { BoostGauge } from "@/hooks/useGauges"
+import { formatUsdValue } from "@/hooks/useTokenPrices"
 import { formatFixedPoint, formatMultiplier } from "@/utils/format"
 import {
   Card,
@@ -26,6 +27,7 @@ type SortColumn =
   | "veMEZOWeight"
   | "boost"
   | "optimalVeMEZO"
+  | "incentives"
   | "apy"
   | null
 type SortDirection = "asc" | "desc"
@@ -51,7 +53,7 @@ export default function GaugesPage(): JSX.Element {
   )
   const { apyMap, isLoading: isLoadingAPY } = useGaugesAPY(gaugesForAPY)
 
-  const [sortColumn, setSortColumn] = useState<SortColumn>("apy")
+  const [sortColumn, setSortColumn] = useState<SortColumn>("incentives")
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc")
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all")
   const [showNeedsBoostOnly, setShowNeedsBoostOnly] = useState(false)
@@ -144,6 +146,14 @@ export default function GaugesPage(): JSX.Element {
             const aAPY = apyMap.get(a.address.toLowerCase())?.apy ?? -1
             const bAPY = apyMap.get(b.address.toLowerCase())?.apy ?? -1
             comparison = aAPY < bAPY ? -1 : aAPY > bAPY ? 1 : 0
+            break
+          }
+          case "incentives": {
+            const aInc =
+              apyMap.get(a.address.toLowerCase())?.totalIncentivesUSD ?? 0
+            const bInc =
+              apyMap.get(b.address.toLowerCase())?.totalIncentivesUSD ?? 0
+            comparison = aInc < bInc ? -1 : aInc > bInc ? 1 : 0
             break
           }
           default:
@@ -462,7 +472,11 @@ export default function GaugesPage(): JSX.Element {
                     )}
                   </TableBuilderColumn>
                   <TableBuilderColumn
-                    header={<SortableHeader column="apy">APY</SortableHeader>}
+                    header={
+                      <SortableHeader column="incentives">
+                        Incentives
+                      </SortableHeader>
+                    }
                   >
                     {(gauge: BoostGauge) => {
                       const apyData = apyMap.get(gauge.address.toLowerCase())
@@ -473,15 +487,23 @@ export default function GaugesPage(): JSX.Element {
                           </span>
                         )
                       }
+                      const totalUsd = apyData?.totalIncentivesUSD ?? 0
                       return (
                         <span
-                          className={`font-mono text-sm font-medium ${
-                            apyData?.apy && apyData.apy > 0
-                              ? "text-[var(--positive)]"
+                          className={`font-mono text-sm tabular-nums ${
+                            totalUsd > 0
+                              ? "text-[var(--content-primary)]"
                               : "text-[var(--content-secondary)]"
                           }`}
+                          title={
+                            apyData && apyData.incentivesByToken.length > 0
+                              ? apyData.incentivesByToken
+                                  .map((t) => t.symbol)
+                                  .join(", ")
+                              : undefined
+                          }
                         >
-                          {formatAPY(apyData?.apy ?? null)}
+                          {totalUsd > 0 ? formatUsdValue(totalUsd) : "—"}
                         </span>
                       )
                     }}
@@ -509,6 +531,31 @@ export default function GaugesPage(): JSX.Element {
                           )}
                       </div>
                     )}
+                  </TableBuilderColumn>
+                  <TableBuilderColumn
+                    header={<SortableHeader column="apy">APY</SortableHeader>}
+                  >
+                    {(gauge: BoostGauge) => {
+                      const apyData = apyMap.get(gauge.address.toLowerCase())
+                      if (isLoadingAPY) {
+                        return (
+                          <span className="text-xs text-[var(--content-secondary)]">
+                            ...
+                          </span>
+                        )
+                      }
+                      return (
+                        <span
+                          className={`font-mono text-sm font-medium ${
+                            apyData?.apy && apyData.apy > 0
+                              ? "text-[var(--positive)]"
+                              : "text-[var(--content-secondary)]"
+                          }`}
+                        >
+                          {formatAPY(apyData?.apy ?? null)}
+                        </span>
+                      )
+                    }}
                   </TableBuilderColumn>
                   <TableBuilderColumn header="Status">
                     {(gauge: BoostGauge) => (

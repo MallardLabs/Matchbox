@@ -1,12 +1,14 @@
 import type { GaugeProfile } from "@/config/supabase"
 import { type GaugeAPYData, formatAPY } from "@/hooks/useAPY"
 import type { BoostGauge } from "@/hooks/useGauges"
+import { formatUsdValue } from "@/hooks/useTokenPrices"
 import { formatFixedPoint, formatMultiplier } from "@/utils/format"
 import { Tag } from "@mezo-org/mezo-clay"
 import Link from "next/link"
 import type { ReactNode } from "react"
 import { formatUnits } from "viem"
 import MarqueeText from "./MarqueeText"
+import { TokenIcon } from "./TokenIcon"
 import Tooltip from "./Tooltip"
 
 /** `totalWeight / optimal` — only meaningful when weight is at or above optimal. */
@@ -231,6 +233,38 @@ export default function GaugeCard({
             {isProjected && " \u2193"}
           </dd>
         </div>
+        {apyData &&
+          apyData.totalIncentivesUSD > 0 &&
+          apyData.incentivesByToken.length > 0 && (
+            <div className="min-[420px]:col-span-2">
+              <dt className="flex items-center gap-1 text-[var(--content-tertiary)]">
+                Incentives
+                <Tooltip
+                  id={`gc-incentives-${gauge.address}`}
+                  content="Total bribe incentives deployed on this gauge for the current epoch. Distributed pro-rata to veMEZO voters."
+                />
+              </dt>
+              <dd className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                <span className="font-mono text-sm font-medium tabular-nums text-[var(--content-primary)]">
+                  {formatUsdValue(apyData.totalIncentivesUSD)}
+                </span>
+                <span className="flex flex-wrap items-center gap-1">
+                  {apyData.incentivesByToken.map((token) => (
+                    <span
+                      key={token.tokenAddress}
+                      className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface-secondary)] px-1.5 py-0.5 text-2xs text-[var(--content-secondary)]"
+                      title={`${formatUsdValue(token.usdValue)} in ${token.symbol}`}
+                    >
+                      <TokenIcon symbol={token.symbol} size={12} />
+                      <span className="font-mono tabular-nums">
+                        {token.symbol}
+                      </span>
+                    </span>
+                  ))}
+                </span>
+              </dd>
+            </div>
+          )}
         <div className="min-[420px]:col-span-2">
           <dt className="flex flex-wrap items-center gap-1.5 text-[var(--content-tertiary)]">
             Optimal veMEZO
