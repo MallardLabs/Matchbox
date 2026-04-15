@@ -1,9 +1,5 @@
 import { formatFixedPoint } from "@/utils/format"
-import {
-  oversubscribedRedWidthPercent,
-  oversubscribedStressColor,
-  weightToOptimalRatio,
-} from "@/utils/optimalVeMEZO"
+import { weightToOptimalRatio } from "@/utils/optimalVeMEZO"
 
 type Size = "sm" | "md"
 
@@ -37,8 +33,6 @@ export default function OptimalVeMEZOProgress({
     optimalTarget > 0n
       ? weightToOptimalRatio(effectiveWeight, optimalTarget)
       : 1
-  const oversubRedBarPct = oversubscribedRedWidthPercent(weightVsOptimalRatio)
-  const oversubTextColor = oversubscribedStressColor(weightVsOptimalRatio)
   const projectedAdditional =
     optimalTarget > effectiveWeight ? optimalTarget - effectiveWeight : 0n
   const hasShortfall = projectedAdditional > 0n
@@ -69,9 +63,8 @@ export default function OptimalVeMEZOProgress({
         )}
         {pastOptimal && (
           <span
-            className={sideTextClass}
-            style={{ color: oversubTextColor }}
-            title={`${weightVsOptimalRatio.toFixed(2)}× optimal weight — oversubscribed. Red stress goes from green (1×) to red (2×+).`}
+            className={`${sideTextClass} text-[var(--negative)]`}
+            title={`${weightVsOptimalRatio.toFixed(2)}x optimal weight - oversubscribed.`}
           >
             +{formatFixedPoint(optimalOverVeMEZO)} over
           </span>
@@ -79,11 +72,9 @@ export default function OptimalVeMEZOProgress({
       </div>
       <div
         className={`relative ${barHeightClass} w-full overflow-hidden rounded-full bg-[var(--surface-secondary)] ring-1 ring-inset ${
-          pastOptimal
-            ? "ring-[color-mix(in_oklab,var(--negative)_28%,transparent)]"
-            : atOrAboveOptimal
-              ? "ring-[rgba(var(--positive-rgb),0.22)]"
-              : "ring-[var(--border)]"
+          atOrAboveOptimal
+            ? "ring-[rgba(var(--positive-rgb),0.22)]"
+            : "ring-[var(--border)]"
         }`}
         aria-hidden="true"
       >
@@ -95,13 +86,7 @@ export default function OptimalVeMEZOProgress({
         ) : (
           atOrAboveOptimal && (
             <div className="relative h-full w-full">
-              <div className="absolute inset-y-0 left-0 h-full w-full rounded-full bg-[var(--positive)]" />
-              {pastOptimal && (
-                <div
-                  className="absolute inset-y-0 left-0 h-full rounded-full bg-[var(--negative)] transition-[width] duration-300 ease-out"
-                  style={{ width: `${oversubRedBarPct}%` }}
-                />
-              )}
+              <div className="optimal-vemezo-shine absolute inset-y-0 left-0 h-full w-full rounded-full bg-[var(--positive)]" />
             </div>
           )
         )}

@@ -196,6 +196,60 @@
     font-variant-numeric: tabular-nums;
   }
 
+  .optimal-vemezo-shine {
+    overflow: hidden;
+  }
+
+  .optimal-vemezo-shine::before,
+  .optimal-vemezo-shine::after {
+    content: "";
+    position: absolute;
+    pointer-events: none;
+    border-radius: inherit;
+  }
+
+  .optimal-vemezo-shine::before {
+    inset: 0 0 45%;
+    background: linear-gradient(
+      to bottom,
+      rgba(255, 255, 255, 0.42),
+      rgba(255, 255, 255, 0.08)
+    );
+  }
+
+  .optimal-vemezo-shine::after {
+    inset: -80% auto -80% 0;
+    width: 42%;
+    background: linear-gradient(
+      100deg,
+      transparent 0%,
+      rgba(255, 255, 255, 0.08) 38%,
+      rgba(255, 255, 255, 0.68) 50%,
+      rgba(255, 255, 255, 0.08) 62%,
+      transparent 100%
+    );
+    animation: optimal-vemezo-shine 7s ease-in-out infinite;
+    transform: translateX(-160%) skewX(-18deg);
+  }
+
+  @keyframes optimal-vemezo-shine {
+    0%,
+    18% {
+      transform: translateX(-160%) skewX(-18deg);
+    }
+    58%,
+    100% {
+      transform: translateX(320%) skewX(-18deg);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .optimal-vemezo-shine::after {
+      animation: none;
+      opacity: 0;
+    }
+  }
+
   /* Status indicators */
   .status-dot {
     @apply w-2 h-2 rounded-full;
