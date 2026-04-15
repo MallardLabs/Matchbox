@@ -1,10 +1,26 @@
+import {
+  MEZO_MAINNET_RPC_ACTIVE_EVENT,
+  MEZO_MAINNET_RPC_ENDPOINTS,
+  MEZO_MAINNET_RPC_PREFERENCE_EVENT,
+  type MezoMainnetRpcEndpoint,
+  type MezoMainnetRpcPreference,
+  getMezoMainnetRpcEndpoint,
+  readMezoMainnetRpcPreference,
+  writeMezoMainnetRpcPreference,
+} from "@/config/mezoRpc"
 import { useNetwork } from "@/contexts/NetworkContext"
 import { useTheme } from "@/contexts/ThemeContext"
 import { useBtcPrice } from "@/hooks/useBtcPrice"
 import { useMezoPrice } from "@/hooks/useMezoPrice"
 import { useWalletAccount } from "@mezo-org/passport"
 import { CHAIN_ID, CONTRACTS, ERC20_ABI } from "@repo/shared/contracts"
-import { useCallback, useEffect, useRef, useState } from "react"
+import {
+  type ChangeEvent,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react"
 import { createPortal } from "react-dom"
 import { formatUnits } from "viem"
 import { useBalance, useDisconnect, useReadContracts } from "wagmi"
@@ -237,8 +253,13 @@ export function WalletDrawer({
   const [pendingView, setPendingView] = useState<"send" | "receive" | null>(
     null,
   )
+  const [rpcPreference, setRpcPreference] =
+    useState<MezoMainnetRpcPreference>("auto")
+  const [activeRpcEndpointId, setActiveRpcEndpointId] =
+    useState<MezoMainnetRpcEndpoint["id"]>("internal")
 
   const isBitcoinWallet = networkFamily === "bitcoin"
+  const activeRpcEndpoint = getMezoMainnetRpcEndpoint(activeRpcEndpointId)
 
   const formatAddress = (addr: string | undefined) => {
     if (!addr) return ""
@@ -258,8 +279,63 @@ export function WalletDrawer({
     }
   }, [])
 
+  const handleRpcPreferenceChange = useCallback(
+    (event: ChangeEvent<HTMLSelectElement>) => {
+      const nextPreference = event.target.value as MezoMainnetRpcPreference
+      setRpcPreference(nextPreference)
+      writeMezoMainnetRpcPreference(nextPreference)
+
+      if (nextPreference !== "auto") {
+        setActiveRpcEndpointId(nextPreference)
+      }
+    },
+    [],
+  )
+
   useEffect(() => {
     setMounted(true)
+  }, [])
+
+  useEffect(() => {
+    const savedPreference = readMezoMainnetRpcPreference()
+    setRpcPreference(savedPreference)
+    if (savedPreference !== "auto") {
+      setActiveRpcEndpointId(savedPreference)
+    }
+
+    const handlePreferenceChange = (event: Event) => {
+      const detail = (
+        event as CustomEvent<{ preference: MezoMainnetRpcPreference }>
+      ).detail
+      setRpcPreference(detail.preference)
+      if (detail.preference !== "auto") {
+        setActiveRpcEndpointId(detail.preference)
+      }
+    }
+
+    const handleActiveChange = (event: Event) => {
+      const detail = (
+        event as CustomEvent<{ endpoint: MezoMainnetRpcEndpoint }>
+      ).detail
+      setActiveRpcEndpointId(detail.endpoint.id)
+    }
+
+    window.addEventListener(
+      MEZO_MAINNET_RPC_PREFERENCE_EVENT,
+      handlePreferenceChange,
+    )
+    window.addEventListener(MEZO_MAINNET_RPC_ACTIVE_EVENT, handleActiveChange)
+
+    return () => {
+      window.removeEventListener(
+        MEZO_MAINNET_RPC_PREFERENCE_EVENT,
+        handlePreferenceChange,
+      )
+      window.removeEventListener(
+        MEZO_MAINNET_RPC_ACTIVE_EVENT,
+        handleActiveChange,
+      )
+    }
   }, [])
 
   useEffect(() => {
@@ -661,6 +737,45 @@ export function WalletDrawer({
                     className={`h-2.5 w-2.5 rounded-full ${isMainnet ? "bg-green-500" : "bg-orange-500"}`}
                   />
                 </button>
+
+                <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-secondary)] p-3">
+                  <div className="mb-2 flex items-start justify-between gap-3">
+                    <div className="flex items-start gap-3">
+                      <NetworkIcon />
+                      <div>
+                        <label
+                          htmlFor="mainnet-rpc-preference"
+                          className="text-sm text-[var(--content-primary)]"
+                        >
+                          Mainnet RPC
+                        </label>
+                        <p className="mt-0.5 text-xs text-[var(--content-secondary)]">
+                          Active: {activeRpcEndpoint.label}
+                        </p>
+                      </div>
+                    </div>
+                    <span
+                      className={`mt-2 h-2.5 w-2.5 rounded-full ${
+                        rpcPreference === "auto"
+                          ? "bg-green-500"
+                          : "bg-orange-500"
+                      }`}
+                    />
+                  </div>
+                  <select
+                    id="mainnet-rpc-preference"
+                    value={rpcPreference}
+                    onChange={handleRpcPreferenceChange}
+                    className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--content-primary)] outline-none transition-colors focus:border-[var(--content-secondary)]"
+                  >
+                    <option value="auto">Auto rotate</option>
+                    {MEZO_MAINNET_RPC_ENDPOINTS.map((endpoint) => (
+                      <option key={endpoint.id} value={endpoint.id}>
+                        {endpoint.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
                 <button
                   type="button"

@@ -1,3 +1,9 @@
+import {
+  DEFAULT_MEZO_TESTNET_RPC_URL,
+  MEZO_MAINNET_RPC_ENDPOINTS,
+  getMezoMainnetRpcEndpoint,
+  isMezoMainnetRpcEndpointId,
+} from "@/config/mezoRpc"
 import type { GaugeTopologyResponse } from "@/types/gaugeTopology"
 import { chunkArray } from "@/utils/chunk"
 import {
@@ -7,7 +13,7 @@ import {
   type SupportedChainId,
 } from "@repo/shared/contracts"
 import type { NextRequest } from "next/server"
-import { http, type Address, createPublicClient } from "viem"
+import { http, type Address, createPublicClient, fallback } from "viem"
 
 export const config = {
   runtime: "edge",
@@ -61,21 +67,24 @@ const ERC20_METADATA_ABI = [
   },
 ] as const
 
-function getRpcUrl(chainId: SupportedChainId): string {
+function getRpcUrls(
+  chainId: SupportedChainId,
+  rpcEndpointId?: string | null,
+): string[] {
   if (chainId === CHAIN_ID.mainnet) {
-    return (
-      process.env.NEXT_PUBLIC_RPC_MAINNET_URL ?? "https://rpc-internal.mezo.org"
-    )
+    if (isMezoMainnetRpcEndpointId(rpcEndpointId)) {
+      return [getMezoMainnetRpcEndpoint(rpcEndpointId).url]
+    }
+
+    return MEZO_MAINNET_RPC_ENDPOINTS.map((endpoint) => endpoint.url)
   }
 
-  return (
-    process.env.NEXT_PUBLIC_RPC_TESTNET_URL ??
-    process.env.NEXT_PUBLIC_RPC_URL ??
-    "https://rpc.test.mezo.org"
-  )
+  return [DEFAULT_MEZO_TESTNET_RPC_URL]
 }
 
-function getChain(chainId: SupportedChainId) {
+function getChain(chainId: SupportedChainId, rpcEndpointId?: string | null) {
+  const rpcUrls = getRpcUrls(chainId, rpcEndpointId)
+
   return {
     id: chainId,
     name: chainId === CHAIN_ID.mainnet ? "Mezo" : "Mezo Testnet",
@@ -85,7 +94,7 @@ function getChain(chainId: SupportedChainId) {
       symbol: "BTC",
     },
     rpcUrls: {
-      default: { http: [getRpcUrl(chainId)] },
+      default: { http: rpcUrls },
     },
     contracts: {
       multicall3: {
@@ -93,6 +102,31 @@ function getChain(chainId: SupportedChainId) {
       },
     },
   }
+}
+
+function getTransport(
+  chainId: SupportedChainId,
+  rpcEndpointId?: string | null,
+) {
+  const rpcUrls = getRpcUrls(chainId, rpcEndpointId)
+
+  if (chainId === CHAIN_ID.mainnet) {
+    return fallback(
+      rpcUrls.map((rpcUrl) =>
+        http(rpcUrl, {
+          batch: true,
+          fetchOptions: { cache: "no-store" },
+          retryCount: 0,
+        }),
+      ),
+    )
+  }
+
+  return http(rpcUrls[0], {
+    batch: true,
+    fetchOptions: { cache: "no-store" },
+    retryCount: 0,
+  })
 }
 
 async function multicallInChunks(
@@ -121,6 +155,7 @@ function isSupportedChainId(value: number): value is SupportedChainId {
 export default async function handler(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const rawChainId = Number(searchParams.get("chainId") ?? CHAIN_ID.testnet)
+  const rpcEndpointId = searchParams.get("rpc")
 
   if (!isSupportedChainId(rawChainId)) {
     return new Response("Invalid chainId", { status: 400 })
@@ -131,8 +166,8 @@ export default async function handler(req: NextRequest) {
     chainId === CHAIN_ID.mainnet ? CONTRACTS.mainnet : CONTRACTS.testnet
 
   const client = createPublicClient({
-    chain: getChain(chainId),
-    transport: http(),
+    chain: getChain(chainId, rpcEndpointId),
+    transport: getTransport(chainId, rpcEndpointId),
   })
 
   try {

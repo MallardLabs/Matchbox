@@ -1,4 +1,9 @@
 import {
+  DEFAULT_MEZO_TESTNET_RPC_URL,
+  getInitialMezoMainnetRpcUrl,
+} from "@/config/mezoRpc"
+import { createMezoMainnetTransport } from "@/config/mezoRpcTransport"
+import {
   getOKXWallet,
   getUnisatWallet,
   getXverseWallet,
@@ -41,10 +46,8 @@ export { mezoMainnet, mezoTestnet }
 const WALLET_CONNECT_PROJECT_ID =
   process.env.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID ?? ""
 
-const MEZO_MAINNET_RPC_URL =
-  process.env.NEXT_PUBLIC_RPC_MAINNET_URL ?? "https://rpc-http.mezo.boar.network"
-const MEZO_TESTNET_RPC_URL =
-  process.env.NEXT_PUBLIC_RPC_TESTNET_URL ?? "https://rpc.test.mezo.org"
+const MEZO_MAINNET_RPC_URL = getInitialMezoMainnetRpcUrl()
+const MEZO_TESTNET_RPC_URL = DEFAULT_MEZO_TESTNET_RPC_URL
 
 function withHttpRpc(
   chain: typeof passportMezoMainnet,
@@ -120,10 +123,7 @@ export const wagmiConfig: Config = getDefaultConfig({
   // targets the selected Mezo chain via ConnectWalletDrawer + switch after connect.
   chains: [mezoTestnet, mezoMainnet, mainnet],
   transports: {
-    [mezoMainnet.id]: http(MEZO_MAINNET_RPC_URL, {
-      batch: true,
-      fetchOptions: { cache: "no-store" },
-    }),
+    [mezoMainnet.id]: createMezoMainnetTransport(),
     [mezoTestnet.id]: http(MEZO_TESTNET_RPC_URL, {
       batch: true,
       fetchOptions: { cache: "no-store" },

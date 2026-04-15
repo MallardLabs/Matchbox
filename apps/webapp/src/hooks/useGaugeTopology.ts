@@ -1,9 +1,15 @@
+import { getContractConfig } from "@/config/contracts"
+import {
+  MEZO_MAINNET_RPC_PREFERENCE_EVENT,
+  type MezoMainnetRpcPreference,
+  readMezoMainnetRpcPreference,
+} from "@/config/mezoRpc"
 import { QUERY_PROFILES } from "@/config/queryProfiles"
 import { useNetwork } from "@/contexts/NetworkContext"
-import { getContractConfig } from "@/config/contracts"
 import type { GaugeTopologyResponse } from "@/types/gaugeTopology"
+import { CHAIN_ID } from "@repo/shared/contracts"
 import { useQuery } from "@tanstack/react-query"
-import { useMemo } from "react"
+import { useEffect, useMemo, useState } from "react"
 import type { Address } from "viem"
 import { useReadContract } from "wagmi"
 
@@ -14,9 +20,15 @@ type UseGaugeTopologyOptions = {
 async function fetchGaugeTopology(
   chainId: number,
   signal: AbortSignal,
+  rpcPreference: MezoMainnetRpcPreference,
 ): Promise<GaugeTopologyResponse> {
+  const searchParams = new URLSearchParams({ chainId: String(chainId) })
+  if (chainId === CHAIN_ID.mainnet && rpcPreference !== "auto") {
+    searchParams.set("rpc", rpcPreference)
+  }
+
   const response = await fetch(
-    `/api/analytics/gauge-topology?chainId=${chainId}`,
+    `/api/analytics/gauge-topology?${searchParams}`,
     {
       method: "GET",
       signal,
@@ -32,8 +44,33 @@ async function fetchGaugeTopology(
 
 export function useGaugeTopology(options: UseGaugeTopologyOptions = {}) {
   const { chainId, isNetworkReady } = useNetwork()
+  const [rpcPreference, setRpcPreference] =
+    useState<MezoMainnetRpcPreference>("auto")
   const enabled = (options.enabled ?? true) && isNetworkReady
   const contracts = getContractConfig(chainId)
+
+  useEffect(() => {
+    setRpcPreference(readMezoMainnetRpcPreference())
+
+    const handlePreferenceChange = (event: Event) => {
+      const detail = (
+        event as CustomEvent<{ preference: MezoMainnetRpcPreference }>
+      ).detail
+      setRpcPreference(detail.preference)
+    }
+
+    window.addEventListener(
+      MEZO_MAINNET_RPC_PREFERENCE_EVENT,
+      handlePreferenceChange,
+    )
+
+    return () => {
+      window.removeEventListener(
+        MEZO_MAINNET_RPC_PREFERENCE_EVENT,
+        handlePreferenceChange,
+      )
+    }
+  }, [])
 
   // Fetch epochStart so cache key invalidates at epoch boundaries
   const now = useMemo(() => BigInt(Math.floor(Date.now() / 1000)), [])
@@ -53,8 +90,8 @@ export function useGaugeTopology(options: UseGaugeTopologyOptions = {}) {
   const epochKey = epochStart?.toString() ?? "unknown"
 
   const query = useQuery({
-    queryKey: ["gauge-topology", chainId, epochKey],
-    queryFn: ({ signal }) => fetchGaugeTopology(chainId, signal),
+    queryKey: ["gauge-topology", chainId, epochKey, rpcPreference],
+    queryFn: ({ signal }) => fetchGaugeTopology(chainId, signal, rpcPreference),
     enabled,
     ...QUERY_PROFILES.SHORT_CACHE,
   })
