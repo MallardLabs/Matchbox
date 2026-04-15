@@ -60,7 +60,11 @@ function TokenPriceItem({
 }
 
 export function TokenPrices(): JSX.Element {
-  const { price: btcPrice, isLoading: btcLoading } = useBtcPrice()
+  const {
+    price: btcPrice,
+    isLoading: btcLoading,
+    isError: btcError,
+  } = useBtcPrice()
   const {
     price: mezoPrice,
     isLoading: mezoLoading,
@@ -83,6 +87,7 @@ export function TokenPrices(): JSX.Element {
         symbol="BTC"
         price={btcPrice}
         isLoading={btcLoading}
+        isUnavailable={btcError || (btcPrice === null && !btcLoading)}
       />
     </div>
   )

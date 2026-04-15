@@ -1,7 +1,8 @@
-import { mezoTestnet } from "@/config/wagmi"
+import { mezoMainnet } from "@/config/wagmi"
 import { useReadContracts } from "wagmi"
 
-// Skip Oracle contract address on Mezo testnet (Chainlink-compatible interface)
+// Skip Oracle contract address on Mezo mainnet (Chainlink-compatible interface).
+// Keep this feed network-independent so testnet UI never prices with mock values.
 // Docs: https://mezo.org/docs/developers/architecture/oracles/read-oracle
 const SKIP_ORACLE_ADDRESS =
   "0x7b7c000000000000000000000000000000000015" as const
@@ -43,13 +44,13 @@ export function useBtcPrice(): {
         address: SKIP_ORACLE_ADDRESS,
         abi: CHAINLINK_AGGREGATOR_ABI,
         functionName: "latestRoundData",
-        chainId: mezoTestnet.id,
+        chainId: mezoMainnet.id,
       },
       {
         address: SKIP_ORACLE_ADDRESS,
         abi: CHAINLINK_AGGREGATOR_ABI,
         functionName: "decimals",
-        chainId: mezoTestnet.id,
+        chainId: mezoMainnet.id,
       },
     ],
     query: {
@@ -67,7 +68,8 @@ export function useBtcPrice(): {
   if (roundData && decimals !== undefined) {
     const [, answer, , updatedAtTimestamp] = roundData
     // Convert the price from fixed-point to a number
-    price = Number(answer) / 10 ** decimals
+    const nextPrice = Number(answer) / 10 ** decimals
+    price = nextPrice > 0 && Number.isFinite(nextPrice) ? nextPrice : null
     updatedAt = new Date(Number(updatedAtTimestamp) * 1000)
   }
 

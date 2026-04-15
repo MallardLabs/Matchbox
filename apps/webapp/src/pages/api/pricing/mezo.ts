@@ -1,4 +1,3 @@
-import { MEZO_FALLBACK_PRICE } from "@repo/shared"
 import { http, createPublicClient, getAddress } from "viem"
 import { base } from "viem/chains"
 
@@ -114,8 +113,8 @@ export default async function handler(request: Request) {
       if (liquidity === 0n || sqrtPriceX96 === 0n) {
         return json(
           {
-            price: MEZO_FALLBACK_PRICE,
-            source: "fallback",
+            price: null,
+            source: "unavailable",
             reason: "pool-empty",
             timestamp: Date.now(),
           },
@@ -134,8 +133,8 @@ export default async function handler(request: Request) {
       if (price <= 0 || price > 1_000_000 || !Number.isFinite(price)) {
         return json(
           {
-            price: MEZO_FALLBACK_PRICE,
-            source: "fallback",
+            price: null,
+            source: "unavailable",
             reason: "price-out-of-range",
             timestamp: Date.now(),
           },
@@ -172,8 +171,8 @@ export default async function handler(request: Request) {
 
   return json(
     {
-      price: MEZO_FALLBACK_PRICE,
-      source: "fallback",
+      price: null,
+      source: "unavailable",
       reason: "rpc-error",
       errors: rpcErrors,
       timestamp: Date.now(),

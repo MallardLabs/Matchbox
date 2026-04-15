@@ -1,7 +1,4 @@
 import { QUERY_PROFILES } from "@/config/queryProfiles"
-import { useNetwork } from "@/contexts/NetworkContext"
-import { MEZO_FALLBACK_PRICE } from "@repo/shared"
-import { CHAIN_ID } from "@repo/shared/contracts"
 import { useQuery } from "@tanstack/react-query"
 import { z } from "zod"
 
@@ -9,12 +6,12 @@ export type MezoPriceResult = {
   price: number | null
   isLoading: boolean
   isError: boolean
-  source: "aerodrome-cl" | "fallback"
+  source: "aerodrome-cl" | "unavailable"
 }
 
 const mezoPriceResponseSchema = z.object({
   price: z.number().nullable(),
-  source: z.enum(["aerodrome-cl", "fallback"]),
+  source: z.enum(["aerodrome-cl", "unavailable"]),
   reason: z.string().optional(),
   timestamp: z.number(),
   liquidity: z.string().optional(),
@@ -42,45 +39,28 @@ async function fetchMezoPrice(
   return mezoPriceResponseSchema.parse(unknownJson)
 }
 
-// Toggle to enable Aerodrome price on testnet (once a testnet pool exists)
-const USE_AERODROME_ON_TESTNET = false
-
 export function useMezoPrice(): MezoPriceResult {
-  const { chainId } = useNetwork()
-  const isMainnet = chainId === CHAIN_ID.mainnet
-  const useAerodrome = isMainnet || USE_AERODROME_ON_TESTNET
-
   const { data, isLoading, isError } = useQuery({
     queryKey: ["mezo-price", mezoPriceEndpoint],
     queryFn: ({ signal }) => fetchMezoPrice(signal),
-    enabled: useAerodrome,
     ...QUERY_PROFILES.SHORT_CACHE,
   })
 
-  if (!useAerodrome) {
-    return {
-      price: MEZO_FALLBACK_PRICE,
-      isLoading: false,
-      isError: false,
-      source: "fallback",
-    }
-  }
-
   if (isLoading) {
     return {
-      price: MEZO_FALLBACK_PRICE,
+      price: null,
       isLoading: true,
       isError: false,
-      source: "fallback",
+      source: "unavailable",
     }
   }
 
   if (isError || !data || data.price === null) {
     return {
-      price: MEZO_FALLBACK_PRICE,
+      price: null,
       isLoading: false,
-      isError: isError,
-      source: "fallback",
+      isError: true,
+      source: "unavailable",
     }
   }
 

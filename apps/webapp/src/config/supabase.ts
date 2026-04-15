@@ -48,6 +48,12 @@ export type GaugeHistory = {
   boost_multiplier: number | null
   total_incentives_usd: number | null
   apy: number | null
+  optimal_vemezo_weight: string | null
+  subscription_ratio: number | null
+  subscription_delta_vemezo: string | null
+  subscription_status: "under" | "perfect" | "over" | "unknown" | null
+  apy_at_optimal: number | null
+  oversubscription_dilution: number | null
   unique_voters: number | null
   recorded_at: string
 }

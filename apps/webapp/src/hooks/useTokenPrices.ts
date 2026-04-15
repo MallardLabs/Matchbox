@@ -33,7 +33,7 @@ export type TokenValueResult = {
  * Uses the token registry to determine pricing type:
  * - Stablecoins: $1.00
  * - BTC-pegged: BTC price from oracle
- * - MEZO: MEZO price from oracle/fallback
+ * - MEZO: MEZO price from the shared Aerodrome feed
  * - Unknown: null (no price available)
  */
 export function useTokenPrices(

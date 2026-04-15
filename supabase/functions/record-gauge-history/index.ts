@@ -5,57 +5,215 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 import {
   createPublicClient,
+  formatUnits,
   http,
   type Address,
-  formatUnits,
+  type PublicClient,
 } from "https://esm.sh/viem@2"
 import {
-  BOOST_VOTER_ABI,
-  VOTING_ESCROW_ABI,
-  NON_STAKING_GAUGE_ABI,
   BRIBE_ABI,
+  BOOST_VOTER_ABI,
+  CHAINS,
+  NON_STAKING_GAUGE_ABI,
+  RPC_URLS,
+  VOTING_ESCROW_ABI,
   getMezoNetworkConfig,
 } from "../_shared/contracts.ts"
 import { corsHeaders, handleCors } from "../_shared/cors.ts"
 
 // Constants
 const EPOCH_DURATION = 7 * 24 * 60 * 60 // 7 days in seconds
-// MEZO pricing config - mirrors packages/shared/src/pricing/index.ts
-// Toggle to use Pyth oracle (requires fetching price from Pyth Hermes API)
-const USE_PYTH_ORACLE = false
-const MEZO_FALLBACK_PRICE = 0.22
+
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000" as Address
+const BTC_TOKEN_ADDRESS = "0x7b7c000000000000000000000000000000000000"
 const MEZO_TOKEN_ADDRESS = "0x7b7c000000000000000000000000000000000001"
-// Pyth price feed ID for MEZO - TODO: replace with actual feed ID
-const MEZO_PYTH_PRICE_FEED_ID =
-  "0x0000000000000000000000000000000000000000000000000000000000000000"
+const BTC_ORACLE_ADDRESS = "0x7b7c000000000000000000000000000000000015"
 
-// Fetch MEZO price from Pyth Hermes API (for server-side use)
-async function fetchMezoPriceFromPyth(): Promise<number | null> {
-  if (!USE_PYTH_ORACLE) {
-    return MEZO_FALLBACK_PRICE
-  }
+const BASE_CHAIN = {
+  id: 8453,
+  name: "Base",
+  nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+  rpcUrls: {
+    default: {
+      http: [
+        Deno.env.get("BASE_RPC_URL") ?? "https://mainnet.base.org",
+        "https://base.llamarpc.com",
+        "https://base-rpc.publicnode.com",
+      ],
+    },
+  },
+} as const
 
+const BASE_RPC_URLS = BASE_CHAIN.rpcUrls.default.http
+
+// Aerodrome Slipstream pool: MEZO / MUSD on Base.
+const MEZO_MUSD_POOL_ADDRESS = "0xfCd3F5cA230E7c1Bd5b415eb85d5186346De0fec"
+const Q96 = 2n ** 96n
+const PERFECT_SUBSCRIPTION_TOLERANCE_BPS = 200n
+const RATIO_SCALE = 100_000_000n
+
+const CHAINLINK_AGGREGATOR_ABI = [
+  {
+    inputs: [],
+    name: "latestRoundData",
+    outputs: [
+      { internalType: "uint80", name: "roundId", type: "uint80" },
+      { internalType: "int256", name: "answer", type: "int256" },
+      { internalType: "uint256", name: "startedAt", type: "uint256" },
+      { internalType: "uint256", name: "updatedAt", type: "uint256" },
+      { internalType: "uint80", name: "answeredInRound", type: "uint80" },
+    ],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [],
+    name: "decimals",
+    outputs: [{ internalType: "uint8", name: "", type: "uint8" }],
+    stateMutability: "view",
+    type: "function",
+  },
+] as const
+
+const SLIPSTREAM_POOL_ABI = [
+  {
+    inputs: [],
+    name: "slot0",
+    outputs: [
+      { internalType: "uint160", name: "sqrtPriceX96", type: "uint160" },
+      { internalType: "int24", name: "tick", type: "int24" },
+      { internalType: "uint16", name: "observationIndex", type: "uint16" },
+      {
+        internalType: "uint16",
+        name: "observationCardinality",
+        type: "uint16",
+      },
+      {
+        internalType: "uint16",
+        name: "observationCardinalityNext",
+        type: "uint16",
+      },
+      { internalType: "bool", name: "unlocked", type: "bool" },
+    ],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [],
+    name: "liquidity",
+    outputs: [{ internalType: "uint128", name: "", type: "uint128" }],
+    stateMutability: "view",
+    type: "function",
+  },
+] as const
+
+const STABLECOIN_ADDRESSES = new Set([
+  "0x118917a40fa1cd7a13db0ef56c86de7973ac503",
+  "0x118917a40faf1cd7a13db0ef56c86de7973ac503",
+  "0xdd468a1ddc392dcdbef6db6e34e89aa338f9f186",
+  "0x04671c72aab5ac02a03c1098314b1bb6b560c197",
+  "0xeb5a5d39de4ea42c2aa6a57eca2894376683bb8e",
+  "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+  "0xdac17f958d2ee523a2206206994597c13d831ec7",
+  "0x6b175474e89094c44da98b954eedeac495271d0f",
+])
+
+const BTC_PEGGED_ADDRESSES = new Set([
+  BTC_TOKEN_ADDRESS,
+  "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+  "0x18084fba666a33d37592fa2633fd49a74dd93a88",
+  "0x5c6a8ea1e714dd3de1a28de1a00f5d5289313822",
+])
+
+function sqrtPriceX96ToPrice(sqrtPriceX96: bigint): number {
+  const sqrtPrice = Number(sqrtPriceX96) / Number(Q96)
+  return sqrtPrice * sqrtPrice
+}
+
+function isUsablePrice(price: number): boolean {
+  return price > 0 && price < 1_000_000 && Number.isFinite(price)
+}
+
+async function fetchBtcPrice(): Promise<number | null> {
   try {
-    const response = await fetch(
-      `https://hermes.pyth.network/api/latest_price_feeds?ids[]=${MEZO_PYTH_PRICE_FEED_ID}`,
-    )
-    if (!response.ok) {
-      console.warn("Failed to fetch Pyth price:", response.statusText)
-      return null
-    }
-    const data = await response.json()
-    if (data.length > 0 && data[0].price) {
-      const priceData = data[0].price
-      const price = Number(priceData.price) * Math.pow(10, priceData.expo)
-      return price
-    }
-    return null
+    const client = createPublicClient({
+      chain: CHAINS.mainnet,
+      transport: http(Deno.env.get("BTC_PRICE_RPC_URL") ?? RPC_URLS.mainnet),
+    })
+
+    const [roundData, decimals] = await Promise.all([
+      client.readContract({
+        address: BTC_ORACLE_ADDRESS as Address,
+        abi: CHAINLINK_AGGREGATOR_ABI,
+        functionName: "latestRoundData",
+      }),
+      client.readContract({
+        address: BTC_ORACLE_ADDRESS as Address,
+        abi: CHAINLINK_AGGREGATOR_ABI,
+        functionName: "decimals",
+      }),
+    ])
+
+    const [, answer] = roundData
+    const price = Number(answer) / 10 ** decimals
+    return isUsablePrice(price) ? price : null
   } catch (e) {
-    console.warn("Error fetching Pyth price:", e)
+    console.warn("Error fetching BTC price:", e)
     return null
   }
 }
-const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
+
+async function fetchMezoPrice(): Promise<number | null> {
+  for (const rpcUrl of BASE_RPC_URLS) {
+    try {
+      const client = createPublicClient({
+        chain: BASE_CHAIN,
+        transport: http(rpcUrl),
+      })
+
+      const [slot0Result, liquidity] = await Promise.all([
+        client.readContract({
+          address: MEZO_MUSD_POOL_ADDRESS as Address,
+          abi: SLIPSTREAM_POOL_ABI,
+          functionName: "slot0",
+        }),
+        client.readContract({
+          address: MEZO_MUSD_POOL_ADDRESS as Address,
+          abi: SLIPSTREAM_POOL_ABI,
+          functionName: "liquidity",
+        }),
+      ])
+
+      const sqrtPriceX96 = slot0Result[0]
+      if (liquidity === 0n || sqrtPriceX96 === 0n) {
+        continue
+      }
+
+      const price = sqrtPriceX96ToPrice(sqrtPriceX96)
+      if (isUsablePrice(price)) {
+        return price
+      }
+    } catch (e) {
+      console.warn(`Error fetching MEZO price from ${rpcUrl}:`, e)
+    }
+  }
+
+  return null
+}
+
+function getTokenUsdPrice(
+  tokenAddress: Address,
+  btcPrice: number,
+  mezoPrice: number,
+): number | null {
+  const address = tokenAddress.toLowerCase()
+
+  if (address === MEZO_TOKEN_ADDRESS) return mezoPrice
+  if (BTC_PEGGED_ADDRESSES.has(address)) return btcPrice
+  if (STABLECOIN_ADDRESSES.has(address)) return 1
+
+  return null
+}
 
 // Types
 type GaugeData = {
@@ -66,12 +224,111 @@ type GaugeData = {
   boost_multiplier: number | null
   total_incentives_usd: number | null
   apy: number | null
+  optimal_vemezo_weight: string | null
+  subscription_ratio: number | null
+  subscription_delta_vemezo: string | null
+  subscription_status: "under" | "perfect" | "over" | "unknown"
+  apy_at_optimal: number | null
+  oversubscription_dilution: number | null
   unique_voters: number | null
 }
 
 // Helper to get current epoch start
 function getEpochStart(timestamp: number): bigint {
   return BigInt(Math.floor(timestamp / EPOCH_DURATION) * EPOCH_DURATION)
+}
+
+function calculateAPY(
+  totalIncentivesUSD: number | null,
+  vemezoWeight: bigint,
+  mezoPrice: number,
+): number | null {
+  if (!totalIncentivesUSD || totalIncentivesUSD <= 0) return null
+
+  if (vemezoWeight === 0n) {
+    return 999999
+  }
+
+  const totalVeMEZOAmount = Number(vemezoWeight) / 1e18
+  const totalVeMEZOValueUSD = totalVeMEZOAmount * mezoPrice
+  if (totalVeMEZOValueUSD <= 0) return null
+
+  const weeklyReturn = totalIncentivesUSD / totalVeMEZOValueUSD
+  return weeklyReturn * 52 * 100
+}
+
+function calculateOptimalVeMEZO(
+  unboostedVeBTCWeight: bigint,
+  veMEZOSupply: bigint | null,
+  veBTCSupply: bigint | null,
+): bigint | null {
+  if (
+    unboostedVeBTCWeight <= 0n ||
+    !veMEZOSupply ||
+    veMEZOSupply <= 0n ||
+    !veBTCSupply ||
+    veBTCSupply <= 0n
+  ) {
+    return null
+  }
+
+  return (unboostedVeBTCWeight * veMEZOSupply) / veBTCSupply
+}
+
+function calculateSubscriptionRatio(
+  actualWeight: bigint,
+  optimalWeight: bigint | null,
+): number | null {
+  if (!optimalWeight || optimalWeight <= 0n) return null
+
+  return (
+    Number((actualWeight * RATIO_SCALE) / optimalWeight) / Number(RATIO_SCALE)
+  )
+}
+
+function getSubscriptionStatus(
+  actualWeight: bigint,
+  optimalWeight: bigint | null,
+): "under" | "perfect" | "over" | "unknown" {
+  if (!optimalWeight || optimalWeight <= 0n) return "unknown"
+
+  const lowerBound =
+    (optimalWeight * (10_000n - PERFECT_SUBSCRIPTION_TOLERANCE_BPS)) / 10_000n
+  const upperBound =
+    (optimalWeight * (10_000n + PERFECT_SUBSCRIPTION_TOLERANCE_BPS)) / 10_000n
+
+  if (actualWeight < lowerBound) return "under"
+  if (actualWeight > upperBound) return "over"
+  return "perfect"
+}
+
+async function fetchVeSupplyTotals(
+  publicClient: PublicClient,
+  veBTCAddress: Address,
+  veMEZOAddress: Address,
+): Promise<{ veBTCSupply: bigint | null; veMEZOSupply: bigint | null }> {
+  try {
+    const [veBTCSupply, veMEZOSupply] = await Promise.all([
+      publicClient.readContract({
+        address: veBTCAddress,
+        abi: VOTING_ESCROW_ABI,
+        functionName: "supply",
+      }),
+      publicClient.readContract({
+        address: veMEZOAddress,
+        abi: VOTING_ESCROW_ABI,
+        functionName: "supply",
+      }),
+    ])
+
+    return {
+      veBTCSupply: veBTCSupply as bigint,
+      veMEZOSupply: veMEZOSupply as bigint,
+    }
+  } catch (e) {
+    console.warn("Error fetching ve supply totals:", e)
+    return { veBTCSupply: null, veMEZOSupply: null }
+  }
 }
 
 // Main function
@@ -104,6 +361,8 @@ Deno.serve(async (req) => {
     })
 
     const boostVoterAddress = contracts.boostVoter as Address
+    const veBTCAddress = contracts.veBTC as Address
+    const veMEZOAddress = contracts.veMEZO as Address
     console.log(`Recording gauge history on ${network} (${rpcUrl})`)
 
     // Get current epoch start
@@ -111,15 +370,31 @@ Deno.serve(async (req) => {
     const epochStart = getEpochStart(now)
     console.log(`Epoch start: ${epochStart} (${new Date(Number(epochStart) * 1000).toISOString()})`)
 
-    // Fetch MEZO price (from Pyth or fallback)
-    const mezoPrice = await fetchMezoPriceFromPyth()
-    if (mezoPrice === null) {
+    const [btcPrice, mezoPrice] = await Promise.all([
+      fetchBtcPrice(),
+      fetchMezoPrice(),
+    ])
+    if (btcPrice === null || mezoPrice === null) {
       return new Response(
-        JSON.stringify({ error: "Failed to fetch MEZO price from oracle" }),
+        JSON.stringify({
+          error: "Failed to fetch live BTC or MEZO price",
+          btc_price_available: btcPrice !== null,
+          mezo_price_available: mezoPrice !== null,
+        }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       )
     }
-    console.log(`MEZO price: $${mezoPrice} (source: ${USE_PYTH_ORACLE ? "Pyth" : "fallback"})`)
+    console.log(`BTC price: $${btcPrice} (source: Mezo mainnet Skip oracle)`)
+    console.log(`MEZO price: $${mezoPrice} (source: Base Aerodrome CL pool)`)
+
+    const { veBTCSupply, veMEZOSupply } = await fetchVeSupplyTotals(
+      publicClient,
+      veBTCAddress,
+      veMEZOAddress,
+    )
+    console.log(
+      `ve supply totals: veBTC=${veBTCSupply?.toString() ?? "unavailable"}, veMEZO=${veMEZOSupply?.toString() ?? "unavailable"}`,
+    )
 
     // 1. Get gauge count
     const gaugeCount = await publicClient.readContract({
@@ -151,7 +426,7 @@ Deno.serve(async (req) => {
 
     const gaugeAddresses = gaugeAddressResults
       .filter((r) => r.status === "success")
-      .map((r) => r.result as Address)
+      .map((r) => r.result as unknown as Address)
 
     console.log(`Fetched ${gaugeAddresses.length} gauge addresses`)
 
@@ -185,7 +460,8 @@ Deno.serve(async (req) => {
     // 4. Get bribe rewards for gauges that have bribes
     const bribeInfoList = bribeResults.map((r, i) => ({
       gaugeIndex: i,
-      bribeAddress: r.status === "success" ? (r.result as Address) : ZERO_ADDRESS,
+      bribeAddress:
+        r.status === "success" ? (r.result as unknown as Address) : ZERO_ADDRESS,
     })).filter((b) => b.bribeAddress !== ZERO_ADDRESS)
 
     // Map to store incentives per gauge index
@@ -226,7 +502,7 @@ Deno.serve(async (req) => {
         // Build calls to get reward amounts for current epoch
         const rewardAmountCalls = rewardTokenCalls.map((c, idx) => {
           const tokenAddress = tokenAddressResults[idx].status === "success"
-            ? (tokenAddressResults[idx].result as Address)
+            ? (tokenAddressResults[idx].result as unknown as Address)
             : ZERO_ADDRESS
           return {
             ...c,
@@ -244,7 +520,7 @@ Deno.serve(async (req) => {
             })),
           })
 
-          // Calculate USD values (assuming 18 decimals, using MEZO price)
+          // Calculate USD values from the same live feeds used by the webapp.
           rewardAmountCalls.forEach((c, idx) => {
             const amount = amountResults[idx].status === "success"
               ? (amountResults[idx].result as bigint)
@@ -252,8 +528,12 @@ Deno.serve(async (req) => {
 
             if (amount > 0n) {
               const gaugeIdx = bribeInfoList[c.bribeIndex].gaugeIndex
-              const isMezo = c.tokenAddress.toLowerCase() === MEZO_TOKEN_ADDRESS
-              const price = isMezo ? mezoPrice : 100000 // MEZO or assume BTC ~100k
+              const price = getTokenUsdPrice(c.tokenAddress, btcPrice, mezoPrice)
+              if (price === null) {
+                console.warn(`Skipping unknown reward token: ${c.tokenAddress}`)
+                return
+              }
+
               const tokenAmount = Number(formatUnits(amount, 18))
               const usdValue = tokenAmount * price
 
@@ -268,8 +548,10 @@ Deno.serve(async (req) => {
     console.log(`Calculated incentives for ${gaugeIncentives.size} gauges`)
 
     // 5. Get boost multipliers for gauges with beneficiaries
-    const veBTCAddress = contracts.veBTC as Address
-    const gaugeBoosts: Map<number, { boost: number; vebtcWeight: bigint }> = new Map()
+    const gaugeBoosts: Map<
+      number,
+      { boost: number; vebtcWeight: bigint; unboostedVebtcWeight: bigint }
+    > = new Map()
 
     // Get beneficiaries that have valid addresses
     const beneficiaryInfo = beneficiaryResults.map((r, i) => ({
@@ -335,7 +617,7 @@ Deno.serve(async (req) => {
           const gaugeToTokenId: Map<number, bigint> = new Map()
           tokenIds.forEach((t, idx) => {
             const mappedGauge = mappedGaugeResults[idx].status === "success"
-              ? (mappedGaugeResults[idx].result as Address)
+              ? (mappedGaugeResults[idx].result as unknown as Address)
               : ZERO_ADDRESS
 
             const gaugeIdx = beneficiaryInfo[t.beneficiaryIdx].gaugeIndex
@@ -349,7 +631,11 @@ Deno.serve(async (req) => {
           // Get boosts and veBTC weights for matched tokens
           const matchedTokens = Array.from(gaugeToTokenId.entries())
           if (matchedTokens.length > 0) {
-            const [boostResults, votingPowerResults] = await Promise.all([
+            const [
+              boostResults,
+              votingPowerResults,
+              unboostedVotingPowerResults,
+            ] = await Promise.all([
               publicClient.multicall({
                 contracts: matchedTokens.map(([_, tokenId]) => ({
                   address: boostVoterAddress,
@@ -366,6 +652,14 @@ Deno.serve(async (req) => {
                   args: [tokenId],
                 })),
               }),
+              publicClient.multicall({
+                contracts: matchedTokens.map(([_, tokenId]) => ({
+                  address: veBTCAddress,
+                  abi: VOTING_ESCROW_ABI,
+                  functionName: "unboostedVotingPowerOfNFT",
+                  args: [tokenId],
+                })),
+              }),
             ])
 
             matchedTokens.forEach(([gaugeIdx], idx) => {
@@ -375,9 +669,17 @@ Deno.serve(async (req) => {
               const vebtcWeight = votingPowerResults[idx].status === "success"
                 ? (votingPowerResults[idx].result as bigint)
                 : 0n
+              const unboostedVebtcWeight =
+                unboostedVotingPowerResults[idx].status === "success"
+                  ? (unboostedVotingPowerResults[idx].result as bigint)
+                  : 0n
 
               if (boost !== null) {
-                gaugeBoosts.set(gaugeIdx, { boost, vebtcWeight })
+                gaugeBoosts.set(gaugeIdx, {
+                  boost,
+                  vebtcWeight,
+                  unboostedVebtcWeight,
+                })
               }
             })
           }
@@ -395,19 +697,30 @@ Deno.serve(async (req) => {
 
       const totalIncentivesUSD = gaugeIncentives.get(i) || null
       const boostInfo = gaugeBoosts.get(i)
-
-      // Calculate APY if we have incentives and votes
-      let apy: number | null = null
-      if (totalIncentivesUSD && totalIncentivesUSD > 0 && vemezoWeight > 0n) {
-        const totalVeMEZOAmount = Number(vemezoWeight) / 1e18
-        const totalVeMEZOValueUSD = totalVeMEZOAmount * mezoPrice
-        if (totalVeMEZOValueUSD > 0) {
-          const weeklyReturn = totalIncentivesUSD / totalVeMEZOValueUSD
-          apy = weeklyReturn * 52 * 100
-        }
-      } else if (totalIncentivesUSD && totalIncentivesUSD > 0) {
-        apy = 999999 // Infinite APY when no votes
-      }
+      const optimalVeMEZOWeight = calculateOptimalVeMEZO(
+        boostInfo?.unboostedVebtcWeight ?? 0n,
+        veMEZOSupply,
+        veBTCSupply,
+      )
+      const subscriptionRatio = calculateSubscriptionRatio(
+        vemezoWeight,
+        optimalVeMEZOWeight,
+      )
+      const subscriptionDelta =
+        optimalVeMEZOWeight !== null ? vemezoWeight - optimalVeMEZOWeight : null
+      const subscriptionStatus = getSubscriptionStatus(
+        vemezoWeight,
+        optimalVeMEZOWeight,
+      )
+      const apy = calculateAPY(totalIncentivesUSD, vemezoWeight, mezoPrice)
+      const apyAtOptimal =
+        optimalVeMEZOWeight !== null
+          ? calculateAPY(totalIncentivesUSD, optimalVeMEZOWeight, mezoPrice)
+          : null
+      const oversubscriptionDilution =
+        subscriptionRatio !== null && subscriptionRatio > 1
+          ? 1 - 1 / subscriptionRatio
+          : null
 
       return {
         gauge_address: gaugeAddress.toLowerCase(),
@@ -417,6 +730,12 @@ Deno.serve(async (req) => {
         boost_multiplier: boostInfo?.boost ?? null,
         total_incentives_usd: totalIncentivesUSD,
         apy,
+        optimal_vemezo_weight: optimalVeMEZOWeight?.toString() ?? null,
+        subscription_ratio: subscriptionRatio,
+        subscription_delta_vemezo: subscriptionDelta?.toString() ?? null,
+        subscription_status: subscriptionStatus,
+        apy_at_optimal: apyAtOptimal,
+        oversubscription_dilution: oversubscriptionDilution,
         unique_voters: null,
       }
     })

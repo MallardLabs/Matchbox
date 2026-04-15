@@ -93,7 +93,11 @@ type HeaderTickerProps = {
 export function HeaderTicker({
   showInline = false,
 }: HeaderTickerProps): JSX.Element {
-  const { price: btcPrice, isLoading: btcLoading } = useBtcPrice()
+  const {
+    price: btcPrice,
+    isLoading: btcLoading,
+    isError: btcError,
+  } = useBtcPrice()
   const {
     price: mezoPrice,
     isLoading: mezoLoading,
@@ -119,7 +123,11 @@ export function HeaderTicker({
     {
       id: "btc",
       label: "BTC",
-      value: btcLoading ? "..." : `$${formatPrice(btcPrice)}`,
+      value: btcLoading
+        ? "..."
+        : btcError || btcPrice === null
+          ? "N/A"
+          : `$${formatPrice(btcPrice)}`,
       icon: "/token icons/Bitcoin.svg",
     },
     {

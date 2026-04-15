@@ -6,7 +6,8 @@ import { CHAIN_ID, type SupportedChainId } from "../contracts"
 // Set to true once Pyth price feed is available and configured
 export const USE_PYTH_ORACLE = false
 
-// Fallback price used when USE_PYTH_ORACLE is false
+// Legacy placeholder retained only for compatibility with older callers.
+// Active app pricing should return null when a live MEZO feed is unavailable.
 export const MEZO_FALLBACK_PRICE = 0.22
 
 // MEZO token address (same on testnet and mainnet)
