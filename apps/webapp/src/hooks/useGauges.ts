@@ -32,7 +32,11 @@ export function useBoostGauges(options: UseBoostGaugesOptions = {}) {
   const enabled = (options.enabled ?? true) && isNetworkReady
   const contracts = getContractConfig(chainId)
 
-  const { data: lengthData, isLoading: isLoadingLength } = useReadContract({
+  const {
+    data: lengthData,
+    isLoading: isLoadingLength,
+    refetch: refetchLength,
+  } = useReadContract({
     ...contracts.boostVoter,
     functionName: "length",
     query: {
@@ -43,18 +47,21 @@ export function useBoostGauges(options: UseBoostGaugesOptions = {}) {
 
   const length = lengthData ?? 0n
 
-  const { data: gaugeAddresses, isLoading: isLoadingAddresses } =
-    useReadContracts({
-      contracts: Array.from({ length: Number(length) }, (_, i) => ({
-        ...contracts.boostVoter,
-        functionName: "gauges",
-        args: [BigInt(i)],
-      })),
-      query: {
-        ...QUERY_PROFILES.SHORT_CACHE,
-        enabled: enabled && length > 0n,
-      },
-    })
+  const {
+    data: gaugeAddresses,
+    isLoading: isLoadingAddresses,
+    refetch: refetchGaugeAddresses,
+  } = useReadContracts({
+    contracts: Array.from({ length: Number(length) }, (_, i) => ({
+      ...contracts.boostVoter,
+      functionName: "gauges",
+      args: [BigInt(i)],
+    })),
+    query: {
+      ...QUERY_PROFILES.SHORT_CACHE,
+      enabled: enabled && length > 0n,
+    },
+  })
 
   const addresses =
     gaugeAddresses
@@ -65,7 +72,11 @@ export function useBoostGauges(options: UseBoostGaugesOptions = {}) {
   const gaugeDataStride = includeOwnership ? 3 : 2
 
   // Fetch gauge data. rewardsBeneficiary is only needed for ownership mapping.
-  const { data: gaugeData, isLoading: isLoadingGaugeData } = useReadContracts({
+  const {
+    data: gaugeData,
+    isLoading: isLoadingGaugeData,
+    refetch: refetchGaugeData,
+  } = useReadContracts({
     contracts: addresses.flatMap((address) => {
       const baseContracts = [
         {
@@ -119,18 +130,21 @@ export function useBoostGauges(options: UseBoostGaugesOptions = {}) {
   }, [beneficiaries])
 
   // Fetch veBTC balance for each unique beneficiary
-  const { data: beneficiaryBalances, isLoading: isLoadingBalances } =
-    useReadContracts({
-      contracts: uniqueBeneficiaries.map((beneficiary) => ({
-        ...contracts.veBTC,
-        functionName: "balanceOf",
-        args: [beneficiary],
-      })),
-      query: {
-        ...QUERY_PROFILES.SHORT_CACHE,
-        enabled: enabled && includeOwnership && uniqueBeneficiaries.length > 0,
-      },
-    })
+  const {
+    data: beneficiaryBalances,
+    isLoading: isLoadingBalances,
+    refetch: refetchBeneficiaryBalances,
+  } = useReadContracts({
+    contracts: uniqueBeneficiaries.map((beneficiary) => ({
+      ...contracts.veBTC,
+      functionName: "balanceOf",
+      args: [beneficiary],
+    })),
+    query: {
+      ...QUERY_PROFILES.SHORT_CACHE,
+      enabled: enabled && includeOwnership && uniqueBeneficiaries.length > 0,
+    },
+  })
 
   // Build beneficiary → balance map
   const beneficiaryToBalance = useMemo(() => {
@@ -167,18 +181,21 @@ export function useBoostGauges(options: UseBoostGaugesOptions = {}) {
     return queries
   }, [beneficiaryTokenCounts, includeOwnership])
 
-  const { data: tokenIdResults, isLoading: isLoadingTokenIds } =
-    useReadContracts({
-      contracts: tokenIdQueries.map(({ beneficiary, index }) => ({
-        ...contracts.veBTC,
-        functionName: "ownerToNFTokenIdList",
-        args: [beneficiary, BigInt(index)],
-      })),
-      query: {
-        ...QUERY_PROFILES.SHORT_CACHE,
-        enabled: enabled && includeOwnership && tokenIdQueries.length > 0,
-      },
-    })
+  const {
+    data: tokenIdResults,
+    isLoading: isLoadingTokenIds,
+    refetch: refetchTokenIds,
+  } = useReadContracts({
+    contracts: tokenIdQueries.map(({ beneficiary, index }) => ({
+      ...contracts.veBTC,
+      functionName: "ownerToNFTokenIdList",
+      args: [beneficiary, BigInt(index)],
+    })),
+    query: {
+      ...QUERY_PROFILES.SHORT_CACHE,
+      enabled: enabled && includeOwnership && tokenIdQueries.length > 0,
+    },
+  })
 
   // Build beneficiary → tokenIds map
   const beneficiaryToTokenIds = useMemo(() => {
@@ -209,18 +226,21 @@ export function useBoostGauges(options: UseBoostGaugesOptions = {}) {
   }, [beneficiaryToTokenIds])
 
   // Query boostableTokenIdToGauge for each tokenId
-  const { data: tokenIdToGaugeResults, isLoading: isLoadingTokenMap } =
-    useReadContracts({
-      contracts: allTokenIds.map((tokenId) => ({
-        ...contracts.boostVoter,
-        functionName: "boostableTokenIdToGauge",
-        args: [tokenId],
-      })),
-      query: {
-        ...QUERY_PROFILES.SHORT_CACHE,
-        enabled: enabled && includeOwnership && allTokenIds.length > 0,
-      },
-    })
+  const {
+    data: tokenIdToGaugeResults,
+    isLoading: isLoadingTokenMap,
+    refetch: refetchTokenIdToGauge,
+  } = useReadContracts({
+    contracts: allTokenIds.map((tokenId) => ({
+      ...contracts.boostVoter,
+      functionName: "boostableTokenIdToGauge",
+      args: [tokenId],
+    })),
+    query: {
+      ...QUERY_PROFILES.SHORT_CACHE,
+      enabled: enabled && includeOwnership && allTokenIds.length > 0,
+    },
+  })
 
   // Build gauge → tokenId map (reverse lookup)
   const gaugeToTokenId = useMemo(() => {
@@ -267,27 +287,33 @@ export function useBoostGauges(options: UseBoostGaugesOptions = {}) {
   )
 
   // Fetch boosted/effective veBTC voting power for display.
-  const { data: veBTCVotingPowers, isLoading: isLoadingVotingPowers } =
-    useReadContracts({
-      contracts: tokenIds
-        .filter((id): id is bigint => id !== undefined && id > 0n)
-        .map((tokenId) => ({
-          ...contracts.veBTC,
-          functionName: "votingPowerOfNFT",
-          args: [tokenId],
-        })),
-      query: {
-        ...QUERY_PROFILES.SHORT_CACHE,
-        enabled:
-          enabled &&
-          includeOwnership &&
-          tokenIds.some((id) => id !== undefined && id > 0n),
-      },
-    })
+  const {
+    data: veBTCVotingPowers,
+    isLoading: isLoadingVotingPowers,
+    refetch: refetchVeBTCVotingPowers,
+  } = useReadContracts({
+    contracts: tokenIds
+      .filter((id): id is bigint => id !== undefined && id > 0n)
+      .map((tokenId) => ({
+        ...contracts.veBTC,
+        functionName: "votingPowerOfNFT",
+        args: [tokenId],
+      })),
+    query: {
+      ...QUERY_PROFILES.SHORT_CACHE,
+      enabled:
+        enabled &&
+        includeOwnership &&
+        tokenIds.some((id) => id !== undefined && id > 0n),
+    },
+  })
 
   // Fetch the unboosted baseline separately so optimal veMEZO keeps using the
   // correct 5x target math without changing the displayed gauge weight.
-  const { data: unboostedVeBTCVotingPowers } = useReadContracts({
+  const {
+    data: unboostedVeBTCVotingPowers,
+    refetch: refetchUnboostedVeBTCVotingPowers,
+  } = useReadContracts({
     contracts: tokenIds
       .filter((id): id is bigint => id !== undefined && id > 0n)
       .map((tokenId) => ({
@@ -306,7 +332,11 @@ export function useBoostGauges(options: UseBoostGaugesOptions = {}) {
 
   // Use the on-chain boost value as the display source of truth so the
   // aggregate gauge views match the per-lock cards and gauge detail page.
-  const { data: boostResults, isLoading: isLoadingBoosts } = useReadContracts({
+  const {
+    data: boostResults,
+    isLoading: isLoadingBoosts,
+    refetch: refetchBoosts,
+  } = useReadContracts({
     contracts: tokenIds
       .filter((id): id is bigint => id !== undefined && id > 0n)
       .map((tokenId) => ({
@@ -324,19 +354,22 @@ export function useBoostGauges(options: UseBoostGaugesOptions = {}) {
   })
 
   // System totals: ve token `supply()` — same as Boost calculator “System totals” (useVeSupply).
-  const { data: totalsData, isLoading: isLoadingSystemTotals } =
-    useReadContracts({
-      contracts: includeOwnership
-        ? [
-            { ...contracts.veBTC, functionName: "supply" },
-            { ...contracts.veMEZO, functionName: "supply" },
-          ]
-        : [],
-      query: {
-        ...QUERY_PROFILES.SHORT_CACHE,
-        enabled: enabled && includeOwnership,
-      },
-    })
+  const {
+    data: totalsData,
+    isLoading: isLoadingSystemTotals,
+    refetch: refetchSystemTotals,
+  } = useReadContracts({
+    contracts: includeOwnership
+      ? [
+          { ...contracts.veBTC, functionName: "supply" },
+          { ...contracts.veMEZO, functionName: "supply" },
+        ]
+      : [],
+    query: {
+      ...QUERY_PROFILES.SHORT_CACHE,
+      enabled: enabled && includeOwnership,
+    },
+  })
 
   const veBTCTokenSupply = totalsData?.[0]?.result as bigint | undefined
   const veMEZOTokenSupply = totalsData?.[1]?.result as bigint | undefined
@@ -433,6 +466,20 @@ export function useBoostGauges(options: UseBoostGaugesOptions = {}) {
     gauges,
     isLoading,
     totalGauges: Number(length),
+    refetch: async () => {
+      await Promise.allSettled([
+        refetchLength(),
+        refetchGaugeAddresses(),
+        refetchGaugeData(),
+        refetchBeneficiaryBalances(),
+        refetchTokenIds(),
+        refetchTokenIdToGauge(),
+        refetchVeBTCVotingPowers(),
+        refetchUnboostedVeBTCVotingPowers(),
+        refetchBoosts(),
+        refetchSystemTotals(),
+      ])
+    },
   }
 }
 

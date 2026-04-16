@@ -22,7 +22,9 @@ import type { BoostGauge } from "@/hooks/useGauges"
 import { useBoostGauges, useVoterTotals } from "@/hooks/useGauges"
 import { useVeMEZOLocks } from "@/hooks/useLocks"
 import { useMezoPrice } from "@/hooks/useMezoPrice"
+import { useMultiLockUnpairing } from "@/hooks/useMultiLockUnpairing"
 import { useMultiLockVoting } from "@/hooks/useMultiLockVoting"
+import type { LockTxStatus } from "@/hooks/useMultiLockVoting"
 import { usePagination } from "@/hooks/usePagination"
 import { useClaimableBribes } from "@/hooks/useVoting"
 import { useAllVoteAllocations, useBatchVoteState } from "@/hooks/useVoting"
@@ -69,10 +71,31 @@ type GaugeWithAllocation = BoostGauge & {
   votingPct: number
 }
 
+function getTransactionStatusLabel(status: LockTxStatus): string {
+  switch (status) {
+    case "success":
+      return "Confirmed"
+    case "error":
+      return "Failed"
+    case "signing":
+      return "Confirm in wallet..."
+    case "confirming":
+      return "Confirming..."
+    case "pending":
+      return "Pending"
+    case "skipped":
+      return "Skipped"
+  }
+}
+
 export default function BoostPage(): JSX.Element {
   const { isConnected } = useAccount()
   const { locks: veMEZOLocks, isLoading: isLoadingLocks } = useVeMEZOLocks()
-  const { gauges, isLoading: isLoadingGauges } = useBoostGauges({
+  const {
+    gauges,
+    isLoading: isLoadingGauges,
+    refetch: refetchBoostGauges,
+  } = useBoostGauges({
     includeOwnership: true,
   })
 
@@ -112,6 +135,9 @@ export default function BoostPage(): JSX.Element {
   )
   const prevSelectedLockCountRef = useRef(0)
   const multiVoteCleanupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  )
+  const unpairCleanupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   )
 
@@ -338,7 +364,6 @@ export default function BoostPage(): JSX.Element {
   ])
   const {
     voteAll,
-    resetAll,
     lockStates,
     currentIndex: multiVoteCurrentIndex,
     totalLocks: multiVoteTotalLocks,
@@ -349,6 +374,18 @@ export default function BoostPage(): JSX.Element {
     hasErrors: multiVoteHasErrors,
     clear: clearMultiVote,
   } = useMultiLockVoting()
+  const {
+    unpairAll,
+    txStates: unpairTxStates,
+    currentIndex: unpairCurrentIndex,
+    totalTransactions: unpairTotalTransactions,
+    successCount: unpairSuccessCount,
+    errorCount: unpairErrorCount,
+    isInProgress: isUnpairInProgress,
+    isDone: isUnpairDone,
+    hasErrors: unpairHasErrors,
+    clear: clearUnpair,
+  } = useMultiLockUnpairing()
 
   // Gauge table sorting and filtering state
   const [gaugeSortColumn, setGaugeSortColumn] = useState<GaugeSortColumn>("apy")
@@ -363,6 +400,7 @@ export default function BoostPage(): JSX.Element {
   // Calculator modal state
   const [isCalculatorOpen, setIsCalculatorOpen] = useState(false)
   const [isCartOpen, setIsCartOpen] = useState(false)
+  const [isUnpairOpen, setIsUnpairOpen] = useState(false)
 
   const clearMultiVoteCleanupTimer = useCallback(() => {
     if (multiVoteCleanupTimerRef.current) {
@@ -384,6 +422,27 @@ export default function BoostPage(): JSX.Element {
   )
 
   useEffect(() => clearMultiVoteCleanupTimer, [clearMultiVoteCleanupTimer])
+
+  const clearUnpairCleanupTimer = useCallback(() => {
+    if (unpairCleanupTimerRef.current) {
+      clearTimeout(unpairCleanupTimerRef.current)
+      unpairCleanupTimerRef.current = null
+    }
+  }, [])
+
+  const scheduleUnpairCleanup = useCallback(
+    (callback?: () => void, delayMs = 1500) => {
+      clearUnpairCleanupTimer()
+      unpairCleanupTimerRef.current = setTimeout(() => {
+        callback?.()
+        clearUnpair()
+        unpairCleanupTimerRef.current = null
+      }, delayMs)
+    },
+    [clearUnpair, clearUnpairCleanupTimer],
+  )
+
+  useEffect(() => clearUnpairCleanupTimer, [clearUnpairCleanupTimer])
 
   const handleGaugeSort = useCallback(
     (column: GaugeSortColumn) => {
@@ -454,6 +513,125 @@ export default function BoostPage(): JSX.Element {
     () => Array.from(selectedGaugeIndexes.values()),
     [selectedGaugeIndexes],
   )
+
+  const gaugeByAddress = useMemo(() => {
+    const map = new Map<string, BoostGauge>()
+    for (const gauge of gauges) {
+      map.set(gauge.address.toLowerCase(), gauge)
+    }
+    return map
+  }, [gauges])
+
+  const { unpairableLocks, unpairBlockedMessage, unresolvedUnpairCount } =
+    useMemo(() => {
+      const eligible: {
+        veMEZOTokenId: bigint
+        affectedVeBTCTokenIds: bigint[]
+      }[] = []
+      let alreadyVotedCount = 0
+      let noAllocationCount = 0
+      let windowClosedCount = 0
+      let unresolvedCount = 0
+
+      for (const lock of selectedLocks) {
+        const state = voteStateMap.get(lock.tokenId.toString())
+        const lockAllocations =
+          allocationsByToken.get(lock.tokenId.toString()) ?? []
+        const hasUsedWeight =
+          state?.usedWeight !== undefined && state.usedWeight > 0n
+        const hasAllocations = lockAllocations.length > 0
+
+        if (!hasUsedWeight || !hasAllocations) {
+          noAllocationCount++
+          continue
+        }
+
+        if (state?.hasVotedThisEpoch) {
+          alreadyVotedCount++
+          continue
+        }
+
+        if (!state?.canVoteInCurrentEpoch) {
+          windowClosedCount++
+          continue
+        }
+
+        const affectedVeBTCTokenIds: bigint[] = []
+        let hasUnresolvedGauge = false
+
+        for (const allocation of lockAllocations) {
+          const gauge = gaugeByAddress.get(
+            allocation.gaugeAddress.toLowerCase(),
+          )
+          if (!gauge || gauge.veBTCTokenId <= 0n) {
+            hasUnresolvedGauge = true
+            break
+          }
+
+          if (
+            !affectedVeBTCTokenIds.some(
+              (tokenId) => tokenId === gauge.veBTCTokenId,
+            )
+          ) {
+            affectedVeBTCTokenIds.push(gauge.veBTCTokenId)
+          }
+        }
+
+        if (hasUnresolvedGauge || affectedVeBTCTokenIds.length === 0) {
+          unresolvedCount++
+          continue
+        }
+
+        eligible.push({
+          veMEZOTokenId: lock.tokenId,
+          affectedVeBTCTokenIds,
+        })
+      }
+
+      let message: string | null = null
+      if (selectedLocks.length === 0) {
+        message = "Select veMEZO locks to unpair prior allocations."
+      } else if (isLoadingVoteState || isLoadingGauges) {
+        message = "Checking unpair eligibility..."
+      } else if (unresolvedCount > 0 && eligible.length === 0) {
+        message =
+          "Some prior allocations cannot be matched to veBTC locks. Refresh and try again."
+      } else if (alreadyVotedCount > 0 && eligible.length === 0) {
+        message =
+          "Selected locks already voted this epoch, so unpairing is blocked."
+      } else if (windowClosedCount > 0 && eligible.length === 0) {
+        message = "Unpairing is only available during the voting window."
+      } else if (noAllocationCount > 0 && eligible.length === 0) {
+        message = "Selected locks have no prior allocations to unpair."
+      } else if (unresolvedCount > 0) {
+        message =
+          "Some prior allocations cannot be matched to veBTC locks. Refresh and try again."
+      } else if (
+        alreadyVotedCount > 0 ||
+        windowClosedCount > 0 ||
+        noAllocationCount > 0
+      ) {
+        message = `${eligible.length} selected lock${
+          eligible.length === 1 ? "" : "s"
+        } eligible to unpair. Ineligible locks will be skipped.`
+      }
+
+      return {
+        unpairableLocks: eligible,
+        unpairBlockedMessage: message,
+        unresolvedUnpairCount: unresolvedCount,
+      }
+    }, [
+      allocationsByToken,
+      gaugeByAddress,
+      isLoadingGauges,
+      isLoadingVoteState,
+      selectedLocks,
+      voteStateMap,
+    ])
+
+  const canUnpairSelectedLocks =
+    unpairableLocks.length > 0 && unresolvedUnpairCount === 0
 
   // Clear allocations only when selection becomes fully empty
   useEffect(() => {
@@ -693,27 +871,24 @@ export default function BoostPage(): JSX.Element {
     }
   }
 
-  // Only locks that have used weight AND can vote this epoch are resettable
-  const resettableLocks = useMemo(
-    () =>
-      selectedLocks.filter((lock) => {
-        const state = voteStateMap.get(lock.tokenId.toString())
-        return (
-          state?.usedWeight &&
-          state.usedWeight > 0n &&
-          state.canVoteInCurrentEpoch
-        )
-      }),
-    [selectedLocks, voteStateMap],
-  )
+  const handleUnpair = async () => {
+    if (!canUnpairSelectedLocks) return
 
-  const handleReset = async () => {
-    if (resettableLocks.length === 0) return
-    const result = await resetAll(resettableLocks.map((l) => l.tokenId))
-    await Promise.allSettled([refetchVoteState(), refetchVoteAllocations()])
+    clearUnpairCleanupTimer()
+    setIsCartOpen(false)
+    setIsUnpairOpen(true)
+
+    const result = await unpairAll(unpairableLocks)
+    await Promise.allSettled([
+      refetchVoteState(),
+      refetchVoteAllocations(),
+      refetchBoostGauges(),
+    ])
 
     if (!result.hasErrors) {
-      scheduleMultiVoteCleanup()
+      scheduleUnpairCleanup(() => {
+        setIsUnpairOpen(false)
+      })
     }
   }
 
@@ -743,6 +918,17 @@ export default function BoostPage(): JSX.Element {
       }
     },
     [clearMultiVote, clearMultiVoteCleanupTimer, isMultiVoteInProgress],
+  )
+
+  const handleUnpairClose = useCallback(
+    function handleUnpairClose() {
+      clearUnpairCleanupTimer()
+      setIsUnpairOpen(false)
+      if (!isUnpairInProgress) {
+        clearUnpair()
+      }
+    },
+    [clearUnpair, clearUnpairCleanupTimer, isUnpairInProgress],
   )
 
   const isLoading = isLoadingLocks || isLoadingGauges
@@ -1174,10 +1360,11 @@ export default function BoostPage(): JSX.Element {
                 )}
               {!isMultiVoteInProgress && !isMultiVoteDone && (
                 <p className="flex items-center gap-1 text-xs text-[var(--content-secondary)]">
-                  Votes lock for this epoch. You can reset and re-vote once.
+                  Votes lock for this epoch. Prior allocations can be unpaired
+                  before voting.
                   <Tooltip
                     id="vote-epoch-hint"
-                    content="Each veMEZO lock can vote once per epoch. After voting, you may reset your allocation and vote again once more in the same epoch."
+                    content="Unpairing resets a prior veMEZO vote and updates the affected veBTC boost. Locks that already voted this epoch cannot unpair until the next epoch."
                   />
                 </p>
               )}
@@ -1186,18 +1373,18 @@ export default function BoostPage(): JSX.Element {
                   {cartStatusMessage ?? "Ready to vote."}
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {resettableLocks.length > 0 &&
+                  {canUnpairSelectedLocks &&
                     !isMultiVoteInProgress &&
                     !isMultiVoteDone && (
                       <Button
                         kind="secondary"
-                        onClick={handleReset}
-                        isLoading={isMultiVoteInProgress}
+                        onClick={handleUnpair}
+                        isLoading={isUnpairInProgress}
                       >
-                        Reset{" "}
-                        {resettableLocks.length > 1
-                          ? `${resettableLocks.length} Locks`
-                          : "Vote"}
+                        Unpair{" "}
+                        {unpairableLocks.length > 1
+                          ? `${unpairableLocks.length} Locks`
+                          : "Boost"}
                       </Button>
                     )}
                   {isMultiVoteDone && multiVoteHasErrors ? (
@@ -1270,6 +1457,132 @@ export default function BoostPage(): JSX.Element {
                   )}
                 </div>
               </div>
+            </div>
+          </div>
+        </ModalBody>
+      </Modal>
+
+      <Modal
+        isOpen={isUnpairOpen}
+        onClose={handleUnpairClose}
+        overrides={{
+          Dialog: {
+            style: {
+              maxWidth: "560px",
+              width: "100%",
+              padding: "0",
+            },
+          },
+          Close: {
+            style: {
+              top: "12px",
+              right: "12px",
+            },
+          },
+        }}
+      >
+        <ModalBody
+          $style={{
+            padding: "16px",
+          }}
+        >
+          <div className="flex flex-col gap-4">
+            <header>
+              <p className="text-xs uppercase tracking-wider text-[var(--content-tertiary)]">
+                Unpair boost
+              </p>
+              <h2 className="text-lg font-semibold text-[var(--content-primary)]">
+                Reset votes and update veBTC boost
+              </h2>
+              <p className="mt-1 text-xs text-[var(--content-secondary)]">
+                Matchbox will reset each eligible veMEZO vote, then refresh the
+                affected veBTC boost.
+              </p>
+            </header>
+
+            {(isUnpairInProgress || isUnpairDone) && (
+              <div className="rounded-lg border border-[var(--border)] p-3">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <p className="text-xs font-semibold text-[var(--content-primary)]">
+                    {isUnpairInProgress
+                      ? `Signing transactions (${unpairCurrentIndex + 1}/${unpairTotalTransactions})`
+                      : unpairHasErrors
+                        ? `${unpairSuccessCount} of ${unpairTotalTransactions} confirmed`
+                        : "All transactions confirmed"}
+                  </p>
+                  {isUnpairDone && !unpairHasErrors && (
+                    <Tag color="green" closeable={false}>
+                      Done
+                    </Tag>
+                  )}
+                </div>
+                <div className="mb-3 flex h-2 gap-0.5 overflow-hidden rounded-full">
+                  {unpairTxStates.map((txState) => (
+                    <div
+                      key={txState.id}
+                      className={`flex-1 transition-colors ${
+                        txState.status === "success"
+                          ? "bg-[var(--positive)]"
+                          : txState.status === "error"
+                            ? "bg-[var(--negative)]"
+                            : txState.status === "signing" ||
+                                txState.status === "confirming"
+                              ? "animate-pulse bg-[#F7931A]"
+                              : txState.status === "skipped"
+                                ? "bg-[var(--content-tertiary)]"
+                                : "bg-[var(--border)]"
+                      }`}
+                    />
+                  ))}
+                </div>
+                <ol className="flex flex-col gap-2">
+                  {unpairTxStates.map((txState) => (
+                    <li
+                      key={txState.id}
+                      className="flex items-center justify-between gap-4 text-xs"
+                    >
+                      <span className="font-mono text-[var(--content-primary)]">
+                        {txState.kind === "reset"
+                          ? "Reset veMEZO"
+                          : "Update veBTC"}{" "}
+                        #{txState.tokenId.toString()}
+                      </span>
+                      <span
+                        className={`text-right ${
+                          txState.status === "success"
+                            ? "text-[var(--positive)]"
+                            : txState.status === "error"
+                              ? "text-[var(--negative)]"
+                              : txState.status === "signing" ||
+                                  txState.status === "confirming"
+                                ? "text-[#F7931A]"
+                                : "text-[var(--content-tertiary)]"
+                        }`}
+                      >
+                        {getTransactionStatusLabel(txState.status)}
+                      </span>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            )}
+
+            {unpairHasErrors && (
+              <p className="rounded-lg border border-[var(--negative)] bg-[var(--negative-subtle)] p-3 text-xs text-[var(--negative)]">
+                {unpairErrorCount} transaction
+                {unpairErrorCount !== 1 ? "s" : ""} failed. Close this modal,
+                refresh eligibility, and retry any remaining locks.
+              </p>
+            )}
+
+            <div className="flex justify-end gap-2 border-t border-[var(--border)] pt-3">
+              <Button
+                kind="secondary"
+                onClick={handleUnpairClose}
+                disabled={isUnpairInProgress}
+              >
+                Close
+              </Button>
             </div>
           </div>
         </ModalBody>
@@ -1429,6 +1742,42 @@ export default function BoostPage(): JSX.Element {
                                   })}
                                 </tbody>
                               </table>
+                            </div>
+                            <div className="flex flex-col gap-3 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3 sm:flex-row sm:items-center sm:justify-between">
+                              <p className="text-xs text-[var(--content-secondary)]">
+                                {unpairBlockedMessage ??
+                                  "Clear prior allocations and refresh affected veBTC boosts."}
+                              </p>
+                              <div className="flex flex-wrap gap-2">
+                                {unresolvedUnpairCount > 0 && (
+                                  <Button
+                                    kind="secondary"
+                                    size="small"
+                                    onClick={() => {
+                                      void Promise.allSettled([
+                                        refetchVoteAllocations(),
+                                        refetchBoostGauges(),
+                                      ])
+                                    }}
+                                  >
+                                    Refresh
+                                  </Button>
+                                )}
+                                <Button
+                                  kind="secondary"
+                                  size="small"
+                                  onClick={handleUnpair}
+                                  isLoading={isUnpairInProgress}
+                                  disabled={
+                                    !canUnpairSelectedLocks ||
+                                    isUnpairInProgress
+                                  }
+                                >
+                                  {unpairableLocks.length > 1
+                                    ? `Unpair ${unpairableLocks.length} Locks`
+                                    : "Unpair"}
+                                </Button>
+                              </div>
                             </div>
                           </div>
                         )}
@@ -1602,26 +1951,27 @@ export default function BoostPage(): JSX.Element {
                                 )
                                 const votePercentage =
                                   gaugeAllocations.get(gauge.originalIndex) ?? 0
-                                const userVoteWeight =
-                                  isProjected
-                                    ? (BigInt(
-                                        Math.floor(userVotePercentage * 100),
-                                      ) *
-                                        totalVotingPower) /
-                                      10000n
-                                    : 0n
+                                const userVoteWeight = isProjected
+                                  ? (BigInt(
+                                      Math.floor(userVotePercentage * 100),
+                                    ) *
+                                      totalVotingPower) /
+                                    10000n
+                                  : 0n
                                 const projectedBoost =
                                   userVoteWeight > 0n &&
                                   gauge.veBTCWeight &&
                                   veBTCSystemTotal &&
                                   veMEZOSystemTotal
-                                    ? boostMultiplierNumberFromCalculatorInputs({
-                                        unboostedNftVp: gauge.veBTCWeight,
-                                        gaugeVeMezoWeight:
-                                          gauge.totalWeight + userVoteWeight,
-                                        veBtcSystemTotal: veBTCSystemTotal,
-                                        veMezoSystemTotal: veMEZOSystemTotal,
-                                      })
+                                    ? boostMultiplierNumberFromCalculatorInputs(
+                                        {
+                                          unboostedNftVp: gauge.veBTCWeight,
+                                          gaugeVeMezoWeight:
+                                            gauge.totalWeight + userVoteWeight,
+                                          veBtcSystemTotal: veBTCSystemTotal,
+                                          veMezoSystemTotal: veMEZOSystemTotal,
+                                        },
+                                      )
                                     : undefined
                                 return (
                                   <GaugeCard
@@ -1641,8 +1991,7 @@ export default function BoostPage(): JSX.Element {
                                     projectedBoostMultiplier={
                                       projectedBoost !== undefined &&
                                       Math.abs(
-                                        projectedBoost -
-                                          gauge.boostMultiplier,
+                                        projectedBoost - gauge.boostMultiplier,
                                       ) > 0.005
                                         ? projectedBoost
                                         : undefined
