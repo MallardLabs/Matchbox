@@ -3,8 +3,8 @@ import { useCallback, useEffect, useRef, useState } from "react"
 
 type LockState = "NONE" | "MEZO" | "BTC"
 
-const INITIAL_TOTAL_VE_MEZO = 30_000_000
-const INITIAL_TOTAL_VE_BTC = 200
+const INITIAL_TOTAL_VE_MEZO = 100_000_000
+const INITIAL_TOTAL_VE_BTC = 400
 const INITIAL_BTC = "21"
 const INITIAL_BOOST = 5.0
 const INITIAL_MAX_VE_MEZO = 500_000_000
@@ -337,14 +337,8 @@ export function BoostCalculator() {
   const {
     totalVeBtc: liveVeBtc,
     totalVeMezo: liveVeMezo,
-    isLoading: supplyLoading,
+    fetchStatus,
   } = useVeSupply()
-
-  const supplyStatus = supplyLoading
-    ? "loading"
-    : liveVeBtc !== undefined
-      ? "success"
-      : "error"
 
   const [lockState, setLockState] = useState<LockState>("MEZO")
   const [userMezo, setUserMezo] = useState<string>(() =>
@@ -358,9 +352,8 @@ export function BoostCalculator() {
   const [boost, setBoost] = useState<number>(INITIAL_BOOST)
   const [systemTotalsOpen, setSystemTotalsOpen] = useState<boolean>(false)
 
-  // "loading" | "visible" | "fading" | "hidden"
   const [tickState, setTickState] = useState<
-    "loading" | "visible" | "fading" | "hidden"
+    "loading" | "visible" | "fading" | "hidden" | "x-visible"
   >("loading")
 
   const systemTotalsRef = useRef<HTMLDivElement>(null)
@@ -378,13 +371,25 @@ export function BoostCalculator() {
     if (liveVeMezo !== undefined) setTotalVeMezo(liveVeMezo)
   }, [liveVeBtc, liveVeMezo])
 
-  // Show tick once on first successful load, then fade; hide on error
   useEffect(() => {
-    if (supplyStatus === "error") {
-      setTickState("hidden")
+    if (fetchStatus === "loading") {
+      if (!tickShownRef.current) {
+        setTickState("loading")
+      }
       return
     }
-    if (supplyStatus !== "success" || tickShownRef.current) return
+
+    if (fetchStatus === "error") {
+      if (!tickShownRef.current) {
+        setTickState("x-visible")
+        const hideTimer = setTimeout(() => setTickState("hidden"), 1000)
+        return () => clearTimeout(hideTimer)
+      }
+      return
+    }
+
+    // success
+    if (tickShownRef.current) return
     tickShownRef.current = true
     setTickState("visible")
     const fadeTimer = setTimeout(() => setTickState("fading"), 2000)
@@ -393,7 +398,7 @@ export function BoostCalculator() {
       clearTimeout(fadeTimer)
       clearTimeout(hideTimer)
     }
-  }, [supplyStatus])
+  }, [fetchStatus])
 
   const calculateBoost = useCallback(
     (btc: number, mezo: number, tBtc: number, tMezo: number) =>
@@ -614,6 +619,28 @@ export function BoostCalculator() {
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   d="M5 13l4 4L19 7"
+                />
+              </svg>
+            )}
+            {tickState === "x-visible" && (
+              <svg
+                className="h-3 w-3 text-red-500"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2.5}
+                aria-label="these totals could not be fetched"
+              >
+                <title>these totals could not be fetched</title>
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M18 6L6 18"
+                />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M6 6l12 12"
                 />
               </svg>
             )}

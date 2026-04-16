@@ -1,5 +1,5 @@
 import { useTheme } from "@/contexts/ThemeContext"
-import { Button } from "@mezo-org/mezo-clay"
+import { Button, Modal, ModalBody } from "@mezo-org/mezo-clay"
 import { useWalletAccount } from "@mezo-org/passport"
 import dynamic from "next/dynamic"
 import NextLink from "next/link"
@@ -14,6 +14,11 @@ const ConnectWalletDrawer = dynamic(
 
 const WalletDrawer = dynamic(
   () => import("./WalletDrawer").then((mod) => mod.WalletDrawer),
+  { ssr: false },
+)
+
+const BoostCalculator = dynamic(
+  () => import("./BoostCalculator").then((mod) => mod.BoostCalculator),
   { ssr: false },
 )
 
@@ -97,6 +102,30 @@ function DocIcon(): JSX.Element {
   )
 }
 
+function CalculatorIcon(): JSX.Element {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="4" y="2" width="16" height="20" rx="2" />
+      <line x1="8" y1="6" x2="16" y2="6" />
+      <line x1="8" y1="10" x2="10" y2="10" />
+      <line x1="12" y1="10" x2="14" y2="10" />
+      <line x1="8" y1="14" x2="10" y2="14" />
+      <line x1="12" y1="14" x2="14" y2="14" />
+      <line x1="8" y1="18" x2="16" y2="18" />
+    </svg>
+  )
+}
+
 function SettingsIcon(): JSX.Element {
   return (
     <svg
@@ -130,6 +159,7 @@ export function Header(): JSX.Element {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [walletDrawerOpen, setWalletDrawerOpen] = useState(false)
   const [connectDrawerOpen, setConnectDrawerOpen] = useState(false)
+  const [calculatorOpen, setCalculatorOpen] = useState(false)
 
   const isHomePage = router.pathname === "/"
 
@@ -170,7 +200,7 @@ export function Header(): JSX.Element {
 
   return (
     <>
-      <header className="sticky top-0 z-50 border-b border-[var(--border)] bg-[var(--surface)]/95 backdrop-blur-sm">
+      <header className="sticky top-0 z-50 border-b border-[var(--border)] bg-[var(--surface)]/95 backdrop-blur-sm" style={{ overflow: "visible" }}>
         <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4 md:h-16 md:px-6 lg:px-8">
           {/* Logo */}
           <NextLink
@@ -297,6 +327,35 @@ export function Header(): JSX.Element {
             />
           )}
 
+          {/* Boost Calculator Modal */}
+          <Modal
+            isOpen={calculatorOpen}
+            onClose={() => setCalculatorOpen(false)}
+            overrides={{
+              Dialog: {
+                style: {
+                  maxWidth: "420px",
+                  width: "100%",
+                  padding: "0",
+                },
+              },
+              Close: {
+                style: {
+                  top: "12px",
+                  right: "12px",
+                },
+              },
+            }}
+          >
+            <ModalBody
+              $style={{
+                padding: "16px",
+              }}
+            >
+              <BoostCalculator />
+            </ModalBody>
+          </Modal>
+
           {/* Mobile Actions */}
           <div className="flex items-center gap-2 md:hidden">
             <a
@@ -321,6 +380,16 @@ export function Header(): JSX.Element {
             </button>
           </div>
         </div>
+
+        {/* Boost Calculator tab – peeks below header */}
+        <button
+          type="button"
+          onClick={() => setCalculatorOpen(true)}
+          className="absolute bottom-0 right-4 z-40 hidden translate-y-full items-center gap-1.5 rounded-b-lg border border-t-0 border-[var(--border)] bg-[var(--surface)]/95 px-3 py-1 text-[11px] font-medium text-[var(--content-secondary)] backdrop-blur-sm transition-colors hover:bg-[var(--surface-secondary)] hover:text-[#F7931A] md:flex md:right-6 lg:right-8"
+        >
+          <CalculatorIcon />
+          Boost Calculator
+        </button>
       </header>
 
       {/* Mobile Menu Overlay */}
@@ -362,6 +431,21 @@ export function Header(): JSX.Element {
                 </NextLink>
               )
             })}
+
+            <button
+              type="button"
+              onClick={() => {
+                setMobileMenuOpen(false)
+                setCalculatorOpen(true)
+              }}
+              className="flex items-center rounded-lg px-4 py-3 text-lg text-[var(--content-secondary)] transition-colors hover:bg-[var(--surface-secondary)] hover:text-[var(--content-primary)]"
+              style={{ textDecoration: "none" }}
+            >
+              <span className="mr-2 flex items-center">
+                <CalculatorIcon />
+              </span>
+              Boost Calculator
+            </button>
           </nav>
 
           <div className="mt-auto border-t border-[var(--border)] p-4">
