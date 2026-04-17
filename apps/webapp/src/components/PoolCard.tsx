@@ -200,8 +200,14 @@ export default function PoolCard({
         </div>
       </dl>
 
-      {activeIncentives.length > 0 && (
-        <div className="rounded-lg border border-[rgba(247,147,26,0.25)] bg-[rgba(247,147,26,0.06)] p-3">
+      {hasGauge && (
+        <div
+          className={`rounded-lg border p-3 ${
+            activeIncentives.length > 0
+              ? "border-[rgba(247,147,26,0.25)] bg-[rgba(247,147,26,0.06)]"
+              : "border-[var(--border)] bg-[var(--surface-secondary)]"
+          }`}
+        >
           <div className="mb-2 flex items-center justify-between gap-2">
             <div className="flex items-center gap-1 text-2xs uppercase tracking-wider text-[var(--content-tertiary)]">
               Incentives
@@ -214,34 +220,44 @@ export default function PoolCard({
               <span className="font-mono text-2xs text-[var(--content-tertiary)]">
                 {formatUsdValue(incentives?.totalIncentivesUSD ?? 0)}
               </span>
-              {incentivesApr > 0 && (
-                <span className="font-mono text-xs font-semibold tabular-nums text-[#F7931A]">
-                  {formatPercent(incentivesApr)}
-                </span>
-              )}
+              <span
+                className={`font-mono text-xs font-semibold tabular-nums ${
+                  incentivesApr > 0
+                    ? "text-[#F7931A]"
+                    : "text-[var(--content-tertiary)]"
+                }`}
+              >
+                {incentivesApr > 0 ? formatPercent(incentivesApr) : "0%"}
+              </span>
             </div>
           </div>
-          <ul className="flex flex-wrap gap-1.5">
-            {activeIncentives.map((token) => {
-              const amount = Number(
-                formatUnits(token.amount, token.decimals),
-              ).toLocaleString(undefined, { maximumFractionDigits: 2 })
-              return (
-                <li
-                  key={token.tokenAddress}
-                  className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface)] px-1.5 py-0.5"
-                >
-                  <TokenIcon symbol={token.symbol} size={12} />
-                  <span className="font-mono text-2xs text-[var(--content-primary)]">
-                    {amount}
-                  </span>
-                  <span className="font-mono text-2xs text-[var(--content-tertiary)]">
-                    {token.symbol}
-                  </span>
-                </li>
-              )
-            })}
-          </ul>
+          {activeIncentives.length > 0 ? (
+            <ul className="flex flex-wrap gap-1.5">
+              {activeIncentives.map((token) => {
+                const amount = Number(
+                  formatUnits(token.amount, token.decimals),
+                ).toLocaleString(undefined, { maximumFractionDigits: 2 })
+                return (
+                  <li
+                    key={token.tokenAddress}
+                    className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface)] px-1.5 py-0.5"
+                  >
+                    <TokenIcon symbol={token.symbol} size={12} />
+                    <span className="font-mono text-2xs text-[var(--content-primary)]">
+                      {amount}
+                    </span>
+                    <span className="font-mono text-2xs text-[var(--content-tertiary)]">
+                      {token.symbol}
+                    </span>
+                  </li>
+                )
+              })}
+            </ul>
+          ) : (
+            <p className="text-2xs text-[var(--content-tertiary)]">
+              No active incentives — be the first.
+            </p>
+          )}
         </div>
       )}
 
