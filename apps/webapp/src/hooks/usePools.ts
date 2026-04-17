@@ -62,9 +62,9 @@ type GetLiquidityPoolResponse = {
   data: Pool[]
 }
 
-const POOLS_API_BASE: Record<number, string> = {
-  [CHAIN_ID.mainnet]: "https://api.mezo.org",
-  [CHAIN_ID.testnet]: "https://api.testnet.mezo.org",
+const POOLS_NETWORK: Record<number, "mainnet" | "testnet"> = {
+  [CHAIN_ID.mainnet]: "mainnet",
+  [CHAIN_ID.testnet]: "testnet",
 }
 
 function extractTickSpacing(symbol: string | undefined): number {
@@ -76,9 +76,9 @@ function extractTickSpacing(symbol: string | undefined): number {
 }
 
 async function fetchPools(chainId: number): Promise<Pool[]> {
-  const base = POOLS_API_BASE[chainId]
-  if (!base) throw new Error(`Unsupported chainId ${chainId}`)
-  const url = `${base}/pools?filter=known`
+  const network = POOLS_NETWORK[chainId]
+  if (!network) throw new Error(`Unsupported chainId ${chainId}`)
+  const url = `/api/pools?network=${network}&filter=known`
   const response = await fetch(url)
   if (!response.ok) {
     throw new Error(`Failed to fetch pools: ${response.status}`)
