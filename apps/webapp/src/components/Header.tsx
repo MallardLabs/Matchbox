@@ -145,11 +145,20 @@ function SettingsIcon(): JSX.Element {
   )
 }
 
-const navItems = [
+type NavChild = { href: string; label: string }
+type NavItem =
+  | { href: string; label: string; children?: never }
+  | { label: string; children: NavChild[]; href?: never }
+
+const navItems: NavItem[] = [
   { href: "/dashboard", label: "dashboard" },
   { href: "/boost", label: "veMEZO" },
   { href: "/incentives", label: "veBTC" },
-  { href: "/how-to", label: "how-to" },
+  { href: "/pools", label: "pools" },
+  {
+    label: "more",
+    children: [{ href: "/how-to", label: "how2" }],
+  },
 ]
 
 export function Header(): JSX.Element {
@@ -160,6 +169,8 @@ export function Header(): JSX.Element {
   const [walletDrawerOpen, setWalletDrawerOpen] = useState(false)
   const [connectDrawerOpen, setConnectDrawerOpen] = useState(false)
   const [calculatorOpen, setCalculatorOpen] = useState(false)
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false)
+  const [mobileMoreOpen, setMobileMoreOpen] = useState(false)
 
   const isHomePage = router.pathname === "/"
 
@@ -226,6 +237,94 @@ export function Header(): JSX.Element {
             aria-label="Main navigation"
           >
             {navItems.map((item) => {
+              if (item.children) {
+                const isActive = item.children.some(
+                  (c) => c.href === router.pathname,
+                )
+                return (
+                  <div
+                    key={item.label}
+                    className="relative"
+                    onMouseEnter={() => setMoreMenuOpen(true)}
+                    onMouseLeave={() => setMoreMenuOpen(false)}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setMoreMenuOpen((o) => !o)}
+                      className={`
+                        relative flex items-center gap-1 px-3 py-2 text-sm transition-colors
+                        ${
+                          isActive
+                            ? "text-[var(--content-primary)]"
+                            : "text-[var(--content-secondary)] hover:text-[var(--content-primary)]"
+                        }
+                      `}
+                      aria-haspopup="menu"
+                      aria-expanded={moreMenuOpen}
+                    >
+                      {isActive && (
+                        <span
+                          className="mr-1 text-[#F7931A]"
+                          aria-hidden="true"
+                        >
+                          &gt;
+                        </span>
+                      )}
+                      {item.label}
+                      <span
+                        aria-hidden="true"
+                        className="text-xs text-[var(--content-tertiary)]"
+                      >
+                        ▾
+                      </span>
+                      {isActive && (
+                        <span
+                          className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#F7931A]"
+                          aria-hidden="true"
+                        />
+                      )}
+                    </button>
+                    {moreMenuOpen && (
+                      <div
+                        role="menu"
+                        className="absolute right-0 top-full z-50 mt-1 min-w-[160px] overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--surface)] shadow-lg"
+                      >
+                        {item.children.map((child) => {
+                          const childActive = router.pathname === child.href
+                          return (
+                            <NextLink
+                              key={child.href}
+                              href={child.href}
+                              className={`
+                                flex items-center px-3 py-2 text-sm transition-colors
+                                ${
+                                  childActive
+                                    ? "bg-[var(--surface-secondary)] text-[var(--content-primary)]"
+                                    : "text-[var(--content-secondary)] hover:bg-[var(--surface-secondary)] hover:text-[var(--content-primary)]"
+                                }
+                              `}
+                              style={{ textDecoration: "none" }}
+                              onClick={() => setMoreMenuOpen(false)}
+                              role="menuitem"
+                            >
+                              {childActive && (
+                                <span
+                                  className="mr-1 text-[#F7931A]"
+                                  aria-hidden="true"
+                                >
+                                  &gt;
+                                </span>
+                              )}
+                              {child.label}
+                            </NextLink>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )
+              }
+
               const isActive = router.pathname === item.href
               return (
                 <NextLink
@@ -406,6 +505,80 @@ export function Header(): JSX.Element {
             aria-label="Mobile navigation"
           >
             {navItems.map((item) => {
+              if (item.children) {
+                const hasActive = item.children.some(
+                  (c) => c.href === router.pathname,
+                )
+                return (
+                  <div key={item.label} className="flex flex-col">
+                    <button
+                      type="button"
+                      onClick={() => setMobileMoreOpen((o) => !o)}
+                      className={`
+                        flex items-center justify-between rounded-lg px-4 py-3 text-lg transition-colors
+                        ${
+                          hasActive
+                            ? "bg-[var(--surface-secondary)] text-[var(--content-primary)]"
+                            : "text-[var(--content-secondary)] hover:bg-[var(--surface-secondary)] hover:text-[var(--content-primary)]"
+                        }
+                      `}
+                      aria-expanded={mobileMoreOpen}
+                    >
+                      <span className="flex items-center">
+                        {hasActive && (
+                          <span
+                            className="mr-2 text-[#F7931A]"
+                            aria-hidden="true"
+                          >
+                            &gt;
+                          </span>
+                        )}
+                        {item.label}
+                      </span>
+                      <span
+                        aria-hidden="true"
+                        className="text-sm text-[var(--content-tertiary)]"
+                      >
+                        {mobileMoreOpen ? "▴" : "▾"}
+                      </span>
+                    </button>
+                    {mobileMoreOpen && (
+                      <div className="ml-4 mt-1 flex flex-col gap-1 border-l border-[var(--border)] pl-2">
+                        {item.children.map((child) => {
+                          const childActive = router.pathname === child.href
+                          return (
+                            <NextLink
+                              key={child.href}
+                              href={child.href}
+                              className={`
+                                flex items-center rounded-lg px-4 py-2 text-base transition-colors
+                                ${
+                                  childActive
+                                    ? "bg-[var(--surface-secondary)] text-[var(--content-primary)]"
+                                    : "text-[var(--content-secondary)] hover:bg-[var(--surface-secondary)] hover:text-[var(--content-primary)]"
+                                }
+                              `}
+                              style={{ textDecoration: "none" }}
+                              onClick={() => setMobileMenuOpen(false)}
+                            >
+                              {childActive && (
+                                <span
+                                  className="mr-2 text-[#F7931A]"
+                                  aria-hidden="true"
+                                >
+                                  &gt;
+                                </span>
+                              )}
+                              {child.label}
+                            </NextLink>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )
+              }
+
               const isActive = router.pathname === item.href
               return (
                 <NextLink
