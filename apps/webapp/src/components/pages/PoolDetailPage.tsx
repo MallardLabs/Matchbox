@@ -4,6 +4,7 @@ import { TokenPairIcon } from "@/components/PoolCard"
 import { SpringIn } from "@/components/SpringIn"
 import { TokenIcon } from "@/components/TokenIcon"
 import { useBtcPrice } from "@/hooks/useBtcPrice"
+import { useEpochCountdown } from "@/hooks/useEpochCountdown"
 import { useMezoPrice } from "@/hooks/useMezoPrice"
 import { usePool } from "@/hooks/usePools"
 import {
@@ -46,6 +47,7 @@ export default function PoolDetailPage({
     usePoolBribeIncentives(bribeAddress)
   const { price: btcPrice } = useBtcPrice()
   const { price: mezoPrice } = useMezoPrice()
+  const { timeRemaining } = useEpochCountdown()
   const [addOpen, setAddOpen] = useState(false)
 
   const incentivesEnriched = useMemo(
@@ -100,7 +102,8 @@ export default function PoolDetailPage({
   const emissionsApr = poolEmissionsAprPercent(pool)
   const tvl = poolTvlUsd(pool)
   const incentivesApr = computePoolIncentivesApr(totalIncentivesUSD, tvl) ?? 0
-  const totalApr = feesApr + emissionsApr + (incentivesApr > 0 ? incentivesApr : 0)
+  // Incentives pay veMEZO voters, not LPs — keep out of LP Total APR.
+  const totalApr = feesApr + emissionsApr
   const volume = poolDailyVolumeUsd(pool)
   const fees = poolDailyFeesUsd(pool)
   const hasGauge = !!pool.gauge
@@ -260,22 +263,8 @@ export default function PoolDetailPage({
                     {formatPercent(emissionsApr)}
                   </dd>
                 </div>
-                <div className="flex items-center justify-between">
-                  <dt className="text-[var(--content-secondary)]">
-                    Incentives APR
-                  </dt>
-                  <dd
-                    className={`font-mono tabular-nums ${
-                      incentivesApr > 0
-                        ? "text-[#F7931A]"
-                        : "text-[var(--content-primary)]"
-                    }`}
-                  >
-                    {formatPercent(incentivesApr)}
-                  </dd>
-                </div>
                 <div className="mt-1 flex items-center justify-between border-t border-[var(--border)] pt-2">
-                  <dt className="text-[var(--content-secondary)]">Total</dt>
+                  <dt className="text-[var(--content-secondary)]">LP Total</dt>
                   <dd
                     className={`font-mono tabular-nums ${
                       totalApr > 0
@@ -284,6 +273,23 @@ export default function PoolDetailPage({
                     }`}
                   >
                     {formatPercent(totalApr)}
+                  </dd>
+                </div>
+                <div className="mt-1 flex items-center justify-between border-t border-dashed border-[var(--border)] pt-2">
+                  <dt
+                    className="flex items-center gap-1 text-[var(--content-tertiary)]"
+                    title="Paid to veMEZO voters, not LPs — shown for context"
+                  >
+                    Voter APR
+                  </dt>
+                  <dd
+                    className={`font-mono tabular-nums ${
+                      incentivesApr > 0
+                        ? "text-[#F7931A]"
+                        : "text-[var(--content-tertiary)]"
+                    }`}
+                  >
+                    {formatPercent(incentivesApr)}
                   </dd>
                 </div>
               </dl>
@@ -327,10 +333,18 @@ export default function PoolDetailPage({
         <div className="lg:col-span-2">
           <SpringIn delay={4} variant="card">
             <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
-              <div className="mb-3 flex items-center justify-between">
-                <h2 className="text-sm font-semibold text-[var(--content-primary)]">
-                  Current epoch incentives
-                </h2>
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <div className="flex min-w-0 flex-col">
+                  <h2 className="text-sm font-semibold text-[var(--content-primary)]">
+                    Incentives
+                  </h2>
+                  <span
+                    className="font-mono text-2xs text-[var(--content-tertiary)]"
+                    title="Time until this epoch's bribes lock in and voters can claim"
+                  >
+                    Epoch rolls in {timeRemaining}
+                  </span>
+                </div>
                 {hasGauge && (
                   <Button
                     kind="secondary"
@@ -357,8 +371,9 @@ export default function PoolDetailPage({
               ) : incentivesEnriched.length === 0 ? (
                 <div className="rounded-lg border border-dashed border-[var(--border)] p-6 text-center">
                   <p className="text-sm text-[var(--content-secondary)]">
-                    No active incentives. Be the first to fund this pool&apos;s
-                    bribe.
+                    Nothing posted this epoch yet. Be the first to fund this
+                    pool&apos;s bribe — veMEZO voters who vote for this pool
+                    claim after rollover.
                   </p>
                 </div>
               ) : (
@@ -370,8 +385,11 @@ export default function PoolDetailPage({
                       {formatUsdValue(totalIncentivesUSD)}
                     </span>
                     {incentivesApr > 0 && (
-                      <span className="font-mono text-xs font-semibold normal-case tracking-normal text-[#F7931A]">
-                        {formatPercent(incentivesApr)} APR
+                      <span
+                        className="font-mono text-xs font-semibold normal-case tracking-normal text-[#F7931A]"
+                        title="Voter APR — paid to veMEZO voters, not LPs"
+                      >
+                        {formatPercent(incentivesApr)} voter APR
                       </span>
                     )}
                   </div>

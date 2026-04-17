@@ -1,6 +1,5 @@
 import { getExplorerAddressUrl } from "@/config/explorer"
 import { useNetwork } from "@/contexts/NetworkContext"
-import { LinkExternal02 } from "@mezo-org/mezo-clay"
 import { useState } from "react"
 import type { Address } from "viem"
 
@@ -49,6 +48,27 @@ function CheckIcon({ size = 14 }: { size?: number }): JSX.Element {
   )
 }
 
+function ExternalIcon({ size = 14 }: { size?: number }): JSX.Element {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+      <polyline points="15 3 21 3 21 9" />
+      <line x1="10" y1="14" x2="21" y2="3" />
+    </svg>
+  )
+}
+
 export function ClickableAddress({
   address,
   label,
@@ -76,7 +96,14 @@ export function ClickableAddress({
       className={`inline-flex items-center gap-1.5 font-mono text-2xs ${className ?? ""}`}
       title={address}
     >
-      <span className="text-[var(--content-secondary)]">{short}</span>
+      <a
+        href={explorerUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-[var(--content-secondary)] no-underline transition-colors hover:text-[#F7931A] hover:underline"
+      >
+        {short}
+      </a>
       <button
         type="button"
         onClick={handleCopy}
@@ -105,7 +132,7 @@ export function ClickableAddress({
         aria-label="View on explorer"
         className="inline-flex h-5 w-5 items-center justify-center rounded text-[var(--content-tertiary)] no-underline transition-colors hover:bg-[var(--surface-secondary)] hover:text-[#F7931A]"
       >
-        <LinkExternal02 size={14} />
+        <ExternalIcon />
       </a>
     </span>
   )

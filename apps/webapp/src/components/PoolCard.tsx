@@ -1,5 +1,6 @@
 import { TokenIcon } from "@/components/TokenIcon"
 import Tooltip from "@/components/Tooltip"
+import { useEpochCountdown } from "@/hooks/useEpochCountdown"
 import {
   type Pool,
   poolDailyFeesUsd,
@@ -84,20 +85,17 @@ export default function PoolCard({
   const volume = poolDailyVolumeUsd(pool)
   const feesEarned = poolDailyFeesUsd(pool)
   const incentivesApr = incentives?.incentivesAprPercent ?? 0
-  const totalApr = feesApr + emissionsApr + (incentivesApr > 0 ? incentivesApr : 0)
+  // Incentives go to veMEZO voters, not LPs, so they are NOT part of LP Total APR.
+  const totalApr = feesApr + emissionsApr
   const hasGauge = !!pool.gauge
   const detailHref = `/pools/${pool.address}`
   const activeIncentives = (incentives?.incentivesByToken ?? []).filter(
     (t) => t.amount > 0n,
   )
+  const { timeRemaining } = useEpochCountdown()
 
   return (
-    <article className="group relative flex min-w-0 flex-col gap-4 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 transition-colors hover:border-[rgba(247,147,26,0.35)]">
-      {/* Orange accent stripe on hover */}
-      <span
-        className="pointer-events-none absolute inset-x-0 top-0 h-[2px] origin-left scale-x-0 bg-[#F7931A] transition-transform duration-300 group-hover:scale-x-100"
-        aria-hidden="true"
-      />
+    <article className="group relative flex min-w-0 flex-col gap-4 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
 
       <div className="flex items-start justify-between gap-3">
         <Link
@@ -213,8 +211,14 @@ export default function PoolCard({
               Incentives
               <Tooltip
                 id={`pc-incentives-${pool.address}`}
-                content="Current epoch bribes posted to this pool, plus their annualized yield relative to TVL."
+                content="Bribes posted to this pool's ExternalBribe. These are paid to veMEZO voters who vote for this pool (not to LPs) after epoch rollover. APR shown is the voter yield relative to pool TVL — a signal of where emissions will flow."
               />
+              <span
+                className="ml-1 font-mono text-2xs normal-case tracking-normal text-[var(--content-tertiary)]"
+                title="Time until this epoch's bribes lock in and voters can claim"
+              >
+                · rolls in {timeRemaining}
+              </span>
             </div>
             <div className="flex items-baseline gap-2">
               <span className="font-mono text-2xs text-[var(--content-tertiary)]">
@@ -226,8 +230,9 @@ export default function PoolCard({
                     ? "text-[#F7931A]"
                     : "text-[var(--content-tertiary)]"
                 }`}
+                title="Voter APR — not included in LP Total APR"
               >
-                {incentivesApr > 0 ? formatPercent(incentivesApr) : "0%"}
+                {incentivesApr > 0 ? `${formatPercent(incentivesApr)}` : "0%"}
               </span>
             </div>
           </div>
@@ -255,7 +260,7 @@ export default function PoolCard({
             </ul>
           ) : (
             <p className="text-2xs text-[var(--content-tertiary)]">
-              No active incentives — be the first.
+              Nothing posted this epoch — be the first briber.
             </p>
           )}
         </div>
