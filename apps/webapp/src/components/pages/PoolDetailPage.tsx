@@ -1,7 +1,10 @@
 import AddPoolIncentiveModal from "@/components/AddPoolIncentiveModal"
+import { ClickableAddress } from "@/components/ClickableAddress"
 import { TokenPairIcon } from "@/components/PoolCard"
 import { SpringIn } from "@/components/SpringIn"
 import { TokenIcon } from "@/components/TokenIcon"
+import { useBtcPrice } from "@/hooks/useBtcPrice"
+import { useMezoPrice } from "@/hooks/useMezoPrice"
 import { usePool } from "@/hooks/usePools"
 import {
   poolDailyFeesUsd,
@@ -14,10 +17,12 @@ import {
   usePoolBribeAddress,
   usePoolBribeIncentives,
 } from "@/hooks/usePoolIncentives"
+import { computePoolIncentivesApr } from "@/hooks/usePoolsIncentivesApr"
 import { formatUsdValue } from "@/hooks/useTokenPrices"
+import { getTokenUsdPrice } from "@repo/shared"
 import { Button, Skeleton, Tag } from "@mezo-org/mezo-clay"
 import Link from "next/link"
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { type Address, formatUnits } from "viem"
 
 type PoolDetailPageProps = {
@@ -39,7 +44,31 @@ export default function PoolDetailPage({
   const { bribeAddress } = usePoolBribeAddress(pool?.gauge ?? undefined)
   const { incentives, isLoading: isLoadingIncentives } =
     usePoolBribeIncentives(bribeAddress)
+  const { price: btcPrice } = useBtcPrice()
+  const { price: mezoPrice } = useMezoPrice()
   const [addOpen, setAddOpen] = useState(false)
+
+  const incentivesEnriched = useMemo(
+    () =>
+      incentives
+        .filter((i) => i.amount > 0n)
+        .map((i) => {
+          const amountNum = Number(formatUnits(i.amount, i.decimals))
+          const priceUsd = getTokenUsdPrice(
+            i.tokenAddress,
+            i.symbol,
+            btcPrice,
+            mezoPrice,
+          )
+          const usdValue = priceUsd !== null ? amountNum * priceUsd : 0
+          return { ...i, amountNum, usdValue }
+        }),
+    [incentives, btcPrice, mezoPrice],
+  )
+  const totalIncentivesUSD = incentivesEnriched.reduce(
+    (s, i) => s + i.usdValue,
+    0,
+  )
 
   if (isLoading) {
     return (
@@ -69,8 +98,9 @@ export default function PoolDetailPage({
 
   const feesApr = poolFeesAprPercent(pool)
   const emissionsApr = poolEmissionsAprPercent(pool)
-  const totalApr = feesApr + emissionsApr
   const tvl = poolTvlUsd(pool)
+  const incentivesApr = computePoolIncentivesApr(totalIncentivesUSD, tvl) ?? 0
+  const totalApr = feesApr + emissionsApr + (incentivesApr > 0 ? incentivesApr : 0)
   const volume = poolDailyVolumeUsd(pool)
   const fees = poolDailyFeesUsd(pool)
   const hasGauge = !!pool.gauge
@@ -101,46 +131,36 @@ export default function PoolDetailPage({
         >
           &larr; All pools
         </Link>
-        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-          <div className="flex items-center gap-4">
-            <TokenPairIcon
-              symbol0={pool.token0.symbol}
-              symbol1={pool.token1.symbol}
-              size={44}
-            />
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-2xl font-semibold text-[var(--content-primary)]">
-                  {pool.token0.symbol}
-                  <span className="mx-1 text-[var(--content-tertiary)]">/</span>
-                  {pool.token1.symbol}
-                </h1>
-                <Tag color={typeColor} closeable={false}>
-                  {typeLabel}
-                </Tag>
-                {hasGauge ? (
-                  <span className="rounded-full bg-[rgba(34,197,94,0.12)] px-2 py-0.5 text-2xs font-medium text-[var(--positive)]">
-                    Live Gauge
-                  </span>
-                ) : (
-                  <span className="rounded border border-[var(--border)] px-1.5 py-0.5 text-2xs text-[var(--content-tertiary)]">
-                    No Gauge
-                  </span>
-                )}
-              </div>
-              <p className="mt-1 text-sm text-[var(--content-secondary)]">
-                {pool.name}
-              </p>
+        <div className="flex items-center gap-4">
+          <TokenPairIcon
+            symbol0={pool.token0.symbol}
+            symbol1={pool.token1.symbol}
+            size={44}
+          />
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-2xl font-semibold text-[var(--content-primary)]">
+                {pool.token0.symbol}
+                <span className="mx-1 text-[var(--content-tertiary)]">/</span>
+                {pool.token1.symbol}
+              </h1>
+              <Tag color={typeColor} closeable={false}>
+                {typeLabel}
+              </Tag>
+              {hasGauge ? (
+                <span className="rounded-full bg-[rgba(34,197,94,0.12)] px-2 py-0.5 text-2xs font-medium text-[var(--positive)]">
+                  Live Gauge
+                </span>
+              ) : (
+                <span className="rounded border border-[var(--border)] px-1.5 py-0.5 text-2xs text-[var(--content-tertiary)]">
+                  No Gauge
+                </span>
+              )}
             </div>
+            <p className="mt-1 text-sm text-[var(--content-secondary)]">
+              {pool.name}
+            </p>
           </div>
-
-          <Button
-            kind="primary"
-            onClick={() => setAddOpen(true)}
-            disabled={!hasGauge}
-          >
-            Add Incentives
-          </Button>
         </div>
       </div>
 
@@ -240,6 +260,20 @@ export default function PoolDetailPage({
                     {formatPercent(emissionsApr)}
                   </dd>
                 </div>
+                <div className="flex items-center justify-between">
+                  <dt className="text-[var(--content-secondary)]">
+                    Incentives APR
+                  </dt>
+                  <dd
+                    className={`font-mono tabular-nums ${
+                      incentivesApr > 0
+                        ? "text-[#F7931A]"
+                        : "text-[var(--content-primary)]"
+                    }`}
+                  >
+                    {formatPercent(incentivesApr)}
+                  </dd>
+                </div>
                 <div className="mt-1 flex items-center justify-between border-t border-[var(--border)] pt-2">
                   <dt className="text-[var(--content-secondary)]">Total</dt>
                   <dd
@@ -261,11 +295,28 @@ export default function PoolDetailPage({
               <h2 className="mb-3 text-sm font-semibold text-[var(--content-primary)]">
                 Addresses
               </h2>
-              <div className="flex flex-col gap-2 font-mono text-2xs text-[var(--content-secondary)]">
-                <AddressRow label="Pool" value={pool.address} />
-                {pool.gauge && <AddressRow label="Gauge" value={pool.gauge} />}
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-2xs text-[var(--content-tertiary)]">
+                    Pool
+                  </span>
+                  <ClickableAddress address={pool.address} />
+                </div>
+                {pool.gauge && (
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-2xs text-[var(--content-tertiary)]">
+                      Gauge
+                    </span>
+                    <ClickableAddress address={pool.gauge} />
+                  </div>
+                )}
                 {bribeAddress && (
-                  <AddressRow label="Bribe" value={bribeAddress} />
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-2xs text-[var(--content-tertiary)]">
+                      Bribe
+                    </span>
+                    <ClickableAddress address={bribeAddress} />
+                  </div>
                 )}
               </div>
             </div>
@@ -303,7 +354,7 @@ export default function PoolDetailPage({
                   <Skeleton width="100%" height="40px" animation />
                   <Skeleton width="100%" height="40px" animation />
                 </div>
-              ) : incentives.length === 0 ? (
+              ) : incentivesEnriched.length === 0 ? (
                 <div className="rounded-lg border border-dashed border-[var(--border)] p-6 text-center">
                   <p className="text-sm text-[var(--content-secondary)]">
                     No active incentives. Be the first to fund this pool&apos;s
@@ -311,28 +362,47 @@ export default function PoolDetailPage({
                   </p>
                 </div>
               ) : (
-                <ul className="flex flex-col divide-y divide-[var(--border)]">
-                  {incentives.map((inc) => (
-                    <li
-                      key={inc.tokenAddress}
-                      className="flex items-center justify-between gap-3 py-2"
-                    >
-                      <div className="flex items-center gap-2">
-                        <TokenIcon symbol={inc.symbol} size={24} />
-                        <span className="text-sm text-[var(--content-primary)]">
-                          {inc.symbol}
-                        </span>
-                      </div>
-                      <span className="font-mono text-sm tabular-nums text-[var(--content-primary)]">
-                        {Number(
-                          formatUnits(inc.amount, inc.decimals),
-                        ).toLocaleString(undefined, {
-                          maximumFractionDigits: 4,
-                        })}
+                <>
+                  <div className="mb-2 flex items-center justify-between text-2xs uppercase tracking-wider text-[var(--content-tertiary)]">
+                    <span>
+                      {incentivesEnriched.length} token
+                      {incentivesEnriched.length === 1 ? "" : "s"} ·{" "}
+                      {formatUsdValue(totalIncentivesUSD)}
+                    </span>
+                    {incentivesApr > 0 && (
+                      <span className="font-mono text-xs font-semibold normal-case tracking-normal text-[#F7931A]">
+                        {formatPercent(incentivesApr)} APR
                       </span>
-                    </li>
-                  ))}
-                </ul>
+                    )}
+                  </div>
+                  <ul className="flex flex-col divide-y divide-[var(--border)]">
+                    {incentivesEnriched.map((inc) => (
+                      <li
+                        key={inc.tokenAddress}
+                        className="flex items-center justify-between gap-3 py-2"
+                      >
+                        <div className="flex items-center gap-2">
+                          <TokenIcon symbol={inc.symbol} size={24} />
+                          <span className="text-sm text-[var(--content-primary)]">
+                            {inc.symbol}
+                          </span>
+                        </div>
+                        <div className="flex flex-col items-end leading-tight">
+                          <span className="font-mono text-sm tabular-nums text-[var(--content-primary)]">
+                            {inc.amountNum.toLocaleString(undefined, {
+                              maximumFractionDigits: 4,
+                            })}
+                          </span>
+                          {inc.usdValue > 0 && (
+                            <span className="font-mono text-2xs text-[var(--content-tertiary)]">
+                              {formatUsdValue(inc.usdValue)}
+                            </span>
+                          )}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </>
               )}
             </div>
           </SpringIn>
@@ -390,23 +460,3 @@ function ReserveRow({
   )
 }
 
-function AddressRow({
-  label,
-  value,
-}: {
-  label: string
-  value: string
-}): JSX.Element {
-  const short = `${value.slice(0, 8)}…${value.slice(-6)}`
-  return (
-    <div className="flex items-center justify-between gap-2">
-      <span className="text-[var(--content-tertiary)]">{label}</span>
-      <span
-        className="text-[var(--content-secondary)]"
-        title={value}
-      >
-        {short}
-      </span>
-    </div>
-  )
-}

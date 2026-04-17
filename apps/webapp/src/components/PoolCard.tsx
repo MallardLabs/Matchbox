@@ -8,9 +8,11 @@ import {
   poolFeesAprPercent,
   poolTvlUsd,
 } from "@/hooks/usePools"
+import type { PoolIncentivesData } from "@/hooks/usePoolsIncentivesApr"
 import { formatUsdValue } from "@/hooks/useTokenPrices"
 import { Button, Tag } from "@mezo-org/mezo-clay"
 import Link from "next/link"
+import { formatUnits } from "viem"
 
 export function TokenPairIcon({
   symbol0,
@@ -68,22 +70,26 @@ function formatPercent(value: number): string {
 type PoolCardProps = {
   pool: Pool
   onAddIncentives: (pool: Pool) => void
-  incentiveCount?: number
+  incentives?: PoolIncentivesData
 }
 
 export default function PoolCard({
   pool,
   onAddIncentives,
-  incentiveCount,
+  incentives,
 }: PoolCardProps): JSX.Element {
   const feesApr = poolFeesAprPercent(pool)
   const emissionsApr = poolEmissionsAprPercent(pool)
   const tvl = poolTvlUsd(pool)
   const volume = poolDailyVolumeUsd(pool)
   const feesEarned = poolDailyFeesUsd(pool)
-  const totalApr = feesApr + emissionsApr
+  const incentivesApr = incentives?.incentivesAprPercent ?? 0
+  const totalApr = feesApr + emissionsApr + (incentivesApr > 0 ? incentivesApr : 0)
   const hasGauge = !!pool.gauge
   const detailHref = `/pools/${pool.address}`
+  const activeIncentives = (incentives?.incentivesByToken ?? []).filter(
+    (t) => t.amount > 0n,
+  )
 
   return (
     <article className="group relative flex min-w-0 flex-col gap-4 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 transition-colors hover:border-[rgba(247,147,26,0.35)]">
@@ -194,6 +200,51 @@ export default function PoolCard({
         </div>
       </dl>
 
+      {activeIncentives.length > 0 && (
+        <div className="rounded-lg border border-[rgba(247,147,26,0.25)] bg-[rgba(247,147,26,0.06)] p-3">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1 text-2xs uppercase tracking-wider text-[var(--content-tertiary)]">
+              Incentives
+              <Tooltip
+                id={`pc-incentives-${pool.address}`}
+                content="Current epoch bribes posted to this pool, plus their annualized yield relative to TVL."
+              />
+            </div>
+            <div className="flex items-baseline gap-2">
+              <span className="font-mono text-2xs text-[var(--content-tertiary)]">
+                {formatUsdValue(incentives?.totalIncentivesUSD ?? 0)}
+              </span>
+              {incentivesApr > 0 && (
+                <span className="font-mono text-xs font-semibold tabular-nums text-[#F7931A]">
+                  {formatPercent(incentivesApr)}
+                </span>
+              )}
+            </div>
+          </div>
+          <ul className="flex flex-wrap gap-1.5">
+            {activeIncentives.map((token) => {
+              const amount = Number(
+                formatUnits(token.amount, token.decimals),
+              ).toLocaleString(undefined, { maximumFractionDigits: 2 })
+              return (
+                <li
+                  key={token.tokenAddress}
+                  className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface)] px-1.5 py-0.5"
+                >
+                  <TokenIcon symbol={token.symbol} size={12} />
+                  <span className="font-mono text-2xs text-[var(--content-primary)]">
+                    {amount}
+                  </span>
+                  <span className="font-mono text-2xs text-[var(--content-tertiary)]">
+                    {token.symbol}
+                  </span>
+                </li>
+              )
+            })}
+          </ul>
+        </div>
+      )}
+
       <div className="flex items-center justify-between gap-2 border-t border-[var(--border)] pt-3">
         <Link
           href={detailHref}
@@ -202,9 +253,10 @@ export default function PoolCard({
         >
           View details &rarr;
         </Link>
-        {typeof incentiveCount === "number" && incentiveCount > 0 ? (
+        {activeIncentives.length > 0 ? (
           <span className="rounded-full border border-[rgba(247,147,26,0.3)] bg-[rgba(247,147,26,0.1)] px-2 py-0.5 font-mono text-2xs text-[#F7931A]">
-            {incentiveCount} incentive{incentiveCount === 1 ? "" : "s"}
+            {activeIncentives.length} incentive
+            {activeIncentives.length === 1 ? "" : "s"}
           </span>
         ) : null}
         <Button
