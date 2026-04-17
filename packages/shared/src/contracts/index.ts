@@ -552,6 +552,23 @@ export const BRIBE_ABI = [
     stateMutability: "nonpayable",
     type: "function",
   },
+  {
+    inputs: [
+      { internalType: "address", name: "", type: "address" },
+      { internalType: "uint256", name: "", type: "uint256" },
+    ],
+    name: "tokenRewardsPerEpoch",
+    outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [{ internalType: "uint256", name: "timestamp", type: "uint256" }],
+    name: "getEpochStart",
+    outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
+    stateMutability: "pure",
+    type: "function",
+  },
 ] as const
 
 export const NON_STAKING_GAUGE_ABI = [

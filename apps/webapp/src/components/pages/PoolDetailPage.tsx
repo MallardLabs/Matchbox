@@ -6,6 +6,10 @@ import { TokenIcon } from "@/components/TokenIcon"
 import { useBtcPrice } from "@/hooks/useBtcPrice"
 import { useEpochCountdown } from "@/hooks/useEpochCountdown"
 import { useMezoPrice } from "@/hooks/useMezoPrice"
+import {
+  usePoolBribeAddress,
+  usePoolBribeIncentives,
+} from "@/hooks/usePoolIncentives"
 import { usePool } from "@/hooks/usePools"
 import {
   poolDailyFeesUsd,
@@ -14,16 +18,13 @@ import {
   poolFeesAprPercent,
   poolTvlUsd,
 } from "@/hooks/usePools"
-import {
-  usePoolBribeAddress,
-  usePoolBribeIncentives,
-} from "@/hooks/usePoolIncentives"
 import { computePoolIncentivesApr } from "@/hooks/usePoolsIncentivesApr"
 import { formatUsdValue } from "@/hooks/useTokenPrices"
-import { getTokenUsdPrice } from "@repo/shared"
+import { useVotables } from "@/hooks/useVotables"
 import { Button, Skeleton, Tag } from "@mezo-org/mezo-clay"
+import { getTokenUsdPrice } from "@repo/shared"
 import Link from "next/link"
-import { useMemo, useState } from "react"
+import { useCallback, useMemo, useState } from "react"
 import { type Address, formatUnits } from "viem"
 
 type PoolDetailPageProps = {
@@ -43,16 +44,24 @@ export default function PoolDetailPage({
 }: PoolDetailPageProps): JSX.Element {
   const { pool, isLoading } = usePool(address as Address)
   const { bribeAddress } = usePoolBribeAddress(pool?.gauge ?? undefined)
-  const { incentives, isLoading: isLoadingIncentives } =
-    usePoolBribeIncentives(bribeAddress)
+  const {
+    incentives,
+    nextEpochIncentives,
+    isLoading: isLoadingIncentives,
+  } = usePoolBribeIncentives(bribeAddress)
   const { price: btcPrice } = useBtcPrice()
   const { price: mezoPrice } = useMezoPrice()
   const { timeRemaining } = useEpochCountdown()
+  const { byPool: votablesByPool } = useVotables()
   const [addOpen, setAddOpen] = useState(false)
 
-  const incentivesEnriched = useMemo(
-    () =>
-      incentives
+  const votable = pool
+    ? votablesByPool.get(pool.address.toLowerCase())
+    : undefined
+
+  const enrichItems = useCallback(
+    (items: typeof incentives) =>
+      items
         .filter((i) => i.amount > 0n)
         .map((i) => {
           const amountNum = Number(formatUnits(i.amount, i.decimals))
@@ -65,9 +74,22 @@ export default function PoolDetailPage({
           const usdValue = priceUsd !== null ? amountNum * priceUsd : 0
           return { ...i, amountNum, usdValue }
         }),
-    [incentives, btcPrice, mezoPrice],
+    [btcPrice, mezoPrice],
+  )
+
+  const incentivesEnriched = useMemo(
+    () => enrichItems(incentives),
+    [incentives, enrichItems],
+  )
+  const nextEpochEnriched = useMemo(
+    () => enrichItems(nextEpochIncentives),
+    [nextEpochIncentives, enrichItems],
   )
   const totalIncentivesUSD = incentivesEnriched.reduce(
+    (s, i) => s + i.usdValue,
+    0,
+  )
+  const totalNextEpochUSD = nextEpochEnriched.reduce(
     (s, i) => s + i.usdValue,
     0,
   )
@@ -101,8 +123,12 @@ export default function PoolDetailPage({
   const feesApr = poolFeesAprPercent(pool)
   const emissionsApr = poolEmissionsAprPercent(pool)
   const tvl = poolTvlUsd(pool)
-  const incentivesApr = computePoolIncentivesApr(totalIncentivesUSD, tvl) ?? 0
-  // Incentives pay veMEZO voters, not LPs — keep out of LP Total APR.
+  // Prefer API's vAPR (accounts for fees-to-voters + bribes); fall back to
+  // on-chain-derived bribe APR when the API hasn't indexed this pool yet.
+  const votingApr =
+    votable?.votingApr ?? computePoolIncentivesApr(totalIncentivesUSD, tvl) ?? 0
+  const voterFeesUsd = votable?.voterFeesUsd ?? 0
+  // LP Total APR = fees + emissions only. Voter rewards don't accrue to LPs.
   const totalApr = feesApr + emissionsApr
   const volume = poolDailyVolumeUsd(pool)
   const fees = poolDailyFeesUsd(pool)
@@ -278,20 +304,33 @@ export default function PoolDetailPage({
                 <div className="mt-1 flex items-center justify-between border-t border-dashed border-[var(--border)] pt-2">
                   <dt
                     className="flex items-center gap-1 text-[var(--content-tertiary)]"
-                    title="Paid to veMEZO voters, not LPs — shown for context"
+                    title="Voting APR from api.mezo.org/votes/votables — paid to veMEZO voters, not LPs"
                   >
-                    Voter APR
+                    vAPR
                   </dt>
                   <dd
                     className={`font-mono tabular-nums ${
-                      incentivesApr > 0
+                      votingApr > 0
                         ? "text-[#F7931A]"
                         : "text-[var(--content-tertiary)]"
                     }`}
                   >
-                    {formatPercent(incentivesApr)}
+                    {formatPercent(votingApr)}
                   </dd>
                 </div>
+                {voterFeesUsd > 0 && (
+                  <div className="flex items-center justify-between">
+                    <dt
+                      className="flex items-center gap-1 text-[var(--content-tertiary)]"
+                      title="LP trading fees redirected to voters this epoch"
+                    >
+                      Fees → voters
+                    </dt>
+                    <dd className="font-mono tabular-nums text-[var(--content-primary)]">
+                      {formatUsdValue(voterFeesUsd)}
+                    </dd>
+                  </div>
+                )}
               </dl>
             </div>
           </SpringIn>
@@ -368,59 +407,34 @@ export default function PoolDetailPage({
                   <Skeleton width="100%" height="40px" animation />
                   <Skeleton width="100%" height="40px" animation />
                 </div>
-              ) : incentivesEnriched.length === 0 ? (
+              ) : incentivesEnriched.length === 0 &&
+                nextEpochEnriched.length === 0 ? (
                 <div className="rounded-lg border border-dashed border-[var(--border)] p-6 text-center">
                   <p className="text-sm text-[var(--content-secondary)]">
-                    Nothing posted this epoch yet. Be the first to fund this
-                    pool&apos;s bribe — veMEZO voters who vote for this pool
-                    claim after rollover.
+                    Nothing posted this epoch or next yet. Be the first to fund
+                    this pool&apos;s bribe — veMEZO voters who vote for this
+                    pool claim after rollover.
                   </p>
                 </div>
               ) : (
-                <>
-                  <div className="mb-2 flex items-center justify-between text-2xs uppercase tracking-wider text-[var(--content-tertiary)]">
-                    <span>
-                      {incentivesEnriched.length} token
-                      {incentivesEnriched.length === 1 ? "" : "s"} ·{" "}
-                      {formatUsdValue(totalIncentivesUSD)}
-                    </span>
-                    {incentivesApr > 0 && (
-                      <span
-                        className="font-mono text-xs font-semibold normal-case tracking-normal text-[#F7931A]"
-                        title="Voter APR — paid to veMEZO voters, not LPs"
-                      >
-                        {formatPercent(incentivesApr)} voter APR
-                      </span>
-                    )}
-                  </div>
-                  <ul className="flex flex-col divide-y divide-[var(--border)]">
-                    {incentivesEnriched.map((inc) => (
-                      <li
-                        key={inc.tokenAddress}
-                        className="flex items-center justify-between gap-3 py-2"
-                      >
-                        <div className="flex items-center gap-2">
-                          <TokenIcon symbol={inc.symbol} size={24} />
-                          <span className="text-sm text-[var(--content-primary)]">
-                            {inc.symbol}
-                          </span>
-                        </div>
-                        <div className="flex flex-col items-end leading-tight">
-                          <span className="font-mono text-sm tabular-nums text-[var(--content-primary)]">
-                            {inc.amountNum.toLocaleString(undefined, {
-                              maximumFractionDigits: 4,
-                            })}
-                          </span>
-                          {inc.usdValue > 0 && (
-                            <span className="font-mono text-2xs text-[var(--content-tertiary)]">
-                              {formatUsdValue(inc.usdValue)}
-                            </span>
-                          )}
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                </>
+                <div className="flex flex-col gap-4">
+                  <IncentivesList
+                    title="This epoch"
+                    subtitle="Claimable by voters after the next rollover."
+                    incentives={incentivesEnriched}
+                    totalUsd={totalIncentivesUSD}
+                    accent="solid"
+                  />
+                  {nextEpochEnriched.length > 0 && (
+                    <IncentivesList
+                      title="Next epoch"
+                      subtitle="Pre-funded for the upcoming voting period."
+                      incentives={nextEpochEnriched}
+                      totalUsd={totalNextEpochUSD}
+                      accent="dashed"
+                    />
+                  )}
+                </div>
               )}
             </div>
           </SpringIn>
@@ -434,6 +448,85 @@ export default function PoolDetailPage({
           pool={pool}
         />
       )}
+    </div>
+  )
+}
+
+type EnrichedIncentive = {
+  tokenAddress: Address
+  symbol: string
+  decimals: number
+  amount: bigint
+  amountNum: number
+  usdValue: number
+  logoURI?: string
+}
+
+function IncentivesList({
+  title,
+  subtitle,
+  incentives,
+  totalUsd,
+  accent,
+}: {
+  title: string
+  subtitle: string
+  incentives: EnrichedIncentive[]
+  totalUsd: number
+  accent: "solid" | "dashed"
+}): JSX.Element | null {
+  if (incentives.length === 0) return null
+  const border =
+    accent === "dashed"
+      ? "border-dashed border-[var(--border)]"
+      : "border-[rgba(247,147,26,0.25)]"
+  const bg =
+    accent === "dashed"
+      ? "bg-[var(--surface-secondary)]"
+      : "bg-[rgba(247,147,26,0.04)]"
+  return (
+    <div className={`rounded-lg border ${border} ${bg} p-3`}>
+      <div className="mb-2 flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold uppercase tracking-wider text-[var(--content-primary)]">
+            {title}
+          </p>
+          <p className="mt-0.5 text-2xs text-[var(--content-tertiary)]">
+            {subtitle}
+          </p>
+        </div>
+        <span className="whitespace-nowrap font-mono text-xs text-[var(--content-secondary)]">
+          {incentives.length} token{incentives.length === 1 ? "" : "s"} ·{" "}
+          {formatUsdValue(totalUsd)}
+        </span>
+      </div>
+      <ul className="flex flex-col divide-y divide-[var(--border)]">
+        {incentives.map((inc) => (
+          <li
+            key={inc.tokenAddress}
+            className="flex items-center justify-between gap-3 py-2"
+          >
+            <div className="flex items-center gap-2">
+              <TokenIcon symbol={inc.symbol} size={24} />
+              <span className="text-sm text-[var(--content-primary)]">
+                {inc.symbol}
+              </span>
+            </div>
+            <div className="flex flex-col items-end leading-tight">
+              <span className="font-mono text-sm tabular-nums text-[var(--content-primary)]">
+                {inc.amountNum.toLocaleString(undefined, {
+                  maximumFractionDigits: 4,
+                })}
+              </span>
+              {inc.usdValue > 0 && (
+                <span className="font-mono text-2xs text-[var(--content-tertiary)]">
+                  {formatUsdValue(inc.usdValue)}
+                </span>
+              )}
+            </div>
+          </li>
+        ))}
+      </ul>
     </div>
   )
 }
@@ -477,4 +570,3 @@ function ReserveRow({
     </div>
   )
 }
-

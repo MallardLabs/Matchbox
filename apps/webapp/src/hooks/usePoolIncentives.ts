@@ -2,7 +2,7 @@ import { getContractConfig } from "@/config/contracts"
 import { QUERY_PROFILES } from "@/config/queryProfiles"
 import { useNetwork } from "@/contexts/NetworkContext"
 import { useTokenList } from "@/hooks/useTokenList"
-import { useMemo } from "react"
+import { useCallback, useMemo } from "react"
 import type { Address, Hex } from "viem"
 import { erc20Abi, zeroAddress } from "viem"
 import {
@@ -64,8 +64,14 @@ export function useIsPoolIncentiveTokenAllowlisted(
   return { isAllowlisted: data as boolean | undefined, isLoading }
 }
 
+const WEEK_SECONDS = 7 * 24 * 60 * 60
+function currentEpochStartSec(nowSec: number): number {
+  return Math.floor(nowSec / WEEK_SECONDS) * WEEK_SECONDS
+}
+
 export function usePoolBribeIncentives(bribeAddress: Address | undefined): {
   incentives: PoolIncentive[]
+  nextEpochIncentives: PoolIncentive[]
   isLoading: boolean
   refetch: () => void
 } {
@@ -134,11 +140,35 @@ export function usePoolBribeIncentives(bribeAddress: Address | undefined): {
     },
   })
 
+  // Next-epoch rewards: tokenRewardsPerEpoch(token, nextEpochStart).
+  const nextEpochStart = useMemo(
+    () => currentEpochStartSec(Math.floor(Date.now() / 1000)) + WEEK_SECONDS,
+    [],
+  )
+  const {
+    data: nextEpochData,
+    isLoading: isLoadingNext,
+    refetch: refetchNext,
+  } = useReadContracts({
+    contracts: tokenAddresses.map((t) => ({
+      address: bribeAddress,
+      abi: contracts.bribe.abi,
+      chainId,
+      functionName: "tokenRewardsPerEpoch" as const,
+      args: [t, BigInt(nextEpochStart)],
+    })),
+    query: {
+      ...QUERY_PROFILES.SHORT_CACHE,
+      enabled: isNetworkReady && !!bribeAddress && tokenAddresses.length > 0,
+    },
+  })
+
   // For any token we don't have in the known list, fetch symbol/decimals on-chain.
   const unknownTokens = useMemo(
     () =>
       tokenAddresses.filter(
-        (addr) => !tokens.some((t) => t.address.toLowerCase() === addr.toLowerCase()),
+        (addr) =>
+          !tokens.some((t) => t.address.toLowerCase() === addr.toLowerCase()),
       ),
     [tokenAddresses, tokens],
   )
@@ -163,9 +193,8 @@ export function usePoolBribeIncentives(bribeAddress: Address | undefined): {
     },
   })
 
-  const incentives = useMemo<PoolIncentive[]>(() => {
-    return tokenAddresses.map((addr, i) => {
-      const amount = (leftData?.[i]?.result as bigint | undefined) ?? 0n
+  const buildIncentive = useCallback(
+    (addr: Address, amount: bigint): PoolIncentive => {
       const known = tokens.find(
         (t) => t.address.toLowerCase() === addr.toLowerCase(),
       )
@@ -187,16 +216,34 @@ export function usePoolBribeIncentives(bribeAddress: Address | undefined): {
       const decimals =
         (metaData?.[unknownIndex * 2 + 1]?.result as number | undefined) ?? 18
       return { tokenAddress: addr, symbol, decimals, amount }
+    },
+    [tokens, unknownTokens, metaData],
+  )
+
+  const incentives = useMemo<PoolIncentive[]>(() => {
+    return tokenAddresses.map((addr, i) => {
+      const amount = (leftData?.[i]?.result as bigint | undefined) ?? 0n
+      return buildIncentive(addr, amount)
     })
-  }, [tokenAddresses, leftData, metaData, tokens, unknownTokens])
+  }, [tokenAddresses, leftData, buildIncentive])
+
+  const nextEpochIncentives = useMemo<PoolIncentive[]>(() => {
+    return tokenAddresses.map((addr, i) => {
+      const amount = (nextEpochData?.[i]?.result as bigint | undefined) ?? 0n
+      return buildIncentive(addr, amount)
+    })
+  }, [tokenAddresses, nextEpochData, buildIncentive])
 
   return {
     incentives,
-    isLoading: isLoadingLength || isLoadingAddresses || isLoadingLeft,
+    nextEpochIncentives,
+    isLoading:
+      isLoadingLength || isLoadingAddresses || isLoadingLeft || isLoadingNext,
     refetch: () => {
       void refetchLength()
       void refetchAddresses()
       void refetchLeft()
+      void refetchNext()
     },
   }
 }

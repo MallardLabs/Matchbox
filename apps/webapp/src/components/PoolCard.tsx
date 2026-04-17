@@ -1,6 +1,5 @@
 import { TokenIcon } from "@/components/TokenIcon"
 import Tooltip from "@/components/Tooltip"
-import { useEpochCountdown } from "@/hooks/useEpochCountdown"
 import {
   type Pool,
   poolDailyFeesUsd,
@@ -11,6 +10,7 @@ import {
 } from "@/hooks/usePools"
 import type { PoolIncentivesData } from "@/hooks/usePoolsIncentivesApr"
 import { formatUsdValue } from "@/hooks/useTokenPrices"
+import type { PoolVotableSummary } from "@/hooks/useVotables"
 import { Button, Tag } from "@mezo-org/mezo-clay"
 import Link from "next/link"
 import { formatUnits } from "viem"
@@ -72,31 +72,46 @@ type PoolCardProps = {
   pool: Pool
   onAddIncentives: (pool: Pool) => void
   incentives?: PoolIncentivesData
+  votable?: PoolVotableSummary
 }
 
 export default function PoolCard({
   pool,
   onAddIncentives,
   incentives,
+  votable,
 }: PoolCardProps): JSX.Element {
   const feesApr = poolFeesAprPercent(pool)
   const emissionsApr = poolEmissionsAprPercent(pool)
   const tvl = poolTvlUsd(pool)
   const volume = poolDailyVolumeUsd(pool)
   const feesEarned = poolDailyFeesUsd(pool)
-  const incentivesApr = incentives?.incentivesAprPercent ?? 0
-  // Incentives go to veMEZO voters, not LPs, so they are NOT part of LP Total APR.
+  // Voter-side stats (prefer the API's /votes/votables; fall back to on-chain bribes only).
+  const votingApr = votable?.votingApr ?? 0
+  const voterFeesUsd = votable?.voterFeesUsd ?? 0
+  const bribesUsdApi = votable?.bribesUsd ?? 0
+  const currentBribesUsdOnchain = incentives?.totalIncentivesUSD ?? 0
+  // Prefer on-chain for this-epoch bribe totals (the API may lag the bribe contract);
+  // fall back to API if no on-chain data yet.
+  const currentBribesUsd = currentBribesUsdOnchain || bribesUsdApi
+  const nextBribesUsd = incentives?.totalNextEpochIncentivesUSD ?? 0
+  const hasAnyVoterIncentive =
+    votingApr > 0 ||
+    voterFeesUsd > 0 ||
+    currentBribesUsd > 0 ||
+    nextBribesUsd > 0
+  // LP total APR = fees + emissions only. Bribes and voter fees go to veMEZO voters.
   const totalApr = feesApr + emissionsApr
   const hasGauge = !!pool.gauge
   const detailHref = `/pools/${pool.address}`
-  const activeIncentives = (incentives?.incentivesByToken ?? []).filter(
+  const currentBribeTokens = (incentives?.incentivesByToken ?? []).filter(
     (t) => t.amount > 0n,
   )
-  const { timeRemaining } = useEpochCountdown()
-
+  const nextBribeTokens = (incentives?.nextEpochIncentivesByToken ?? []).filter(
+    (t) => t.amount > 0n,
+  )
   return (
     <article className="group relative flex min-w-0 flex-col gap-4 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
-
       <div className="flex items-start justify-between gap-3">
         <Link
           href={detailHref}
@@ -136,10 +151,10 @@ export default function PoolCard({
       <dl className="grid grid-cols-2 gap-3 text-xs">
         <div>
           <dt className="flex items-center gap-1 text-[var(--content-tertiary)]">
-            Total APR
+            LP APR
             <Tooltip
               id={`pc-totalapr-${pool.address}`}
-              content="Combined annualized return: fees APR + emissions APR. Actual returns depend on boost multiplier and incentives."
+              content="What LPs earn: trading fees APR + MEZO emissions APY. Voter-side rewards (bribes + fees-to-voters) are shown separately below."
             />
           </dt>
           <dd
@@ -201,50 +216,76 @@ export default function PoolCard({
       {hasGauge && (
         <div
           className={`rounded-lg border p-3 ${
-            activeIncentives.length > 0
+            hasAnyVoterIncentive
               ? "border-[rgba(247,147,26,0.25)] bg-[rgba(247,147,26,0.06)]"
               : "border-[var(--border)] bg-[var(--surface-secondary)]"
           }`}
         >
           <div className="mb-2 flex items-center justify-between gap-2">
             <div className="flex items-center gap-1 text-2xs uppercase tracking-wider text-[var(--content-tertiary)]">
-              Incentives
+              Voter rewards
               <Tooltip
-                id={`pc-incentives-${pool.address}`}
-                content="Bribes posted to this pool's ExternalBribe. These are paid to veMEZO voters who vote for this pool (not to LPs) after epoch rollover. APR shown is the voter yield relative to pool TVL — a signal of where emissions will flow."
+                id={`pc-voter-${pool.address}`}
+                content="Everything that accrues to veMEZO voters who allocate to this pool — not to LPs. vAPR is the Mezo API's voting APR. Trading fees → voters is LP fee revenue redirected to voters this epoch. Bribes are external incentives posted to this pool's ExternalBribe for the current and upcoming epoch."
               />
-              <span
-                className="ml-1 font-mono text-2xs normal-case tracking-normal text-[var(--content-tertiary)]"
-                title="Time until this epoch's bribes lock in and voters can claim"
-              >
-                · rolls in {timeRemaining}
-              </span>
             </div>
-            <div className="flex items-baseline gap-2">
-              <span className="font-mono text-2xs text-[var(--content-tertiary)]">
-                {formatUsdValue(incentives?.totalIncentivesUSD ?? 0)}
-              </span>
-              <span
-                className={`font-mono text-xs font-semibold tabular-nums ${
-                  incentivesApr > 0
-                    ? "text-[#F7931A]"
+            <span
+              className={`font-mono text-xs font-semibold tabular-nums ${
+                votingApr > 0
+                  ? "text-[#F7931A]"
+                  : "text-[var(--content-tertiary)]"
+              }`}
+              title="vAPR from api.mezo.org/votes/votables"
+            >
+              {votingApr > 0 ? `${formatPercent(votingApr)} vAPR` : "0% vAPR"}
+            </span>
+          </div>
+
+          <dl className="mb-2 grid grid-cols-3 gap-2 text-2xs">
+            <div className="min-w-0">
+              <dt className="truncate text-[var(--content-tertiary)]">
+                Fees → voters
+              </dt>
+              <dd className="truncate font-mono tabular-nums text-[var(--content-primary)]">
+                {formatUsdValue(voterFeesUsd)}
+              </dd>
+            </div>
+            <div className="min-w-0">
+              <dt className="truncate text-[var(--content-tertiary)]">
+                Bribes now
+              </dt>
+              <dd className="truncate font-mono tabular-nums text-[var(--content-primary)]">
+                {formatUsdValue(currentBribesUsd)}
+              </dd>
+            </div>
+            <div className="min-w-0">
+              <dt className="truncate text-[var(--content-tertiary)]">
+                Bribes next
+              </dt>
+              <dd
+                className={`truncate font-mono tabular-nums ${
+                  nextBribesUsd > 0
+                    ? "text-[var(--content-primary)]"
                     : "text-[var(--content-tertiary)]"
                 }`}
-                title="Voter APR — not included in LP Total APR"
               >
-                {incentivesApr > 0 ? `${formatPercent(incentivesApr)}` : "0%"}
-              </span>
+                {formatUsdValue(nextBribesUsd)}
+              </dd>
             </div>
-          </div>
-          {activeIncentives.length > 0 ? (
-            <ul className="flex flex-wrap gap-1.5">
-              {activeIncentives.map((token) => {
+          </dl>
+
+          {currentBribeTokens.length > 0 && (
+            <div className="mb-1 flex flex-wrap items-center gap-1.5">
+              <span className="text-2xs text-[var(--content-tertiary)]">
+                This epoch:
+              </span>
+              {currentBribeTokens.map((token) => {
                 const amount = Number(
                   formatUnits(token.amount, token.decimals),
                 ).toLocaleString(undefined, { maximumFractionDigits: 2 })
                 return (
-                  <li
-                    key={token.tokenAddress}
+                  <span
+                    key={`cur-${token.tokenAddress}`}
                     className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface)] px-1.5 py-0.5"
                   >
                     <TokenIcon symbol={token.symbol} size={12} />
@@ -254,13 +295,42 @@ export default function PoolCard({
                     <span className="font-mono text-2xs text-[var(--content-tertiary)]">
                       {token.symbol}
                     </span>
-                  </li>
+                  </span>
                 )
               })}
-            </ul>
-          ) : (
+            </div>
+          )}
+
+          {nextBribeTokens.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-2xs text-[var(--content-tertiary)]">
+                Next epoch:
+              </span>
+              {nextBribeTokens.map((token) => {
+                const amount = Number(
+                  formatUnits(token.amount, token.decimals),
+                ).toLocaleString(undefined, { maximumFractionDigits: 2 })
+                return (
+                  <span
+                    key={`nxt-${token.tokenAddress}`}
+                    className="inline-flex items-center gap-1 rounded-full border border-dashed border-[var(--border)] bg-[var(--surface)] px-1.5 py-0.5"
+                  >
+                    <TokenIcon symbol={token.symbol} size={12} />
+                    <span className="font-mono text-2xs text-[var(--content-primary)]">
+                      {amount}
+                    </span>
+                    <span className="font-mono text-2xs text-[var(--content-tertiary)]">
+                      {token.symbol}
+                    </span>
+                  </span>
+                )
+              })}
+            </div>
+          )}
+
+          {!hasAnyVoterIncentive && (
             <p className="text-2xs text-[var(--content-tertiary)]">
-              Nothing posted this epoch — be the first briber.
+              No voter rewards yet this epoch — be the first briber.
             </p>
           )}
         </div>
@@ -274,12 +344,6 @@ export default function PoolCard({
         >
           View details &rarr;
         </Link>
-        {activeIncentives.length > 0 ? (
-          <span className="rounded-full border border-[rgba(247,147,26,0.3)] bg-[rgba(247,147,26,0.1)] px-2 py-0.5 font-mono text-2xs text-[#F7931A]">
-            {activeIncentives.length} incentive
-            {activeIncentives.length === 1 ? "" : "s"}
-          </span>
-        ) : null}
         <Button
           kind="primary"
           size="small"

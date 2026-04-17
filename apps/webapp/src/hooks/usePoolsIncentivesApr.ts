@@ -12,6 +12,11 @@ import { erc20Abi, formatUnits, zeroAddress } from "viem"
 import { useReadContracts } from "wagmi"
 
 const EPOCHS_PER_YEAR = 52
+const WEEK_SECONDS = 7 * 24 * 60 * 60
+
+function currentEpochStart(nowSec: number): number {
+  return Math.floor(nowSec / WEEK_SECONDS) * WEEK_SECONDS
+}
 
 export type PoolIncentiveToken = {
   tokenAddress: Address
@@ -24,8 +29,12 @@ export type PoolIncentiveToken = {
 export type PoolIncentivesData = {
   poolAddress: Address
   bribeAddress: Address | undefined
+  /** Current-epoch bribes (from bribe.left(token)). */
   incentivesByToken: PoolIncentiveToken[]
   totalIncentivesUSD: number
+  /** Next-epoch bribes (from tokenRewardsPerEpoch(token, nextEpochStart)). */
+  nextEpochIncentivesByToken: PoolIncentiveToken[]
+  totalNextEpochIncentivesUSD: number
   incentivesAprPercent: number | null
 }
 
@@ -132,9 +141,7 @@ export function usePoolsIncentivesApr(pools: Pool[]): {
           if (!token || token === zeroAddress) return null
           return { ...slot, token }
         })
-        .filter(
-          (s): s is BribeTokenSlot & { token: Address } => s !== null,
-        ),
+        .filter((s): s is BribeTokenSlot & { token: Address } => s !== null),
     [tokenSlots, rewardsData],
   )
 
@@ -146,6 +153,25 @@ export function usePoolsIncentivesApr(pools: Pool[]): {
       chainId,
       functionName: "left" as const,
       args: [token],
+    })),
+    query: {
+      ...QUERY_PROFILES.SHORT_CACHE,
+      enabled: isNetworkReady && resolvedSlots.length > 0,
+    },
+  })
+
+  // Round 4b: tokenRewardsPerEpoch(token, nextEpochStart) for each (bribe, token).
+  const nextEpochStart = useMemo(
+    () => currentEpochStart(Math.floor(Date.now() / 1000)) + WEEK_SECONDS,
+    [],
+  )
+  const { data: nextEpochData, isLoading: isLoadingNext } = useReadContracts({
+    contracts: resolvedSlots.map(({ bribe, token }) => ({
+      address: bribe,
+      abi: contracts.bribe.abi,
+      chainId,
+      functionName: "tokenRewardsPerEpoch" as const,
+      args: [token, BigInt(nextEpochStart)],
     })),
     query: {
       ...QUERY_PROFILES.SHORT_CACHE,
@@ -195,6 +221,8 @@ export function usePoolsIncentivesApr(pools: Pool[]): {
         bribeAddress: undefined,
         incentivesByToken: [],
         totalIncentivesUSD: 0,
+        nextEpochIncentivesByToken: [],
+        totalNextEpochIncentivesUSD: 0,
         incentivesAprPercent: null,
       })
     }
@@ -204,15 +232,15 @@ export function usePoolsIncentivesApr(pools: Pool[]): {
       if (entry) entry.bribeAddress = bribe
     }
 
-    // Aggregate token amounts by pool.
+    // Aggregate current + next epoch token amounts by pool.
     resolvedSlots.forEach((slot, i) => {
       const amount = (leftData?.[i]?.result as bigint | undefined) ?? 0n
-      if (amount <= 0n) return
+      const nextAmount =
+        (nextEpochData?.[i]?.result as bigint | undefined) ?? 0n
+      if (amount <= 0n && nextAmount <= 0n) return
 
       const lower = slot.token.toLowerCase()
-      const known = knownTokens.find(
-        (t) => t.address.toLowerCase() === lower,
-      )
+      const known = knownTokens.find((t) => t.address.toLowerCase() === lower)
 
       let symbol = known?.symbol
       let decimals = known?.decimals
@@ -227,20 +255,35 @@ export function usePoolsIncentivesApr(pools: Pool[]): {
           (metaData?.[unknownIdx * 2 + 1]?.result as number | undefined) ?? 18
       }
 
-      const tokenAmount = Number(formatUnits(amount, decimals ?? 18))
+      const d = decimals ?? 18
       const price = getTokenUsdPrice(slot.token, symbol, btcPrice, mezoPrice)
-      const usdValue = price !== null ? tokenAmount * price : 0
-
       const entry = m.get(slot.pool.address.toLowerCase())
       if (!entry) return
-      entry.incentivesByToken.push({
-        tokenAddress: slot.token,
-        symbol: symbol ?? "?",
-        decimals: decimals ?? 18,
-        amount,
-        usdValue,
-      })
-      entry.totalIncentivesUSD += usdValue
+
+      if (amount > 0n) {
+        const tokenAmount = Number(formatUnits(amount, d))
+        const usdValue = price !== null ? tokenAmount * price : 0
+        entry.incentivesByToken.push({
+          tokenAddress: slot.token,
+          symbol: symbol ?? "?",
+          decimals: d,
+          amount,
+          usdValue,
+        })
+        entry.totalIncentivesUSD += usdValue
+      }
+      if (nextAmount > 0n) {
+        const tokenAmount = Number(formatUnits(nextAmount, d))
+        const usdValue = price !== null ? tokenAmount * price : 0
+        entry.nextEpochIncentivesByToken.push({
+          tokenAddress: slot.token,
+          symbol: symbol ?? "?",
+          decimals: d,
+          amount: nextAmount,
+          usdValue,
+        })
+        entry.totalNextEpochIncentivesUSD += usdValue
+      }
     })
 
     // Compute APR: (weekly USD * 52) / poolTVLUSD * 100.
@@ -252,7 +295,7 @@ export function usePoolsIncentivesApr(pools: Pool[]): {
         entry.incentivesAprPercent = null
       } else {
         entry.incentivesAprPercent =
-          (entry.totalIncentivesUSD * EPOCHS_PER_YEAR) / tvl * 100
+          ((entry.totalIncentivesUSD * EPOCHS_PER_YEAR) / tvl) * 100
       }
     }
 
@@ -262,6 +305,7 @@ export function usePoolsIncentivesApr(pools: Pool[]): {
     bribes,
     resolvedSlots,
     leftData,
+    nextEpochData,
     knownTokens,
     unknownTokens,
     metaData,
@@ -272,7 +316,11 @@ export function usePoolsIncentivesApr(pools: Pool[]): {
   return {
     map,
     isLoading:
-      isLoadingBribes || isLoadingLengths || isLoadingRewards || isLoadingLeft,
+      isLoadingBribes ||
+      isLoadingLengths ||
+      isLoadingRewards ||
+      isLoadingLeft ||
+      isLoadingNext,
   }
 }
 
@@ -281,5 +329,5 @@ export function computePoolIncentivesApr(
   tvlUsd: number,
 ): number | null {
   if (totalIncentivesUSD <= 0 || tvlUsd <= 0) return null
-  return (totalIncentivesUSD * EPOCHS_PER_YEAR) / tvlUsd * 100
+  return ((totalIncentivesUSD * EPOCHS_PER_YEAR) / tvlUsd) * 100
 }

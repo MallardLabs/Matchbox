@@ -12,6 +12,7 @@ import {
 } from "@/hooks/usePools"
 import { usePoolsIncentivesApr } from "@/hooks/usePoolsIncentivesApr"
 import { formatUsdValue } from "@/hooks/useTokenPrices"
+import { useVotables } from "@/hooks/useVotables"
 import { Input, Skeleton, Tag } from "@mezo-org/mezo-clay"
 import { useMemo, useState } from "react"
 
@@ -22,6 +23,7 @@ type SortColumn =
   | "volume"
   | "totalApr"
   | "incentives"
+  | "votingApr"
 type SortDirection = "asc" | "desc"
 type PoolTypeFilter = "all" | "volatile" | "stable" | "concentrated"
 
@@ -38,6 +40,7 @@ function matchesPoolType(pool: Pool, filter: PoolTypeFilter): boolean {
 export default function PoolsPage(): JSX.Element {
   const { pools, isLoading, error } = usePools()
   const { map: incentivesMap } = usePoolsIncentivesApr(pools)
+  const { byPool: votablesByPool } = useVotables()
 
   const [sortColumn, setSortColumn] = useState<SortColumn>("tvl")
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc")
@@ -75,18 +78,25 @@ export default function PoolsPage(): JSX.Element {
       })
     }
 
-    const incentivesApr = (p: Pool): number =>
-      incentivesMap.get(p.address.toLowerCase())?.incentivesAprPercent ?? 0
-    const incentivesUsd = (p: Pool): number =>
-      incentivesMap.get(p.address.toLowerCase())?.totalIncentivesUSD ?? 0
+    const incentivesUsd = (p: Pool): number => {
+      const v = votablesByPool.get(p.address.toLowerCase())
+      const onchain = incentivesMap.get(
+        p.address.toLowerCase(),
+      )?.totalIncentivesUSD
+      // Combine voter fees + current bribes; prefer on-chain bribes if available.
+      return (v?.voterFeesUsd ?? 0) + (onchain ?? v?.bribesUsd ?? 0)
+    }
+    const votingAprOf = (p: Pool): number =>
+      votablesByPool.get(p.address.toLowerCase())?.votingApr ?? 0
     const keyFn: Record<SortColumn, (p: Pool) => number> = {
       tvl: poolTvlUsd,
       feesApr: poolFeesAprPercent,
       emissionsApr: poolEmissionsAprPercent,
       volume: poolDailyVolumeUsd,
-      totalApr: (p) =>
-        poolFeesAprPercent(p) + poolEmissionsAprPercent(p) + incentivesApr(p),
+      // LP-only: fees + emissions (voter rewards don't accrue to LPs).
+      totalApr: (p) => poolFeesAprPercent(p) + poolEmissionsAprPercent(p),
       incentives: incentivesUsd,
+      votingApr: votingAprOf,
     }
     const keyFnSel = keyFn[sortColumn]
 
@@ -98,7 +108,15 @@ export default function PoolsPage(): JSX.Element {
     })
 
     return result
-  }, [pools, search, sortColumn, sortDirection, typeFilter, incentivesMap])
+  }, [
+    pools,
+    search,
+    sortColumn,
+    sortDirection,
+    typeFilter,
+    incentivesMap,
+    votablesByPool,
+  ])
 
   const totals = useMemo(() => {
     let tvl = 0
@@ -212,7 +230,14 @@ export default function PoolsPage(): JSX.Element {
               onClick={() => handleSort("totalApr")}
               color={sortColumn === "totalApr" ? "green" : "gray"}
             >
-              Total APR{sortIndicator("totalApr")}
+              LP APR{sortIndicator("totalApr")}
+            </Tag>
+            <Tag
+              closeable={false}
+              onClick={() => handleSort("votingApr")}
+              color={sortColumn === "votingApr" ? "yellow" : "gray"}
+            >
+              vAPR{sortIndicator("votingApr")}
             </Tag>
             <Tag
               closeable={false}
@@ -281,12 +306,14 @@ export default function PoolsPage(): JSX.Element {
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
           {filteredAndSorted.map((pool) => {
             const incentives = incentivesMap.get(pool.address.toLowerCase())
+            const votable = votablesByPool.get(pool.address.toLowerCase())
             return (
               <PoolCard
                 key={pool.address}
                 pool={pool}
                 onAddIncentives={setActivePool}
                 {...(incentives ? { incentives } : {})}
+                {...(votable ? { votable } : {})}
               />
             )
           })}
