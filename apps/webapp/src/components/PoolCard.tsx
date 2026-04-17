@@ -209,7 +209,7 @@ export default function PoolCard({
         ) : null}
         <Button
           kind="primary"
-          size="compact"
+          size="small"
           onClick={() => onAddIncentives(pool)}
           disabled={!hasGauge}
           overrides={{

@@ -283,7 +283,7 @@ export default function PoolDetailPage({
                 {hasGauge && (
                   <Button
                     kind="secondary"
-                    size="compact"
+                    size="small"
                     onClick={() => setAddOpen(true)}
                   >
                     Add
