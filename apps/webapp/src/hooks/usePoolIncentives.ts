@@ -175,7 +175,7 @@ export function usePoolBribeIncentives(bribeAddress: Address | undefined): {
           symbol: known.symbol,
           decimals: known.decimals,
           amount,
-          logoURI: known.logoURI,
+          ...(known.logoURI ? { logoURI: known.logoURI } : {}),
         }
       }
       const unknownIndex = unknownTokens.findIndex(
