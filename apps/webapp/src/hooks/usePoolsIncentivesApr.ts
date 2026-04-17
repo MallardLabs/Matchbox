@@ -40,17 +40,20 @@ export function usePoolsIncentivesApr(pools: Pool[]): {
   const { price: mezoPrice } = useMezoPrice()
 
   const gaugedPools = useMemo(
-    () => pools.filter((p): p is Pool & { gauge: Address } => !!p.gauge),
+    () =>
+      pools
+        .map((p) => ({ pool: p, gauge: p.gauge }))
+        .filter((x): x is { pool: Pool; gauge: Address } => !!x.gauge),
     [pools],
   )
 
   // Round 1: gaugeToBribe(gauge) for each gauged pool.
   const { data: bribeAddrsData, isLoading: isLoadingBribes } = useReadContracts(
     {
-      contracts: gaugedPools.map((p) => ({
+      contracts: gaugedPools.map(({ gauge }) => ({
         ...contracts.poolsVoter,
         functionName: "gaugeToBribe" as const,
-        args: [p.gauge as Address],
+        args: [gauge],
       })),
       query: {
         ...QUERY_PROFILES.SHORT_CACHE,
@@ -59,9 +62,10 @@ export function usePoolsIncentivesApr(pools: Pool[]): {
     },
   )
 
-  const bribes = useMemo(
+  type BribeEntry = { pool: Pool; bribe: Address | undefined }
+  const bribes = useMemo<BribeEntry[]>(
     () =>
-      gaugedPools.map((pool, i) => {
+      gaugedPools.map(({ pool }, i) => {
         const addr = bribeAddrsData?.[i]?.result as Address | undefined
         return {
           pool,
@@ -73,7 +77,10 @@ export function usePoolsIncentivesApr(pools: Pool[]): {
 
   // Round 2: rewardsListLength for each bribe.
   const activeBribes = useMemo(
-    () => bribes.filter((b): b is { pool: Pool; bribe: Address } => !!b.bribe),
+    () =>
+      bribes.filter(
+        (b): b is { pool: Pool; bribe: Address } => b.bribe !== undefined,
+      ),
     [bribes],
   )
 
