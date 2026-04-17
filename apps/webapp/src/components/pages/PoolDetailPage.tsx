@@ -84,9 +84,9 @@ export default function PoolDetailPage({
         ? "Stable"
         : "Volatile"
 
-  const typeColor: "blue" | "green" | "orange" =
+  const typeColor: "blue" | "green" | "purple" =
     pool.type === "concentrated"
-      ? "orange"
+      ? "purple"
       : pool.volatility === "stable"
         ? "green"
         : "blue"

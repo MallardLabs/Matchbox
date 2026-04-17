@@ -175,7 +175,7 @@ export default function PoolsPage(): JSX.Element {
               <Tag
                 closeable={false}
                 onClick={() => setTypeFilter("concentrated")}
-                color={typeFilter === "concentrated" ? "orange" : "gray"}
+                color={typeFilter === "concentrated" ? "purple" : "gray"}
               >
                 Concentrated
               </Tag>
@@ -217,7 +217,7 @@ export default function PoolsPage(): JSX.Element {
             <Tag
               closeable={false}
               onClick={() => handleSort("emissionsApr")}
-              color={sortColumn === "emissionsApr" ? "orange" : "gray"}
+              color={sortColumn === "emissionsApr" ? "purple" : "gray"}
             >
               Emissions APY{sortIndicator("emissionsApr")}
             </Tag>

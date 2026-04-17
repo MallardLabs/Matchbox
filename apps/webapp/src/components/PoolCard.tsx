@@ -52,8 +52,8 @@ function poolTypeLabel(pool: Pool): string {
   return pool.volatility === "stable" ? "Stable" : "Volatile"
 }
 
-function poolTypeColor(pool: Pool): "blue" | "green" | "orange" {
-  if (pool.type === "concentrated") return "orange"
+function poolTypeColor(pool: Pool): "blue" | "green" | "purple" {
+  if (pool.type === "concentrated") return "purple"
   return pool.volatility === "stable" ? "green" : "blue"
 }
 
