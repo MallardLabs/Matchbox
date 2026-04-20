@@ -2,6 +2,7 @@ import { getContractConfig } from "@/config/contracts"
 import { QUERY_PROFILES } from "@/config/queryProfiles"
 import { useAllGaugeProfilesFromContext } from "@/contexts/GaugeProfilesContext"
 import { useNetwork } from "@/contexts/NetworkContext"
+import { useVeSupplyBigint } from "@/hooks/useVeSupplyBigint"
 import { boostMultiplierNumberFromCalculatorInputs } from "@/utils/boostMultiplierFromCalculatorInputs"
 import { calculateOptimalVeMEZO } from "@/utils/optimalVeMEZO"
 import { NON_STAKING_GAUGE_ABI } from "@repo/shared/contracts"
@@ -353,26 +354,15 @@ export function useBoostGauges(options: UseBoostGaugesOptions = {}) {
     },
   })
 
-  // System totals: ve token `supply()` — same as Boost calculator “System totals” (useVeSupply).
+  // System totals: ve token `supply()` via shared hook — honors preview-mode
+  // overrides so simulated totals flow through to the boost / optimal math.
   const {
-    data: totalsData,
-    isLoading: isLoadingSystemTotals,
+    veBTCSupply: veBTCTokenSupply,
+    veMEZOSupply: veMEZOTokenSupply,
+    fetchStatus: systemTotalsFetchStatus,
     refetch: refetchSystemTotals,
-  } = useReadContracts({
-    contracts: includeOwnership
-      ? [
-          { ...contracts.veBTC, functionName: "supply" },
-          { ...contracts.veMEZO, functionName: "supply" },
-        ]
-      : [],
-    query: {
-      ...QUERY_PROFILES.SHORT_CACHE,
-      enabled: enabled && includeOwnership,
-    },
-  })
-
-  const veBTCTokenSupply = totalsData?.[0]?.result as bigint | undefined
-  const veMEZOTokenSupply = totalsData?.[1]?.result as bigint | undefined
+  } = useVeSupplyBigint()
+  const isLoadingSystemTotals = systemTotalsFetchStatus === "loading"
 
   // Build maps of token ID to voting power and boost
   const tokenIdToVotingPower = new Map<string, bigint>()
