@@ -1,11 +1,14 @@
+import PreviewModePanel from "@/components/PreviewModePanel"
 import { mezoTestnet, wagmiConfig } from "@/config/wagmi"
 import { GaugeProfilesProvider } from "@/contexts/GaugeProfilesContext"
 import { NetworkProvider } from "@/contexts/NetworkContext"
+import { PreviewModeProvider } from "@/contexts/PreviewModeContext"
 import {
   ThemeProvider,
   getThemeObject,
   useTheme,
 } from "@/contexts/ThemeContext"
+import { usePreviewModeHotkey } from "@/hooks/usePreviewModeHotkey"
 import { ClayProvider } from "@mezo-org/mezo-clay"
 import { PassportProvider } from "@mezo-org/passport"
 import {
@@ -27,6 +30,7 @@ type ClientAppProps = Pick<AppProps, "Component" | "pageProps">
 function ThemedApp({ Component, pageProps }: ClientAppProps) {
   const { theme } = useTheme()
   const themeObject = getThemeObject(theme)
+  usePreviewModeHotkey()
 
   const rainbowTheme =
     theme === "dark"
@@ -49,6 +53,7 @@ function ThemedApp({ Component, pageProps }: ClientAppProps) {
           <Layout>
             <Component {...pageProps} />
           </Layout>
+          <PreviewModePanel />
         </ClayProvider>
       </PassportProvider>
     </RainbowKitProvider>
@@ -61,9 +66,11 @@ export function ClientApp({ Component, pageProps }: ClientAppProps) {
       <QueryClientProvider client={queryClient}>
         <ThemeProvider>
           <NetworkProvider>
-            <GaugeProfilesProvider>
-              <ThemedApp Component={Component} pageProps={pageProps} />
-            </GaugeProfilesProvider>
+            <PreviewModeProvider>
+              <GaugeProfilesProvider>
+                <ThemedApp Component={Component} pageProps={pageProps} />
+              </GaugeProfilesProvider>
+            </PreviewModeProvider>
           </NetworkProvider>
         </ThemeProvider>
       </QueryClientProvider>

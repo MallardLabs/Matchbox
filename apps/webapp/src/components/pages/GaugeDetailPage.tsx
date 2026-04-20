@@ -17,6 +17,7 @@ import {
 import { useGaugeTopology } from "@/hooks/useGaugeTopology"
 import { useBoostInfo } from "@/hooks/useGauges"
 import { formatUsdValue } from "@/hooks/useTokenPrices"
+import { useVeSupplyBigint } from "@/hooks/useVeSupplyBigint"
 import {
   formatFixedPoint,
   formatMultiplier,
@@ -198,9 +199,7 @@ function getSubscriptionDetail(record: GaugeHistory): string | null {
     if (record.oversubscription_dilution != null) {
       return `${formatSubscriptionPercent(record.oversubscription_dilution)} APY dilution`
     }
-    return delta && delta > 0n
-      ? `${formatTokenAmount(delta, 18)} over`
-      : null
+    return delta && delta > 0n ? `${formatTokenAmount(delta, 18)} over` : null
   }
 
   if (record.subscription_status === "under") {
@@ -394,15 +393,9 @@ export default function GaugeDetailPage({
     },
   })
 
-  // System totals from escrow `supply()` — same source as Boost calculator.
-  const { data: systemSupplies } = useReadContracts({
-    contracts: [
-      { ...contracts.veBTC, functionName: "supply" },
-      { ...contracts.veMEZO, functionName: "supply" },
-    ],
-  })
-  const veBTCTokenSupply = systemSupplies?.[0]?.result as bigint | undefined
-  const veMEZOTokenSupply = systemSupplies?.[1]?.result as bigint | undefined
+  // System totals via shared hook — honors preview-mode overrides.
+  const { veBTCSupply: veBTCTokenSupply, veMEZOSupply: veMEZOTokenSupply } =
+    useVeSupplyBigint()
 
   const optimalVeMEZOData = useMemo(
     () =>
