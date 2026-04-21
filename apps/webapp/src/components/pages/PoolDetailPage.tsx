@@ -194,11 +194,11 @@ export default function PoolDetailPage({
       </div>
 
       {/* Stat grid */}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 md:gap-4">
         <SpringIn delay={0} variant="card">
           <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
             <p className="mb-1 text-2xs uppercase tracking-wider text-[var(--content-tertiary)]">
-              Total APR
+              LP APR
             </p>
             <p
               className={`font-mono text-xl font-semibold tabular-nums ${
@@ -206,12 +206,30 @@ export default function PoolDetailPage({
                   ? "text-[var(--positive)]"
                   : "text-[var(--content-primary)]"
               }`}
+              title="Fees APR + Emissions APY — LP-side only. Voter rewards shown separately."
             >
               {formatPercent(totalApr)}
             </p>
           </div>
         </SpringIn>
         <SpringIn delay={1} variant="card">
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
+            <p className="mb-1 text-2xs uppercase tracking-wider text-[var(--content-tertiary)]">
+              vAPR
+            </p>
+            <p
+              className={`font-mono text-xl font-semibold tabular-nums ${
+                votingApr > 0
+                  ? "text-[#F7931A]"
+                  : "text-[var(--content-primary)]"
+              }`}
+              title="Voting APR for veMEZO voters — source: api.mezo.org/votes/votables stats.votingApr"
+            >
+              {formatPercent(votingApr)}
+            </p>
+          </div>
+        </SpringIn>
+        <SpringIn delay={2} variant="card">
           <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
             <p className="mb-1 text-2xs uppercase tracking-wider text-[var(--content-tertiary)]">
               TVL
@@ -221,7 +239,24 @@ export default function PoolDetailPage({
             </p>
           </div>
         </SpringIn>
-        <SpringIn delay={2} variant="card">
+        <SpringIn delay={3} variant="card">
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
+            <p className="mb-1 text-2xs uppercase tracking-wider text-[var(--content-tertiary)]">
+              Voter Fees
+            </p>
+            <p
+              className={`font-mono text-xl font-semibold tabular-nums ${
+                voterFeesUsd > 0
+                  ? "text-[#F7931A]"
+                  : "text-[var(--content-primary)]"
+              }`}
+              title="LP trading fees redirected to voters this epoch — source: api.mezo.org/votes/votables stats.gaugeFees"
+            >
+              {formatUsdValue(voterFeesUsd)}
+            </p>
+          </div>
+        </SpringIn>
+        <SpringIn delay={4} variant="card">
           <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
             <p className="mb-1 text-2xs uppercase tracking-wider text-[var(--content-tertiary)]">
               24h Volume
@@ -231,7 +266,7 @@ export default function PoolDetailPage({
             </p>
           </div>
         </SpringIn>
-        <SpringIn delay={3} variant="card">
+        <SpringIn delay={5} variant="card">
           <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
             <p className="mb-1 text-2xs uppercase tracking-wider text-[var(--content-tertiary)]">
               24h Fees
@@ -272,7 +307,7 @@ export default function PoolDetailPage({
           <SpringIn delay={5} variant="card">
             <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
               <h2 className="mb-3 text-sm font-semibold text-[var(--content-primary)]">
-                APR breakdown
+                LP APR breakdown
               </h2>
               <dl className="grid grid-cols-1 gap-2 text-xs">
                 <div className="flex items-center justify-between">
@@ -301,36 +336,6 @@ export default function PoolDetailPage({
                     {formatPercent(totalApr)}
                   </dd>
                 </div>
-                <div className="mt-1 flex items-center justify-between border-t border-dashed border-[var(--border)] pt-2">
-                  <dt
-                    className="flex items-center gap-1 text-[var(--content-tertiary)]"
-                    title="Voting APR from api.mezo.org/votes/votables — paid to veMEZO voters, not LPs"
-                  >
-                    vAPR
-                  </dt>
-                  <dd
-                    className={`font-mono tabular-nums ${
-                      votingApr > 0
-                        ? "text-[#F7931A]"
-                        : "text-[var(--content-tertiary)]"
-                    }`}
-                  >
-                    {formatPercent(votingApr)}
-                  </dd>
-                </div>
-                {voterFeesUsd > 0 && (
-                  <div className="flex items-center justify-between">
-                    <dt
-                      className="flex items-center gap-1 text-[var(--content-tertiary)]"
-                      title="LP trading fees redirected to voters this epoch"
-                    >
-                      Fees → voters
-                    </dt>
-                    <dd className="font-mono tabular-nums text-[var(--content-primary)]">
-                      {formatUsdValue(voterFeesUsd)}
-                    </dd>
-                  </div>
-                )}
               </dl>
             </div>
           </SpringIn>
@@ -370,18 +375,18 @@ export default function PoolDetailPage({
 
         {/* Right: Incentives */}
         <div className="lg:col-span-2">
-          <SpringIn delay={4} variant="card">
+          <SpringIn delay={6} variant="card">
             <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
               <div className="mb-3 flex items-center justify-between gap-2">
                 <div className="flex min-w-0 flex-col">
                   <h2 className="text-sm font-semibold text-[var(--content-primary)]">
-                    Incentives
+                    External bribes
                   </h2>
                   <span
                     className="font-mono text-2xs text-[var(--content-tertiary)]"
                     title="Time until this epoch's bribes lock in and voters can claim"
                   >
-                    Epoch rolls in {timeRemaining}
+                    Rolls to voters in {timeRemaining}
                   </span>
                 </div>
                 {hasGauge && (
@@ -411,9 +416,9 @@ export default function PoolDetailPage({
                 nextEpochEnriched.length === 0 ? (
                 <div className="rounded-lg border border-dashed border-[var(--border)] p-6 text-center">
                   <p className="text-sm text-[var(--content-secondary)]">
-                    Nothing posted this epoch or next yet. Be the first to fund
-                    this pool&apos;s bribe — veMEZO voters who vote for this
-                    pool claim after rollover.
+                    No bribes posted this epoch yet. Be the first to fund this
+                    pool&apos;s bribe — veMEZO voters who vote for this pool
+                    will claim your deposit at the next rollover.
                   </p>
                 </div>
               ) : (
@@ -427,8 +432,8 @@ export default function PoolDetailPage({
                   />
                   {nextEpochEnriched.length > 0 && (
                     <IncentivesList
-                      title="Next epoch"
-                      subtitle="Pre-funded for the upcoming voting period."
+                      title="Pre-posted for next epoch"
+                      subtitle="Already funded for the round starting at rollover."
                       incentives={nextEpochEnriched}
                       totalUsd={totalNextEpochUSD}
                       accent="dashed"

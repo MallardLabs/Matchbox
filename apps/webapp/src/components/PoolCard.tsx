@@ -1,5 +1,6 @@
 import { TokenIcon } from "@/components/TokenIcon"
 import Tooltip from "@/components/Tooltip"
+import { useEpochCountdown } from "@/hooks/useEpochCountdown"
 import {
   type Pool,
   poolDailyFeesUsd,
@@ -81,6 +82,7 @@ export default function PoolCard({
   incentives,
   votable,
 }: PoolCardProps): JSX.Element {
+  const { timeRemaining } = useEpochCountdown()
   const feesApr = poolFeesAprPercent(pool)
   const emissionsApr = poolEmissionsAprPercent(pool)
   const tvl = poolTvlUsd(pool)
@@ -94,15 +96,11 @@ export default function PoolCard({
   // Prefer on-chain for this-epoch bribe totals (the API may lag the bribe contract);
   // fall back to API if no on-chain data yet.
   const currentBribesUsd = currentBribesUsdOnchain || bribesUsdApi
-  const nextBribesUsd = incentives?.totalNextEpochIncentivesUSD ?? 0
   // LP total APR = fees + emissions only. Bribes and voter fees go to veMEZO voters.
   const totalApr = feesApr + emissionsApr
   const hasGauge = !!pool.gauge
   const detailHref = `/pools/${pool.address}`
   const currentBribeTokens = (incentives?.incentivesByToken ?? []).filter(
-    (t) => t.amount > 0n,
-  )
-  const nextBribeTokens = (incentives?.nextEpochIncentivesByToken ?? []).filter(
     (t) => t.amount > 0n,
   )
   return (
@@ -220,46 +218,26 @@ export default function PoolCard({
         </div>
       </dl>
 
-      {hasGauge && (currentBribesUsd > 0 || nextBribesUsd > 0) && (
+      {hasGauge && currentBribesUsd > 0 && (
         <div className="rounded-lg border border-[rgba(247,147,26,0.25)] bg-[rgba(247,147,26,0.06)] p-3">
-          <div className="mb-2 flex items-center gap-1 text-2xs uppercase tracking-wider text-[var(--content-tertiary)]">
-            External bribes
-            <Tooltip
-              id={`pc-bribes-${pool.address}`}
-              content="Third-party incentives posted to this pool's ExternalBribe contract. 'This epoch' is the pot voters are accruing right now (claimable at epoch end); 'Next epoch' is anything pre-posted for the upcoming voting round."
-            />
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1 text-2xs uppercase tracking-wider text-[var(--content-tertiary)]">
+              External bribes
+              <Tooltip
+                id={`pc-bribes-${pool.address}`}
+                content="Third-party incentives posted to this pool's ExternalBribe contract. These sit in the current-epoch pot and are distributed to voters at the next epoch rollover."
+              />
+            </div>
+            <span className="font-mono text-sm font-semibold tabular-nums text-[#F7931A]">
+              {formatUsdValue(currentBribesUsd)}
+            </span>
           </div>
-
-          <dl className="mb-2 grid grid-cols-2 gap-2 text-2xs">
-            <div className="min-w-0">
-              <dt className="truncate text-[var(--content-tertiary)]">
-                This epoch
-              </dt>
-              <dd className="truncate font-mono tabular-nums text-[var(--content-primary)]">
-                {formatUsdValue(currentBribesUsd)}
-              </dd>
-            </div>
-            <div className="min-w-0">
-              <dt className="truncate text-[var(--content-tertiary)]">
-                Next epoch
-              </dt>
-              <dd
-                className={`truncate font-mono tabular-nums ${
-                  nextBribesUsd > 0
-                    ? "text-[var(--content-primary)]"
-                    : "text-[var(--content-tertiary)]"
-                }`}
-              >
-                {formatUsdValue(nextBribesUsd)}
-              </dd>
-            </div>
-          </dl>
+          <p className="mb-2 font-mono text-2xs text-[var(--content-tertiary)]">
+            Rolls to voters in {timeRemaining}
+          </p>
 
           {currentBribeTokens.length > 0 && (
-            <div className="mb-1 flex flex-wrap items-center gap-1.5">
-              <span className="text-2xs text-[var(--content-tertiary)]">
-                This epoch:
-              </span>
+            <div className="flex flex-wrap items-center gap-1.5">
               {currentBribeTokens.map((token) => {
                 const amount = Number(
                   formatUnits(token.amount, token.decimals),
@@ -268,33 +246,6 @@ export default function PoolCard({
                   <span
                     key={`cur-${token.tokenAddress}`}
                     className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface)] px-1.5 py-0.5"
-                  >
-                    <TokenIcon symbol={token.symbol} size={12} />
-                    <span className="font-mono text-2xs text-[var(--content-primary)]">
-                      {amount}
-                    </span>
-                    <span className="font-mono text-2xs text-[var(--content-tertiary)]">
-                      {token.symbol}
-                    </span>
-                  </span>
-                )
-              })}
-            </div>
-          )}
-
-          {nextBribeTokens.length > 0 && (
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span className="text-2xs text-[var(--content-tertiary)]">
-                Next epoch:
-              </span>
-              {nextBribeTokens.map((token) => {
-                const amount = Number(
-                  formatUnits(token.amount, token.decimals),
-                ).toLocaleString(undefined, { maximumFractionDigits: 2 })
-                return (
-                  <span
-                    key={`nxt-${token.tokenAddress}`}
-                    className="inline-flex items-center gap-1 rounded-full border border-dashed border-[var(--border)] bg-[var(--surface)] px-1.5 py-0.5"
                   >
                     <TokenIcon symbol={token.symbol} size={12} />
                     <span className="font-mono text-2xs text-[var(--content-primary)]">
