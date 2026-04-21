@@ -1,6 +1,9 @@
 import { getContractConfig } from "@/config/contracts"
 import { useNetwork } from "@/contexts/NetworkContext"
-import { getAtomicBatchSupport } from "@/utils/eip5792"
+import {
+  type AtomicBatchSupport,
+  getAtomicBatchSupport,
+} from "@/utils/eip5792"
 import { useCallback, useRef, useState } from "react"
 import type { Address, Hex } from "viem"
 import { sendCalls, waitForCallsStatus } from "viem/actions"
@@ -54,6 +57,7 @@ type UseMultiLockVotingReturn = {
   isDone: boolean
   hasErrors: boolean
   executionMode: MultiLockExecutionMode
+  batchSupport: AtomicBatchSupport | null
   clear: () => void
 }
 
@@ -68,6 +72,9 @@ export function useMultiLockVoting(): UseMultiLockVotingReturn {
   const [status, setStatus] = useState<MultiLockVoteStatus>("idle")
   const [executionMode, setExecutionMode] =
     useState<MultiLockExecutionMode>("sequential")
+  const [batchSupport, setBatchSupport] = useState<AtomicBatchSupport | null>(
+    null,
+  )
   const [lockStates, setLockStates] = useState<LockTxState[]>([])
   const [currentIndex, setCurrentIndex] = useState(0)
   const abortRef = useRef(false)
@@ -254,13 +261,14 @@ export function useMultiLockVoting(): UseMultiLockVotingReturn {
       const { address, abi } = contracts.boostVoter
       if (!address) return buildExecutionResult([])
 
-      const { supportsAtomicBatching } = await getAtomicBatchSupport({
+      const batchSupport = await getAtomicBatchSupport({
         walletClient,
         account: accountAddress,
         chainId,
       })
+      setBatchSupport(batchSupport)
 
-      if (supportsAtomicBatching) {
+      if (batchSupport.supportsAtomicBatching) {
         return executeBatched(
           tokenIds,
           tokenIds.map((tokenId) => ({
@@ -298,13 +306,14 @@ export function useMultiLockVoting(): UseMultiLockVotingReturn {
       const { address, abi } = contracts.boostVoter
       if (!address) return buildExecutionResult([])
 
-      const { supportsAtomicBatching } = await getAtomicBatchSupport({
+      const batchSupport = await getAtomicBatchSupport({
         walletClient,
         account: accountAddress,
         chainId,
       })
+      setBatchSupport(batchSupport)
 
-      if (supportsAtomicBatching) {
+      if (batchSupport.supportsAtomicBatching) {
         return executeBatched(
           tokenIds,
           tokenIds.map((tokenId) => ({
@@ -344,6 +353,7 @@ export function useMultiLockVoting(): UseMultiLockVotingReturn {
   const clear = useCallback(() => {
     setStatus("idle")
     setExecutionMode("sequential")
+    setBatchSupport(null)
     setLockStates([])
     lockStatesRef.current = []
     setCurrentIndex(0)
@@ -366,6 +376,7 @@ export function useMultiLockVoting(): UseMultiLockVotingReturn {
     isDone: status === "done",
     hasErrors: errorCount > 0,
     executionMode,
+    batchSupport,
     clear,
   }
 }

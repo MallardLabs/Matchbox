@@ -1,6 +1,9 @@
 import { getContractConfig } from "@/config/contracts"
 import { useNetwork } from "@/contexts/NetworkContext"
-import { getAtomicBatchSupport } from "@/utils/eip5792"
+import {
+  type AtomicBatchSupport,
+  getAtomicBatchSupport,
+} from "@/utils/eip5792"
 import { useCallback, useRef, useState } from "react"
 import type { Address, Hex } from "viem"
 import { sendCalls, waitForCallsStatus } from "viem/actions"
@@ -48,6 +51,7 @@ type UseMultiLockUnpairingReturn = {
   isDone: boolean
   hasErrors: boolean
   executionMode: MultiLockExecutionMode
+  batchSupport: AtomicBatchSupport | null
   clear: () => void
 }
 
@@ -77,6 +81,9 @@ export function useMultiLockUnpairing(): UseMultiLockUnpairingReturn {
   const [status, setStatus] = useState<MultiLockUnpairStatus>("idle")
   const [executionMode, setExecutionMode] =
     useState<MultiLockExecutionMode>("sequential")
+  const [batchSupport, setBatchSupport] = useState<AtomicBatchSupport | null>(
+    null,
+  )
   const [txStates, setTxStates] = useState<UnpairTxState[]>([])
   const [currentIndex, setCurrentIndex] = useState(0)
   const abortRef = useRef(false)
@@ -267,13 +274,14 @@ export function useMultiLockUnpairing(): UseMultiLockUnpairingReturn {
       const { address, abi } = contracts.boostVoter
       if (!address || requests.length === 0) return buildExecutionResult([])
 
-      const { supportsAtomicBatching } = await getAtomicBatchSupport({
+      const batchSupport = await getAtomicBatchSupport({
         walletClient,
         account: accountAddress,
         chainId,
       })
+      setBatchSupport(batchSupport)
 
-      if (supportsAtomicBatching) {
+      if (batchSupport.supportsAtomicBatching) {
         return executeBatched(requests, address, abi)
       }
 
@@ -380,6 +388,7 @@ export function useMultiLockUnpairing(): UseMultiLockUnpairingReturn {
   const clear = useCallback(() => {
     setStatus("idle")
     setExecutionMode("sequential")
+    setBatchSupport(null)
     setTxStates([])
     txStatesRef.current = []
     setCurrentIndex(0)
@@ -401,6 +410,7 @@ export function useMultiLockUnpairing(): UseMultiLockUnpairingReturn {
     isDone: status === "done",
     hasErrors: errorCount > 0,
     executionMode,
+    batchSupport,
     clear,
   }
 }

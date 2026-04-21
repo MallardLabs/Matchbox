@@ -29,6 +29,7 @@ import { usePagination } from "@/hooks/usePagination"
 import { useClaimableBribes } from "@/hooks/useVoting"
 import { useAllVoteAllocations, useBatchVoteState } from "@/hooks/useVoting"
 import { boostMultiplierNumberFromCalculatorInputs } from "@/utils/boostMultiplierFromCalculatorInputs"
+import { getAtomicBatchFallbackMessage } from "@/utils/eip5792"
 import { formatTokenAmount } from "@/utils/format"
 import {
   Button,
@@ -373,6 +374,7 @@ export default function BoostPage(): JSX.Element {
     isDone: isMultiVoteDone,
     hasErrors: multiVoteHasErrors,
     executionMode: multiVoteExecutionMode,
+    batchSupport: multiVoteBatchSupport,
     clear: clearMultiVote,
   } = useMultiLockVoting()
   const {
@@ -386,6 +388,7 @@ export default function BoostPage(): JSX.Element {
     isDone: isUnpairDone,
     hasErrors: unpairHasErrors,
     executionMode: unpairExecutionMode,
+    batchSupport: unpairBatchSupport,
     clear: clearUnpair,
   } = useMultiLockUnpairing()
 
@@ -1292,6 +1295,12 @@ export default function BoostPage(): JSX.Element {
                     </Tag>
                   )}
                 </div>
+                {multiVoteExecutionMode === "sequential" &&
+                  getAtomicBatchFallbackMessage(multiVoteBatchSupport) && (
+                    <p className="mb-3 text-2xs text-[var(--content-secondary)]">
+                      {getAtomicBatchFallbackMessage(multiVoteBatchSupport)}
+                    </p>
+                  )}
                 {/* Progress bar */}
                 <div className="mb-3 flex h-2 gap-0.5 overflow-hidden rounded-full">
                   {lockStates.map((ls) => (
@@ -1528,6 +1537,12 @@ export default function BoostPage(): JSX.Element {
                     </Tag>
                   )}
                 </div>
+                {unpairExecutionMode === "sequential" &&
+                  getAtomicBatchFallbackMessage(unpairBatchSupport) && (
+                    <p className="mb-3 text-2xs text-[var(--content-secondary)]">
+                      {getAtomicBatchFallbackMessage(unpairBatchSupport)}
+                    </p>
+                  )}
                 <div className="mb-3 flex h-2 gap-0.5 overflow-hidden rounded-full">
                   {unpairTxStates.map((txState) => (
                     <div

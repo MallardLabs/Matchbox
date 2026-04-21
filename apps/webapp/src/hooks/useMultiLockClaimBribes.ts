@@ -1,6 +1,9 @@
 import { getContractConfig } from "@/config/contracts"
 import { useNetwork } from "@/contexts/NetworkContext"
-import { getAtomicBatchSupport } from "@/utils/eip5792"
+import {
+  type AtomicBatchSupport,
+  getAtomicBatchSupport,
+} from "@/utils/eip5792"
 import { useCallback, useState } from "react"
 import type { Address, Hex } from "viem"
 import { sendCalls, waitForCallsStatus } from "viem/actions"
@@ -44,6 +47,7 @@ type UseMultiLockClaimBribesReturn = {
   isDone: boolean
   hasErrors: boolean
   executionMode: MultiLockExecutionMode
+  batchSupport: AtomicBatchSupport | null
   clear: () => void
 }
 
@@ -58,6 +62,9 @@ export function useMultiLockClaimBribes(): UseMultiLockClaimBribesReturn {
   const [status, setStatus] = useState<MultiLockClaimStatus>("idle")
   const [executionMode, setExecutionMode] =
     useState<MultiLockExecutionMode>("sequential")
+  const [batchSupport, setBatchSupport] = useState<AtomicBatchSupport | null>(
+    null,
+  )
   const [lockStates, setLockStates] = useState<LockTxState[]>([])
   const [currentIndex, setCurrentIndex] = useState(0)
 
@@ -238,13 +245,14 @@ export function useMultiLockClaimBribes(): UseMultiLockClaimBribesReturn {
   const claimAll = useCallback(
     (claims: ClaimLockRequest[]) => {
       void (async () => {
-        const { supportsAtomicBatching } = await getAtomicBatchSupport({
+        const batchSupport = await getAtomicBatchSupport({
           walletClient,
           account: accountAddress,
           chainId,
         })
+        setBatchSupport(batchSupport)
 
-        if (supportsAtomicBatching) {
+        if (batchSupport.supportsAtomicBatching) {
           await executeBatched(claims)
           return
         }
@@ -258,6 +266,7 @@ export function useMultiLockClaimBribes(): UseMultiLockClaimBribesReturn {
   const clear = useCallback(() => {
     setStatus("idle")
     setExecutionMode("sequential")
+    setBatchSupport(null)
     setLockStates([])
     setCurrentIndex(0)
   }, [])
@@ -280,6 +289,7 @@ export function useMultiLockClaimBribes(): UseMultiLockClaimBribesReturn {
     isDone: status === "done",
     hasErrors: errorCount > 0,
     executionMode,
+    batchSupport,
     clear,
   }
 }
