@@ -122,7 +122,7 @@ export function AnalyticsRevenueChart(): JSX.Element {
           </div>
           <div className="flex items-center gap-3">
             {isLoading ? (
-              <Skeleton height="24px" width="120px" />
+              <Skeleton height="24px" width="120px" animation />
             ) : (
               <div className="font-mono text-sm font-bold text-[var(--content-primary)]">
                 {formatCompactUsd(totalUsd)}
@@ -154,7 +154,7 @@ export function AnalyticsRevenueChart(): JSX.Element {
         <div className="h-72 w-full">
           {isLoading ? (
             <div className="flex h-full items-center justify-center">
-              <Skeleton height="90%" width="100%" />
+              <Skeleton height="90%" width="100%" animation />
             </div>
           ) : chartData.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center gap-2 font-mono text-xs text-[var(--content-tertiary)]">

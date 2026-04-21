@@ -133,7 +133,7 @@ function KPICard({
       </div>
       <div className="mt-3">
         {isLoading ? (
-          <Skeleton height="36px" width="60%" />
+          <Skeleton height="36px" width="60%" animation />
         ) : (
           <div className="font-mono text-2xl font-bold text-[var(--content-primary)]">
             {value}

@@ -160,7 +160,7 @@ export function AnalyticsPoolsTable(): JSX.Element {
         {isLoading ? (
           <div className="flex flex-col gap-2">
             {[0, 1, 2, 3].map((i) => (
-              <Skeleton key={i} height="44px" width="100%" />
+              <Skeleton key={i} height="44px" width="100%" animation />
             ))}
           </div>
         ) : isUnavailable ? (

@@ -123,7 +123,7 @@ export function AnalyticsEarningPower(): JSX.Element {
             </div>
             <div className="mt-2">
               {isLoadingVoter && veBTCTotalVotingPower === undefined ? (
-                <Skeleton height="32px" width="60%" />
+                <Skeleton height="32px" width="60%" animation />
               ) : (
                 <div className="font-mono text-xl font-bold text-[var(--content-primary)]">
                   {formatCompactNumber(veBTCTotalVotingPower)}
@@ -140,7 +140,7 @@ export function AnalyticsEarningPower(): JSX.Element {
             </div>
             <div className="mt-2">
               {isLoadingVoter && veMEZOTotalVotingPower === undefined ? (
-                <Skeleton height="32px" width="60%" />
+                <Skeleton height="32px" width="60%" animation />
               ) : (
                 <div className="font-mono text-xl font-bold text-[var(--content-primary)]">
                   {formatCompactNumber(veMEZOTotalVotingPower)}
@@ -160,7 +160,7 @@ export function AnalyticsEarningPower(): JSX.Element {
           <div className="h-56 w-full">
             {isLoadingHistory ? (
               <div className="flex h-full items-center justify-center">
-                <Skeleton height="90%" width="100%" />
+                <Skeleton height="90%" width="100%" animation />
               </div>
             ) : !hasChartData ? (
               <div className="flex h-full flex-col items-center justify-center gap-2 font-mono text-xs text-[var(--content-tertiary)]">
