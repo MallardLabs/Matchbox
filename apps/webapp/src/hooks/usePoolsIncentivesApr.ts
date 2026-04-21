@@ -6,7 +6,7 @@ import { useMezoPrice } from "@/hooks/useMezoPrice"
 import { type Pool, poolTvlUsd } from "@/hooks/usePools"
 import { useTokenList } from "@/hooks/useTokenList"
 import { getTokenUsdPrice } from "@repo/shared"
-import { useMemo } from "react"
+import { useCallback, useMemo } from "react"
 import type { Address } from "viem"
 import { erc20Abi, formatUnits, zeroAddress } from "viem"
 import { useReadContracts } from "wagmi"
@@ -29,7 +29,7 @@ export type PoolIncentiveToken = {
 export type PoolIncentivesData = {
   poolAddress: Address
   bribeAddress: Address | undefined
-  /** Current-epoch bribes (from bribe.left(token)). */
+  /** Current-epoch bribes (from tokenRewardsPerEpoch(token, currentEpochStart)). */
   incentivesByToken: PoolIncentiveToken[]
   totalIncentivesUSD: number
   /** Next-epoch bribes (from tokenRewardsPerEpoch(token, nextEpochStart)). */
@@ -41,6 +41,7 @@ export type PoolIncentivesData = {
 export function usePoolsIncentivesApr(pools: Pool[]): {
   map: Map<string, PoolIncentivesData>
   isLoading: boolean
+  refetch: () => void
 } {
   const { chainId, isNetworkReady } = useNetwork()
   const contracts = getContractConfig(chainId)
@@ -57,19 +58,21 @@ export function usePoolsIncentivesApr(pools: Pool[]): {
   )
 
   // Round 1: gaugeToBribe(gauge) for each gauged pool.
-  const { data: bribeAddrsData, isLoading: isLoadingBribes } = useReadContracts(
-    {
-      contracts: gaugedPools.map(({ gauge }) => ({
-        ...contracts.poolsVoter,
-        functionName: "gaugeToBribe" as const,
-        args: [gauge],
-      })),
-      query: {
-        ...QUERY_PROFILES.SHORT_CACHE,
-        enabled: isNetworkReady && gaugedPools.length > 0,
-      },
+  const {
+    data: bribeAddrsData,
+    isLoading: isLoadingBribes,
+    refetch: refetchBribeAddrs,
+  } = useReadContracts({
+    contracts: gaugedPools.map(({ gauge }) => ({
+      ...contracts.poolsVoter,
+      functionName: "gaugeToBribe" as const,
+      args: [gauge],
+    })),
+    query: {
+      ...QUERY_PROFILES.SHORT_CACHE,
+      enabled: isNetworkReady && gaugedPools.length > 0,
     },
-  )
+  })
 
   type BribeEntry = { pool: Pool; bribe: Address | undefined }
   const bribes = useMemo<BribeEntry[]>(
@@ -93,7 +96,11 @@ export function usePoolsIncentivesApr(pools: Pool[]): {
     [bribes],
   )
 
-  const { data: lengthsData, isLoading: isLoadingLengths } = useReadContracts({
+  const {
+    data: lengthsData,
+    isLoading: isLoadingLengths,
+    refetch: refetchLengths,
+  } = useReadContracts({
     contracts: activeBribes.map(({ bribe }) => ({
       address: bribe,
       abi: contracts.bribe.abi,
@@ -119,7 +126,11 @@ export function usePoolsIncentivesApr(pools: Pool[]): {
     return slots
   }, [activeBribes, lengthsData])
 
-  const { data: rewardsData, isLoading: isLoadingRewards } = useReadContracts({
+  const {
+    data: rewardsData,
+    isLoading: isLoadingRewards,
+    refetch: refetchRewards,
+  } = useReadContracts({
     contracts: tokenSlots.map(({ bribe, index }) => ({
       address: bribe,
       abi: contracts.bribe.abi,
@@ -145,14 +156,26 @@ export function usePoolsIncentivesApr(pools: Pool[]): {
     [tokenSlots, rewardsData],
   )
 
-  // Round 4: left(token) for each (bribe, token).
-  const { data: leftData, isLoading: isLoadingLeft } = useReadContracts({
+  // Round 4: tokenRewardsPerEpoch(token, currentEpochStart) for each (bribe, token).
+  // Velodrome V2 ExternalBribe writes notifyRewardAmount() into
+  // tokenRewardsPerEpoch[token][getEpochStart(block.timestamp)]. `left()` on
+  // ExternalBribe tracks remaining streaming duration and is NOT the epoch pot,
+  // so we read the per-epoch mapping directly (matches veBTC gauge-topology).
+  const epochStartCurrent = useMemo(
+    () => currentEpochStart(Math.floor(Date.now() / 1000)),
+    [],
+  )
+  const {
+    data: currentEpochData,
+    isLoading: isLoadingCurrent,
+    refetch: refetchCurrent,
+  } = useReadContracts({
     contracts: resolvedSlots.map(({ bribe, token }) => ({
       address: bribe,
       abi: contracts.bribe.abi,
       chainId,
-      functionName: "left" as const,
-      args: [token],
+      functionName: "tokenRewardsPerEpoch" as const,
+      args: [token, BigInt(epochStartCurrent)],
     })),
     query: {
       ...QUERY_PROFILES.SHORT_CACHE,
@@ -162,10 +185,14 @@ export function usePoolsIncentivesApr(pools: Pool[]): {
 
   // Round 4b: tokenRewardsPerEpoch(token, nextEpochStart) for each (bribe, token).
   const nextEpochStart = useMemo(
-    () => currentEpochStart(Math.floor(Date.now() / 1000)) + WEEK_SECONDS,
-    [],
+    () => epochStartCurrent + WEEK_SECONDS,
+    [epochStartCurrent],
   )
-  const { data: nextEpochData, isLoading: isLoadingNext } = useReadContracts({
+  const {
+    data: nextEpochData,
+    isLoading: isLoadingNext,
+    refetch: refetchNext,
+  } = useReadContracts({
     contracts: resolvedSlots.map(({ bribe, token }) => ({
       address: bribe,
       abi: contracts.bribe.abi,
@@ -234,7 +261,7 @@ export function usePoolsIncentivesApr(pools: Pool[]): {
 
     // Aggregate current + next epoch token amounts by pool.
     resolvedSlots.forEach((slot, i) => {
-      const amount = (leftData?.[i]?.result as bigint | undefined) ?? 0n
+      const amount = (currentEpochData?.[i]?.result as bigint | undefined) ?? 0n
       const nextAmount =
         (nextEpochData?.[i]?.result as bigint | undefined) ?? 0n
       if (amount <= 0n && nextAmount <= 0n) return
@@ -304,7 +331,7 @@ export function usePoolsIncentivesApr(pools: Pool[]): {
     pools,
     bribes,
     resolvedSlots,
-    leftData,
+    currentEpochData,
     nextEpochData,
     knownTokens,
     unknownTokens,
@@ -313,14 +340,29 @@ export function usePoolsIncentivesApr(pools: Pool[]): {
     mezoPrice,
   ])
 
+  const refetch = useCallback(() => {
+    void refetchBribeAddrs()
+    void refetchLengths()
+    void refetchRewards()
+    void refetchCurrent()
+    void refetchNext()
+  }, [
+    refetchBribeAddrs,
+    refetchLengths,
+    refetchRewards,
+    refetchCurrent,
+    refetchNext,
+  ])
+
   return {
     map,
     isLoading:
       isLoadingBribes ||
       isLoadingLengths ||
       isLoadingRewards ||
-      isLoadingLeft ||
+      isLoadingCurrent ||
       isLoadingNext,
+    refetch,
   }
 }
 

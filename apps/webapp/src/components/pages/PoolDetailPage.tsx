@@ -48,6 +48,7 @@ export default function PoolDetailPage({
     incentives,
     nextEpochIncentives,
     isLoading: isLoadingIncentives,
+    refetch: refetchIncentives,
   } = usePoolBribeIncentives(bribeAddress)
   const { price: btcPrice } = useBtcPrice()
   const { price: mezoPrice } = useMezoPrice()
@@ -451,6 +452,7 @@ export default function PoolDetailPage({
           isOpen={addOpen}
           onClose={() => setAddOpen(false)}
           pool={pool}
+          onIncentivesAdded={refetchIncentives}
         />
       )}
     </div>

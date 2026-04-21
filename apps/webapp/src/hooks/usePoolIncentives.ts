@@ -122,6 +122,14 @@ export function usePoolBribeIncentives(bribeAddress: Address | undefined): {
     [tokenAddressesData],
   )
 
+  // Current-epoch rewards: tokenRewardsPerEpoch(token, currentEpochStart).
+  // Velodrome V2 ExternalBribe writes notifyRewardAmount() into
+  // tokenRewardsPerEpoch[token][getEpochStart(block.timestamp)]. `left()` on
+  // ExternalBribe tracks remaining streaming duration and is NOT the epoch pot.
+  const epochStartCurrent = useMemo(
+    () => currentEpochStartSec(Math.floor(Date.now() / 1000)),
+    [],
+  )
   const {
     data: leftData,
     isLoading: isLoadingLeft,
@@ -131,8 +139,8 @@ export function usePoolBribeIncentives(bribeAddress: Address | undefined): {
       address: bribeAddress,
       abi: contracts.bribe.abi,
       chainId,
-      functionName: "left" as const,
-      args: [t],
+      functionName: "tokenRewardsPerEpoch" as const,
+      args: [t, BigInt(epochStartCurrent)],
     })),
     query: {
       ...QUERY_PROFILES.SHORT_CACHE,
@@ -142,8 +150,8 @@ export function usePoolBribeIncentives(bribeAddress: Address | undefined): {
 
   // Next-epoch rewards: tokenRewardsPerEpoch(token, nextEpochStart).
   const nextEpochStart = useMemo(
-    () => currentEpochStartSec(Math.floor(Date.now() / 1000)) + WEEK_SECONDS,
-    [],
+    () => epochStartCurrent + WEEK_SECONDS,
+    [epochStartCurrent],
   )
   const {
     data: nextEpochData,

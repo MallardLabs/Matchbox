@@ -14,7 +14,6 @@ import { formatUsdValue } from "@/hooks/useTokenPrices"
 import type { PoolVotableSummary } from "@/hooks/useVotables"
 import { Button, Tag } from "@mezo-org/mezo-clay"
 import Link from "next/link"
-import { formatUnits } from "viem"
 
 export function TokenPairIcon({
   symbol0,
@@ -196,9 +195,7 @@ export default function PoolCard({
           </dt>
           <dd
             className={`font-mono tabular-nums ${
-              votingApr > 0
-                ? "text-[#F7931A]"
-                : "text-[var(--content-primary)]"
+              votingApr > 0 ? "text-[#F7931A]" : "text-[var(--content-primary)]"
             }`}
           >
             {formatPercent(votingApr)}
@@ -218,48 +215,33 @@ export default function PoolCard({
         </div>
       </dl>
 
-      {hasGauge && currentBribesUsd > 0 && (
-        <div className="rounded-lg border border-[rgba(247,147,26,0.25)] bg-[rgba(247,147,26,0.06)] p-3">
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <div className="flex items-center gap-1 text-2xs uppercase tracking-wider text-[var(--content-tertiary)]">
-              External bribes
-              <Tooltip
-                id={`pc-bribes-${pool.address}`}
-                content="Third-party incentives posted to this pool's ExternalBribe contract. These sit in the current-epoch pot and are distributed to voters at the next epoch rollover."
-              />
-            </div>
-            <span className="font-mono text-sm font-semibold tabular-nums text-[#F7931A]">
+      {hasGauge && currentBribesUsd > 0 && currentBribeTokens.length > 0 && (
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-1 text-2xs uppercase tracking-wider text-[var(--content-tertiary)]">
+            Incentives
+            <Tooltip
+              id={`pc-bribes-${pool.address}`}
+              content={`Third-party incentives posted to this pool's ExternalBribe for the current epoch. Distributed to veMEZO voters at the next rollover (in ${timeRemaining}).`}
+            />
+          </div>
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="font-mono text-sm font-medium text-[#F7931A] tabular-nums">
               {formatUsdValue(currentBribesUsd)}
             </span>
-          </div>
-          <p className="mb-2 font-mono text-2xs text-[var(--content-tertiary)]">
-            Rolls to voters in {timeRemaining}
-          </p>
-
-          {currentBribeTokens.length > 0 && (
-            <div className="flex flex-wrap items-center gap-1.5">
-              {currentBribeTokens.map((token) => {
-                const amount = Number(
-                  formatUnits(token.amount, token.decimals),
-                ).toLocaleString(undefined, { maximumFractionDigits: 2 })
-                return (
-                  <span
-                    key={`cur-${token.tokenAddress}`}
-                    className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface)] px-1.5 py-0.5"
-                  >
-                    <TokenIcon symbol={token.symbol} size={12} />
-                    <span className="font-mono text-2xs text-[var(--content-primary)]">
-                      {amount}
-                    </span>
-                    <span className="font-mono text-2xs text-[var(--content-tertiary)]">
-                      {token.symbol}
-                    </span>
+            <span className="flex flex-wrap items-center gap-1">
+              {currentBribeTokens.map((token) => (
+                <span
+                  key={`cur-${token.tokenAddress}`}
+                  className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface-secondary)] px-1.5 py-0.5"
+                >
+                  <TokenIcon symbol={token.symbol} size={12} />
+                  <span className="font-mono text-2xs text-[var(--content-primary)]">
+                    {token.symbol}
                   </span>
-                )
-              })}
-            </div>
-          )}
-
+                </span>
+              ))}
+            </span>
+          </div>
         </div>
       )}
 

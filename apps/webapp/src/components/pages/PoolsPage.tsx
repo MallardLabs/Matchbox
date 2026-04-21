@@ -39,7 +39,8 @@ function matchesPoolType(pool: Pool, filter: PoolTypeFilter): boolean {
 
 export default function PoolsPage(): JSX.Element {
   const { pools, isLoading, error } = usePools()
-  const { map: incentivesMap } = usePoolsIncentivesApr(pools)
+  const { map: incentivesMap, refetch: refetchIncentives } =
+    usePoolsIncentivesApr(pools)
   const { byPool: votablesByPool } = useVotables()
 
   const [sortColumn, setSortColumn] = useState<SortColumn>("tvl")
@@ -325,6 +326,7 @@ export default function PoolsPage(): JSX.Element {
           isOpen={!!activePool}
           onClose={() => setActivePool(null)}
           pool={activePool}
+          onIncentivesAdded={refetchIncentives}
         />
       ) : null}
     </div>

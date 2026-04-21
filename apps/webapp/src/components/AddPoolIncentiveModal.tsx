@@ -1,11 +1,11 @@
 import { TokenPairIcon } from "@/components/PoolCard"
 import { TokenSelector } from "@/components/TokenSelector"
-import type { Pool } from "@/hooks/usePools"
 import {
   useAddPoolIncentive,
   useIsPoolIncentiveTokenAllowlisted,
   usePoolBribeAddress,
 } from "@/hooks/usePoolIncentives"
+import type { Pool } from "@/hooks/usePools"
 import type { Token } from "@/hooks/useTokenList"
 import { useApproveToken, useTokenAllowance } from "@/hooks/useVoting"
 import {
@@ -83,8 +83,7 @@ export default function AddPoolIncentiveModal({
     incentiveToken && balance !== undefined
       ? formatUnits(balance, incentiveToken.decimals)
       : undefined
-  const hasInsufficientBalance =
-    balance !== undefined && parsedAmount > balance
+  const hasInsufficientBalance = balance !== undefined && parsedAmount > balance
 
   const {
     approve,
@@ -125,7 +124,13 @@ export default function AddPoolIncentiveModal({
       onIncentivesAdded?.()
       onClose()
     }
-  }, [isAddSuccess, onClose, onIncentivesAdded, refetchAllowance, refetchBalance])
+  }, [
+    isAddSuccess,
+    onClose,
+    onIncentivesAdded,
+    refetchAllowance,
+    refetchBalance,
+  ])
 
   const handleApprove = () => {
     if (!incentiveToken || !bribeAddress || parsedAmount <= 0n) return
@@ -214,7 +219,10 @@ export default function AddPoolIncentiveModal({
               >
                 <span className="uppercase">Amount</span>
                 {incentiveToken && (
-                  <span className="normal-case"> ({incentiveToken.symbol})</span>
+                  <span className="normal-case">
+                    {" "}
+                    ({incentiveToken.symbol})
+                  </span>
                 )}
               </label>
               {incentiveToken && formattedBalance !== undefined && (
