@@ -60,7 +60,9 @@ type TooltipProps = {
 
 function CustomTooltip({ active, payload }: TooltipProps) {
   if (!active || !payload || payload.length === 0) return null
-  const datum = payload[0].payload
+  const first = payload[0]
+  if (!first) return null
+  const datum = first.payload
   const date = new Date(datum.epochStart * 1000)
 
   return (
