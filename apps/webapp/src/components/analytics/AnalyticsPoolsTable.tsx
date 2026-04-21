@@ -215,7 +215,7 @@ export function AnalyticsPoolsTable(): JSX.Element {
                         </span>
                         <div className="flex items-center gap-1.5">
                           <Tag
-                            kind="secondary"
+                            closeable={false}
                             color={
                               pool.type === "concentrated" ? "yellow" : "gray"
                             }
@@ -223,12 +223,12 @@ export function AnalyticsPoolsTable(): JSX.Element {
                             {pool.type === "concentrated" ? "CL" : "AMM"}
                           </Tag>
                           {pool.volatility === "stable" && (
-                            <Tag kind="secondary" color="blue">
+                            <Tag closeable={false} color="blue">
                               stable
                             </Tag>
                           )}
                           {pool.isVotable && (
-                            <Tag kind="secondary" color="green">
+                            <Tag closeable={false} color="green">
                               votable
                             </Tag>
                           )}
