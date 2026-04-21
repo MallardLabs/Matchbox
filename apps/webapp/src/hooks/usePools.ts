@@ -78,8 +78,10 @@ function extractTickSpacing(symbol: string | undefined): number {
 async function fetchPools(chainId: number): Promise<Pool[]> {
   const network = POOLS_NETWORK[chainId]
   if (!network) throw new Error(`Unsupported chainId ${chainId}`)
-  const url = `/api/pools?network=${network}&filter=known`
-  const response = await fetch(url)
+  // Per-network path (not query string) so the browser HTTP cache and CDN
+  // never accidentally serve the wrong network's response after a toggle.
+  const url = `/api/pools/${network}?filter=known`
+  const response = await fetch(url, { cache: "no-store" })
   if (!response.ok) {
     throw new Error(`Failed to fetch pools: ${response.status}`)
   }

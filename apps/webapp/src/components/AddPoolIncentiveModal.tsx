@@ -21,7 +21,7 @@ import {
 } from "@mezo-org/mezo-clay"
 import { getTokenUsdPrice } from "@repo/shared"
 import { useEffect, useMemo, useState } from "react"
-import { formatUnits, parseUnits } from "viem"
+import { type Address, formatUnits, parseUnits } from "viem"
 import { useAccount, useReadContract } from "wagmi"
 
 type AddPoolIncentiveModalProps = {
@@ -29,6 +29,15 @@ type AddPoolIncentiveModalProps = {
   onClose: () => void
   pool: Pool
   onIncentivesAdded?: () => void
+  /**
+   * Pre-fetched bribe address for this pool's gauge. The PoolsPage loads this
+   * for every gauged pool on mount (via `usePoolsIncentivesApr`), so passing it
+   * in means the modal opens with the bribe address already resolved — no
+   * "Looking up bribe contract…" delay. We still fall back to an on-demand
+   * lookup if it wasn't pre-fetched (e.g. opening the modal from a route
+   * that didn't hydrate the incentives map).
+   */
+  prefetchedBribeAddress?: Address | undefined
 }
 
 export default function AddPoolIncentiveModal({
@@ -36,10 +45,17 @@ export default function AddPoolIncentiveModal({
   onClose,
   pool,
   onIncentivesAdded,
+  prefetchedBribeAddress,
 }: AddPoolIncentiveModalProps): JSX.Element {
   const { address: walletAddress } = useAccount()
   const gaugeAddress = pool.gauge ?? undefined
-  const { bribeAddress } = usePoolBribeAddress(gaugeAddress)
+  // Only fire the on-demand lookup if the caller didn't pre-fetch. This makes
+  // the modal feel instant when opened from the Pools page (the common case)
+  // while still working standalone.
+  const { bribeAddress: fetchedBribeAddress } = usePoolBribeAddress(
+    prefetchedBribeAddress ? undefined : gaugeAddress,
+  )
+  const bribeAddress = prefetchedBribeAddress ?? fetchedBribeAddress
 
   const [incentiveToken, setIncentiveToken] = useState<Token | undefined>()
   const [incentiveAmount, setIncentiveAmount] = useState("")
@@ -47,9 +63,10 @@ export default function AddPoolIncentiveModal({
   // effect of bribes attracting more votes.
   const [voteMultiplier, setVoteMultiplier] = useState(1.0)
   // How the slider is displayed/labeled. The underlying value is always stored
-  // as a multiplier, but users think in either absolute veMEZO counts or
-  // relative growth percentages.
-  const [sliderMode, setSliderMode] = useState<"veMEZO" | "percent">("veMEZO")
+  // as a multiplier, but users think in either absolute veBTC counts or
+  // relative growth percentages. (veBTC is the actual voting token on pool
+  // gauges — veMEZO is merely a boost token paired with it.)
+  const [sliderMode, setSliderMode] = useState<"veBTC" | "percent">("veBTC")
   // User-edited buffer for the manual input; null means "follow the slider".
   // We keep it separate from voteMultiplier so mid-typing values like "5." or
   // "2.4M" don't fight with the slider while they're being typed.
@@ -123,7 +140,7 @@ export default function AddPoolIncentiveModal({
       setIncentiveToken(undefined)
       setIncentiveAmount("")
       setVoteMultiplier(1.0)
-      setSliderMode("veMEZO")
+      setSliderMode("veBTC")
       setVoteInputDraft(null)
     }
   }, [isOpen])
@@ -266,18 +283,19 @@ export default function AddPoolIncentiveModal({
 
   const voteGrowthPct = Math.round((voteMultiplier - 1) * 100)
 
-  // veMEZO voting on the pool, for the "absolute veMEZO" slider mode.
-  // Derived from USD votes and the current MEZO price.
-  const currentVotesMezo = useMemo(() => {
-    if (currentVotesUsd === null || !mezoPrice || mezoPrice <= 0) return null
-    return currentVotesUsd / mezoPrice
-  }, [currentVotesUsd, mezoPrice])
+  // veBTC voting on the pool, for the "absolute veBTC" slider mode. Votes are
+  // denominated in veBTC — veMEZO is just the boost token paired with veBTC
+  // for pool gauge voting. Derived from USD votes and the current BTC price.
+  const currentVotesBtc = useMemo(() => {
+    if (currentVotesUsd === null || !btcPrice || btcPrice <= 0) return null
+    return currentVotesUsd / btcPrice
+  }, [currentVotesUsd, btcPrice])
 
-  // Disable the veMEZO mode toggle if we can't derive a count (e.g. no MEZO
+  // Disable the veBTC mode toggle if we can't derive a count (e.g. no BTC
   // price yet). We fall back to percent mode in that case.
-  const canUseVeMezoMode = currentVotesMezo !== null
-  const effectiveSliderMode: "veMEZO" | "percent" =
-    sliderMode === "veMEZO" && !canUseVeMezoMode ? "percent" : sliderMode
+  const canUseVeBtcMode = currentVotesBtc !== null
+  const effectiveSliderMode: "veBTC" | "percent" =
+    sliderMode === "veBTC" && !canUseVeBtcMode ? "percent" : sliderMode
 
   // Parse user input like "5.2M", "1,234,567", "50%", "5.2b", "2k" into a raw
   // number. Returns null on invalid input (used to suppress voteMultiplier
@@ -295,11 +313,15 @@ export default function AddPoolIncentiveModal({
   }
 
   // Format the "canonical" input value for the current slider mode — used to
-  // populate the input when the user hasn't typed anything.
+  // populate the input when the user hasn't typed anything. veBTC is shown to
+  // higher precision than integer counts because 1 veBTC ≈ $60k+.
   const formatVoteInput = (): string => {
-    if (effectiveSliderMode === "veMEZO" && currentVotesMezo !== null) {
-      const mezo = currentVotesMezo * voteMultiplier
-      return Math.round(mezo).toLocaleString()
+    if (effectiveSliderMode === "veBTC" && currentVotesBtc !== null) {
+      const btc = currentVotesBtc * voteMultiplier
+      if (btc === 0) return "0"
+      if (btc < 1) return btc.toFixed(4)
+      if (btc < 100) return btc.toFixed(2)
+      return Math.round(btc).toLocaleString()
     }
     return String(voteGrowthPct)
   }
@@ -310,9 +332,9 @@ export default function AddPoolIncentiveModal({
     setVoteInputDraft(raw)
     const parsed = parseSuffixedNumber(raw)
     if (parsed === null) return
-    if (effectiveSliderMode === "veMEZO" && currentVotesMezo !== null) {
-      if (currentVotesMezo <= 0) return
-      setVoteMultiplier(Math.max(0, parsed / currentVotesMezo))
+    if (effectiveSliderMode === "veBTC" && currentVotesBtc !== null) {
+      if (currentVotesBtc <= 0) return
+      setVoteMultiplier(Math.max(0, parsed / currentVotesBtc))
     } else {
       // Percent mode — treat bare number as growth percentage.
       setVoteMultiplier(Math.max(0, 1 + parsed / 100))
@@ -331,7 +353,7 @@ export default function AddPoolIncentiveModal({
     setVoteInputDraft(null)
   }
 
-  const handleModeChange = (mode: "veMEZO" | "percent") => {
+  const handleModeChange = (mode: "veBTC" | "percent") => {
     setSliderMode(mode)
     setVoteInputDraft(null)
   }
@@ -376,7 +398,7 @@ export default function AddPoolIncentiveModal({
 
           <p className="text-sm text-[var(--content-secondary)]">
             Add allowlisted tokens to this pool&apos;s bribe contract to attract
-            veBTC votes and reward LPs this epoch.
+            veBTC votes (with veMEZO boost) and reward LPs this epoch.
           </p>
 
           <TokenSelector
@@ -508,7 +530,7 @@ export default function AddPoolIncentiveModal({
                     Assumed Epoch Votes
                     <Tooltip
                       id={`add-incentive-slider-${pool.address}`}
-                      content="How much veMEZO voting power flows into this pool this epoch. Switch between an absolute veMEZO count and a percentage change from today. Type directly or drag the slider — higher vote totals dilute the per-voter reward."
+                      content="How much veBTC voting power flows into this pool this epoch. veBTC is the voting token — veMEZO pairs alongside it as the boost. Switch between an absolute veBTC count and a percentage change from today. Type directly or drag the slider — higher vote totals dilute the per-voter reward."
                     />
                   </div>
                   {isResettable && (
@@ -531,19 +553,17 @@ export default function AddPoolIncentiveModal({
                       onChange={(e) => handleVoteInputChange(e.target.value)}
                       onBlur={handleVoteInputBlur}
                       disabled={currentVotesUsd === null}
-                      placeholder={
-                        effectiveSliderMode === "veMEZO" ? "0" : "0%"
-                      }
+                      placeholder={effectiveSliderMode === "veBTC" ? "0" : "0%"}
                       aria-label={
-                        effectiveSliderMode === "veMEZO"
-                          ? "Assumed epoch votes in veMEZO"
+                        effectiveSliderMode === "veBTC"
+                          ? "Assumed epoch votes in veBTC"
                           : "Assumed vote growth percent"
                       }
-                      className="w-full rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-1 font-mono text-sm tabular-nums text-[var(--content-primary)] outline-none focus:border-[#F7931A] disabled:cursor-not-allowed disabled:opacity-40"
+                      className="w-full rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-1 pr-12 font-mono text-sm tabular-nums text-[var(--content-primary)] outline-none focus:border-[#F7931A] disabled:cursor-not-allowed disabled:opacity-40"
                     />
-                    {effectiveSliderMode === "veMEZO" && (
+                    {effectiveSliderMode === "veBTC" && (
                       <span className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-2xs text-[var(--content-tertiary)]">
-                        veMEZO
+                        veBTC
                       </span>
                     )}
                     {effectiveSliderMode === "percent" && (
@@ -556,15 +576,15 @@ export default function AddPoolIncentiveModal({
                     <legend className="sr-only">Slider units</legend>
                     <button
                       type="button"
-                      onClick={() => handleModeChange("veMEZO")}
-                      disabled={!canUseVeMezoMode}
+                      onClick={() => handleModeChange("veBTC")}
+                      disabled={!canUseVeBtcMode}
                       className={`px-2 py-1 transition-colors ${
-                        effectiveSliderMode === "veMEZO"
+                        effectiveSliderMode === "veBTC"
                           ? "bg-[#F7931A] text-white"
                           : "text-[var(--content-secondary)] hover:text-[var(--content-primary)] disabled:cursor-not-allowed disabled:opacity-40"
                       }`}
                     >
-                      veMEZO
+                      veBTC
                     </button>
                     <button
                       type="button"
@@ -580,10 +600,10 @@ export default function AddPoolIncentiveModal({
                   </fieldset>
                 </div>
 
-                {effectiveSliderMode === "veMEZO" &&
-                  currentVotesMezo !== null && (
+                {effectiveSliderMode === "veBTC" &&
+                  currentVotesBtc !== null && (
                     <p className="mb-1 text-[10px] text-[var(--content-tertiary)]">
-                      Currently voting: {formatCompact(currentVotesMezo)} veMEZO
+                      Currently voting: {formatCompact(currentVotesBtc)} veBTC
                       {voteGrowthPct > 300 && (
                         <span className="ml-1 text-[var(--accent)]">
                           (slider maxed — input overrides)
@@ -604,13 +624,13 @@ export default function AddPoolIncentiveModal({
                   aria-label="Assumed epoch votes slider"
                 />
                 <div className="mt-1 flex justify-between text-[10px] text-[var(--content-tertiary)]">
-                  {effectiveSliderMode === "veMEZO" &&
-                  currentVotesMezo !== null ? (
+                  {effectiveSliderMode === "veBTC" &&
+                  currentVotesBtc !== null ? (
                     <>
                       <span>0</span>
-                      <span>{formatCompact(currentVotesMezo * 2)}</span>
-                      <span>{formatCompact(currentVotesMezo * 3)}</span>
-                      <span>{formatCompact(currentVotesMezo * 4)}</span>
+                      <span>{formatCompact(currentVotesBtc * 2)}</span>
+                      <span>{formatCompact(currentVotesBtc * 3)}</span>
+                      <span>{formatCompact(currentVotesBtc * 4)}</span>
                     </>
                   ) : (
                     <>
@@ -623,13 +643,13 @@ export default function AddPoolIncentiveModal({
                 </div>
               </div>
 
-              {/* $ / 1k veMEZO voting power — cost-per-vote KPI. */}
+              {/* $ / 1k veBTC voting power — cost-per-vote KPI. */}
               <div className="flex items-center justify-between gap-2 border-t border-[var(--border)] pt-2">
                 <div className="flex items-center gap-1 text-2xs uppercase tracking-wider text-[var(--content-tertiary)]">
-                  Cost per $1k veMEZO
+                  Cost per $1k veBTC
                   <Tooltip
                     id={`add-incentive-cost-${pool.address}`}
-                    content="Your new bribe divided by the assumed USD value of veMEZO voting this pool (× $1,000). Lower is better — you're competing for votes against every other pool posting bribes this epoch."
+                    content="Your new bribe divided by the assumed USD value of veBTC voting this pool (× $1,000). Lower is better — you're competing for votes against every other pool posting bribes this epoch."
                   />
                 </div>
                 <span className="font-mono text-sm font-semibold tabular-nums text-[var(--content-primary)]">

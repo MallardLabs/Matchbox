@@ -2,6 +2,15 @@ export const config = {
   runtime: "edge",
 }
 
+// Per-network edge proxy for the Mezo pools API.
+//
+// Split into distinct paths (`/api/pools/mainnet` vs `/api/pools/testnet`) —
+// NOT a single `/api/pools?network=…` endpoint — so the CDN cache and browser
+// HTTP cache key the two responses on fully separate URLs. The previous
+// query-string variant caused stale/cross-network data on rapid network
+// switches because shared caches sometimes collapse responses that share a
+// path regardless of query string. Isolating by path removes the ambiguity.
+
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, OPTIONS",
@@ -23,7 +32,12 @@ export default async function handler(request: Request) {
   }
 
   const url = new URL(request.url)
-  const network = url.searchParams.get("network") === "testnet" ? "testnet" : "mainnet"
+  // The dynamic segment comes in at the tail of the path on the edge runtime.
+  // `/api/pools/testnet` → segments[2] === "testnet". Fall back to "mainnet"
+  // if the segment is missing or unknown, so we never accidentally blend chains.
+  const segments = url.pathname.split("/").filter(Boolean)
+  const rawNetwork = segments[segments.length - 1]
+  const network = rawNetwork === "testnet" ? "testnet" : "mainnet"
   const filter = url.searchParams.get("filter") ?? "known"
 
   const upstream = `${UPSTREAM[network]}/pools?filter=${encodeURIComponent(filter)}`
@@ -53,12 +67,9 @@ export default async function handler(request: Request) {
     })
   } catch (err) {
     const message = err instanceof Error ? err.message : "unknown"
-    return new Response(
-      JSON.stringify({ success: false, error: message }),
-      {
-        status: 502,
-        headers: { "Content-Type": "application/json", ...CORS_HEADERS },
-      },
-    )
+    return new Response(JSON.stringify({ success: false, error: message }), {
+      status: 502,
+      headers: { "Content-Type": "application/json", ...CORS_HEADERS },
+    })
   }
 }

@@ -39,8 +39,10 @@ const VOTABLES_NETWORK: Record<number, "mainnet" | "testnet"> = {
 async function fetchVotables(chainId: number): Promise<Votable[]> {
   const network = VOTABLES_NETWORK[chainId]
   if (!network) throw new Error(`Unsupported chainId ${chainId}`)
-  const url = `/api/votables?network=${network}`
-  const response = await fetch(url)
+  // Per-network path so CDN / browser cache never collapses testnet and
+  // mainnet responses together (see `pages/api/votables/[network].ts`).
+  const url = `/api/votables/${network}`
+  const response = await fetch(url, { cache: "no-store" })
   if (!response.ok) {
     throw new Error(`Failed to fetch votables: ${response.status}`)
   }

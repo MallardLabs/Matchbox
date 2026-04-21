@@ -452,6 +452,13 @@ export const POOLS_VOTER_ABI = [
     type: "function",
   },
   {
+    inputs: [{ internalType: "address", name: "_token", type: "address" }],
+    name: "isWhitelistedToken",
+    outputs: [{ internalType: "bool", name: "", type: "bool" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
     inputs: [
       { internalType: "address[]", name: "_bribes", type: "address[]" },
       { internalType: "address[][]", name: "_tokens", type: "address[][]" },

@@ -346,6 +346,9 @@ export default function PoolsPage(): JSX.Element {
           onClose={() => setActivePool(null)}
           pool={activePool}
           onIncentivesAdded={refetchIncentives}
+          prefetchedBribeAddress={
+            incentivesMap.get(activePool.address.toLowerCase())?.bribeAddress
+          }
         />
       ) : null}
     </div>

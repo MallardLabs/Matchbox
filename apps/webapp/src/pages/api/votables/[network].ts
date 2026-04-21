@@ -2,6 +2,12 @@ export const config = {
   runtime: "edge",
 }
 
+// Per-network edge proxy for the Mezo votables API.
+//
+// See `pages/api/pools/[network].ts` for why we route by path instead of
+// query string — prevents the CDN / browser from serving one network's
+// cached response to the other network on network toggle.
+
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, OPTIONS",
@@ -23,8 +29,9 @@ export default async function handler(request: Request) {
   }
 
   const url = new URL(request.url)
-  const network =
-    url.searchParams.get("network") === "testnet" ? "testnet" : "mainnet"
+  const segments = url.pathname.split("/").filter(Boolean)
+  const rawNetwork = segments[segments.length - 1]
+  const network = rawNetwork === "testnet" ? "testnet" : "mainnet"
 
   const upstream = `${UPSTREAM[network]}/votes/votables`
   const origin = SPOOF_ORIGIN[network] ?? "https://mezo.org"

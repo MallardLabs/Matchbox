@@ -453,6 +453,7 @@ export default function PoolDetailPage({
           onClose={() => setAddOpen(false)}
           pool={pool}
           onIncentivesAdded={refetchIncentives}
+          prefetchedBribeAddress={bribeAddress}
         />
       )}
     </div>
