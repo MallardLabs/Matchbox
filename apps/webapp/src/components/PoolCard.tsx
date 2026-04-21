@@ -95,11 +95,6 @@ export default function PoolCard({
   // fall back to API if no on-chain data yet.
   const currentBribesUsd = currentBribesUsdOnchain || bribesUsdApi
   const nextBribesUsd = incentives?.totalNextEpochIncentivesUSD ?? 0
-  const hasAnyVoterIncentive =
-    votingApr > 0 ||
-    voterFeesUsd > 0 ||
-    currentBribesUsd > 0 ||
-    nextBribesUsd > 0
   // LP total APR = fees + emissions only. Bribes and voter fees go to veMEZO voters.
   const totalApr = feesApr + emissionsApr
   const hasGauge = !!pool.gauge
@@ -111,7 +106,7 @@ export default function PoolCard({
     (t) => t.amount > 0n,
   )
   return (
-    <article className="group relative flex min-w-0 flex-col gap-4 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
+    <article className="group relative flex h-full min-w-0 flex-col gap-4 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
       <div className="flex items-start justify-between gap-3">
         <Link
           href={detailHref}
@@ -177,26 +172,38 @@ export default function PoolCard({
         </div>
         <div>
           <dt className="flex items-center gap-1 text-[var(--content-tertiary)]">
-            Fees APR
+            Voter Fees
             <Tooltip
-              id={`pc-feesapr-${pool.address}`}
-              content="Annualized return from LP trading fees over the last 24 hours."
+              id={`pc-voterfees-${pool.address}`}
+              content="LP trading fees redirected to veMEZO voters this epoch (not to LPs). Sourced from api.mezo.org/votes/votables stats.gaugeFees — the sum of USD across all fee tokens. Claimable by voters at epoch end."
             />
           </dt>
-          <dd className="font-mono tabular-nums text-[var(--content-primary)]">
-            {formatPercent(feesApr)}
+          <dd
+            className={`font-mono tabular-nums ${
+              voterFeesUsd > 0
+                ? "text-[#F7931A]"
+                : "text-[var(--content-primary)]"
+            }`}
+          >
+            {formatUsdValue(voterFeesUsd)}
           </dd>
         </div>
         <div>
           <dt className="flex items-center gap-1 text-[var(--content-tertiary)]">
-            Emissions APY
+            vAPR
             <Tooltip
-              id={`pc-emissions-${pool.address}`}
-              content="Annualized MEZO emissions paid to LP stakers in this gauge."
+              id={`pc-vapr-${pool.address}`}
+              content="Voting APR — annualized return for veMEZO voters who allocate to this pool. (voter fees + bribes this epoch × 52) / USD votes on this pool. Sourced from api.mezo.org/votes/votables stats.votingApr."
             />
           </dt>
-          <dd className="font-mono tabular-nums text-[var(--content-primary)]">
-            {formatPercent(emissionsApr)}
+          <dd
+            className={`font-mono tabular-nums ${
+              votingApr > 0
+                ? "text-[#F7931A]"
+                : "text-[var(--content-primary)]"
+            }`}
+          >
+            {formatPercent(votingApr)}
           </dd>
         </div>
         <div>
@@ -213,46 +220,20 @@ export default function PoolCard({
         </div>
       </dl>
 
-      {hasGauge && (
-        <div
-          className={`rounded-lg border p-3 ${
-            hasAnyVoterIncentive
-              ? "border-[rgba(247,147,26,0.25)] bg-[rgba(247,147,26,0.06)]"
-              : "border-[var(--border)] bg-[var(--surface-secondary)]"
-          }`}
-        >
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <div className="flex items-center gap-1 text-2xs uppercase tracking-wider text-[var(--content-tertiary)]">
-              Voter rewards
-              <Tooltip
-                id={`pc-voter-${pool.address}`}
-                content="Everything that accrues to veMEZO voters who allocate to this pool — not to LPs. vAPR is the Mezo API's voting APR. Trading fees → voters is LP fee revenue redirected to voters this epoch. Bribes are external incentives posted to this pool's ExternalBribe for the current and upcoming epoch."
-              />
-            </div>
-            <span
-              className={`font-mono text-xs font-semibold tabular-nums ${
-                votingApr > 0
-                  ? "text-[#F7931A]"
-                  : "text-[var(--content-tertiary)]"
-              }`}
-              title="vAPR from api.mezo.org/votes/votables"
-            >
-              {votingApr > 0 ? `${formatPercent(votingApr)} vAPR` : "0% vAPR"}
-            </span>
+      {hasGauge && (currentBribesUsd > 0 || nextBribesUsd > 0) && (
+        <div className="rounded-lg border border-[rgba(247,147,26,0.25)] bg-[rgba(247,147,26,0.06)] p-3">
+          <div className="mb-2 flex items-center gap-1 text-2xs uppercase tracking-wider text-[var(--content-tertiary)]">
+            External bribes
+            <Tooltip
+              id={`pc-bribes-${pool.address}`}
+              content="Third-party incentives posted to this pool's ExternalBribe contract. 'This epoch' is the pot voters are accruing right now (claimable at epoch end); 'Next epoch' is anything pre-posted for the upcoming voting round."
+            />
           </div>
 
-          <dl className="mb-2 grid grid-cols-3 gap-2 text-2xs">
+          <dl className="mb-2 grid grid-cols-2 gap-2 text-2xs">
             <div className="min-w-0">
               <dt className="truncate text-[var(--content-tertiary)]">
-                Fees → voters
-              </dt>
-              <dd className="truncate font-mono tabular-nums text-[var(--content-primary)]">
-                {formatUsdValue(voterFeesUsd)}
-              </dd>
-            </div>
-            <div className="min-w-0">
-              <dt className="truncate text-[var(--content-tertiary)]">
-                Bribes now
+                This epoch
               </dt>
               <dd className="truncate font-mono tabular-nums text-[var(--content-primary)]">
                 {formatUsdValue(currentBribesUsd)}
@@ -260,7 +241,7 @@ export default function PoolCard({
             </div>
             <div className="min-w-0">
               <dt className="truncate text-[var(--content-tertiary)]">
-                Bribes next
+                Next epoch
               </dt>
               <dd
                 className={`truncate font-mono tabular-nums ${
@@ -328,15 +309,10 @@ export default function PoolCard({
             </div>
           )}
 
-          {!hasAnyVoterIncentive && (
-            <p className="text-2xs text-[var(--content-tertiary)]">
-              No voter rewards yet this epoch — be the first briber.
-            </p>
-          )}
         </div>
       )}
 
-      <div className="flex items-center justify-between gap-2 border-t border-[var(--border)] pt-3">
+      <div className="mt-auto flex items-center justify-between gap-2 border-t border-[var(--border)] pt-3">
         <Link
           href={detailHref}
           className="text-xs text-[var(--content-secondary)] transition-colors hover:text-[#F7931A]"
