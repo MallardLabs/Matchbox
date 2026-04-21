@@ -224,7 +224,7 @@ export default function GaugeCard({
             Optimal veMEZO
             <Tooltip
               id={`gc-optimal-${gauge.address}`}
-              content="veMEZO voting weight on this gauge that reaches maximum (5x) boost. System totals are veBTC and veMEZO supply() from escrow—the same bases as the Boost calculator. Below that, the bar fills in orange toward the goal. At the target the bar is green. If oversubscribed, a red layer grows over the green from 0% at 1× to 100% at 2× the optimal weight (full red); beyond 2× the bar stays full red—more veMEZO dilutes rewards per voter."
+              content="veMEZO voting weight on this gauge that reaches maximum (5x) boost. System totals are veBTC and veMEZO totalVotingPower() from escrow—the same bases as the Boost calculator. Below that, the bar fills in orange toward the goal. At the target the bar is green. If oversubscribed, a red layer grows over the green from 0% at 1× to 100% at 2× the optimal weight (full red); beyond 2× the bar stays full red—more veMEZO dilutes rewards per voter."
             />
           </dt>
           <dd className="min-w-0 text-[var(--content-primary)]">

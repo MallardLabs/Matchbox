@@ -8,11 +8,7 @@ type VeSupplyResult = {
   fetchStatus: FetchStatus
 }
 
-/**
- * Live veBTC / veMEZO totals from escrow `supply()` — Boost calculator
- * system defaults. Honors the preview-mode override so simulating a supply
- * flows through here to the standalone BoostCalculator on the /boost page.
- */
+/** Live veBTC / veMEZO totals from escrow `totalVotingPower()` for Boost calculator defaults. */
 export function useVeSupply(): VeSupplyResult {
   const { veBTCSupply, veMEZOSupply, fetchStatus } = useVeSupplyBigint()
 

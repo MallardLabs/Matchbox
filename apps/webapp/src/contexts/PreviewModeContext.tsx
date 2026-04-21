@@ -44,7 +44,7 @@ export function usePreviewMode(): PreviewModeContextValue {
 
 /**
  * Holds simulation overrides for veBTC / veMEZO system totals, plus the live
- * supply fetch that seeds the overrides when preview mode is toggled on.
+ * totalVotingPower fetch that seeds the overrides when preview mode is toggled on.
  * State is session-scoped (no persistence).
  */
 export function PreviewModeProvider({ children }: { children: ReactNode }) {
@@ -53,8 +53,8 @@ export function PreviewModeProvider({ children }: { children: ReactNode }) {
 
   const { data, isFetching, isError, refetch } = useReadContracts({
     contracts: [
-      { ...contracts.veBTC, functionName: "supply" },
-      { ...contracts.veMEZO, functionName: "supply" },
+      { ...contracts.veBTC, functionName: "totalVotingPower" },
+      { ...contracts.veMEZO, functionName: "totalVotingPower" },
     ],
     query: {
       ...QUERY_PROFILES.SHORT_CACHE,

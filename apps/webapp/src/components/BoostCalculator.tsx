@@ -518,11 +518,6 @@ export function BoostCalculator() {
             ref={systemTotalsRef}
             className="flex flex-col gap-4 px-1 pb-2 sm:gap-6"
           >
-            <p className="text-[10px] leading-snug text-[var(--content-secondary)] sm:text-xs">
-              Live defaults use total locked veBTC and veMEZO from escrow
-              <code className="mx-0.5">supply()</code>
-              —the same bases as Optimal veMEZO on gauge cards.
-            </p>
             <SystemRow
               label="veBTC"
               tokenSymbol="BTC"

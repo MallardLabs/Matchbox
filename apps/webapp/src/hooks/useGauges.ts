@@ -356,9 +356,10 @@ export function useBoostGauges(options: UseBoostGaugesOptions = {}) {
 
   // System totals: ve token `supply()` via shared hook — honors preview-mode
   // overrides so simulated totals flow through to the boost / optimal math.
+  // System totals: ve token `totalVotingPower()` — same as Boost calculator system totals.
   const {
-    veBTCSupply: veBTCTokenSupply,
-    veMEZOSupply: veMEZOTokenSupply,
+    veBTCSupply: veBTCTotalVotingPower,
+    veMEZOSupply: veMEZOTotalVotingPower,
     fetchStatus: systemTotalsFetchStatus,
     refetch: refetchSystemTotals,
   } = useVeSupplyBigint()
@@ -405,25 +406,25 @@ export function useBoostGauges(options: UseBoostGaugesOptions = {}) {
       gaugeBoost !== undefined
         ? Number(gaugeBoost) / 1e18
         : includeOwnership &&
-            veMEZOTokenSupply !== undefined &&
-            veMEZOTokenSupply > 0n &&
-            veBTCTokenSupply !== undefined &&
-            veBTCTokenSupply > 0n &&
+            veMEZOTotalVotingPower !== undefined &&
+            veMEZOTotalVotingPower > 0n &&
+            veBTCTotalVotingPower !== undefined &&
+            veBTCTotalVotingPower > 0n &&
             gaugeUnboostedVeBTCWeight !== undefined &&
             gaugeUnboostedVeBTCWeight > 0n
           ? boostMultiplierNumberFromCalculatorInputs({
               unboostedNftVp: gaugeUnboostedVeBTCWeight,
               gaugeVeMezoWeight: totalWeight,
-              veBtcSystemTotal: veBTCTokenSupply,
-              veMezoSystemTotal: veMEZOTokenSupply,
+              veBtcSystemTotal: veBTCTotalVotingPower,
+              veMezoSystemTotal: veMEZOTotalVotingPower,
             })
           : 1
     const optimalVeMEZOData = includeOwnership
       ? calculateOptimalVeMEZO(
           gaugeUnboostedVeBTCWeight,
           totalWeight,
-          veBTCTokenSupply,
-          veMEZOTokenSupply,
+          veBTCTotalVotingPower,
+          veMEZOTotalVotingPower,
         )
       : undefined
 
