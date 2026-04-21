@@ -211,7 +211,10 @@ export function Header(): JSX.Element {
 
   return (
     <>
-      <header className="sticky top-0 z-50 border-b border-[var(--border)] bg-[var(--surface)]/95 backdrop-blur-sm" style={{ overflow: "visible" }}>
+      <header
+        className="sticky top-0 z-50 border-b border-[var(--border)] bg-[var(--surface)]/95 backdrop-blur-sm"
+        style={{ overflow: "visible" }}
+      >
         <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4 md:h-16 md:px-6 lg:px-8">
           {/* Logo */}
           <NextLink
@@ -285,17 +288,18 @@ export function Header(): JSX.Element {
                       )}
                     </button>
                     {moreMenuOpen && (
-                      <div
-                        role="menu"
-                        className="absolute right-0 top-full z-50 mt-1 min-w-[160px] overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--surface)] shadow-lg"
-                      >
-                        {item.children.map((child) => {
-                          const childActive = router.pathname === child.href
-                          return (
-                            <NextLink
-                              key={child.href}
-                              href={child.href}
-                              className={`
+                      <div className="absolute left-0 top-full z-50 pt-1">
+                        <div
+                          role="menu"
+                          className="min-w-[160px] overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--surface)] shadow-lg"
+                        >
+                          {item.children.map((child) => {
+                            const childActive = router.pathname === child.href
+                            return (
+                              <NextLink
+                                key={child.href}
+                                href={child.href}
+                                className={`
                                 flex items-center px-3 py-2 text-sm transition-colors
                                 ${
                                   childActive
@@ -303,22 +307,23 @@ export function Header(): JSX.Element {
                                     : "text-[var(--content-secondary)] hover:bg-[var(--surface-secondary)] hover:text-[var(--content-primary)]"
                                 }
                               `}
-                              style={{ textDecoration: "none" }}
-                              onClick={() => setMoreMenuOpen(false)}
-                              role="menuitem"
-                            >
-                              {childActive && (
-                                <span
-                                  className="mr-1 text-[#F7931A]"
-                                  aria-hidden="true"
-                                >
-                                  &gt;
-                                </span>
-                              )}
-                              {child.label}
-                            </NextLink>
-                          )
-                        })}
+                                style={{ textDecoration: "none" }}
+                                onClick={() => setMoreMenuOpen(false)}
+                                role="menuitem"
+                              >
+                                {childActive && (
+                                  <span
+                                    className="mr-1 text-[#F7931A]"
+                                    aria-hidden="true"
+                                  >
+                                    &gt;
+                                  </span>
+                                )}
+                                {child.label}
+                              </NextLink>
+                            )
+                          })}
+                        </div>
                       </div>
                     )}
                   </div>

@@ -1,5 +1,8 @@
 import { TokenPairIcon } from "@/components/PoolCard"
 import { TokenSelector } from "@/components/TokenSelector"
+import Tooltip from "@/components/Tooltip"
+import { useBtcPrice } from "@/hooks/useBtcPrice"
+import { useMezoPrice } from "@/hooks/useMezoPrice"
 import {
   useAddPoolIncentive,
   useIsPoolIncentiveTokenAllowlisted,
@@ -7,6 +10,7 @@ import {
 } from "@/hooks/usePoolIncentives"
 import type { Pool } from "@/hooks/usePools"
 import type { Token } from "@/hooks/useTokenList"
+import { useVotables } from "@/hooks/useVotables"
 import { useApproveToken, useTokenAllowance } from "@/hooks/useVoting"
 import {
   Button,
@@ -15,6 +19,7 @@ import {
   ModalBody,
   ModalHeader,
 } from "@mezo-org/mezo-clay"
+import { getTokenUsdPrice } from "@repo/shared"
 import { useEffect, useMemo, useState } from "react"
 import { formatUnits, parseUnits } from "viem"
 import { useAccount, useReadContract } from "wagmi"
@@ -149,6 +154,57 @@ export default function AddPoolIncentiveModal({
   const isSubmittingApproval = isApproving || isConfirmingApproval
   const isFunding = isAdding || isConfirmingAdd
 
+  // Live vAPR preview: proportionally scale the pool's current voting APR by
+  // the new total voter-incentive USD (current voterFees + bribes + delta).
+  // vAPR = (voterFees + bribes) * 52 * 100 / USD_votes, so the votes
+  // denominator cancels when we scale by incentive ratio.
+  const { price: btcPrice } = useBtcPrice()
+  const { price: mezoPrice } = useMezoPrice()
+  const { byPool: votablesByPool } = useVotables()
+  const votable = votablesByPool.get(pool.address.toLowerCase())
+
+  const deltaUsd = useMemo(() => {
+    if (!incentiveToken || parsedAmount <= 0n) return 0
+    const price = getTokenUsdPrice(
+      incentiveToken.address,
+      incentiveToken.symbol,
+      btcPrice,
+      mezoPrice,
+    )
+    if (price === null) return 0
+    const amountNum = Number(formatUnits(parsedAmount, incentiveToken.decimals))
+    return amountNum * price
+  }, [incentiveToken, parsedAmount, btcPrice, mezoPrice])
+
+  const currentVAprPercent = votable?.votingApr ?? 0
+  const currentVoterIncentivesUsd =
+    (votable?.voterFeesUsd ?? 0) + (votable?.bribesUsd ?? 0)
+
+  const projectedVAprPercent = useMemo(() => {
+    if (deltaUsd <= 0) return currentVAprPercent
+    if (currentVoterIncentivesUsd > 0 && currentVAprPercent > 0) {
+      const scale =
+        (currentVoterIncentivesUsd + deltaUsd) / currentVoterIncentivesUsd
+      return currentVAprPercent * scale
+    }
+    // No current baseline — we can't derive the votes denominator, so the
+    // projection is unknown. Return null so the UI shows "—".
+    return null
+  }, [deltaUsd, currentVAprPercent, currentVoterIncentivesUsd])
+
+  const vAprDelta =
+    projectedVAprPercent !== null
+      ? projectedVAprPercent - currentVAprPercent
+      : null
+
+  const formatApr = (value: number): string => {
+    if (!Number.isFinite(value) || value === 0) return "0%"
+    if (value < 0.01) return "<0.01%"
+    if (value < 1) return `${value.toFixed(2)}%`
+    if (value < 100) return `${value.toFixed(1)}%`
+    return `${Math.round(value)}%`
+  }
+
   return (
     <Modal
       isOpen={isOpen}
@@ -258,6 +314,63 @@ export default function AddPoolIncentiveModal({
               <p className="text-sm text-[var(--negative)]">
                 Insufficient balance for this incentive amount.
               </p>
+            </div>
+          )}
+
+          {pool.gauge && (
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-secondary)] p-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1 text-2xs uppercase tracking-wider text-[var(--content-tertiary)]">
+                  Projected vAPR
+                  <Tooltip
+                    id={`add-incentive-vapr-${pool.address}`}
+                    content="Estimated voter APR after this deposit, derived by scaling the pool's current vAPR by the new total voter-incentive USD. Updates live as you edit the amount."
+                  />
+                </div>
+                <div className="flex items-baseline gap-2 font-mono tabular-nums">
+                  <span className="text-xs text-[var(--content-tertiary)]">
+                    {formatApr(currentVAprPercent)}
+                  </span>
+                  <span
+                    className="text-xs text-[var(--content-tertiary)]"
+                    aria-hidden="true"
+                  >
+                    &rarr;
+                  </span>
+                  <span
+                    className={`text-sm font-semibold transition-colors duration-200 ${
+                      projectedVAprPercent !== null &&
+                      projectedVAprPercent > currentVAprPercent
+                        ? "text-[#F7931A]"
+                        : "text-[var(--content-primary)]"
+                    }`}
+                  >
+                    {projectedVAprPercent !== null
+                      ? formatApr(projectedVAprPercent)
+                      : "—"}
+                  </span>
+                  {vAprDelta !== null && vAprDelta > 0 && (
+                    <span className="text-2xs text-[var(--positive)]">
+                      +{vAprDelta.toFixed(vAprDelta < 1 ? 2 : 1)} pp
+                    </span>
+                  )}
+                </div>
+              </div>
+              {deltaUsd > 0 && (
+                <p className="mt-1 text-2xs text-[var(--content-tertiary)]">
+                  Adding ~$
+                  {deltaUsd.toLocaleString(undefined, {
+                    maximumFractionDigits: 2,
+                  })}{" "}
+                  to this epoch&apos;s bribe pot.
+                </p>
+              )}
+              {projectedVAprPercent === null && deltaUsd > 0 && (
+                <p className="mt-1 text-2xs text-[var(--content-tertiary)]">
+                  No baseline vAPR yet — projection available once this pool has
+                  votes or existing incentives.
+                </p>
+              )}
             </div>
           )}
 

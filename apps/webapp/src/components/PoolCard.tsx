@@ -102,6 +102,8 @@ export default function PoolCard({
   const currentBribeTokens = (incentives?.incentivesByToken ?? []).filter(
     (t) => t.amount > 0n,
   )
+  const showIncentives =
+    hasGauge && currentBribesUsd > 0 && currentBribeTokens.length > 0
   return (
     <article className="group relative flex h-full min-w-0 flex-col gap-4 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
       <div className="flex items-start justify-between gap-3">
@@ -210,35 +212,49 @@ export default function PoolCard({
         </div>
       </dl>
 
-      {hasGauge && currentBribesUsd > 0 && currentBribeTokens.length > 0 && (
-        <div className="flex flex-col gap-1">
-          <div className="flex items-center gap-1 text-2xs uppercase tracking-wider text-[var(--content-tertiary)]">
-            Incentives
-            <Tooltip
-              id={`pc-bribes-${pool.address}`}
-              content={`Third-party incentives posted to this pool's ExternalBribe for the current epoch. Distributed to veMEZO voters at the next rollover (in ${timeRemaining}).`}
-            />
-          </div>
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <span className="font-mono text-sm font-medium text-[#F7931A] tabular-nums">
-              {formatUsdValue(currentBribesUsd)}
-            </span>
-            <span className="flex flex-wrap items-center gap-1">
-              {currentBribeTokens.map((token) => (
-                <span
-                  key={`cur-${token.tokenAddress}`}
-                  className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface-secondary)] px-1.5 py-0.5"
-                >
-                  <TokenIcon symbol={token.symbol} size={12} />
-                  <span className="font-mono text-2xs text-[var(--content-primary)]">
-                    {token.symbol}
+      {/*
+       * Incentives expand smoothly when bribe data arrives. The grid-rows
+       * trick animates auto-height; the -mt-4 on collapse cancels the
+       * parent's gap-4 so the card sits flush with no empty slot.
+       */}
+      <div
+        aria-hidden={!showIncentives}
+        className={`grid transition-[grid-template-rows,margin,opacity] duration-300 ease-out ${
+          showIncentives
+            ? "grid-rows-[1fr] opacity-100"
+            : "-mt-4 grid-rows-[0fr] opacity-0"
+        }`}
+      >
+        <div className="min-h-0 overflow-hidden">
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-1 text-2xs uppercase tracking-wider text-[var(--content-tertiary)]">
+              Incentives
+              <Tooltip
+                id={`pc-bribes-${pool.address}`}
+                content={`Third-party incentives posted to this pool's ExternalBribe for the current epoch. Distributed to veMEZO voters at the next rollover (in ${timeRemaining}).`}
+              />
+            </div>
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <span className="font-mono text-sm font-medium text-[#F7931A] tabular-nums">
+                {formatUsdValue(currentBribesUsd)}
+              </span>
+              <span className="flex flex-wrap items-center gap-1">
+                {currentBribeTokens.map((token) => (
+                  <span
+                    key={`cur-${token.tokenAddress}`}
+                    className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface-secondary)] px-1.5 py-0.5"
+                  >
+                    <TokenIcon symbol={token.symbol} size={12} />
+                    <span className="font-mono text-2xs text-[var(--content-primary)]">
+                      {token.symbol}
+                    </span>
                   </span>
-                </span>
-              ))}
-            </span>
+                ))}
+              </span>
+            </div>
           </div>
         </div>
-      )}
+      </div>
 
       <div className="mt-auto flex items-center justify-between gap-2 border-t border-[var(--border)] pt-3">
         <Link
