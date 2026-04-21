@@ -103,9 +103,9 @@ type KPICardProps = {
   icon: React.ReactNode
   label: string
   value: string
-  sublabel?: string
+  sublabel?: string | undefined
   accent?: "brand" | "positive" | "amber" | "cyan"
-  isLoading?: boolean
+  isLoading?: boolean | undefined
 }
 
 const ACCENT_STYLES: Record<NonNullable<KPICardProps["accent"]>, string> = {
