@@ -1,5 +1,6 @@
 import {
   BOOST_VOTER_ABI,
+  BRIBE_ABI,
   CHAIN_ID,
   CONTRACTS,
   ERC20_ABI,
@@ -38,6 +39,10 @@ export function getContractConfig(
     poolsVoter: {
       address: addresses.poolsVoter,
       abi: POOLS_VOTER_ABI,
+      chainId,
+    },
+    bribe: {
+      abi: BRIBE_ABI,
       chainId,
     },
     gaugeFactory: {

@@ -1534,6 +1534,34 @@ export default function IncentivesPage(): JSX.Element {
             ))}
         </>
       )}
+      {/* Pools CTA banner */}
+      <SpringIn delay={5} variant="card">
+        <div className="relative overflow-hidden rounded-xl border border-[rgba(247,147,26,0.35)] bg-[var(--surface)] p-5">
+          <span
+            className="pointer-events-none absolute inset-x-0 top-0 h-[2px] bg-[#F7931A]"
+            aria-hidden="true"
+          />
+          <div className="flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
+            <div className="min-w-0">
+              <h3 className="text-base font-semibold text-[var(--content-primary)]">
+                Looking to add incentives to a liquidity pool?
+              </h3>
+              <p className="mt-1 text-sm text-[var(--content-secondary)]">
+                Fund any Mezo LP bribe pool directly to attract liquidity and
+                reward depositors.
+              </p>
+            </div>
+            <Link
+              href="/pools"
+              className="inline-flex flex-shrink-0 items-center gap-1 rounded-lg border border-[#F7931A] bg-[#F7931A] px-4 py-2 text-sm font-semibold text-black transition-opacity hover:opacity-90"
+              style={{ textDecoration: "none" }}
+            >
+              Explore Pools &rarr;
+            </Link>
+          </div>
+        </div>
+      </SpringIn>
+
       <IncentiveWarningModal
         isOpen={showIncentiveWarning}
         onClose={() => setShowIncentiveWarning(false)}
