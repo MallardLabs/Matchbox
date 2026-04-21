@@ -95,7 +95,8 @@ export default function PoolCard({
   // Prefer on-chain for this-epoch bribe totals (the API may lag the bribe contract);
   // fall back to API if no on-chain data yet.
   const currentBribesUsd = currentBribesUsdOnchain || bribesUsdApi
-  // LP total APR = fees + emissions only. Bribes and voter fees go to veMEZO voters.
+  // LP total APR = fees + emissions only. Bribes and voter fees go to veBTC voters
+  // (the voting token on pool gauges — veMEZO is the paired boost token).
   const totalApr = feesApr + emissionsApr
   const hasGauge = !!pool.gauge
   const detailHref = `/pools/${pool.address}`
@@ -169,7 +170,7 @@ export default function PoolCard({
             Voter Fees
             <Tooltip
               id={`pc-voterfees-${pool.address}`}
-              content="LP trading fees redirected to veMEZO voters this epoch (not to LPs). Claimable by voters at epoch end."
+              content="LP trading fees redirected to veBTC voters this epoch (not to LPs). Claimable by voters at epoch end."
             />
           </dt>
           <dd
@@ -187,7 +188,7 @@ export default function PoolCard({
             vAPR
             <Tooltip
               id={`pc-vapr-${pool.address}`}
-              content="Voting APR — annualized return for veMEZO voters who allocate to this pool. (voter fees + bribes this epoch × 52) / USD votes on this pool."
+              content="Voting APR — annualized return for veBTC voters who allocate to this pool (with veMEZO boost). (voter fees + bribes this epoch × 52) / USD votes on this pool."
             />
           </dt>
           <dd
@@ -231,7 +232,7 @@ export default function PoolCard({
               Incentives
               <Tooltip
                 id={`pc-bribes-${pool.address}`}
-                content={`Third-party incentives posted to this pool's ExternalBribe for the current epoch. Distributed to veMEZO voters at the next rollover (in ${timeRemaining}).`}
+                content={`Third-party incentives posted to this pool's ExternalBribe for the current epoch. Distributed to veBTC voters at the next rollover (in ${timeRemaining}).`}
               />
             </div>
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">

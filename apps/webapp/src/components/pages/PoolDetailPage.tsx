@@ -224,7 +224,7 @@ export default function PoolDetailPage({
                   ? "text-[#F7931A]"
                   : "text-[var(--content-primary)]"
               }`}
-              title="Voting APR — annualized return for veMEZO voters who allocate to this pool."
+              title="Voting APR — annualized return for veBTC voters who allocate to this pool (with veMEZO boost)."
             >
               {formatPercent(votingApr)}
             </p>
@@ -251,7 +251,7 @@ export default function PoolDetailPage({
                   ? "text-[#F7931A]"
                   : "text-[var(--content-primary)]"
               }`}
-              title="LP trading fees redirected to veMEZO voters this epoch. Claimable by voters at epoch end."
+              title="LP trading fees redirected to veBTC voters this epoch. Claimable by voters at epoch end."
             >
               {formatUsdValue(voterFeesUsd)}
             </p>
@@ -418,8 +418,8 @@ export default function PoolDetailPage({
                 <div className="rounded-lg border border-dashed border-[var(--border)] p-6 text-center">
                   <p className="text-sm text-[var(--content-secondary)]">
                     No bribes posted this epoch yet. Be the first to fund this
-                    pool&apos;s bribe — veMEZO voters who vote for this pool
-                    will claim your deposit at the next rollover.
+                    pool&apos;s bribe — veBTC voters who vote for this pool will
+                    claim your deposit at the next rollover.
                   </p>
                 </div>
               ) : (
