@@ -1,4 +1,5 @@
 import { useNetwork } from "@/contexts/NetworkContext"
+import { normalizeVotingAprPercent } from "@/utils/votingApr"
 import { CHAIN_ID } from "@repo/shared/contracts"
 import { useQuery } from "@tanstack/react-query"
 import { useMemo } from "react"
@@ -90,7 +91,7 @@ export function useVotables() {
       )
       m.set(v.target.id.toLowerCase(), {
         gauge: v.gauge,
-        votingApr: v.stats.votingApr ?? 0,
+        votingApr: normalizeVotingAprPercent(v.stats.votingApr),
         voterFeesUsd,
         voterFees: v.stats.gaugeFees,
         bribesUsd,
