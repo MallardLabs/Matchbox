@@ -198,8 +198,10 @@ export default function PoolsPage(): JSX.Element {
         </SpringIn>
       </div>
 
-      {/* Sticky filter + sort bar */}
-      <div className="sticky top-14 z-30 -mx-4 border-b border-[var(--border)] bg-[var(--surface)]/95 px-4 py-3 backdrop-blur-sm md:top-16 md:-mx-6 md:px-6 lg:-mx-8 lg:px-8">
+      {/* Filter + sort bar — sticky only from md up. On mobile the bar is
+       * tall enough that pinning it would eat half the viewport, so we let it
+       * scroll away with the rest of the content. */}
+      <div className="-mx-4 border-b border-[var(--border)] bg-[var(--surface)]/95 px-4 py-3 backdrop-blur-sm md:sticky md:top-16 md:z-30 md:-mx-6 md:px-6 lg:-mx-8 lg:px-8">
         <div className="flex flex-col gap-3">
           <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
             <div className="flex flex-wrap items-center gap-2">
