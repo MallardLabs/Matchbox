@@ -217,7 +217,7 @@ export function AnalyticsPoolsTable(): JSX.Element {
                           <Tag
                             kind="secondary"
                             color={
-                              pool.type === "concentrated" ? "orange" : "gray"
+                              pool.type === "concentrated" ? "yellow" : "gray"
                             }
                           >
                             {pool.type === "concentrated" ? "CL" : "AMM"}
