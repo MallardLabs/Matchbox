@@ -900,6 +900,7 @@ export default function DashboardPage(): JSX.Element {
     isInProgress: isMultiClaimInProgress,
     isDone: isMultiClaimDone,
     hasErrors: multiClaimHasErrors,
+    executionMode: multiClaimExecutionMode,
     clear: clearMultiClaim,
   } = useMultiLockClaimBribes()
 
@@ -1490,10 +1491,14 @@ export default function DashboardPage(): JSX.Element {
                               </p>
                               <p className="text-sm font-medium text-[var(--content-primary)]">
                                 {isMultiClaimInProgress
-                                  ? `Signing transactions (${multiClaimCurrentIndex + 1}/${multiClaimTotalLocks})`
+                                  ? multiClaimExecutionMode === "batched"
+                                    ? "Confirm batch in wallet"
+                                    : `Signing transactions (${multiClaimCurrentIndex + 1}/${multiClaimTotalLocks})`
                                   : multiClaimHasErrors
                                     ? `${multiClaimSuccessCount} of ${multiClaimTotalLocks} succeeded`
-                                    : "All transactions confirmed"}
+                                    : multiClaimExecutionMode === "batched"
+                                      ? "Batch confirmed"
+                                      : "All transactions confirmed"}
                               </p>
                             </div>
                             {isMultiClaimDone && !multiClaimHasErrors && (

@@ -1,8 +1,15 @@
 import { getContractConfig } from "@/config/contracts"
 import { useNetwork } from "@/contexts/NetworkContext"
+import { getAtomicBatchSupport } from "@/utils/eip5792"
 import { useCallback, useRef, useState } from "react"
 import type { Address, Hex } from "viem"
-import { usePublicClient, useWriteContract } from "wagmi"
+import { sendCalls, waitForCallsStatus } from "viem/actions"
+import {
+  useAccount,
+  usePublicClient,
+  useWalletClient,
+  useWriteContract,
+} from "wagmi"
 
 export type LockTxStatus =
   | "pending"
@@ -20,6 +27,7 @@ export type LockTxState = {
 }
 
 type MultiLockVoteStatus = "idle" | "voting" | "done"
+export type MultiLockExecutionMode = "sequential" | "batched"
 
 export type MultiLockExecutionResult = {
   totalLocks: number
@@ -45,16 +53,21 @@ type UseMultiLockVotingReturn = {
   isInProgress: boolean
   isDone: boolean
   hasErrors: boolean
+  executionMode: MultiLockExecutionMode
   clear: () => void
 }
 
 export function useMultiLockVoting(): UseMultiLockVotingReturn {
   const { chainId } = useNetwork()
+  const { address: accountAddress } = useAccount()
   const contracts = getContractConfig(chainId)
   const publicClient = usePublicClient({ chainId })
+  const { data: walletClient } = useWalletClient({ chainId })
   const { writeContractAsync } = useWriteContract()
 
   const [status, setStatus] = useState<MultiLockVoteStatus>("idle")
+  const [executionMode, setExecutionMode] =
+    useState<MultiLockExecutionMode>("sequential")
   const [lockStates, setLockStates] = useState<LockTxState[]>([])
   const [currentIndex, setCurrentIndex] = useState(0)
   const abortRef = useRef(false)
@@ -89,18 +102,23 @@ export function useMultiLockVoting(): UseMultiLockVotingReturn {
     [],
   )
 
+  const replaceLockStates = useCallback((next: LockTxState[]) => {
+    lockStatesRef.current = next
+    setLockStates(next)
+  }, [])
+
   const executeSequential = useCallback(
     async (
       tokenIds: bigint[],
       executeFn: (tokenId: bigint) => Promise<Hex>,
     ): Promise<MultiLockExecutionResult> => {
       abortRef.current = false
+      setExecutionMode("sequential")
       const initial: LockTxState[] = tokenIds.map((tokenId) => ({
         tokenId,
         status: "pending" as const,
       }))
-      lockStatesRef.current = initial
-      setLockStates(initial)
+      replaceLockStates(initial)
       setCurrentIndex(0)
       setStatus("voting")
 
@@ -150,7 +168,81 @@ export function useMultiLockVoting(): UseMultiLockVotingReturn {
 
       return buildExecutionResult(lockStatesRef.current)
     },
-    [buildExecutionResult, publicClient, updateLockState],
+    [buildExecutionResult, publicClient, replaceLockStates, updateLockState],
+  )
+
+  const executeBatched = useCallback(
+    async (
+      tokenIds: bigint[],
+      calls: {
+        to: Address
+        abi: typeof contracts.boostVoter.abi
+        functionName: "vote" | "reset"
+        args: [bigint, Address[], bigint[]] | [bigint]
+      }[],
+    ): Promise<MultiLockExecutionResult> => {
+      if (!walletClient || !accountAddress) {
+        return buildExecutionResult([])
+      }
+
+      abortRef.current = false
+      setExecutionMode("batched")
+      const initial: LockTxState[] = tokenIds.map((tokenId) => ({
+        tokenId,
+        status: "signing",
+      }))
+      replaceLockStates(initial)
+      setCurrentIndex(0)
+      setStatus("voting")
+
+      try {
+        const { id } = await sendCalls(walletClient, {
+          account: accountAddress,
+          calls,
+          forceAtomic: true,
+        })
+
+        replaceLockStates(
+          initial.map((state) => ({
+            ...state,
+            status: "confirming",
+          })),
+        )
+
+        await waitForCallsStatus(walletClient, {
+          id,
+          throwOnFailure: true,
+          timeout: 120_000,
+        })
+
+        replaceLockStates(
+          initial.map((state) => ({
+            ...state,
+            status: "success",
+          })),
+        )
+      } catch (err) {
+        const error = err instanceof Error ? err : new Error(String(err))
+
+        replaceLockStates(
+          initial.map((state) => ({
+            ...state,
+            status: "error",
+            error,
+          })),
+        )
+      }
+
+      setStatus("done")
+
+      return buildExecutionResult(lockStatesRef.current)
+    },
+    [
+      accountAddress,
+      buildExecutionResult,
+      replaceLockStates,
+      walletClient,
+    ],
   )
 
   const voteAll = useCallback(
@@ -162,6 +254,24 @@ export function useMultiLockVoting(): UseMultiLockVotingReturn {
       const { address, abi } = contracts.boostVoter
       if (!address) return buildExecutionResult([])
 
+      const { supportsAtomicBatching } = await getAtomicBatchSupport({
+        walletClient,
+        account: accountAddress,
+        chainId,
+      })
+
+      if (supportsAtomicBatching) {
+        return executeBatched(
+          tokenIds,
+          tokenIds.map((tokenId) => ({
+            to: address,
+            abi,
+            functionName: "vote" as const,
+            args: [tokenId, gaugeAddresses, weights],
+          })),
+        )
+      }
+
       return executeSequential(tokenIds, async (tokenId) => {
         return writeContractAsync({
           address,
@@ -172,9 +282,13 @@ export function useMultiLockVoting(): UseMultiLockVotingReturn {
       })
     },
     [
+      accountAddress,
       buildExecutionResult,
+      chainId,
       contracts.boostVoter,
+      executeBatched,
       executeSequential,
+      walletClient,
       writeContractAsync,
     ],
   )
@@ -183,6 +297,24 @@ export function useMultiLockVoting(): UseMultiLockVotingReturn {
     async (tokenIds: bigint[]): Promise<MultiLockExecutionResult> => {
       const { address, abi } = contracts.boostVoter
       if (!address) return buildExecutionResult([])
+
+      const { supportsAtomicBatching } = await getAtomicBatchSupport({
+        walletClient,
+        account: accountAddress,
+        chainId,
+      })
+
+      if (supportsAtomicBatching) {
+        return executeBatched(
+          tokenIds,
+          tokenIds.map((tokenId) => ({
+            to: address,
+            abi,
+            functionName: "reset" as const,
+            args: [tokenId],
+          })),
+        )
+      }
 
       return executeSequential(tokenIds, async (tokenId) => {
         return writeContractAsync({
@@ -194,9 +326,13 @@ export function useMultiLockVoting(): UseMultiLockVotingReturn {
       })
     },
     [
+      accountAddress,
       buildExecutionResult,
+      chainId,
       contracts.boostVoter,
+      executeBatched,
       executeSequential,
+      walletClient,
       writeContractAsync,
     ],
   )
@@ -207,6 +343,7 @@ export function useMultiLockVoting(): UseMultiLockVotingReturn {
 
   const clear = useCallback(() => {
     setStatus("idle")
+    setExecutionMode("sequential")
     setLockStates([])
     lockStatesRef.current = []
     setCurrentIndex(0)
@@ -228,6 +365,7 @@ export function useMultiLockVoting(): UseMultiLockVotingReturn {
     isInProgress: status === "voting",
     isDone: status === "done",
     hasErrors: errorCount > 0,
+    executionMode,
     clear,
   }
 }

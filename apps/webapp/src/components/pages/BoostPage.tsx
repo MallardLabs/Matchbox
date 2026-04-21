@@ -372,6 +372,7 @@ export default function BoostPage(): JSX.Element {
     isInProgress: isMultiVoteInProgress,
     isDone: isMultiVoteDone,
     hasErrors: multiVoteHasErrors,
+    executionMode: multiVoteExecutionMode,
     clear: clearMultiVote,
   } = useMultiLockVoting()
   const {
@@ -384,6 +385,7 @@ export default function BoostPage(): JSX.Element {
     isInProgress: isUnpairInProgress,
     isDone: isUnpairDone,
     hasErrors: unpairHasErrors,
+    executionMode: unpairExecutionMode,
     clear: clearUnpair,
   } = useMultiLockUnpairing()
 
@@ -1275,10 +1277,14 @@ export default function BoostPage(): JSX.Element {
                 <div className="mb-3 flex items-center justify-between">
                   <p className="text-xs font-semibold text-[var(--content-primary)]">
                     {isMultiVoteInProgress
-                      ? `Signing transactions (${multiVoteCurrentIndex + 1}/${multiVoteTotalLocks})`
+                      ? multiVoteExecutionMode === "batched"
+                        ? "Confirm batch in wallet"
+                        : `Signing transactions (${multiVoteCurrentIndex + 1}/${multiVoteTotalLocks})`
                       : multiVoteHasErrors
                         ? `${multiVoteSuccessCount} of ${multiVoteTotalLocks} succeeded`
-                        : "All transactions confirmed"}
+                        : multiVoteExecutionMode === "batched"
+                          ? "Batch confirmed"
+                          : "All transactions confirmed"}
                   </p>
                   {isMultiVoteDone && !multiVoteHasErrors && (
                     <Tag color="green" closeable={false}>
@@ -1447,7 +1453,9 @@ export default function BoostPage(): JSX.Element {
                       }
                     >
                       {isMultiVoteInProgress
-                        ? `Signing ${multiVoteCurrentIndex + 1}/${multiVoteTotalLocks}...`
+                        ? multiVoteExecutionMode === "batched"
+                          ? "Confirm batch..."
+                          : `Signing ${multiVoteCurrentIndex + 1}/${multiVoteTotalLocks}...`
                         : isMultiVoteDone
                           ? "Done"
                           : votableLocks.length > 1
@@ -1505,10 +1513,14 @@ export default function BoostPage(): JSX.Element {
                 <div className="mb-3 flex items-center justify-between gap-3">
                   <p className="text-xs font-semibold text-[var(--content-primary)]">
                     {isUnpairInProgress
-                      ? `Signing transactions (${unpairCurrentIndex + 1}/${unpairTotalTransactions})`
+                      ? unpairExecutionMode === "batched"
+                        ? "Confirm batch in wallet"
+                        : `Signing transactions (${unpairCurrentIndex + 1}/${unpairTotalTransactions})`
                       : unpairHasErrors
                         ? `${unpairSuccessCount} of ${unpairTotalTransactions} confirmed`
-                        : "All transactions confirmed"}
+                        : unpairExecutionMode === "batched"
+                          ? "Batch confirmed"
+                          : "All transactions confirmed"}
                   </p>
                   {isUnpairDone && !unpairHasErrors && (
                     <Tag color="green" closeable={false}>
@@ -1542,10 +1554,7 @@ export default function BoostPage(): JSX.Element {
                       className="flex items-center justify-between gap-4 text-xs"
                     >
                       <span className="font-mono text-[var(--content-primary)]">
-                        {txState.kind === "reset"
-                          ? "Reset veMEZO"
-                          : "Update veBTC"}{" "}
-                        #{txState.tokenId.toString()}
+                        {txState.label}
                       </span>
                       <span
                         className={`text-right ${

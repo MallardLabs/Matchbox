@@ -1,8 +1,16 @@
 import { getContractConfig } from "@/config/contracts"
 import { useNetwork } from "@/contexts/NetworkContext"
+import { getAtomicBatchSupport } from "@/utils/eip5792"
 import { useCallback, useState } from "react"
 import type { Address, Hex } from "viem"
-import { usePublicClient, useWriteContract } from "wagmi"
+import { sendCalls, waitForCallsStatus } from "viem/actions"
+import {
+  useAccount,
+  usePublicClient,
+  useWalletClient,
+  useWriteContract,
+} from "wagmi"
+import type { MultiLockExecutionMode } from "./useMultiLockVoting"
 
 type LockTxStatus = "pending" | "signing" | "confirming" | "success" | "error"
 
@@ -35,16 +43,21 @@ type UseMultiLockClaimBribesReturn = {
   isInProgress: boolean
   isDone: boolean
   hasErrors: boolean
+  executionMode: MultiLockExecutionMode
   clear: () => void
 }
 
 export function useMultiLockClaimBribes(): UseMultiLockClaimBribesReturn {
   const { chainId } = useNetwork()
+  const { address: accountAddress } = useAccount()
   const contracts = getContractConfig(chainId)
   const publicClient = usePublicClient({ chainId })
+  const { data: walletClient } = useWalletClient({ chainId })
   const { writeContractAsync } = useWriteContract()
 
   const [status, setStatus] = useState<MultiLockClaimStatus>("idle")
+  const [executionMode, setExecutionMode] =
+    useState<MultiLockExecutionMode>("sequential")
   const [lockStates, setLockStates] = useState<LockTxState[]>([])
   const [currentIndex, setCurrentIndex] = useState(0)
 
@@ -74,6 +87,7 @@ export function useMultiLockClaimBribes(): UseMultiLockClaimBribesReturn {
         return
       }
 
+      setExecutionMode("sequential")
       const initialState: LockTxState[] = validClaims.map((claim) => ({
         tokenId: claim.tokenId,
         status: "pending",
@@ -140,15 +154,110 @@ export function useMultiLockClaimBribes(): UseMultiLockClaimBribesReturn {
     [contracts.boostVoter, publicClient, updateLockState, writeContractAsync],
   )
 
+  const executeBatched = useCallback(
+    async (claims: ClaimLockRequest[]) => {
+      const { address, abi } = contracts.boostVoter
+      const validClaims = claims.filter((claim) => claim.bribes.length > 0)
+
+      if (
+        !address ||
+        validClaims.length === 0 ||
+        !walletClient ||
+        !accountAddress
+      ) {
+        setStatus("idle")
+        setExecutionMode("sequential")
+        setLockStates([])
+        setCurrentIndex(0)
+        return
+      }
+
+      setExecutionMode("batched")
+      const initialState: LockTxState[] = validClaims.map((claim) => ({
+        tokenId: claim.tokenId,
+        status: "signing",
+      }))
+
+      setLockStates(initialState)
+      setCurrentIndex(0)
+      setStatus("claiming")
+
+      try {
+        const { id } = await sendCalls(walletClient, {
+          account: accountAddress,
+          calls: validClaims.map((claim) => ({
+            to: address,
+            abi,
+            functionName: "claimBribes" as const,
+            args: [
+              claim.bribes.map((bribe) => bribe.bribeAddress),
+              claim.bribes.map((bribe) => bribe.tokens),
+              claim.tokenId,
+            ],
+          })),
+          forceAtomic: true,
+        })
+
+        setLockStates(
+          initialState.map((state) => ({
+            ...state,
+            status: "confirming",
+          })),
+        )
+
+        await waitForCallsStatus(walletClient, {
+          id,
+          throwOnFailure: true,
+          timeout: 120_000,
+        })
+
+        setLockStates(
+          initialState.map((state) => ({
+            ...state,
+            status: "success",
+          })),
+        )
+      } catch (error) {
+        const batchError =
+          error instanceof Error ? error : new Error(String(error))
+
+        setLockStates(
+          initialState.map((state) => ({
+            ...state,
+            status: "error",
+            error: batchError,
+          })),
+        )
+      }
+
+      setStatus("done")
+    },
+    [accountAddress, contracts.boostVoter, walletClient],
+  )
+
   const claimAll = useCallback(
     (claims: ClaimLockRequest[]) => {
-      void executeSequential(claims)
+      void (async () => {
+        const { supportsAtomicBatching } = await getAtomicBatchSupport({
+          walletClient,
+          account: accountAddress,
+          chainId,
+        })
+
+        if (supportsAtomicBatching) {
+          await executeBatched(claims)
+          return
+        }
+
+        await executeSequential(claims)
+      })()
     },
-    [executeSequential],
+    [accountAddress, chainId, executeBatched, executeSequential, walletClient],
   )
 
   const clear = useCallback(() => {
     setStatus("idle")
+    setExecutionMode("sequential")
     setLockStates([])
     setCurrentIndex(0)
   }, [])
@@ -170,6 +279,7 @@ export function useMultiLockClaimBribes(): UseMultiLockClaimBribesReturn {
     isInProgress: status === "claiming",
     isDone: status === "done",
     hasErrors: errorCount > 0,
+    executionMode,
     clear,
   }
 }

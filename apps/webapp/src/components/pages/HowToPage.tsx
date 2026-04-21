@@ -185,13 +185,13 @@ const veMEZOSteps: StepProps[] = [
     number: 5,
     title: "Submit your vote",
     description:
-      "Click Vote in the cart. One transaction fires per selected veMEZO lock. Track status in the cart modal — each lock progresses through signing → confirming → done. Multi-lock voting runs sequentially.",
+      "Click Vote in the cart. If your wallet supports atomic batching, Matchbox will request one confirmation for all selected veMEZO locks. Otherwise it falls back to one transaction per lock and tracks each step in the cart modal.",
   },
   {
     number: 6,
     title: "Claim rewards",
     description:
-      'After Thursday 00:00 UTC, visit the Dashboard. Your claimable bribe rewards appear grouped by gauge and token. Click "Claim All" to collect in a single multi-transaction flow. Rewards do not expire — claim when convenient.',
+      'After Thursday 00:00 UTC, visit the Dashboard. Your claimable bribe rewards appear grouped by gauge and token. Click "Claim All" to collect through one wallet batch when supported, or the existing per-lock flow when it is not. Rewards do not expire — claim when convenient.',
   },
 ]
 
