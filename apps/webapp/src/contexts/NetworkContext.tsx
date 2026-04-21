@@ -55,35 +55,39 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
   const { switchChainAsync } = useSwitchChain()
 
   useEffect(() => {
-    const savedChainId = readSavedNetwork()
+    // Saved preference is the source of truth for the UI's selected network.
+    // We DO NOT auto-override it with wagmi's chain when the wallet is on a
+    // different Mezo chain — that silently defeated the user's explicit switch
+    // (e.g. toggling to Testnet while the wallet was still on Mainnet would
+    // snap the UI right back to Mainnet pools).
+    //
+    // Exception: on first mount with no explicit stored preference AND the
+    // wallet is already on a supported Mezo chain, we adopt the wallet's chain
+    // as the starting preference. Otherwise the saved value wins.
+    if (!isNetworkReady) {
+      const hasStored =
+        typeof window !== "undefined" &&
+        window.localStorage.getItem(NETWORK_STORAGE_KEY) !== null
+      const savedChainId = readSavedNetwork()
 
-    if (!isConnected) {
-      if (savedChainId !== chainId) {
-        setChainId(savedChainId)
-      }
-
-      if (!isNetworkReady) {
+      if (!hasStored && isConnected && isSupportedMezoChainId(wagmiChainId)) {
+        if (wagmiChainId !== chainId) {
+          setChainId(wagmiChainId)
+        }
+        writeSavedNetwork(wagmiChainId)
+        console.info("[Network] Initialized from connected wallet chain", {
+          wagmiChainId,
+        })
+      } else {
+        if (savedChainId !== chainId) {
+          setChainId(savedChainId)
+        }
         console.info("[Network] Initialized from saved preference", {
           isConnected,
           savedChainId,
         })
       }
-    } else if (isSupportedMezoChainId(wagmiChainId)) {
-      if (wagmiChainId !== chainId) {
-        setChainId(wagmiChainId)
-      }
-      writeSavedNetwork(wagmiChainId)
 
-      if (!isNetworkReady) {
-        console.info("[Network] Initialized from connected wallet chain", {
-          wagmiChainId,
-        })
-      }
-    } else if (savedChainId !== chainId) {
-      setChainId(savedChainId)
-    }
-
-    if (!isNetworkReady) {
       setIsNetworkReady(true)
     }
   }, [wagmiChainId, chainId, isConnected, isNetworkReady])
@@ -105,34 +109,43 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
       return
     }
 
+    // Update the UI's selected network immediately so pool/bribe data refetch
+    // right away. The wallet chain switch is fired best-effort; if the user
+    // rejects or the wallet hangs, the UI still reflects the chosen network
+    // (on-chain reads via wagmi will simply no-op until the wallet catches up
+    // or the user connects a wallet on the chosen chain).
+    setChainId(newChainId)
+    writeSavedNetwork(newChainId)
+
     if (!switchChainAsync) {
-      console.warn("[Network] Manual switch unavailable for current wallet", {
+      console.warn("[Network] Wallet switch unavailable; UI updated only", {
         fromChainId: previousChainId,
         toChainId: newChainId,
       })
       return
     }
 
-    console.info("[Network] Attempting manual switch", {
+    console.info("[Network] Attempting wallet chain switch", {
       fromChainId: previousChainId,
       toChainId: newChainId,
     })
 
     switchChainAsync({ chainId: newChainId })
       .then(() => {
-        setChainId(newChainId)
-        writeSavedNetwork(newChainId)
-        console.info("[Network] Manual switch successful", {
+        console.info("[Network] Wallet chain switch successful", {
           fromChainId: previousChainId,
           toChainId: newChainId,
         })
       })
       .catch((error) => {
-        console.warn("[Network] Manual switch failed", {
-          fromChainId: previousChainId,
-          toChainId: newChainId,
-          error,
-        })
+        console.warn(
+          "[Network] Wallet chain switch failed; UI remains on requested chain",
+          {
+            fromChainId: previousChainId,
+            toChainId: newChainId,
+            error,
+          },
+        )
       })
   }, [chainId, isConnected, isNetworkReady, switchChainAsync])
 

@@ -13,7 +13,13 @@ import {
 import { usePoolsIncentivesApr } from "@/hooks/usePoolsIncentivesApr"
 import { formatUsdValue } from "@/hooks/useTokenPrices"
 import { useVotables } from "@/hooks/useVotables"
-import { Input, Skeleton, Tag } from "@mezo-org/mezo-clay"
+import {
+  ChevronDown,
+  ChevronUp,
+  Input,
+  Skeleton,
+  Tag,
+} from "@mezo-org/mezo-clay"
 import { useMemo, useState } from "react"
 
 type SortColumn =
@@ -47,6 +53,7 @@ export default function PoolsPage(): JSX.Element {
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc")
   const [typeFilter, setTypeFilter] = useState<PoolTypeFilter>("all")
   const [search, setSearch] = useState("")
+  const [gaugedOnly, setGaugedOnly] = useState(false)
   const [activePool, setActivePool] = useState<Pool | null>(null)
 
   const handleSort = (column: SortColumn) => {
@@ -58,14 +65,28 @@ export default function PoolsPage(): JSX.Element {
     }
   }
 
-  const sortIndicator = (column: SortColumn): string => {
-    if (sortColumn !== column) return ""
-    return sortDirection === "asc" ? " ↑" : " ↓"
+  const getSortIndicator = (column: SortColumn): JSX.Element => {
+    if (sortColumn === column) {
+      return sortDirection === "asc" ? (
+        <ChevronUp size={16} />
+      ) : (
+        <ChevronDown size={16} />
+      )
+    }
+    return (
+      <span className="opacity-30">
+        <ChevronDown size={16} />
+      </span>
+    )
   }
 
   const filteredAndSorted = useMemo(() => {
     const q = search.trim().toLowerCase()
     let result = pools.filter((p) => matchesPoolType(p, typeFilter))
+
+    if (gaugedOnly) {
+      result = result.filter((p) => !!p.gauge)
+    }
 
     if (q) {
       result = result.filter((p) => {
@@ -115,6 +136,7 @@ export default function PoolsPage(): JSX.Element {
     sortColumn,
     sortDirection,
     typeFilter,
+    gaugedOnly,
     incentivesMap,
     votablesByPool,
   ])
@@ -226,55 +248,52 @@ export default function PoolsPage(): JSX.Element {
             <span className="text-xs text-[var(--content-secondary)]">
               Sort:
             </span>
-            <Tag
-              closeable={false}
-              onClick={() => handleSort("totalApr")}
-              color={sortColumn === "totalApr" ? "green" : "gray"}
+            {(
+              [
+                { id: "totalApr", label: "LP APR" },
+                { id: "votingApr", label: "vAPR" },
+                { id: "tvl", label: "TVL" },
+                { id: "feesApr", label: "Fees APR" },
+                { id: "emissionsApr", label: "Emissions APY" },
+                { id: "volume", label: "24h Volume" },
+                { id: "incentives", label: "Incentives" },
+              ] as const
+            ).map((option) => (
+              <button
+                key={option.id}
+                type="button"
+                onClick={() => handleSort(option.id)}
+                className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs ${
+                  sortColumn === option.id
+                    ? "border-[var(--content-primary)] text-[var(--content-primary)]"
+                    : "border-[var(--border)] text-[var(--content-secondary)]"
+                }`}
+              >
+                {option.label}
+                {getSortIndicator(option.id)}
+              </button>
+            ))}
+            <button
+              type="button"
+              aria-pressed={gaugedOnly}
+              onClick={() => setGaugedOnly((v) => !v)}
+              className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs transition-colors ${
+                gaugedOnly
+                  ? "border-[rgba(247,147,26,0.35)] bg-[rgba(247,147,26,0.12)] text-[#F7931A]"
+                  : "border-[var(--border)] text-[var(--content-secondary)] hover:border-[var(--content-tertiary)] hover:text-[var(--content-primary)]"
+              }`}
             >
-              LP APR{sortIndicator("totalApr")}
-            </Tag>
-            <Tag
-              closeable={false}
-              onClick={() => handleSort("votingApr")}
-              color={sortColumn === "votingApr" ? "yellow" : "gray"}
-            >
-              vAPR{sortIndicator("votingApr")}
-            </Tag>
-            <Tag
-              closeable={false}
-              onClick={() => handleSort("tvl")}
-              color={sortColumn === "tvl" ? "yellow" : "gray"}
-            >
-              TVL{sortIndicator("tvl")}
-            </Tag>
-            <Tag
-              closeable={false}
-              onClick={() => handleSort("feesApr")}
-              color={sortColumn === "feesApr" ? "blue" : "gray"}
-            >
-              Fees APR{sortIndicator("feesApr")}
-            </Tag>
-            <Tag
-              closeable={false}
-              onClick={() => handleSort("emissionsApr")}
-              color={sortColumn === "emissionsApr" ? "purple" : "gray"}
-            >
-              Emissions APY{sortIndicator("emissionsApr")}
-            </Tag>
-            <Tag
-              closeable={false}
-              onClick={() => handleSort("volume")}
-              color={sortColumn === "volume" ? "yellow" : "gray"}
-            >
-              24h Volume{sortIndicator("volume")}
-            </Tag>
-            <Tag
-              closeable={false}
-              onClick={() => handleSort("incentives")}
-              color={sortColumn === "incentives" ? "red" : "gray"}
-            >
-              Incentives{sortIndicator("incentives")}
-            </Tag>
+              <span
+                className={`flex h-3.5 w-3.5 items-center justify-center rounded-sm border text-[9px] leading-none ${
+                  gaugedOnly
+                    ? "border-[#F7931A] bg-[#F7931A] text-white"
+                    : "border-[var(--content-muted)] bg-transparent text-transparent"
+                }`}
+              >
+                ✓
+              </span>
+              <span>Gauged Only</span>
+            </button>
           </div>
         </div>
       </div>
