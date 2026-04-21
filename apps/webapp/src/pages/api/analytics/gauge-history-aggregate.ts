@@ -90,7 +90,7 @@ export default async function handler(request: Request) {
       )
     }
 
-    const rows = (data ?? []) as GaugeHistoryRow[]
+    const rows = (data ?? []) as unknown as GaugeHistoryRow[]
 
     // Aggregate per epoch_start.
     const byEpoch = new Map<
