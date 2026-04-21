@@ -22,6 +22,7 @@ import {
   useMultiLockClaimBribes,
 } from "@/hooks/useMultiLockClaimBribes"
 import { usePagination } from "@/hooks/usePagination"
+import { getAtomicBatchFallbackMessage } from "@/utils/eip5792"
 import {
   type ClaimableBribe,
   type VoteAllocation,
@@ -900,6 +901,8 @@ export default function DashboardPage(): JSX.Element {
     isInProgress: isMultiClaimInProgress,
     isDone: isMultiClaimDone,
     hasErrors: multiClaimHasErrors,
+    executionMode: multiClaimExecutionMode,
+    batchSupport: multiClaimBatchSupport,
     clear: clearMultiClaim,
   } = useMultiLockClaimBribes()
 
@@ -1490,10 +1493,14 @@ export default function DashboardPage(): JSX.Element {
                               </p>
                               <p className="text-sm font-medium text-[var(--content-primary)]">
                                 {isMultiClaimInProgress
-                                  ? `Signing transactions (${multiClaimCurrentIndex + 1}/${multiClaimTotalLocks})`
+                                  ? multiClaimExecutionMode === "batched"
+                                    ? "Confirm batch in wallet"
+                                    : `Signing transactions (${multiClaimCurrentIndex + 1}/${multiClaimTotalLocks})`
                                   : multiClaimHasErrors
                                     ? `${multiClaimSuccessCount} of ${multiClaimTotalLocks} succeeded`
-                                    : "All transactions confirmed"}
+                                    : multiClaimExecutionMode === "batched"
+                                      ? "Batch confirmed"
+                                      : "All transactions confirmed"}
                               </p>
                             </div>
                             {isMultiClaimDone && !multiClaimHasErrors && (
@@ -1502,6 +1509,16 @@ export default function DashboardPage(): JSX.Element {
                               </Tag>
                             )}
                           </div>
+                          {multiClaimExecutionMode === "sequential" &&
+                            getAtomicBatchFallbackMessage(
+                              multiClaimBatchSupport,
+                            ) && (
+                              <p className="mb-3 text-xs text-[var(--content-secondary)]">
+                                {getAtomicBatchFallbackMessage(
+                                  multiClaimBatchSupport,
+                                )}
+                              </p>
+                            )}
 
                           <div className="mb-3 flex h-2 gap-0.5 overflow-hidden rounded-full">
                             {multiClaimLockStates.map((state) => (
