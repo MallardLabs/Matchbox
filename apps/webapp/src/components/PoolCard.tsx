@@ -132,11 +132,6 @@ export default function PoolCard({
           <Tag color={poolTypeColor(pool)} closeable={false}>
             {poolTypeLabel(pool)}
           </Tag>
-          {!hasGauge ? (
-            <span className="rounded border border-[var(--border)] px-1.5 py-0.5 text-2xs text-[var(--content-tertiary)]">
-              No Gauge
-            </span>
-          ) : null}
         </div>
       </div>
 
@@ -172,7 +167,7 @@ export default function PoolCard({
             Voter Fees
             <Tooltip
               id={`pc-voterfees-${pool.address}`}
-              content="LP trading fees redirected to veMEZO voters this epoch (not to LPs). Sourced from api.mezo.org/votes/votables stats.gaugeFees — the sum of USD across all fee tokens. Claimable by voters at epoch end."
+              content="LP trading fees redirected to veMEZO voters this epoch (not to LPs). Claimable by voters at epoch end."
             />
           </dt>
           <dd
@@ -190,7 +185,7 @@ export default function PoolCard({
             vAPR
             <Tooltip
               id={`pc-vapr-${pool.address}`}
-              content="Voting APR — annualized return for veMEZO voters who allocate to this pool. (voter fees + bribes this epoch × 52) / USD votes on this pool. Sourced from api.mezo.org/votes/votables stats.votingApr."
+              content="Voting APR — annualized return for veMEZO voters who allocate to this pool. (voter fees + bribes this epoch × 52) / USD votes on this pool."
             />
           </dt>
           <dd
@@ -262,7 +257,7 @@ export default function PoolCard({
             BaseButton: { style: { height: "32px" } },
           }}
         >
-          Add Incentives
+          {hasGauge ? "Add Incentives" : "No Gauge"}
         </Button>
       </div>
     </article>

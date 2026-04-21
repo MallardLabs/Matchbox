@@ -224,7 +224,7 @@ export default function PoolDetailPage({
                   ? "text-[#F7931A]"
                   : "text-[var(--content-primary)]"
               }`}
-              title="Voting APR for veMEZO voters — source: api.mezo.org/votes/votables stats.votingApr"
+              title="Voting APR — annualized return for veMEZO voters who allocate to this pool."
             >
               {formatPercent(votingApr)}
             </p>
@@ -251,7 +251,7 @@ export default function PoolDetailPage({
                   ? "text-[#F7931A]"
                   : "text-[var(--content-primary)]"
               }`}
-              title="LP trading fees redirected to voters this epoch — source: api.mezo.org/votes/votables stats.gaugeFees"
+              title="LP trading fees redirected to veMEZO voters this epoch. Claimable by voters at epoch end."
             >
               {formatUsdValue(voterFeesUsd)}
             </p>
