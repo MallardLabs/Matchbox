@@ -149,6 +149,7 @@ const navItems = [
   { href: "/dashboard", label: "dashboard" },
   { href: "/boost", label: "veMEZO" },
   { href: "/incentives", label: "veBTC" },
+  { href: "/analytics", label: "analytics" },
   { href: "/how-to", label: "how-to" },
 ]
 
