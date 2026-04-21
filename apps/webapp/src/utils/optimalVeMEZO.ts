@@ -8,7 +8,7 @@ export type OptimalVeMEZO = {
 /**
  * Calculate the veMEZO voting weight on a gauge that reaches maximum (5x) boost.
  * Formula (same basis as the Boost calculator):
- *   targetVeMEZO = (unboosted NFT veBTC * veMEZO totalVotingPower) / veBTC totalVotingPower
+ *   targetVeMEZO = (unboosted NFT veBTC * veMEZO totalVotingPower) / veBTC unboostedTotalVotingPower
  *   additionalVeMEZO = max(targetVeMEZO - currentGaugeVeMEZOWeight, 0)
  */
 export function calculateOptimalVeMEZO(

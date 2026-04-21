@@ -3,9 +3,9 @@ import { usePreviewMode } from "@/contexts/PreviewModeContext"
 type FetchStatus = "loading" | "success" | "error"
 
 type VeSupplyBigintResult = {
-  /** Effective veBTC system total: override when preview is active, else live. */
+  /** Effective veBTC system total from `unboostedTotalVotingPower()`. */
   veBTCSupply: bigint | undefined
-  /** Effective veMEZO system total: override when preview is active, else live. */
+  /** Effective veMEZO system total from `totalVotingPower()`. */
   veMEZOSupply: bigint | undefined
   fetchStatus: FetchStatus
   /** True when the returned values are simulated, not on-chain. */
@@ -15,9 +15,10 @@ type VeSupplyBigintResult = {
 }
 
 /**
- * Effective bigint veBTC / veMEZO system totals, honoring the preview-mode
- * override. Drop-in replacement for the inline system-total reads elsewhere in
- * the app so simulation propagates to boost / optimal-veMEZO math everywhere.
+ * Effective bigint boost-system totals, honoring the preview-mode override.
+ * veBTC uses `unboostedTotalVotingPower()` and veMEZO uses
+ * `totalVotingPower()` so simulation propagates to boost / optimal-veMEZO math
+ * everywhere.
  */
 export function useVeSupplyBigint(): VeSupplyBigintResult {
   const {

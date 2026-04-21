@@ -393,13 +393,13 @@ export default function GaugeDetailPage({
     },
   })
 
-  // System totals via shared hook — honors preview-mode overrides.
+  // System totals via shared hook — honors preview-mode overrides. veBTC uses
+  // `unboostedTotalVotingPower()` and veMEZO uses `totalVotingPower()`.
   const {
     veBTCSupply: veBTCTotalVotingPower,
     veMEZOSupply: veMEZOTotalVotingPower,
   } =
     useVeSupplyBigint()
-  // System totals from escrow `totalVotingPower()` — same source as Boost calculator.
 
   const optimalVeMEZOData = useMemo(
     () =>
@@ -835,7 +835,7 @@ export default function GaugeDetailPage({
                       </p>
                       <Tooltip
                         id={`gd-optimal-${gaugeAddress}`}
-                        content="veMEZO voting weight on this gauge that reaches maximum (5x) boost. System totals are veBTC and veMEZO totalVotingPower() from escrow—the same bases as the Boost calculator. Below that, the bar fills in orange toward the goal. At the target the bar is green. If oversubscribed, a red layer grows over the green from 0% at 1× to 100% at 2× the optimal weight (full red); beyond 2× the bar stays full red—more veMEZO dilutes rewards per voter."
+                        content="veMEZO voting weight on this gauge that reaches maximum (5x) boost. System totals use veBTC unboostedTotalVotingPower() and veMEZO totalVotingPower() from escrow—the same bases as the Boost calculator. Below that, the bar fills in orange toward the goal. At the target the bar is green. If oversubscribed, a red layer grows over the green from 0% at 1× to 100% at 2× the optimal weight (full red); beyond 2× the bar stays full red—more veMEZO dilutes rewards per voter."
                       />
                     </div>
                   </div>

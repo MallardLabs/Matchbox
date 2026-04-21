@@ -6,7 +6,7 @@ export type BoostCalculatorInputs = {
   unboostedNftVp: bigint
   /** Total veMEZO vote weight on this gauge (`weights(gauge)`). */
   gaugeVeMezoWeight: bigint
-  /** System veBTC total from escrow `totalVotingPower()`. */
+  /** System veBTC total from escrow `unboostedTotalVotingPower()`. */
   veBtcSystemTotal: bigint
   /** System veMEZO total from escrow `totalVotingPower()`. */
   veMezoSystemTotal: bigint
@@ -15,7 +15,7 @@ export type BoostCalculatorInputs = {
 /**
  * Same closed form as `BoostCalculator` / whitepaper §3.6:
  * multiplier = min(5, 1 + 4 * (V_total / v) * (w_gauge / W_total))
- * with V_total = veBTC `totalVotingPower()`, v = NFT unboosted VP,
+ * with V_total = veBTC `unboostedTotalVotingPower()`, v = NFT unboosted VP,
  * w_gauge = gauge veMEZO weight, W_total = veMEZO `totalVotingPower()`.
  * Returns 1e18-scaled multiplier (wei).
  */

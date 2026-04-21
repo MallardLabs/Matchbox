@@ -43,8 +43,9 @@ export function usePreviewMode(): PreviewModeContextValue {
 }
 
 /**
- * Holds simulation overrides for veBTC / veMEZO system totals, plus the live
- * totalVotingPower fetch that seeds the overrides when preview mode is toggled on.
+ * Holds simulation overrides for boost-system totals, plus the live fetch that
+ * seeds the overrides when preview mode is toggled on. veBTC uses
+ * `unboostedTotalVotingPower()` while veMEZO uses `totalVotingPower()`.
  * State is session-scoped (no persistence).
  */
 export function PreviewModeProvider({ children }: { children: ReactNode }) {
@@ -53,7 +54,7 @@ export function PreviewModeProvider({ children }: { children: ReactNode }) {
 
   const { data, isFetching, isError, refetch } = useReadContracts({
     contracts: [
-      { ...contracts.veBTC, functionName: "totalVotingPower" },
+      { ...contracts.veBTC, functionName: "unboostedTotalVotingPower" },
       { ...contracts.veMEZO, functionName: "totalVotingPower" },
     ],
     query: {

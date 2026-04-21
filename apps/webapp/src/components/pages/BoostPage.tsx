@@ -103,7 +103,7 @@ export default function BoostPage(): JSX.Element {
 
   const {
     veMEZOTotalVotingPower: veMEZOSystemTotal,
-    veBTCTotalVotingPower: veBTCSystemTotal,
+    veBTCUnboostedTotalVotingPower: veBTCSystemTotal,
   } = useVoterTotals()
 
   // Fetch all gauge profiles from Supabase (pre-fetches all for faster loading)
@@ -1960,12 +1960,13 @@ export default function BoostPage(): JSX.Element {
                                   : 0n
                                 const projectedBoost =
                                   userVoteWeight > 0n &&
-                                  gauge.veBTCWeight &&
+                                  gauge.unboostedVeBTCWeight &&
                                   veBTCSystemTotal &&
                                   veMEZOSystemTotal
                                     ? boostMultiplierNumberFromCalculatorInputs(
                                         {
-                                          unboostedNftVp: gauge.veBTCWeight,
+                                          unboostedNftVp:
+                                            gauge.unboostedVeBTCWeight,
                                           gaugeVeMezoWeight:
                                             gauge.totalWeight + userVoteWeight,
                                           veBtcSystemTotal: veBTCSystemTotal,

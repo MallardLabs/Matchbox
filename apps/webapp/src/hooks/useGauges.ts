@@ -14,6 +14,7 @@ export type BoostGauge = {
   address: Address
   veBTCTokenId: bigint
   veBTCWeight: bigint | undefined
+  unboostedVeBTCWeight: bigint | undefined
   totalWeight: bigint
   isAlive: boolean
   optimalVeMEZO: bigint | undefined
@@ -432,6 +433,9 @@ export function useBoostGauges(options: UseBoostGaugesOptions = {}) {
       address,
       veBTCTokenId,
       veBTCWeight: includeOwnership ? gaugeVeBTCWeight : undefined,
+      unboostedVeBTCWeight: includeOwnership
+        ? gaugeUnboostedVeBTCWeight
+        : undefined,
       totalWeight,
       isAlive,
       optimalVeMEZO: optimalVeMEZOData?.optimalVeMEZO,
