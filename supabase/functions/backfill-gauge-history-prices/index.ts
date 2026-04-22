@@ -18,6 +18,11 @@
 //                                     // lets historical rows pick up
 //                                     // subscription/boost data recomputed
 //                                     // from the epoch's historical state
+//   POST ?resetFailedSubscriptions=true  // one-shot: null out
+//                                        // subscription_status='unknown' on
+//                                        // rows still missing optimal weight,
+//                                        // so a later refreshSubscription run
+//                                        // can retry them
 //
 // Subscription note: we read true historical state for every epoch.
 //   - NFT ownership / boost assignment: archive reads (eth_call at the block
@@ -236,25 +241,44 @@ async function findBlockForTimestamp(
   }
 }
 
-// Walk the gauge → beneficiary → veBTC NFT → boostableTokenIdToGauge chain,
-// reading archive state at the block closest to `epochStart` so we get the
-// NFT ownership and boost assignments as they were at that epoch. Voting
-// power values use the contract's first-class historical queries
-// (`unboostedVotingPowerOfNFTAt` / `votingPowerOfNFTAt`), which accept a
-// timestamp directly and return the state at that time regardless of
-// whether the RPC supports archive reads at the specific block.
+type DiscoveryCounters = {
+  gauges_checked: number
+  beneficiaries_found: number
+  beneficiaries_with_nfts: number
+  token_ids_discovered: number
+  tokens_mapped_to_gauge: number
+  historical_vp_nonzero: number
+}
+
+// Discover the NFT-to-gauge boost mapping using CURRENT chain state, then
+// read each NFT's voting power AT the target timestamp via the contract's
+// first-class historical queries. The discovery chain (rewardsBeneficiary →
+// balanceOf → ownerToNFTokenIdList → boostableTokenIdToGauge) has no
+// At(timestamp) variant, and archive-reading it at the epoch's block fails
+// when NFTs hadn't been minted or boost wasn't yet assigned — common for
+// anything more than a couple weeks old. The NFT-gauge relationship is
+// usually stable (people who create a gauge keep boosting it with the same
+// NFT), so the current mapping is the best practical approximation.
+// `votingPowerOfNFTAt` / `unboostedVotingPowerOfNFTAt` return 0 for NFTs
+// that didn't exist at the target timestamp, which correctly yields no
+// boost data for those gauges.
 async function fetchHistoricalBoostInfo(
   publicClient: PublicClient,
   boostVoterAddress: Address,
   veBTCAddress: Address,
   gaugeAddresses: Address[],
   epochStart: number,
-  archiveBlock: bigint | null,
-): Promise<Map<string, GaugeBoostInfo>> {
-  const result = new Map<string, GaugeBoostInfo>()
-  if (gaugeAddresses.length === 0) return result
-
-  const blockOpt = archiveBlock !== null ? { blockNumber: archiveBlock } : {}
+): Promise<{ info: Map<string, GaugeBoostInfo>; counters: DiscoveryCounters }> {
+  const info = new Map<string, GaugeBoostInfo>()
+  const counters: DiscoveryCounters = {
+    gauges_checked: gaugeAddresses.length,
+    beneficiaries_found: 0,
+    beneficiaries_with_nfts: 0,
+    token_ids_discovered: 0,
+    tokens_mapped_to_gauge: 0,
+    historical_vp_nonzero: 0,
+  }
+  if (gaugeAddresses.length === 0) return { info, counters }
 
   const beneficiaryResults = await publicClient.multicall({
     contracts: gaugeAddresses.map((addr) => ({
@@ -262,7 +286,6 @@ async function fetchHistoricalBoostInfo(
       abi: NON_STAKING_GAUGE_ABI,
       functionName: "rewardsBeneficiary",
     })),
-    ...blockOpt,
   })
 
   const beneficiaryInfo = beneficiaryResults
@@ -273,7 +296,8 @@ async function fetchHistoricalBoostInfo(
     }))
     .filter((b) => b.beneficiary !== ZERO_ADDRESS)
 
-  if (beneficiaryInfo.length === 0) return result
+  counters.beneficiaries_found = beneficiaryInfo.length
+  if (beneficiaryInfo.length === 0) return { info, counters }
 
   const balanceResults = await publicClient.multicall({
     contracts: beneficiaryInfo.map((b) => ({
@@ -282,10 +306,8 @@ async function fetchHistoricalBoostInfo(
       functionName: "balanceOf",
       args: [b.beneficiary],
     })),
-    ...blockOpt,
   })
 
-  // Cap per-beneficiary enumeration to avoid long multicalls for whales.
   const MAX_TOKENS_PER_BENEFICIARY = 5n
   const tokenIdCalls: { beneficiaryIdx: number; tokenIndex: bigint }[] = []
   beneficiaryInfo.forEach((_, bIdx) => {
@@ -293,6 +315,7 @@ async function fetchHistoricalBoostInfo(
       balanceResults[bIdx].status === "success"
         ? (balanceResults[bIdx].result as bigint)
         : 0n
+    if (balance > 0n) counters.beneficiaries_with_nfts++
     const maxTokens =
       balance > MAX_TOKENS_PER_BENEFICIARY
         ? MAX_TOKENS_PER_BENEFICIARY
@@ -302,7 +325,7 @@ async function fetchHistoricalBoostInfo(
     }
   })
 
-  if (tokenIdCalls.length === 0) return result
+  if (tokenIdCalls.length === 0) return { info, counters }
 
   const tokenIdResults = await publicClient.multicall({
     contracts: tokenIdCalls.map((c) => ({
@@ -311,7 +334,6 @@ async function fetchHistoricalBoostInfo(
       functionName: "ownerToNFTokenIdList",
       args: [beneficiaryInfo[c.beneficiaryIdx].beneficiary, c.tokenIndex],
     })),
-    ...blockOpt,
   })
 
   const tokenIds = tokenIdCalls
@@ -324,7 +346,8 @@ async function fetchHistoricalBoostInfo(
     }))
     .filter((t) => t.tokenId > 0n)
 
-  if (tokenIds.length === 0) return result
+  counters.token_ids_discovered = tokenIds.length
+  if (tokenIds.length === 0) return { info, counters }
 
   const mappedGaugeResults = await publicClient.multicall({
     contracts: tokenIds.map((t) => ({
@@ -333,7 +356,6 @@ async function fetchHistoricalBoostInfo(
       functionName: "boostableTokenIdToGauge",
       args: [t.tokenId],
     })),
-    ...blockOpt,
   })
 
   const gaugeToTokenId = new Map<string, bigint>()
@@ -349,7 +371,8 @@ async function fetchHistoricalBoostInfo(
   })
 
   const matchedTokens = Array.from(gaugeToTokenId.entries())
-  if (matchedTokens.length === 0) return result
+  counters.tokens_mapped_to_gauge = matchedTokens.length
+  if (matchedTokens.length === 0) return { info, counters }
 
   const epochStartBig = BigInt(epochStart)
   const [boostedVpResults, unboostedVpResults] = await Promise.all([
@@ -380,19 +403,17 @@ async function fetchHistoricalBoostInfo(
       unboostedVpResults[idx].status === "success"
         ? (unboostedVpResults[idx].result as bigint)
         : 0n
-    // boost = boosted VP / unboosted VP. Matches on-chain semantics without
-    // relying on the boostVoter's current `getBoost(tokenId)` view.
-    const boost =
-      unboostedVp > 0n ? Number(boostedVp) / Number(unboostedVp) : null
-    if (boost === null) return
-    result.set(gauge, {
+    if (unboostedVp <= 0n) return
+    counters.historical_vp_nonzero++
+    const boost = Number(boostedVp) / Number(unboostedVp)
+    info.set(gauge, {
       boost,
       vebtcWeight: boostedVp,
       unboostedVebtcWeight: unboostedVp,
     })
   })
 
-  return result
+  return { info, counters }
 }
 
 function epochDateString(epochSeconds: number): string {
@@ -513,6 +534,7 @@ async function recomputeEpoch(
   gauges: number
   subscription_recomputed: number
   archive_block: string | null
+  discovery: DiscoveryCounters | null
 }> {
   if (rows.length === 0)
     return {
@@ -520,6 +542,7 @@ async function recomputeEpoch(
       gauges: 0,
       subscription_recomputed: 0,
       archive_block: null,
+      discovery: null,
     }
 
   // Find the block closest to the epoch boundary so we can archive-read
@@ -556,14 +579,14 @@ async function recomputeEpoch(
       : null
 
   const gaugeAddressesForBoost = rows.map((r) => r.gauge_address as Address)
-  const boostInfoByGauge = await fetchHistoricalBoostInfo(
-    publicClient,
-    boostVoterAddress,
-    veBTCAddress,
-    gaugeAddressesForBoost,
-    epochStart,
-    archiveBlock,
-  )
+  const { info: boostInfoByGauge, counters: discoveryCounters } =
+    await fetchHistoricalBoostInfo(
+      publicClient,
+      boostVoterAddress,
+      veBTCAddress,
+      gaugeAddressesForBoost,
+      epochStart,
+    )
 
   const gaugeAddresses = rows.map((r) => r.gauge_address as Address)
 
@@ -608,7 +631,11 @@ async function recomputeEpoch(
       priceSource,
       dryRun,
     })
-    return { ...res, archive_block: archiveBlockStr }
+    return {
+      ...res,
+      archive_block: archiveBlockStr,
+      discovery: discoveryCounters,
+    }
   }
 
   const lengthResults = await publicClient.multicall({
@@ -653,7 +680,11 @@ async function recomputeEpoch(
       priceSource,
       dryRun,
     })
-    return { ...res, archive_block: archiveBlockStr }
+    return {
+      ...res,
+      archive_block: archiveBlockStr,
+      discovery: discoveryCounters,
+    }
   }
 
   const tokenAddressResults = await publicClient.multicall({
@@ -773,7 +804,11 @@ async function recomputeEpoch(
     priceSource,
     dryRun,
   })
-  return { ...res, archive_block: archiveBlockStr }
+  return {
+    ...res,
+    archive_block: archiveBlockStr,
+    discovery: discoveryCounters,
+  }
 }
 
 async function writeRows(params: {
@@ -921,6 +956,12 @@ Deno.serve(async (req) => {
     // recomputed against current chain state).
     const refreshSubscription =
       url.searchParams.get("refreshSubscription") === "true"
+    // One-shot reset: null out subscription_status on rows that were stamped
+    // 'unknown' by an earlier run that failed to recover historical boost data
+    // (e.g. archive-read discovery dropouts). Lets refreshSubscription pick
+    // them up again with the fixed HEAD-discovery + At(timestamp) logic.
+    const resetFailedSubscriptions =
+      url.searchParams.get("resetFailedSubscriptions") === "true"
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")
@@ -943,6 +984,25 @@ Deno.serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey, {
       auth: { autoRefreshToken: false, persistSession: false },
     })
+
+    if (resetFailedSubscriptions) {
+      const { data, error } = await supabase
+        .from("gauge_history")
+        .update({ subscription_status: null })
+        .eq("subscription_status", "unknown")
+        .is("optimal_vemezo_weight", null)
+        .select("id")
+      if (error) throw error
+      return new Response(
+        JSON.stringify({
+          success: true,
+          reset: true,
+          rows_reset: data?.length ?? 0,
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      )
+    }
+
     const { chain, contracts, rpcUrl } = getMezoNetworkConfig()
     const publicClient = createPublicClient({
       chain,
@@ -997,6 +1057,7 @@ Deno.serve(async (req) => {
       gauges: number
       subscription_recomputed?: number
       archive_block?: string | null
+      discovery?: DiscoveryCounters | null
       skipped_reason?: string
       btc_error?: string
       mezo_coingecko_error?: string
@@ -1079,8 +1140,13 @@ Deno.serve(async (req) => {
             ? "geckoterminal-historical"
             : "coingecko-historical"
 
-      const { updated, gauges, subscription_recomputed, archive_block } =
-        await recomputeEpoch(
+      const {
+        updated,
+        gauges,
+        subscription_recomputed,
+        archive_block,
+        discovery,
+      } = await recomputeEpoch(
           supabase,
           publicClient,
           contracts.boostVoter as Address,
@@ -1104,6 +1170,7 @@ Deno.serve(async (req) => {
         gauges,
         subscription_recomputed,
         archive_block,
+        discovery,
         mezo_coingecko_error:
           mezoPrice === null || mezoPriceSource !== "coingecko-historical"
             ? mezoCoingeckoResult.error ?? undefined
