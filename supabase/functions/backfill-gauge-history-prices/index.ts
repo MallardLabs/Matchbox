@@ -13,11 +13,12 @@
 //   POST ?epochs=3                    // process up to 3 oldest still-missing epochs
 //   POST ?epoch=1744156800            // re-backfill a specific epoch
 //   POST ?dryRun=true                 // compute but don't write
-//   POST ?refreshSubscription=true    // also sweep rows whose prices are set
-//                                     // but optimal_vemezo_weight is null —
-//                                     // lets historical rows pick up
-//                                     // subscription/boost data recomputed
-//                                     // from the epoch's historical state
+//   POST ?refreshSubscription=true    // subscription-only: sweep rows that
+//                                     // are missing optimal_vemezo_weight
+//                                     // and stamp boost/subscription fields
+//                                     // from historical state. Does NOT
+//                                     // touch prices, incentive_breakdown,
+//                                     // total_incentives_usd, or apy.
 //   POST ?resetFailedSubscriptions=true  // one-shot: null out
 //                                        // subscription_status='unknown' on
 //                                        // rows still missing optimal weight,
@@ -517,6 +518,166 @@ async function fetchGeckoTerminalDailyClose(
   }
 }
 
+// Subscription-only recompute. Used by refreshSubscription mode: touches
+// optimal_vemezo_weight / boost_multiplier / subscription_* / vebtc_weight /
+// apy_at_optimal only, leaving btc_price_usd, mezo_price_usd, price_source,
+// incentive_breakdown, total_incentives_usd and apy untouched. For
+// apy_at_optimal we use each row's stored mezo_price_usd and its recorded
+// total_incentives_usd so the number is internally consistent with the
+// price snapshot already on disk.
+async function recomputeSubscriptionOnly(
+  supabase: ReturnType<typeof createClient>,
+  publicClient: PublicClient,
+  boostVoterAddress: Address,
+  veBTCAddress: Address,
+  veMEZOAddress: Address,
+  rows: Array<
+    HistoryRow & { total_incentives_usd: number | null }
+  >,
+  epochStart: number,
+  dryRun: boolean,
+): Promise<{
+  updated: number
+  gauges: number
+  subscription_recomputed: number
+  archive_block: string | null
+  discovery: DiscoveryCounters | null
+}> {
+  if (rows.length === 0)
+    return {
+      updated: 0,
+      gauges: 0,
+      subscription_recomputed: 0,
+      archive_block: null,
+      discovery: null,
+    }
+
+  const archiveBlock = await findBlockForTimestamp(publicClient, epochStart)
+  const blockOpt = archiveBlock !== null ? { blockNumber: archiveBlock } : {}
+  const supplyResults = await publicClient.multicall({
+    contracts: [
+      {
+        address: veMEZOAddress,
+        abi: VOTING_ESCROW_ABI,
+        functionName: "supply",
+      },
+      {
+        address: veBTCAddress,
+        abi: VOTING_ESCROW_ABI,
+        functionName: "supply",
+      },
+    ],
+    ...blockOpt,
+  })
+  const veMEZOSupply =
+    supplyResults[0].status === "success"
+      ? (supplyResults[0].result as bigint)
+      : null
+  const veBTCSupply =
+    supplyResults[1].status === "success"
+      ? (supplyResults[1].result as bigint)
+      : null
+
+  const gaugeAddressesForBoost = rows.map((r) => r.gauge_address as Address)
+  const { info: boostInfoByGauge, counters: discoveryCounters } =
+    await fetchHistoricalBoostInfo(
+      publicClient,
+      boostVoterAddress,
+      veBTCAddress,
+      gaugeAddressesForBoost,
+      epochStart,
+    )
+
+  let updated = 0
+  let subscriptionRecomputed = 0
+
+  for (const row of rows) {
+    const gauge = row.gauge_address.toLowerCase()
+    const vemezoWeight = row.vemezo_weight ? BigInt(row.vemezo_weight) : 0n
+    const storedMezoPrice = row.mezo_price_usd
+      ? Number(row.mezo_price_usd)
+      : null
+    const storedTotalIncentives = row.total_incentives_usd
+
+    const liveBoost = boostInfoByGauge.get(gauge)
+    const recordedOptimal = row.optimal_vemezo_weight
+      ? BigInt(row.optimal_vemezo_weight)
+      : null
+    const liveOptimal = liveBoost
+      ? calculateOptimalVeMEZO(
+          liveBoost.unboostedVebtcWeight,
+          veMEZOSupply,
+          veBTCSupply,
+        )
+      : null
+    const optimalWeight = liveOptimal ?? recordedOptimal
+    const boostMultiplier = liveBoost?.boost ?? row.boost_multiplier ?? null
+    const vebtcWeight = liveBoost?.vebtcWeight ?? null
+
+    const apyAtOptimal =
+      optimalWeight !== null
+        ? calculateAPY(storedTotalIncentives, optimalWeight, storedMezoPrice)
+        : null
+    const subscriptionRatio = calculateSubscriptionRatio(
+      vemezoWeight,
+      optimalWeight,
+    )
+    const subscriptionStatus = getSubscriptionStatus(
+      vemezoWeight,
+      optimalWeight,
+    )
+    const subscriptionDelta =
+      optimalWeight !== null ? vemezoWeight - optimalWeight : null
+    const oversubscriptionDilution =
+      subscriptionRatio !== null && subscriptionRatio > 1
+        ? 1 - 1 / subscriptionRatio
+        : null
+    const gotNewSubscription =
+      recordedOptimal === null && optimalWeight !== null
+
+    const update: Record<string, unknown> = {
+      apy_at_optimal: apyAtOptimal,
+      subscription_ratio: subscriptionRatio,
+      subscription_status: subscriptionStatus,
+      subscription_delta_vemezo:
+        subscriptionDelta !== null ? subscriptionDelta.toString() : null,
+      oversubscription_dilution: oversubscriptionDilution,
+      optimal_vemezo_weight:
+        optimalWeight !== null ? optimalWeight.toString() : null,
+      boost_multiplier: boostMultiplier,
+    }
+    if (vebtcWeight !== null) {
+      update.vebtc_weight = vebtcWeight.toString()
+    }
+
+    if (dryRun) {
+      console.log(`[dry-run subs-only] would update id=${row.id}`, update)
+      updated++
+      if (gotNewSubscription) subscriptionRecomputed++
+      continue
+    }
+
+    const { error } = await supabase
+      .from("gauge_history")
+      .update(update)
+      .eq("id", row.id)
+    if (error) {
+      console.error(`Failed to update row id=${row.id}:`, error)
+      continue
+    }
+    updated++
+    if (gotNewSubscription) subscriptionRecomputed++
+  }
+
+  return {
+    updated,
+    gauges: rows.length,
+    subscription_recomputed: subscriptionRecomputed,
+    archive_block: archiveBlock !== null ? archiveBlock.toString() : null,
+    discovery: discoveryCounters,
+  }
+}
+
 async function recomputeEpoch(
   supabase: ReturnType<typeof createClient>,
   publicClient: PublicClient,
@@ -1009,26 +1170,32 @@ Deno.serve(async (req) => {
       transport: http(rpcUrl),
     })
 
-    // Pick target epochs. By default: oldest epochs whose price_source is null
-    // or 'live-oracle-pre-backfill' or a legacy placeholder tag. With
-    // refreshSubscription, also include rows where optimal_vemezo_weight is
-    // null AND subscription_status hasn't been stamped yet. The second AND
-    // clause matters: some old epochs genuinely have no historical boost data
-    // to recover (pre-launch), so after one pass we stamp
-    // subscription_status='unknown' and stop retrying — otherwise the query
-    // keeps picking the same never-recoverable rows forever.
+    // Pick target epochs.
+    // Default (price backfill): oldest epochs whose price_source is null,
+    // 'live-oracle-pre-backfill', or a legacy placeholder tag.
+    // refreshSubscription (subscription-only): epochs that already have
+    // prices but are missing optimal_vemezo_weight AND haven't been stamped
+    // as 'unknown'. The subscription_status.is.null clause prevents the
+    // query from looping on genuinely unrecoverable pre-launch rows that
+    // we stamped on a prior pass.
     let targetEpochs: number[]
     if (singleEpoch) {
       targetEpochs = [Number.parseInt(singleEpoch, 10)]
     } else {
-      const filter = refreshSubscription
-        ? "price_source.is.null,price_source.eq.live-oracle-pre-backfill,price_source.eq.placeholder,and(optimal_vemezo_weight.is.null,subscription_status.is.null)"
-        : "price_source.is.null,price_source.eq.live-oracle-pre-backfill,price_source.eq.placeholder"
-      const { data, error } = await supabase
+      let query = supabase
         .from("gauge_history")
         .select("epoch_start")
-        .or(filter)
         .order("epoch_start", { ascending: true })
+      if (refreshSubscription) {
+        query = query
+          .is("optimal_vemezo_weight", null)
+          .is("subscription_status", null)
+      } else {
+        query = query.or(
+          "price_source.is.null,price_source.eq.live-oracle-pre-backfill,price_source.eq.placeholder",
+        )
+      }
+      const { data, error } = await query
       if (error) throw error
       targetEpochs = Array.from(
         new Set((data ?? []).map((r) => Number(r.epoch_start))),
@@ -1065,15 +1232,51 @@ Deno.serve(async (req) => {
     }> = []
 
     for (const epochStart of targetEpochs) {
+      const selectColumns = refreshSubscription
+        ? "id, gauge_address, epoch_start, vemezo_weight, optimal_vemezo_weight, boost_multiplier, price_source, btc_price_usd, mezo_price_usd, total_incentives_usd"
+        : "id, gauge_address, epoch_start, vemezo_weight, optimal_vemezo_weight, boost_multiplier, price_source, btc_price_usd, mezo_price_usd"
       const { data: rows, error: rowsError } = await supabase
         .from("gauge_history")
-        .select(
-          "id, gauge_address, epoch_start, vemezo_weight, optimal_vemezo_weight, boost_multiplier, price_source, btc_price_usd, mezo_price_usd",
-        )
+        .select(selectColumns)
         .eq("epoch_start", epochStart)
       if (rowsError) throw rowsError
 
       const typedRows = (rows ?? []) as HistoryRow[]
+
+      if (refreshSubscription) {
+        const subRows = (rows ?? []) as Array<
+          HistoryRow & { total_incentives_usd: number | null }
+        >
+        const {
+          updated,
+          gauges,
+          subscription_recomputed,
+          archive_block,
+          discovery,
+        } = await recomputeSubscriptionOnly(
+          supabase,
+          publicClient,
+          contracts.boostVoter as Address,
+          contracts.veBTC as Address,
+          contracts.veMEZO as Address,
+          subRows,
+          epochStart,
+          dryRun,
+        )
+        results.push({
+          epoch_start: epochStart,
+          btc_price: null,
+          mezo_price: null,
+          mezo_price_source: null,
+          price_source: "subscription-only",
+          updated,
+          gauges,
+          subscription_recomputed,
+          archive_block,
+          discovery,
+        })
+        continue
+      }
 
       const [btcResult, mezoCoingeckoResult] = await Promise.all([
         fetchCoingeckoHistorical(
