@@ -297,7 +297,27 @@ async function recomputeEpoch(
 
   // Per-bribe: fetch token list length
   const bribeEntries = Array.from(bribeByGauge.entries())
-  if (bribeEntries.length === 0) return { updated: 0, gauges: 0 }
+  if (bribeEntries.length === 0) {
+    // Deprecated/retired gauges may no longer have a bribe mapping. Still
+    // stamp the price source so the row isn't re-picked on every run.
+    if (!dryRun) {
+      for (const row of rows) {
+        await supabase
+          .from("gauge_history")
+          .update({
+            btc_price_usd: btcPrice,
+            mezo_price_usd: mezoPrice,
+            price_source: priceSource,
+            incentive_breakdown: [],
+            total_incentives_usd: 0,
+            apy: null,
+            apy_at_optimal: null,
+          })
+          .eq("id", row.id)
+      }
+    }
+    return { updated: rows.length, gauges: rows.length }
+  }
 
   const lengthResults = await publicClient.multicall({
     contracts: bribeEntries.map(([, bribe]) => ({
