@@ -8,6 +8,7 @@ export type ProtocolEpochDatum = {
   totalIncentivesUsd: number
   gaugeCount: number
   totalVemezoWeight: string
+  totalVebtcWeight: string
   avgBoostMultiplier: number | null
 }
 

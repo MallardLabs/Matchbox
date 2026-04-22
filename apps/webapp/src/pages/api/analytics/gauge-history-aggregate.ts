@@ -26,6 +26,7 @@ type GaugeHistoryRow = {
   epoch_start: number
   total_incentives_usd: number | null
   vemezo_weight: string | null
+  vebtc_weight: string | null
   gauge_address: string
   boost_multiplier: number | null
 }
@@ -35,6 +36,7 @@ type AggregatedEpoch = {
   totalIncentivesUsd: number
   gaugeCount: number
   totalVemezoWeight: string
+  totalVebtcWeight: string
   avgBoostMultiplier: number | null
 }
 
@@ -74,7 +76,7 @@ export default async function handler(request: Request) {
     const { data, error } = await supabase
       .from("gauge_history")
       .select(
-        "epoch_start, total_incentives_usd, vemezo_weight, gauge_address, boost_multiplier",
+        "epoch_start, total_incentives_usd, vemezo_weight, vebtc_weight, gauge_address, boost_multiplier",
       )
       .gte("epoch_start", cutoffEpoch)
       .order("epoch_start", { ascending: true })
@@ -99,6 +101,7 @@ export default async function handler(request: Request) {
         totalIncentivesUsd: number
         gaugeAddresses: Set<string>
         totalVemezoWeight: bigint
+        totalVebtcWeight: bigint
         boostSum: number
         boostCount: number
       }
@@ -109,6 +112,7 @@ export default async function handler(request: Request) {
         totalIncentivesUsd: 0,
         gaugeAddresses: new Set<string>(),
         totalVemezoWeight: 0n,
+        totalVebtcWeight: 0n,
         boostSum: 0,
         boostCount: 0,
       }
@@ -118,6 +122,13 @@ export default async function handler(request: Request) {
       if (row.vemezo_weight) {
         try {
           existing.totalVemezoWeight += BigInt(row.vemezo_weight)
+        } catch {
+          // Skip malformed bigint values.
+        }
+      }
+      if (row.vebtc_weight) {
+        try {
+          existing.totalVebtcWeight += BigInt(row.vebtc_weight)
         } catch {
           // Skip malformed bigint values.
         }
@@ -137,6 +148,7 @@ export default async function handler(request: Request) {
         totalIncentivesUsd: Number(agg.totalIncentivesUsd.toFixed(2)),
         gaugeCount: agg.gaugeAddresses.size,
         totalVemezoWeight: agg.totalVemezoWeight.toString(),
+        totalVebtcWeight: agg.totalVebtcWeight.toString(),
         avgBoostMultiplier:
           agg.boostCount > 0 ? agg.boostSum / agg.boostCount : null,
       }))

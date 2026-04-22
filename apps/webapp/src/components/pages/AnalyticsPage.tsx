@@ -1,4 +1,5 @@
 import { AnalyticsEarningPower } from "@/components/analytics/AnalyticsEarningPower"
+import { AnalyticsGaugeVotes } from "@/components/analytics/AnalyticsGaugeVotes"
 import { AnalyticsGaugesTable } from "@/components/analytics/AnalyticsGaugesTable"
 import { AnalyticsKPIBar } from "@/components/analytics/AnalyticsKPIBar"
 import { AnalyticsPoolsTable } from "@/components/analytics/AnalyticsPoolsTable"
@@ -18,6 +19,7 @@ export default function AnalyticsPage(): JSX.Element {
 
       <AnalyticsKPIBar />
       <AnalyticsRevenueChart />
+      <AnalyticsGaugeVotes />
       <AnalyticsGaugesTable />
       <AnalyticsPoolsTable />
       <AnalyticsEarningPower />
