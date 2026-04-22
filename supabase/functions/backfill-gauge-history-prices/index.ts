@@ -951,14 +951,18 @@ Deno.serve(async (req) => {
 
     // Pick target epochs. By default: oldest epochs whose price_source is null
     // or 'live-oracle-pre-backfill' or a legacy placeholder tag. With
-    // refreshSubscription, also include rows that have prices but lack
-    // optimal_vemezo_weight (which means no subscription data was recorded).
+    // refreshSubscription, also include rows where optimal_vemezo_weight is
+    // null AND subscription_status hasn't been stamped yet. The second AND
+    // clause matters: some old epochs genuinely have no historical boost data
+    // to recover (pre-launch), so after one pass we stamp
+    // subscription_status='unknown' and stop retrying — otherwise the query
+    // keeps picking the same never-recoverable rows forever.
     let targetEpochs: number[]
     if (singleEpoch) {
       targetEpochs = [Number.parseInt(singleEpoch, 10)]
     } else {
       const filter = refreshSubscription
-        ? "price_source.is.null,price_source.eq.live-oracle-pre-backfill,price_source.eq.placeholder,optimal_vemezo_weight.is.null"
+        ? "price_source.is.null,price_source.eq.live-oracle-pre-backfill,price_source.eq.placeholder,and(optimal_vemezo_weight.is.null,subscription_status.is.null)"
         : "price_source.is.null,price_source.eq.live-oracle-pre-backfill,price_source.eq.placeholder"
       const { data, error } = await supabase
         .from("gauge_history")
