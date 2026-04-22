@@ -161,31 +161,36 @@ function formatSubscriptionPercent(value: number | null | undefined): string {
   return `${(value * 100).toFixed(1)}%`
 }
 
-function getSubscriptionClassName(
+function getSubscriptionColor(
   status: GaugeHistory["subscription_status"],
 ): string {
   switch (status) {
     case "under":
-      return "border-[rgba(247,147,26,0.35)] bg-[rgba(247,147,26,0.12)] text-[#F7931A]"
+      return "#F7931A"
     case "perfect":
-      return "border-[rgba(34,197,94,0.35)] bg-[rgba(34,197,94,0.12)] text-[var(--positive)]"
+      return "var(--positive)"
     case "over":
-      return "border-[rgba(239,68,68,0.35)] bg-[rgba(239,68,68,0.12)] text-[var(--negative)]"
+      return "var(--negative)"
     default:
-      return "border-[var(--border)] bg-[var(--surface-secondary)] text-[var(--content-tertiary)]"
+      return "var(--content-tertiary)"
   }
 }
 
-function getSubscriptionLabel(record: GaugeHistory): string {
+function getSubscriptionHeadline(
+  record: GaugeHistory,
+): { label: string; color: string } | null {
+  const ratio = record.subscription_ratio
+  if (ratio == null || !Number.isFinite(ratio)) return null
+  const color = getSubscriptionColor(record.subscription_status)
   switch (record.subscription_status) {
-    case "under":
-      return `Under ${formatSubscriptionRatio(record.subscription_ratio)}`
     case "perfect":
-      return "Perfect 🌝"
+      return { label: `${formatSubscriptionRatio(ratio)} · Perfect`, color }
+    case "under":
+      return { label: `${formatSubscriptionRatio(ratio)} · Under`, color }
     case "over":
-      return `Over ${formatSubscriptionRatio(record.subscription_ratio)}`
+      return { label: `${formatSubscriptionRatio(ratio)} · Over`, color }
     default:
-      return "-"
+      return { label: formatSubscriptionRatio(ratio), color }
   }
 }
 
@@ -197,7 +202,7 @@ function getSubscriptionDetail(record: GaugeHistory): string | null {
 
   if (record.subscription_status === "over") {
     if (record.oversubscription_dilution != null) {
-      return `${formatSubscriptionPercent(record.oversubscription_dilution)} APY dilution`
+      return `${formatSubscriptionPercent(record.oversubscription_dilution)} dilution`
     }
     return delta && delta > 0n ? `${formatTokenAmount(delta, 18)} over` : null
   }
@@ -208,23 +213,20 @@ function getSubscriptionDetail(record: GaugeHistory): string | null {
       : null
   }
 
-  if (record.subscription_status === "perfect") {
-    return "At optimal"
-  }
-
   return null
 }
 
 // Visual bar showing where a gauge sits on the under / perfect / over spectrum.
-// The bar spans 0x to 2x subscription ratio; markers beyond 2x are capped and
-// flagged with a chevron so extreme oversubscription stays readable.
+// Bar spans 0x to 2x. Ratios beyond 2x are pinned to the right edge and flagged
+// with a chevron. The indicator dot renders in a parent that is not clipped,
+// so the dot can overflow the bar's rounded track without being cut off.
 function SubscriptionBar({
   record,
 }: {
   record: GaugeHistory
-}): JSX.Element {
+}): JSX.Element | null {
   const ratio = record.subscription_ratio
-  const hasData = ratio != null && Number.isFinite(ratio)
+  if (ratio == null || !Number.isFinite(ratio)) return null
 
   const maxDisplay = 2
   // Zone boundaries mirror PERFECT_SUBSCRIPTION_TOLERANCE_BPS = 200 (±2%)
@@ -234,23 +236,14 @@ function SubscriptionBar({
   const perfectEndPct = (perfectHigh / maxDisplay) * 100
   const targetPct = (1 / maxDisplay) * 100
 
-  const clamped = hasData ? Math.min(Math.max(ratio, 0), maxDisplay) : 0
+  const clamped = Math.min(Math.max(ratio, 0), maxDisplay)
   const positionPct = (clamped / maxDisplay) * 100
-  const isCappedHigh = hasData && ratio > maxDisplay
-
-  const indicatorColor =
-    record.subscription_status === "under"
-      ? "#F7931A"
-      : record.subscription_status === "over"
-        ? "var(--negative)"
-        : "var(--positive)"
+  const isCappedHigh = ratio > maxDisplay
+  const indicatorColor = getSubscriptionColor(record.subscription_status)
 
   return (
-    <div className={`w-full ${hasData ? "" : "opacity-40"}`}>
-      <div
-        className="relative h-2 overflow-hidden rounded-full border border-[var(--border)] bg-[var(--surface-secondary)]"
-        title={hasData ? undefined : "Subscription data not recorded for this epoch"}
-      >
+    <div className="relative h-3.5 w-full">
+      <div className="absolute inset-x-0 top-1/2 h-1.5 -translate-y-1/2 overflow-hidden rounded-full border border-[var(--border)] bg-[var(--surface-secondary)]">
         <div
           className="absolute top-0 h-full bg-[rgba(247,147,26,0.22)]"
           style={{ left: 0, width: `${underEndPct}%` }}
@@ -273,21 +266,13 @@ function SubscriptionBar({
           className="absolute top-0 h-full w-px bg-[var(--content-tertiary)] opacity-60"
           style={{ left: `${targetPct}%` }}
         />
-        {hasData && (
-          <div
-            className="absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-[var(--surface)] shadow"
-            style={{ left: `${positionPct}%`, backgroundColor: indicatorColor }}
-            aria-hidden="true"
-          />
-        )}
       </div>
-      <div className="mt-1 flex justify-between text-[10px] uppercase tracking-wider text-[var(--content-tertiary)]">
-        <span>0x</span>
-        <span>1x</span>
-        <span>
-          {isCappedHigh && hasData ? `${ratio.toFixed(1)}x ›` : "2x"}
-        </span>
-      </div>
+      <div
+        className="absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-[var(--surface)] shadow-sm"
+        style={{ left: `${positionPct}%`, backgroundColor: indicatorColor }}
+        title={isCappedHigh ? `${ratio.toFixed(2)}x (capped)` : undefined}
+        aria-hidden="true"
+      />
     </div>
   )
 }
@@ -1030,25 +1015,22 @@ export default function GaugeDetailPage({
                 ) : (
                   <div className="space-y-4">
                     <div className="overflow-x-auto">
-                      <table className="w-full min-w-[860px]">
+                      <table className="w-full min-w-[820px]">
                         <thead>
                           <tr className="border-b border-[var(--border)]">
-                            <th className="pb-2 text-left text-2xs font-medium uppercase tracking-wider text-[var(--content-tertiary)]">
+                            <th className="pb-2 pr-4 text-left text-2xs font-medium uppercase tracking-wider text-[var(--content-tertiary)]">
                               Epoch
                             </th>
-                            <th className="pb-2 text-right text-2xs font-medium uppercase tracking-wider text-[var(--content-tertiary)]">
+                            <th className="pb-2 px-4 text-right text-2xs font-medium uppercase tracking-wider text-[var(--content-tertiary)]">
                               veMEZO Votes
                             </th>
-                            <th className="pb-2 text-right text-2xs font-medium uppercase tracking-wider text-[var(--content-tertiary)]">
-                              Boost
-                            </th>
-                            <th className="w-[220px] pb-2 text-left text-2xs font-medium uppercase tracking-wider text-[var(--content-tertiary)]">
+                            <th className="w-[260px] pb-2 px-4 text-left text-2xs font-medium uppercase tracking-wider text-[var(--content-tertiary)]">
                               Subscription
                             </th>
-                            <th className="pb-2 text-right text-2xs font-medium uppercase tracking-wider text-[var(--content-tertiary)]">
+                            <th className="pb-2 px-4 text-right text-2xs font-medium uppercase tracking-wider text-[var(--content-tertiary)]">
                               Incentives
                             </th>
-                            <th className="pb-2 text-right text-2xs font-medium uppercase tracking-wider text-[var(--content-tertiary)]">
+                            <th className="pb-2 pl-4 text-right text-2xs font-medium uppercase tracking-wider text-[var(--content-tertiary)]">
                               APY
                             </th>
                           </tr>
@@ -1057,6 +1039,8 @@ export default function GaugeDetailPage({
                           {history.map((record) => {
                             const subscriptionDetail =
                               getSubscriptionDetail(record)
+                            const subscriptionHeadline =
+                              getSubscriptionHeadline(record)
                             const isExpanded =
                               expandedEpoch === record.epoch_start
                             const breakdown = record.incentive_breakdown ?? []
@@ -1099,16 +1083,14 @@ export default function GaugeDetailPage({
                                       : undefined
                                   }
                                 >
-                                  <td className="py-3 text-sm text-[var(--content-primary)]">
+                                  <td className="py-3 pr-4 text-sm text-[var(--content-primary)]">
                                     <div className="flex items-center gap-2">
-                                      {hasBreakdown && (
-                                        <span
-                                          className={`inline-block text-xs text-[var(--content-tertiary)] transition-transform ${isExpanded ? "rotate-90" : ""}`}
-                                          aria-hidden="true"
-                                        >
-                                          ›
-                                        </span>
-                                      )}
+                                      <span
+                                        className={`inline-block w-2 text-xs text-[var(--content-tertiary)] transition-transform ${isExpanded ? "rotate-90" : ""} ${hasBreakdown ? "" : "opacity-0"}`}
+                                        aria-hidden="true"
+                                      >
+                                        ›
+                                      </span>
                                       <div>
                                         <div>
                                           {new Date(
@@ -1126,47 +1108,62 @@ export default function GaugeDetailPage({
                                       </div>
                                     </div>
                                   </td>
-                                  <td className="py-3 text-right font-mono text-sm tabular-nums text-[var(--content-primary)]">
-                                    {record.vemezo_weight
-                                      ? formatTokenAmount(
-                                          BigInt(record.vemezo_weight),
-                                          18,
-                                        )
-                                      : "-"}
-                                  </td>
-                                  <td className="py-3 text-right font-mono text-sm tabular-nums text-[var(--content-primary)]">
-                                    {record.boost_multiplier != null
-                                      ? `${record.boost_multiplier.toFixed(2)}x`
-                                      : "-"}
-                                  </td>
-                                  <td className="py-3 pr-3">
-                                    <SubscriptionBar record={record} />
-                                    <div className="mt-1 flex items-center gap-2">
-                                      <span
-                                        className={`inline-flex rounded border px-1.5 py-0.5 font-mono text-[10px] font-medium tabular-nums ${getSubscriptionClassName(record.subscription_status)}`}
-                                      >
-                                        {getSubscriptionLabel(record)}
-                                      </span>
-                                      {subscriptionDetail && (
-                                        <span className="text-[10px] text-[var(--content-tertiary)]">
-                                          {subscriptionDetail}
-                                        </span>
-                                      )}
+                                  <td className="py-3 px-4 text-right font-mono text-sm tabular-nums text-[var(--content-primary)]">
+                                    <div>
+                                      {record.vemezo_weight
+                                        ? formatTokenAmount(
+                                            BigInt(record.vemezo_weight),
+                                            18,
+                                          )
+                                        : "—"}
+                                    </div>
+                                    <div className="mt-0.5 text-[10px] text-[var(--content-tertiary)]">
+                                      {record.boost_multiplier != null
+                                        ? `${record.boost_multiplier.toFixed(2)}× boost`
+                                        : "no boost"}
                                     </div>
                                   </td>
-                                  <td className="py-3 text-right font-mono text-sm tabular-nums text-[var(--content-primary)]">
-                                    {record.total_incentives_usd != null
-                                      ? `$${record.total_incentives_usd.toFixed(2)}`
-                                      : "-"}
+                                  <td className="py-3 px-4 align-middle">
+                                    {subscriptionHeadline ? (
+                                      <div className="space-y-1.5">
+                                        <SubscriptionBar record={record} />
+                                        <div className="flex items-baseline gap-2 font-mono text-xs tabular-nums">
+                                          <span
+                                            className="font-medium"
+                                            style={{
+                                              color: subscriptionHeadline.color,
+                                            }}
+                                          >
+                                            {subscriptionHeadline.label}
+                                          </span>
+                                          {subscriptionDetail && (
+                                            <span className="text-[10px] text-[var(--content-tertiary)]">
+                                              {subscriptionDetail}
+                                            </span>
+                                          )}
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <span className="font-mono text-xs text-[var(--content-tertiary)]">
+                                        —
+                                      </span>
+                                    )}
+                                  </td>
+                                  <td className="py-3 px-4 text-right font-mono text-sm tabular-nums text-[var(--content-primary)]">
+                                    <div>
+                                      {record.total_incentives_usd != null
+                                        ? `$${record.total_incentives_usd.toFixed(2)}`
+                                        : "—"}
+                                    </div>
                                     {hasBreakdown && (
-                                      <div className="text-[10px] text-[var(--content-tertiary)]">
+                                      <div className="mt-0.5 text-[10px] text-[var(--content-tertiary)]">
                                         {breakdown.length} token
                                         {breakdown.length === 1 ? "" : "s"}
                                       </div>
                                     )}
                                   </td>
                                   <td
-                                    className={`py-3 text-right font-mono text-sm font-medium tabular-nums ${
+                                    className={`py-3 pl-4 text-right font-mono text-sm font-medium tabular-nums ${
                                       record.apy && record.apy > 0
                                         ? "text-[var(--positive)]"
                                         : "text-[var(--content-primary)]"
@@ -1175,11 +1172,11 @@ export default function GaugeDetailPage({
                                     <div>
                                       {record.apy != null
                                         ? formatAPY(record.apy)
-                                        : "-"}
+                                        : "—"}
                                     </div>
                                     {record.subscription_status === "over" &&
                                       record.apy_at_optimal != null && (
-                                        <div className="mt-1 text-2xs font-normal text-[var(--content-tertiary)]">
+                                        <div className="mt-0.5 text-2xs font-normal text-[var(--content-tertiary)]">
                                           Optimal{" "}
                                           {formatAPY(record.apy_at_optimal)}
                                         </div>
@@ -1189,7 +1186,7 @@ export default function GaugeDetailPage({
                                 {isExpanded && hasBreakdown && (
                                   <tr className="bg-[var(--surface-secondary)]">
                                     <td
-                                      colSpan={6}
+                                      colSpan={5}
                                       className="px-4 py-3 text-xs"
                                     >
                                       <div className="mb-2 flex flex-wrap gap-4 text-[var(--content-tertiary)]">
