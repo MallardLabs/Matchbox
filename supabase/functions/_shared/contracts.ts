@@ -205,6 +205,40 @@ export const VOTING_ESCROW_ABI = [
     type: "function",
   },
   {
+    inputs: [
+      { internalType: "uint256", name: "_tokenId", type: "uint256" },
+      { internalType: "uint256", name: "_t", type: "uint256" },
+    ],
+    name: "votingPowerOfNFTAt",
+    outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [
+      { internalType: "uint256", name: "_tokenId", type: "uint256" },
+      { internalType: "uint256", name: "_t", type: "uint256" },
+    ],
+    name: "unboostedVotingPowerOfNFTAt",
+    outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [{ internalType: "uint256", name: "_t", type: "uint256" }],
+    name: "totalVotingPowerAt",
+    outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [{ internalType: "uint256", name: "_t", type: "uint256" }],
+    name: "unboostedTotalVotingPowerAt",
+    outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
     inputs: [],
     name: "supply",
     outputs: [{ internalType: "uint256", name: "", type: "uint256" }],

@@ -39,6 +39,16 @@ export type GaugeProfile = {
   updated_at: string
 }
 
+export type GaugeIncentiveEntry = {
+  token_address: string
+  symbol: string | null
+  decimals: number
+  amount_raw: string
+  amount: number
+  usd_value: number | null
+  price_used: number | null
+}
+
 export type GaugeHistory = {
   id: number
   gauge_address: string
@@ -55,6 +65,10 @@ export type GaugeHistory = {
   apy_at_optimal: number | null
   oversubscription_dilution: number | null
   unique_voters: number | null
+  incentive_breakdown: GaugeIncentiveEntry[] | null
+  btc_price_usd: number | null
+  mezo_price_usd: number | null
+  price_source: string | null
   recorded_at: string
 }
 

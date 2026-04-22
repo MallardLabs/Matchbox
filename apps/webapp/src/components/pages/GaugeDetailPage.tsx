@@ -28,7 +28,7 @@ import { Button, Card, Skeleton, Tag } from "@mezo-org/mezo-clay"
 import { NON_STAKING_GAUGE_ABI } from "@repo/shared/contracts"
 import Link from "next/link"
 import { useRouter } from "next/router"
-import { useEffect, useMemo, useState } from "react"
+import { Fragment, useEffect, useMemo, useState } from "react"
 import type { Address } from "viem"
 import { useReadContract, useReadContracts } from "wagmi"
 
@@ -151,41 +151,23 @@ function absBigInt(value: bigint): bigint {
   return value < 0n ? -value : value
 }
 
-function formatSubscriptionRatio(ratio: number | null | undefined): string {
-  if (ratio == null || !Number.isFinite(ratio)) return "-"
-  return `${ratio.toFixed(2)}x`
-}
-
 function formatSubscriptionPercent(value: number | null | undefined): string {
   if (value == null || !Number.isFinite(value)) return "-"
   return `${(value * 100).toFixed(1)}%`
 }
 
-function getSubscriptionClassName(
-  status: GaugeHistory["subscription_status"],
-): string {
-  switch (status) {
-    case "under":
-      return "border-[rgba(247,147,26,0.35)] bg-[rgba(247,147,26,0.12)] text-[#F7931A]"
-    case "perfect":
-      return "border-[rgba(34,197,94,0.35)] bg-[rgba(34,197,94,0.12)] text-[var(--positive)]"
-    case "over":
-      return "border-[rgba(239,68,68,0.35)] bg-[rgba(239,68,68,0.12)] text-[var(--negative)]"
-    default:
-      return "border-[var(--border)] bg-[var(--surface-secondary)] text-[var(--content-tertiary)]"
-  }
-}
-
-function getSubscriptionLabel(record: GaugeHistory): string {
+function getSubscriptionHeadline(record: GaugeHistory): string | null {
+  const ratio = record.subscription_ratio
+  if (ratio == null || !Number.isFinite(ratio)) return null
   switch (record.subscription_status) {
-    case "under":
-      return `Under ${formatSubscriptionRatio(record.subscription_ratio)}`
     case "perfect":
-      return "Perfect 🌝"
+      return "At optimal"
+    case "under":
+      return `${(ratio * 100).toFixed(0)}% subscribed`
     case "over":
-      return `Over ${formatSubscriptionRatio(record.subscription_ratio)}`
+      return `${ratio.toFixed(2)}× oversubscribed`
     default:
-      return "-"
+      return `${ratio.toFixed(2)}× subscribed`
   }
 }
 
@@ -197,7 +179,7 @@ function getSubscriptionDetail(record: GaugeHistory): string | null {
 
   if (record.subscription_status === "over") {
     if (record.oversubscription_dilution != null) {
-      return `${formatSubscriptionPercent(record.oversubscription_dilution)} APY dilution`
+      return `${formatSubscriptionPercent(record.oversubscription_dilution)} dilution`
     }
     return delta && delta > 0n ? `${formatTokenAmount(delta, 18)} over` : null
   }
@@ -208,11 +190,69 @@ function getSubscriptionDetail(record: GaugeHistory): string | null {
       : null
   }
 
-  if (record.subscription_status === "perfect") {
-    return "At optimal"
-  }
-
   return null
+}
+
+// Compact subscription bar that mirrors the visual style of
+// OptimalVeMEZOProgress: orange fill below optimal, green "shine" at or above
+// optimal, plus a subtle red overflow segment when oversubscribed.
+function SubscriptionBar({
+  record,
+}: {
+  record: GaugeHistory
+}): JSX.Element | null {
+  const ratio = record.subscription_ratio
+  if (ratio == null || !Number.isFinite(ratio)) return null
+
+  const clamped = Math.max(ratio, 0)
+  const atOrAbove = clamped >= 1
+  const underFillPct = Math.min(100, clamped * 100)
+  // For over-subscription, render a red overflow wedge that grows with the
+  // ratio but is capped so the bar stays readable at extreme ratios.
+  const overPct = atOrAbove
+    ? Math.min(100, Math.max(0, ((clamped - 1) / 1) * 100))
+    : 0
+
+  return (
+    <div
+      className={`relative h-1.5 w-full overflow-hidden rounded-full bg-[var(--surface-secondary)] ring-1 ring-inset ${
+        atOrAbove ? "ring-[rgba(var(--positive-rgb),0.22)]" : "ring-[var(--border)]"
+      }`}
+      aria-hidden="true"
+    >
+      {atOrAbove ? (
+        <>
+          <div className="absolute inset-y-0 left-0 h-full w-full rounded-full bg-[var(--positive)] opacity-70" />
+          {overPct > 0 && (
+            <div
+              className="absolute inset-y-0 right-0 h-full rounded-r-full bg-[var(--negative)] opacity-80"
+              style={{ width: `${overPct}%` }}
+            />
+          )}
+        </>
+      ) : (
+        <div
+          className="h-full rounded-full bg-[rgba(247,147,26,0.9)] transition-[width] duration-300 ease-out"
+          style={{ width: `${underFillPct}%` }}
+        />
+      )}
+    </div>
+  )
+}
+
+function getSubscriptionHeadlineColor(
+  status: GaugeHistory["subscription_status"],
+): string {
+  switch (status) {
+    case "under":
+      return "#F7931A"
+    case "perfect":
+      return "var(--positive)"
+    case "over":
+      return "var(--negative)"
+    default:
+      return "var(--content-secondary)"
+  }
 }
 
 // Social link button component
@@ -398,8 +438,7 @@ export default function GaugeDetailPage({
   const {
     veBTCSupply: veBTCTotalVotingPower,
     veMEZOSupply: veMEZOTotalVotingPower,
-  } =
-    useVeSupplyBigint()
+  } = useVeSupplyBigint()
 
   const optimalVeMEZOData = useMemo(
     () =>
@@ -427,6 +466,7 @@ export default function GaugeDetailPage({
   // Fetch gauge history
   const { history, isLoading: isLoadingHistory } = useGaugeHistory(gaugeAddress)
   const [isAddIncentiveModalOpen, setIsAddIncentiveModalOpen] = useState(false)
+  const [expandedEpoch, setExpandedEpoch] = useState<number | null>(null)
   const { refetch: refetchTopology } = useGaugeTopology({
     enabled: !!gaugeAddress,
   })
@@ -952,27 +992,23 @@ export default function GaugeDetailPage({
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    {/* Simple historical data table */}
                     <div className="overflow-x-auto">
-                      <table className="w-full min-w-[760px]">
+                      <table className="w-full min-w-[820px]">
                         <thead>
                           <tr className="border-b border-[var(--border)]">
-                            <th className="pb-2 text-left text-2xs font-medium uppercase tracking-wider text-[var(--content-tertiary)]">
+                            <th className="pb-2 pr-4 text-left text-2xs font-medium uppercase tracking-wider text-[var(--content-tertiary)]">
                               Epoch
                             </th>
-                            <th className="pb-2 text-right text-2xs font-medium uppercase tracking-wider text-[var(--content-tertiary)]">
+                            <th className="pb-2 px-4 text-right text-2xs font-medium uppercase tracking-wider text-[var(--content-tertiary)]">
                               veMEZO Votes
                             </th>
-                            <th className="pb-2 text-right text-2xs font-medium uppercase tracking-wider text-[var(--content-tertiary)]">
-                              Boost
-                            </th>
-                            <th className="pb-2 text-right text-2xs font-medium uppercase tracking-wider text-[var(--content-tertiary)]">
+                            <th className="w-[260px] pb-2 px-4 text-left text-2xs font-medium uppercase tracking-wider text-[var(--content-tertiary)]">
                               Subscription
                             </th>
-                            <th className="pb-2 text-right text-2xs font-medium uppercase tracking-wider text-[var(--content-tertiary)]">
+                            <th className="pb-2 px-4 text-right text-2xs font-medium uppercase tracking-wider text-[var(--content-tertiary)]">
                               Incentives
                             </th>
-                            <th className="pb-2 text-right text-2xs font-medium uppercase tracking-wider text-[var(--content-tertiary)]">
+                            <th className="pb-2 pl-4 text-right text-2xs font-medium uppercase tracking-wider text-[var(--content-tertiary)]">
                               APY
                             </th>
                           </tr>
@@ -981,68 +1017,234 @@ export default function GaugeDetailPage({
                           {history.map((record) => {
                             const subscriptionDetail =
                               getSubscriptionDetail(record)
+                            const subscriptionHeadline =
+                              getSubscriptionHeadline(record)
+                            const isExpanded =
+                              expandedEpoch === record.epoch_start
+                            const breakdown = record.incentive_breakdown ?? []
+                            const hasBreakdown = breakdown.length > 0
+                            const isApproximate =
+                              record.price_source == null ||
+                              record.price_source === "placeholder" ||
+                              record.price_source === "live-oracle-pre-backfill"
 
                             return (
-                              <tr
-                                key={record.epoch_start}
-                                className="border-b border-[var(--border)] last:border-0"
-                              >
-                                <td className="py-3 text-sm text-[var(--content-primary)]">
-                                  {new Date(
-                                    record.epoch_start * 1000,
-                                  ).toLocaleDateString()}
-                                </td>
-                                <td className="py-3 text-right font-mono text-sm tabular-nums text-[var(--content-primary)]">
-                                  {record.vemezo_weight
-                                    ? formatTokenAmount(
-                                        BigInt(record.vemezo_weight),
-                                        18,
-                                      )
-                                    : "-"}
-                                </td>
-                                <td className="py-3 text-right font-mono text-sm tabular-nums text-[var(--content-primary)]">
-                                  {record.boost_multiplier != null
-                                    ? `${record.boost_multiplier.toFixed(2)}x`
-                                    : "-"}
-                                </td>
-                                <td className="py-3 text-right">
-                                  <span
-                                    className={`inline-flex rounded border px-2 py-1 font-mono text-2xs font-medium tabular-nums ${getSubscriptionClassName(record.subscription_status)}`}
-                                  >
-                                    {getSubscriptionLabel(record)}
-                                  </span>
-                                  {subscriptionDetail && (
-                                    <div className="mt-1 text-2xs text-[var(--content-tertiary)]">
-                                      {subscriptionDetail}
-                                    </div>
-                                  )}
-                                </td>
-                                <td className="py-3 text-right font-mono text-sm tabular-nums text-[var(--content-primary)]">
-                                  {record.total_incentives_usd != null
-                                    ? `$${record.total_incentives_usd.toFixed(2)}`
-                                    : "-"}
-                                </td>
-                                <td
-                                  className={`py-3 text-right font-mono text-sm font-medium tabular-nums ${
-                                    record.apy && record.apy > 0
-                                      ? "text-[var(--positive)]"
-                                      : "text-[var(--content-primary)]"
-                                  }`}
+                              <Fragment key={record.epoch_start}>
+                                <tr
+                                  className={`border-b border-[var(--border)] last:border-0 ${hasBreakdown ? "cursor-pointer hover:bg-[var(--surface-secondary)]" : ""}`}
+                                  tabIndex={hasBreakdown ? 0 : undefined}
+                                  onClick={
+                                    hasBreakdown
+                                      ? () =>
+                                          setExpandedEpoch(
+                                            isExpanded
+                                              ? null
+                                              : record.epoch_start,
+                                          )
+                                      : undefined
+                                  }
+                                  onKeyDown={
+                                    hasBreakdown
+                                      ? (e) => {
+                                          if (
+                                            e.key === "Enter" ||
+                                            e.key === " "
+                                          ) {
+                                            e.preventDefault()
+                                            setExpandedEpoch(
+                                              isExpanded
+                                                ? null
+                                                : record.epoch_start,
+                                            )
+                                          }
+                                        }
+                                      : undefined
+                                  }
                                 >
-                                  <div>
-                                    {record.apy != null
-                                      ? formatAPY(record.apy)
-                                      : "-"}
-                                  </div>
-                                  {record.subscription_status === "over" &&
-                                    record.apy_at_optimal != null && (
-                                      <div className="mt-1 text-2xs font-normal text-[var(--content-tertiary)]">
-                                        Optimal{" "}
-                                        {formatAPY(record.apy_at_optimal)}
+                                  <td className="py-3 pr-4 text-sm text-[var(--content-primary)]">
+                                    <div className="flex items-center gap-2">
+                                      <span
+                                        className={`inline-block w-2 text-xs text-[var(--content-tertiary)] transition-transform ${isExpanded ? "rotate-90" : ""} ${hasBreakdown ? "" : "opacity-0"}`}
+                                        aria-hidden="true"
+                                      >
+                                        ›
+                                      </span>
+                                      <div>
+                                        <div>
+                                          {new Date(
+                                            record.epoch_start * 1000,
+                                          ).toLocaleDateString()}
+                                        </div>
+                                        {isApproximate && (
+                                          <div
+                                            className="text-[10px] text-[var(--content-tertiary)]"
+                                            title="Prices for this epoch may be placeholders; run backfill-gauge-history-prices to refresh."
+                                          >
+                                            approximate
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </td>
+                                  <td className="py-3 px-4 text-right font-mono text-sm tabular-nums text-[var(--content-primary)]">
+                                    {record.vemezo_weight
+                                      ? formatTokenAmount(
+                                          BigInt(record.vemezo_weight),
+                                          18,
+                                        )
+                                      : "—"}
+                                  </td>
+                                  <td className="py-3 px-4 align-middle">
+                                    <div className="space-y-2">
+                                      {subscriptionHeadline ? (
+                                        <div className="space-y-1.5">
+                                          <SubscriptionBar record={record} />
+                                          <div className="flex items-baseline justify-between gap-2 font-mono text-xs tabular-nums">
+                                            <span
+                                              className="font-medium"
+                                              style={{
+                                                color: getSubscriptionHeadlineColor(
+                                                  record.subscription_status,
+                                                ),
+                                              }}
+                                            >
+                                              {subscriptionHeadline}
+                                            </span>
+                                            {subscriptionDetail && (
+                                              <span className="text-[10px] text-[var(--content-tertiary)]">
+                                                {subscriptionDetail}
+                                              </span>
+                                            )}
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        <div className="font-mono text-xs text-[var(--content-tertiary)]">
+                                          No subscription data
+                                        </div>
+                                      )}
+                                      <div className="flex items-baseline gap-1.5 border-t border-[var(--border)] pt-1.5">
+                                        <span className="font-mono text-sm font-semibold tabular-nums text-[var(--content-primary)]">
+                                          {record.boost_multiplier != null
+                                            ? `${record.boost_multiplier.toFixed(2)}×`
+                                            : "—"}
+                                        </span>
+                                        <span className="text-[10px] uppercase tracking-wider text-[var(--content-tertiary)]">
+                                          boost
+                                        </span>
+                                      </div>
+                                    </div>
+                                  </td>
+                                  <td className="py-3 px-4 text-right font-mono text-sm tabular-nums text-[var(--content-primary)]">
+                                    <div>
+                                      {record.total_incentives_usd != null
+                                        ? `$${record.total_incentives_usd.toFixed(2)}`
+                                        : "—"}
+                                    </div>
+                                    {hasBreakdown && (
+                                      <div className="mt-0.5 text-[10px] text-[var(--content-tertiary)]">
+                                        {breakdown.length} token
+                                        {breakdown.length === 1 ? "" : "s"}
                                       </div>
                                     )}
-                                </td>
-                              </tr>
+                                  </td>
+                                  <td
+                                    className={`py-3 pl-4 text-right font-mono text-sm font-medium tabular-nums ${
+                                      record.apy && record.apy > 0
+                                        ? "text-[var(--positive)]"
+                                        : "text-[var(--content-primary)]"
+                                    }`}
+                                  >
+                                    <div>
+                                      {record.apy != null
+                                        ? formatAPY(record.apy)
+                                        : "—"}
+                                    </div>
+                                    {record.subscription_status === "over" &&
+                                      record.apy_at_optimal != null && (
+                                        <div className="mt-0.5 text-2xs font-normal text-[var(--content-tertiary)]">
+                                          Optimal{" "}
+                                          {formatAPY(record.apy_at_optimal)}
+                                        </div>
+                                      )}
+                                  </td>
+                                </tr>
+                                {isExpanded && hasBreakdown && (
+                                  <tr className="bg-[var(--surface-secondary)]">
+                                    <td
+                                      colSpan={5}
+                                      className="px-4 py-3 text-xs"
+                                    >
+                                      <div className="mb-2 flex flex-wrap gap-4 text-[var(--content-tertiary)]">
+                                        <span>
+                                          BTC ${" "}
+                                          {record.btc_price_usd != null
+                                            ? Number(
+                                                record.btc_price_usd,
+                                              ).toLocaleString(undefined, {
+                                                maximumFractionDigits: 2,
+                                              })
+                                            : "—"}
+                                        </span>
+                                        <span>
+                                          MEZO ${" "}
+                                          {record.mezo_price_usd != null
+                                            ? Number(
+                                                record.mezo_price_usd,
+                                              ).toLocaleString(undefined, {
+                                                maximumFractionDigits: 6,
+                                              })
+                                            : "—"}
+                                        </span>
+                                      </div>
+                                      <table className="w-full">
+                                        <thead>
+                                          <tr className="text-left text-[10px] uppercase tracking-wider text-[var(--content-tertiary)]">
+                                            <th className="py-1">Token</th>
+                                            <th className="py-1 text-right">
+                                              Amount
+                                            </th>
+                                            <th className="py-1 text-right">
+                                              Price used
+                                            </th>
+                                            <th className="py-1 text-right">
+                                              USD value
+                                            </th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {breakdown.map((entry) => (
+                                            <tr
+                                              key={`${record.epoch_start}-${entry.token_address}`}
+                                              className="border-t border-[var(--border)]"
+                                            >
+                                              <td className="py-1.5 font-mono text-xs text-[var(--content-primary)]">
+                                                {entry.symbol ??
+                                                  `${entry.token_address.slice(0, 6)}…${entry.token_address.slice(-4)}`}
+                                              </td>
+                                              <td className="py-1.5 text-right font-mono text-xs tabular-nums text-[var(--content-primary)]">
+                                                {entry.amount.toLocaleString(
+                                                  undefined,
+                                                  { maximumFractionDigits: 4 },
+                                                )}
+                                              </td>
+                                              <td className="py-1.5 text-right font-mono text-xs tabular-nums text-[var(--content-tertiary)]">
+                                                {entry.price_used != null
+                                                  ? `$${entry.price_used.toLocaleString(undefined, { maximumFractionDigits: 6 })}`
+                                                  : "—"}
+                                              </td>
+                                              <td className="py-1.5 text-right font-mono text-xs tabular-nums text-[var(--content-primary)]">
+                                                {entry.usd_value != null
+                                                  ? `$${entry.usd_value.toFixed(2)}`
+                                                  : "—"}
+                                              </td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    </td>
+                                  </tr>
+                                )}
+                              </Fragment>
                             )
                           })}
                         </tbody>
