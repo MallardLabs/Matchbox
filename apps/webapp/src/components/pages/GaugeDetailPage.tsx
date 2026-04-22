@@ -28,7 +28,7 @@ import { Button, Card, Skeleton, Tag } from "@mezo-org/mezo-clay"
 import { NON_STAKING_GAUGE_ABI } from "@repo/shared/contracts"
 import Link from "next/link"
 import { useRouter } from "next/router"
-import { useEffect, useMemo, useState } from "react"
+import { Fragment, useEffect, useMemo, useState } from "react"
 import type { Address } from "viem"
 import { useReadContract, useReadContracts } from "wagmi"
 
@@ -215,6 +215,76 @@ function getSubscriptionDetail(record: GaugeHistory): string | null {
   return null
 }
 
+// Visual bar showing where a gauge sits on the under / perfect / over spectrum.
+// The bar spans 0x to 2x subscription ratio; markers beyond 2x are capped and
+// flagged with a chevron so extreme oversubscription stays readable.
+function SubscriptionBar({
+  record,
+}: {
+  record: GaugeHistory
+}): JSX.Element | null {
+  const ratio = record.subscription_ratio
+  if (ratio == null || !Number.isFinite(ratio)) return null
+
+  const maxDisplay = 2
+  const clamped = Math.min(Math.max(ratio, 0), maxDisplay)
+  const positionPct = (clamped / maxDisplay) * 100
+  const isCappedHigh = ratio > maxDisplay
+
+  // Zone boundaries mirror PERFECT_SUBSCRIPTION_TOLERANCE_BPS = 200 (±2%)
+  const perfectLow = 0.98
+  const perfectHigh = 1.02
+  const underEndPct = (perfectLow / maxDisplay) * 100
+  const perfectEndPct = (perfectHigh / maxDisplay) * 100
+  const targetPct = (1 / maxDisplay) * 100
+
+  const indicatorColor =
+    record.subscription_status === "under"
+      ? "#F7931A"
+      : record.subscription_status === "over"
+        ? "var(--negative)"
+        : "var(--positive)"
+
+  return (
+    <div className="w-full">
+      <div className="relative h-2 overflow-hidden rounded-full border border-[var(--border)] bg-[var(--surface-secondary)]">
+        <div
+          className="absolute top-0 h-full bg-[rgba(247,147,26,0.22)]"
+          style={{ left: 0, width: `${underEndPct}%` }}
+        />
+        <div
+          className="absolute top-0 h-full bg-[rgba(34,197,94,0.28)]"
+          style={{
+            left: `${underEndPct}%`,
+            width: `${perfectEndPct - underEndPct}%`,
+          }}
+        />
+        <div
+          className="absolute top-0 h-full bg-[rgba(239,68,68,0.22)]"
+          style={{
+            left: `${perfectEndPct}%`,
+            width: `${100 - perfectEndPct}%`,
+          }}
+        />
+        <div
+          className="absolute top-0 h-full w-px bg-[var(--content-tertiary)] opacity-60"
+          style={{ left: `${targetPct}%` }}
+        />
+        <div
+          className="absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-[var(--surface)] shadow"
+          style={{ left: `${positionPct}%`, backgroundColor: indicatorColor }}
+          aria-hidden="true"
+        />
+      </div>
+      <div className="mt-1 flex justify-between text-[10px] uppercase tracking-wider text-[var(--content-tertiary)]">
+        <span>0x</span>
+        <span>1x</span>
+        <span>{isCappedHigh ? `${ratio.toFixed(1)}x ›` : "2x"}</span>
+      </div>
+    </div>
+  )
+}
+
 // Social link button component
 function SocialLinkButton({
   href,
@@ -398,8 +468,7 @@ export default function GaugeDetailPage({
   const {
     veBTCSupply: veBTCTotalVotingPower,
     veMEZOSupply: veMEZOTotalVotingPower,
-  } =
-    useVeSupplyBigint()
+  } = useVeSupplyBigint()
 
   const optimalVeMEZOData = useMemo(
     () =>
@@ -427,6 +496,7 @@ export default function GaugeDetailPage({
   // Fetch gauge history
   const { history, isLoading: isLoadingHistory } = useGaugeHistory(gaugeAddress)
   const [isAddIncentiveModalOpen, setIsAddIncentiveModalOpen] = useState(false)
+  const [expandedEpoch, setExpandedEpoch] = useState<number | null>(null)
   const { refetch: refetchTopology } = useGaugeTopology({
     enabled: !!gaugeAddress,
   })
@@ -952,9 +1022,8 @@ export default function GaugeDetailPage({
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    {/* Simple historical data table */}
                     <div className="overflow-x-auto">
-                      <table className="w-full min-w-[760px]">
+                      <table className="w-full min-w-[860px]">
                         <thead>
                           <tr className="border-b border-[var(--border)]">
                             <th className="pb-2 text-left text-2xs font-medium uppercase tracking-wider text-[var(--content-tertiary)]">
@@ -966,7 +1035,7 @@ export default function GaugeDetailPage({
                             <th className="pb-2 text-right text-2xs font-medium uppercase tracking-wider text-[var(--content-tertiary)]">
                               Boost
                             </th>
-                            <th className="pb-2 text-right text-2xs font-medium uppercase tracking-wider text-[var(--content-tertiary)]">
+                            <th className="w-[220px] pb-2 text-left text-2xs font-medium uppercase tracking-wider text-[var(--content-tertiary)]">
                               Subscription
                             </th>
                             <th className="pb-2 text-right text-2xs font-medium uppercase tracking-wider text-[var(--content-tertiary)]">
@@ -981,68 +1050,217 @@ export default function GaugeDetailPage({
                           {history.map((record) => {
                             const subscriptionDetail =
                               getSubscriptionDetail(record)
+                            const isExpanded =
+                              expandedEpoch === record.epoch_start
+                            const breakdown = record.incentive_breakdown ?? []
+                            const hasBreakdown = breakdown.length > 0
+                            const isApproximate =
+                              record.price_source == null ||
+                              record.price_source === "placeholder" ||
+                              record.price_source === "live-oracle-pre-backfill"
 
                             return (
-                              <tr
-                                key={record.epoch_start}
-                                className="border-b border-[var(--border)] last:border-0"
-                              >
-                                <td className="py-3 text-sm text-[var(--content-primary)]">
-                                  {new Date(
-                                    record.epoch_start * 1000,
-                                  ).toLocaleDateString()}
-                                </td>
-                                <td className="py-3 text-right font-mono text-sm tabular-nums text-[var(--content-primary)]">
-                                  {record.vemezo_weight
-                                    ? formatTokenAmount(
-                                        BigInt(record.vemezo_weight),
-                                        18,
-                                      )
-                                    : "-"}
-                                </td>
-                                <td className="py-3 text-right font-mono text-sm tabular-nums text-[var(--content-primary)]">
-                                  {record.boost_multiplier != null
-                                    ? `${record.boost_multiplier.toFixed(2)}x`
-                                    : "-"}
-                                </td>
-                                <td className="py-3 text-right">
-                                  <span
-                                    className={`inline-flex rounded border px-2 py-1 font-mono text-2xs font-medium tabular-nums ${getSubscriptionClassName(record.subscription_status)}`}
-                                  >
-                                    {getSubscriptionLabel(record)}
-                                  </span>
-                                  {subscriptionDetail && (
-                                    <div className="mt-1 text-2xs text-[var(--content-tertiary)]">
-                                      {subscriptionDetail}
-                                    </div>
-                                  )}
-                                </td>
-                                <td className="py-3 text-right font-mono text-sm tabular-nums text-[var(--content-primary)]">
-                                  {record.total_incentives_usd != null
-                                    ? `$${record.total_incentives_usd.toFixed(2)}`
-                                    : "-"}
-                                </td>
-                                <td
-                                  className={`py-3 text-right font-mono text-sm font-medium tabular-nums ${
-                                    record.apy && record.apy > 0
-                                      ? "text-[var(--positive)]"
-                                      : "text-[var(--content-primary)]"
-                                  }`}
+                              <Fragment key={record.epoch_start}>
+                                <tr
+                                  className={`border-b border-[var(--border)] last:border-0 ${hasBreakdown ? "cursor-pointer hover:bg-[var(--surface-secondary)]" : ""}`}
+                                  tabIndex={hasBreakdown ? 0 : undefined}
+                                  onClick={
+                                    hasBreakdown
+                                      ? () =>
+                                          setExpandedEpoch(
+                                            isExpanded
+                                              ? null
+                                              : record.epoch_start,
+                                          )
+                                      : undefined
+                                  }
+                                  onKeyDown={
+                                    hasBreakdown
+                                      ? (e) => {
+                                          if (
+                                            e.key === "Enter" ||
+                                            e.key === " "
+                                          ) {
+                                            e.preventDefault()
+                                            setExpandedEpoch(
+                                              isExpanded
+                                                ? null
+                                                : record.epoch_start,
+                                            )
+                                          }
+                                        }
+                                      : undefined
+                                  }
                                 >
-                                  <div>
-                                    {record.apy != null
-                                      ? formatAPY(record.apy)
+                                  <td className="py-3 text-sm text-[var(--content-primary)]">
+                                    <div className="flex items-center gap-2">
+                                      {hasBreakdown && (
+                                        <span
+                                          className={`inline-block text-xs text-[var(--content-tertiary)] transition-transform ${isExpanded ? "rotate-90" : ""}`}
+                                          aria-hidden="true"
+                                        >
+                                          ›
+                                        </span>
+                                      )}
+                                      <div>
+                                        <div>
+                                          {new Date(
+                                            record.epoch_start * 1000,
+                                          ).toLocaleDateString()}
+                                        </div>
+                                        {isApproximate && (
+                                          <div
+                                            className="text-[10px] text-[var(--content-tertiary)]"
+                                            title="Prices for this epoch may be placeholders; run backfill-gauge-history-prices to refresh."
+                                          >
+                                            approximate
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </td>
+                                  <td className="py-3 text-right font-mono text-sm tabular-nums text-[var(--content-primary)]">
+                                    {record.vemezo_weight
+                                      ? formatTokenAmount(
+                                          BigInt(record.vemezo_weight),
+                                          18,
+                                        )
                                       : "-"}
-                                  </div>
-                                  {record.subscription_status === "over" &&
-                                    record.apy_at_optimal != null && (
-                                      <div className="mt-1 text-2xs font-normal text-[var(--content-tertiary)]">
-                                        Optimal{" "}
-                                        {formatAPY(record.apy_at_optimal)}
+                                  </td>
+                                  <td className="py-3 text-right font-mono text-sm tabular-nums text-[var(--content-primary)]">
+                                    {record.boost_multiplier != null
+                                      ? `${record.boost_multiplier.toFixed(2)}x`
+                                      : "-"}
+                                  </td>
+                                  <td className="py-3 pr-3">
+                                    <SubscriptionBar record={record} />
+                                    <div className="mt-1 flex items-center gap-2">
+                                      <span
+                                        className={`inline-flex rounded border px-1.5 py-0.5 font-mono text-[10px] font-medium tabular-nums ${getSubscriptionClassName(record.subscription_status)}`}
+                                      >
+                                        {getSubscriptionLabel(record)}
+                                      </span>
+                                      {subscriptionDetail && (
+                                        <span className="text-[10px] text-[var(--content-tertiary)]">
+                                          {subscriptionDetail}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </td>
+                                  <td className="py-3 text-right font-mono text-sm tabular-nums text-[var(--content-primary)]">
+                                    {record.total_incentives_usd != null
+                                      ? `$${record.total_incentives_usd.toFixed(2)}`
+                                      : "-"}
+                                    {hasBreakdown && (
+                                      <div className="text-[10px] text-[var(--content-tertiary)]">
+                                        {breakdown.length} token
+                                        {breakdown.length === 1 ? "" : "s"}
                                       </div>
                                     )}
-                                </td>
-                              </tr>
+                                  </td>
+                                  <td
+                                    className={`py-3 text-right font-mono text-sm font-medium tabular-nums ${
+                                      record.apy && record.apy > 0
+                                        ? "text-[var(--positive)]"
+                                        : "text-[var(--content-primary)]"
+                                    }`}
+                                  >
+                                    <div>
+                                      {record.apy != null
+                                        ? formatAPY(record.apy)
+                                        : "-"}
+                                    </div>
+                                    {record.subscription_status === "over" &&
+                                      record.apy_at_optimal != null && (
+                                        <div className="mt-1 text-2xs font-normal text-[var(--content-tertiary)]">
+                                          Optimal{" "}
+                                          {formatAPY(record.apy_at_optimal)}
+                                        </div>
+                                      )}
+                                  </td>
+                                </tr>
+                                {isExpanded && hasBreakdown && (
+                                  <tr className="bg-[var(--surface-secondary)]">
+                                    <td
+                                      colSpan={6}
+                                      className="px-4 py-3 text-xs"
+                                    >
+                                      <div className="mb-2 flex flex-wrap gap-4 text-[var(--content-tertiary)]">
+                                        <span>
+                                          BTC ${" "}
+                                          {record.btc_price_usd != null
+                                            ? Number(
+                                                record.btc_price_usd,
+                                              ).toLocaleString(undefined, {
+                                                maximumFractionDigits: 2,
+                                              })
+                                            : "—"}
+                                        </span>
+                                        <span>
+                                          MEZO ${" "}
+                                          {record.mezo_price_usd != null
+                                            ? Number(
+                                                record.mezo_price_usd,
+                                              ).toLocaleString(undefined, {
+                                                maximumFractionDigits: 6,
+                                              })
+                                            : "—"}
+                                        </span>
+                                        {record.price_source && (
+                                          <span>
+                                            source: {record.price_source}
+                                          </span>
+                                        )}
+                                      </div>
+                                      <table className="w-full">
+                                        <thead>
+                                          <tr className="text-left text-[10px] uppercase tracking-wider text-[var(--content-tertiary)]">
+                                            <th className="py-1">Token</th>
+                                            <th className="py-1 text-right">
+                                              Amount
+                                            </th>
+                                            <th className="py-1 text-right">
+                                              Price used
+                                            </th>
+                                            <th className="py-1 text-right">
+                                              USD value
+                                            </th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {breakdown.map((entry) => (
+                                            <tr
+                                              key={`${record.epoch_start}-${entry.token_address}`}
+                                              className="border-t border-[var(--border)]"
+                                            >
+                                              <td className="py-1.5 font-mono text-xs text-[var(--content-primary)]">
+                                                {entry.symbol ??
+                                                  `${entry.token_address.slice(0, 6)}…${entry.token_address.slice(-4)}`}
+                                              </td>
+                                              <td className="py-1.5 text-right font-mono text-xs tabular-nums text-[var(--content-primary)]">
+                                                {entry.amount.toLocaleString(
+                                                  undefined,
+                                                  { maximumFractionDigits: 4 },
+                                                )}
+                                              </td>
+                                              <td className="py-1.5 text-right font-mono text-xs tabular-nums text-[var(--content-tertiary)]">
+                                                {entry.price_used != null
+                                                  ? `$${entry.price_used.toLocaleString(undefined, { maximumFractionDigits: 6 })}`
+                                                  : "—"}
+                                              </td>
+                                              <td className="py-1.5 text-right font-mono text-xs tabular-nums text-[var(--content-primary)]">
+                                                {entry.usd_value != null
+                                                  ? `$${entry.usd_value.toFixed(2)}`
+                                                  : "—"}
+                                              </td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    </td>
+                                  </tr>
+                                )}
+                              </Fragment>
                             )
                           })}
                         </tbody>

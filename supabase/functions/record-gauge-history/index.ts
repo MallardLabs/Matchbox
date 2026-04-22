@@ -75,6 +75,23 @@ const CHAINLINK_AGGREGATOR_ABI = [
   },
 ] as const
 
+const ERC20_METADATA_ABI = [
+  {
+    inputs: [],
+    name: "decimals",
+    outputs: [{ internalType: "uint8", name: "", type: "uint8" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [],
+    name: "symbol",
+    outputs: [{ internalType: "string", name: "", type: "string" }],
+    stateMutability: "view",
+    type: "function",
+  },
+] as const
+
 const SLIPSTREAM_POOL_ABI = [
   {
     inputs: [],
@@ -216,6 +233,16 @@ function getTokenUsdPrice(
 }
 
 // Types
+type IncentiveEntry = {
+  token_address: string
+  symbol: string | null
+  decimals: number
+  amount_raw: string
+  amount: number
+  usd_value: number | null
+  price_used: number | null
+}
+
 type GaugeData = {
   gauge_address: string
   epoch_start: number
@@ -231,6 +258,10 @@ type GaugeData = {
   apy_at_optimal: number | null
   oversubscription_dilution: number | null
   unique_voters: number | null
+  incentive_breakdown: IncentiveEntry[]
+  btc_price_usd: number
+  mezo_price_usd: number
+  price_source: string
 }
 
 // Helper to get current epoch start
@@ -464,8 +495,9 @@ Deno.serve(async (req) => {
         r.status === "success" ? (r.result as unknown as Address) : ZERO_ADDRESS,
     })).filter((b) => b.bribeAddress !== ZERO_ADDRESS)
 
-    // Map to store incentives per gauge index
+    // Map to store incentives per gauge index (USD totals and per-token breakdown)
     const gaugeIncentives: Map<number, number> = new Map()
+    const gaugeBreakdowns: Map<number, IncentiveEntry[]> = new Map()
 
     if (bribeInfoList.length > 0) {
       // Get rewards list length for each bribe
@@ -511,33 +543,95 @@ Deno.serve(async (req) => {
         }).filter((c) => c.tokenAddress !== ZERO_ADDRESS)
 
         if (rewardAmountCalls.length > 0) {
-          const amountResults = await publicClient.multicall({
-            contracts: rewardAmountCalls.map((c) => ({
-              address: c.bribeAddress,
-              abi: BRIBE_ABI,
-              functionName: "tokenRewardsPerEpoch",
-              args: [c.tokenAddress, epochStart],
-            })),
+          // Fetch reward amount + token metadata (decimals, symbol) in parallel.
+          // Dedupe metadata calls per unique token to keep RPC load down.
+          const uniqueTokens = Array.from(
+            new Set(
+              rewardAmountCalls.map((c) => c.tokenAddress.toLowerCase()),
+            ),
+          ) as Address[]
+
+          const [amountResults, decimalsResults, symbolResults] =
+            await Promise.all([
+              publicClient.multicall({
+                contracts: rewardAmountCalls.map((c) => ({
+                  address: c.bribeAddress,
+                  abi: BRIBE_ABI,
+                  functionName: "tokenRewardsPerEpoch",
+                  args: [c.tokenAddress, epochStart],
+                })),
+              }),
+              publicClient.multicall({
+                contracts: uniqueTokens.map((addr) => ({
+                  address: addr,
+                  abi: ERC20_METADATA_ABI,
+                  functionName: "decimals",
+                })),
+              }),
+              publicClient.multicall({
+                contracts: uniqueTokens.map((addr) => ({
+                  address: addr,
+                  abi: ERC20_METADATA_ABI,
+                  functionName: "symbol",
+                })),
+              }),
+            ])
+
+          const tokenMetadata = new Map<
+            string,
+            { decimals: number; symbol: string | null }
+          >()
+          uniqueTokens.forEach((addr, i) => {
+            const decimals =
+              decimalsResults[i].status === "success"
+                ? Number(decimalsResults[i].result as number)
+                : 18
+            const symbol =
+              symbolResults[i].status === "success"
+                ? (symbolResults[i].result as string)
+                : null
+            tokenMetadata.set(addr, { decimals, symbol })
           })
 
           // Calculate USD values from the same live feeds used by the webapp.
           rewardAmountCalls.forEach((c, idx) => {
-            const amount = amountResults[idx].status === "success"
-              ? (amountResults[idx].result as bigint)
-              : 0n
+            const amount =
+              amountResults[idx].status === "success"
+                ? (amountResults[idx].result as bigint)
+                : 0n
 
-            if (amount > 0n) {
-              const gaugeIdx = bribeInfoList[c.bribeIndex].gaugeIndex
-              const price = getTokenUsdPrice(c.tokenAddress, btcPrice, mezoPrice)
-              if (price === null) {
-                console.warn(`Skipping unknown reward token: ${c.tokenAddress}`)
-                return
-              }
+            if (amount <= 0n) return
 
-              const tokenAmount = Number(formatUnits(amount, 18))
-              const usdValue = tokenAmount * price
+            const gaugeIdx = bribeInfoList[c.bribeIndex].gaugeIndex
+            const tokenKey = c.tokenAddress.toLowerCase()
+            const meta = tokenMetadata.get(tokenKey) ?? {
+              decimals: 18,
+              symbol: null,
+            }
+            const price = getTokenUsdPrice(c.tokenAddress, btcPrice, mezoPrice)
+            const tokenAmount = Number(formatUnits(amount, meta.decimals))
+            const usdValue = price !== null ? tokenAmount * price : null
 
-              const current = gaugeIncentives.get(gaugeIdx) || 0
+            if (price === null) {
+              console.warn(`Unknown reward token (no USD price): ${tokenKey}`)
+            }
+
+            const entry: IncentiveEntry = {
+              token_address: tokenKey,
+              symbol: meta.symbol,
+              decimals: meta.decimals,
+              amount_raw: amount.toString(),
+              amount: tokenAmount,
+              usd_value: usdValue,
+              price_used: price,
+            }
+
+            const existing = gaugeBreakdowns.get(gaugeIdx) ?? []
+            existing.push(entry)
+            gaugeBreakdowns.set(gaugeIdx, existing)
+
+            if (usdValue !== null) {
+              const current = gaugeIncentives.get(gaugeIdx) ?? 0
               gaugeIncentives.set(gaugeIdx, current + usdValue)
             }
           })
@@ -737,6 +831,10 @@ Deno.serve(async (req) => {
         apy_at_optimal: apyAtOptimal,
         oversubscription_dilution: oversubscriptionDilution,
         unique_voters: null,
+        incentive_breakdown: gaugeBreakdowns.get(i) ?? [],
+        btc_price_usd: btcPrice,
+        mezo_price_usd: mezoPrice,
+        price_source: "live-oracle",
       }
     })
 
