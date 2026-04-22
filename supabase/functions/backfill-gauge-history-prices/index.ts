@@ -19,6 +19,17 @@
 //   MEZO_COINGECKO_ID          (default: "mezo")
 //   BTC_COINGECKO_ID           (default: "bitcoin")
 //   COINGECKO_API_KEY          (optional; enables Pro endpoint + higher rate limit)
+//   COINGECKO_API_TIER         ("demo" | "pro", default "demo")
+//   MEZO_GECKOTERMINAL_POOL    (optional; Base-chain MEZO/MUSD pool address used
+//                              as a secondary historical source when CoinGecko
+//                              has no data. Default: the known Aerodrome pool.)
+//
+// Pre-market note: MEZO had no market anywhere before the Aerodrome pool was
+// created on 2026-04-01 (~1743465600) and was only listed on CoinGecko around
+// 2026-04-12. For epochs older than that, no source will return a MEZO price.
+// The backfill still recomputes BTC- and stablecoin-denominated incentives for
+// those epochs and tags the row with price_source = "mezo-premarket" so we
+// don't keep retrying and don't falsely claim a placeholder MEZO price.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 import {
@@ -100,7 +111,7 @@ type HistoryRow = {
 function getTokenUsdPrice(
   tokenAddress: string,
   btcPrice: number,
-  mezoPrice: number,
+  mezoPrice: number | null,
 ): number | null {
   const address = tokenAddress.toLowerCase()
   if (address === MEZO_TOKEN_ADDRESS) return mezoPrice
@@ -112,9 +123,10 @@ function getTokenUsdPrice(
 function calculateAPY(
   totalIncentivesUSD: number | null,
   vemezoWeight: bigint,
-  mezoPrice: number,
+  mezoPrice: number | null,
 ): number | null {
   if (!totalIncentivesUSD || totalIncentivesUSD <= 0) return null
+  if (mezoPrice === null || mezoPrice <= 0) return null
   if (vemezoWeight === 0n) return 999999
   const totalVeMEZOAmount = Number(vemezoWeight) / 1e18
   const totalVeMEZOValueUSD = totalVeMEZOAmount * mezoPrice
@@ -203,6 +215,51 @@ async function fetchCoingeckoHistorical(
   }
 }
 
+// GeckoTerminal exposes historical OHLCV per pool without requiring an API
+// key. For MEZO we query the Base-chain MEZO/MUSD pool: MUSD is a USD
+// stablecoin so the close price is effectively MEZO/USD for that day.
+// Requesting `before_timestamp=epoch+1day` with `limit=1` returns the last
+// daily candle that ends at or before the epoch boundary.
+async function fetchGeckoTerminalDailyClose(
+  poolAddress: string,
+  epochSeconds: number,
+): Promise<{ price: number | null; error: string | null }> {
+  const before = epochSeconds + 24 * 60 * 60
+  const url = `https://api.geckoterminal.com/api/v2/networks/base/pools/${poolAddress}/ohlcv/day?before_timestamp=${before}&limit=1&currency=usd`
+  try {
+    const res = await fetch(url, {
+      headers: { accept: "application/json;version=20230302" },
+    })
+    if (!res.ok) {
+      const bodyText = await res.text().catch(() => "")
+      const snippet = bodyText.slice(0, 200)
+      return {
+        price: null,
+        error: `${res.status} ${res.statusText}${snippet ? `: ${snippet}` : ""}`,
+      }
+    }
+    const body = (await res.json()) as {
+      data?: {
+        attributes?: { ohlcv_list?: Array<[number, number, number, number, number, number]> }
+      }
+    }
+    const list = body?.data?.attributes?.ohlcv_list ?? []
+    if (list.length === 0) {
+      return { price: null, error: "geckoterminal ohlcv_list empty" }
+    }
+    // ohlcv_list is [timestamp, open, high, low, close, volume], newest first.
+    // Pick the candle at or before our epoch.
+    const candle = list.find((c) => c[0] <= epochSeconds) ?? list[0]
+    const close = candle?.[4]
+    if (typeof close === "number" && Number.isFinite(close) && close > 0) {
+      return { price: close, error: null }
+    }
+    return { price: null, error: "geckoterminal close missing" }
+  } catch (e) {
+    return { price: null, error: String(e) }
+  }
+}
+
 async function recomputeEpoch(
   supabase: ReturnType<typeof createClient>,
   publicClient: PublicClient,
@@ -210,7 +267,7 @@ async function recomputeEpoch(
   rows: HistoryRow[],
   epochStart: number,
   btcPrice: number,
-  mezoPrice: number,
+  mezoPrice: number | null,
   priceSource: string,
   dryRun: boolean,
 ): Promise<{ updated: number; gauges: number }> {
@@ -480,6 +537,10 @@ Deno.serve(async (req) => {
       Deno.env.get("COINGECKO_API_TIER") ?? "demo"
     ).toLowerCase()
     const coingeckoTier: CoingeckoTier = tierEnv === "pro" ? "pro" : "demo"
+    const mezoGeckoTerminalPool = (
+      Deno.env.get("MEZO_GECKOTERMINAL_POOL") ??
+      "0xfCd3F5cA230E7c1Bd5b415eb85d5186346De0fec"
+    ).toLowerCase()
 
     const supabase = createClient(supabaseUrl, supabaseKey, {
       auth: { autoRefreshToken: false, persistSession: false },
@@ -525,11 +586,14 @@ Deno.serve(async (req) => {
       epoch_start: number
       btc_price: number | null
       mezo_price: number | null
+      mezo_price_source: string | null
+      price_source: string
       updated: number
       gauges: number
       skipped_reason?: string
       btc_error?: string
-      mezo_error?: string
+      mezo_coingecko_error?: string
+      mezo_geckoterminal_error?: string
     }> = []
 
     for (const epochStart of targetEpochs) {
@@ -543,7 +607,7 @@ Deno.serve(async (req) => {
 
       const typedRows = (rows ?? []) as HistoryRow[]
 
-      const [btcResult, mezoResult] = await Promise.all([
+      const [btcResult, mezoCoingeckoResult] = await Promise.all([
         fetchCoingeckoHistorical(
           btcCoinId,
           epochStart,
@@ -558,21 +622,55 @@ Deno.serve(async (req) => {
         ),
       ])
       const btcPrice = btcResult.price
-      const mezoPrice = mezoResult.price
 
-      if (btcPrice === null || mezoPrice === null) {
+      // MEZO has no pre-market CoinGecko data, so fall through to
+      // GeckoTerminal for the Aerodrome MEZO/MUSD pool. That pool itself
+      // was created 2026-04-01, so epochs before that will still come back
+      // null — handled below as "mezo-premarket".
+      let mezoPrice = mezoCoingeckoResult.price
+      let mezoPriceSource: string | null =
+        mezoPrice !== null ? "coingecko-historical" : null
+      let mezoGeckoTerminalError: string | null = null
+      if (mezoPrice === null) {
+        const gt = await fetchGeckoTerminalDailyClose(
+          mezoGeckoTerminalPool,
+          epochStart,
+        )
+        if (gt.price !== null) {
+          mezoPrice = gt.price
+          mezoPriceSource = "geckoterminal-historical"
+        } else {
+          mezoGeckoTerminalError = gt.error
+        }
+      }
+
+      if (btcPrice === null) {
         results.push({
           epoch_start: epochStart,
           btc_price: btcPrice,
           mezo_price: mezoPrice,
+          mezo_price_source: mezoPriceSource,
+          price_source: "skipped",
           updated: 0,
           gauges: typedRows.length,
-          skipped_reason: "missing-historical-price",
+          skipped_reason: "missing-btc-price",
           btc_error: btcResult.error ?? undefined,
-          mezo_error: mezoResult.error ?? undefined,
+          mezo_coingecko_error: mezoCoingeckoResult.error ?? undefined,
+          mezo_geckoterminal_error: mezoGeckoTerminalError ?? undefined,
         })
         continue
       }
+
+      // BTC known, MEZO unknown -> still a useful backfill: MEZO-denominated
+      // incentives get usd_value=null, but BTC/stablecoin ones are valued
+      // correctly. Tag the row so we don't retry endlessly.
+      const priceSource = dryRun
+        ? "dry-run"
+        : mezoPrice === null
+          ? "mezo-premarket"
+          : mezoPriceSource === "geckoterminal-historical"
+            ? "geckoterminal-historical"
+            : "coingecko-historical"
 
       const { updated, gauges } = await recomputeEpoch(
         supabase,
@@ -582,7 +680,7 @@ Deno.serve(async (req) => {
         epochStart,
         btcPrice,
         mezoPrice,
-        dryRun ? "dry-run" : "coingecko-historical",
+        priceSource,
         dryRun,
       )
 
@@ -590,8 +688,16 @@ Deno.serve(async (req) => {
         epoch_start: epochStart,
         btc_price: btcPrice,
         mezo_price: mezoPrice,
+        mezo_price_source: mezoPriceSource,
+        price_source: priceSource,
         updated,
         gauges,
+        mezo_coingecko_error:
+          mezoPrice === null || mezoPriceSource !== "coingecko-historical"
+            ? mezoCoingeckoResult.error ?? undefined
+            : undefined,
+        mezo_geckoterminal_error:
+          mezoPrice === null ? mezoGeckoTerminalError ?? undefined : undefined,
       })
     }
 
