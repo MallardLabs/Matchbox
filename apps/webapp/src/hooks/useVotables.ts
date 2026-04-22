@@ -53,6 +53,12 @@ async function fetchVotables(chainId: number): Promise<Votable[]> {
 }
 
 export type PoolVotableSummary = {
+  id: string
+  type: string
+  votingBucket: string
+  votingContract: Address
+  targetId: Address
+  targetType: string
   gauge: Address
   votingApr: number
   /** Trading fees redirected to voters this epoch (USD). */
@@ -65,6 +71,8 @@ export type PoolVotableSummary = {
   totalVoterIncentivesUsd: number
 }
 
+export type StandaloneVotableSummary = PoolVotableSummary
+
 export function useVotables() {
   const { chainId, isNetworkReady } = useNetwork()
 
@@ -76,35 +84,57 @@ export function useVotables() {
     enabled: isNetworkReady,
   })
 
+  const summaries = useMemo(
+    () =>
+      (data ?? []).map((v) => {
+        const voterFeesUsd = v.stats.gaugeFees.reduce(
+          (a, t) => a + Number.parseFloat(t.amountUSD || "0"),
+          0,
+        )
+        const bribesUsd = v.stats.bribes.reduce(
+          (a, t) => a + Number.parseFloat(t.amountUSD || "0"),
+          0,
+        )
+
+        return {
+          id: v.id,
+          type: v.type,
+          votingBucket: v.votingBucket,
+          votingContract: v.votingContract,
+          targetId: v.target.id,
+          targetType: v.target.type,
+          gauge: v.gauge,
+          votingApr: normalizeVotingAprPercent(v.stats.votingApr),
+          voterFeesUsd,
+          voterFees: v.stats.gaugeFees,
+          bribesUsd,
+          bribes: v.stats.bribes,
+          totalVoterIncentivesUsd: voterFeesUsd + bribesUsd,
+        } satisfies PoolVotableSummary
+      }),
+    [data],
+  )
+
   // Map by pool address (target.id), lowercased.
   const byPool = useMemo(() => {
     const m = new Map<string, PoolVotableSummary>()
-    for (const v of data ?? []) {
-      if (v.target?.type !== "pool") continue
-      const voterFeesUsd = v.stats.gaugeFees.reduce(
-        (a, t) => a + Number.parseFloat(t.amountUSD || "0"),
-        0,
-      )
-      const bribesUsd = v.stats.bribes.reduce(
-        (a, t) => a + Number.parseFloat(t.amountUSD || "0"),
-        0,
-      )
-      m.set(v.target.id.toLowerCase(), {
-        gauge: v.gauge,
-        votingApr: normalizeVotingAprPercent(v.stats.votingApr),
-        voterFeesUsd,
-        voterFees: v.stats.gaugeFees,
-        bribesUsd,
-        bribes: v.stats.bribes,
-        totalVoterIncentivesUsd: voterFeesUsd + bribesUsd,
-      })
+    for (const summary of summaries) {
+      if (summary.targetType !== "pool") continue
+      m.set(summary.targetId.toLowerCase(), summary)
     }
     return m
-  }, [data])
+  }, [summaries])
+
+  const standalone = useMemo(
+    () => summaries.filter((summary) => summary.targetType !== "pool"),
+    [summaries],
+  )
 
   return {
     votables: data ?? [],
+    summaries,
     byPool,
+    standalone,
     isLoading,
     error: error as Error | null,
     refetch,

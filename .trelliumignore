@@ -1,3 +1,5 @@
 AGENT.md
 CLAUDE.md
+RELEASING.md
 agent-instructions/matchbox-repo-roles.md
+supabase/migrations/**

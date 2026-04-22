@@ -11,7 +11,9 @@
     "lint:config": "prettier --check '**/*.{json,yaml,yml}'",
     "lint:config:fix": "prettier --write '**/*.{json,yaml,yml}'",
     "typecheck": "turbo run typecheck",
-    "check:trellium": "node ./scripts/check-trellium-boundary.mjs"
+    "check:trellium": "node ./scripts/check-trellium-boundary.mjs",
+    "release:trellium:prepare": "node ./scripts/prepare-trellium-release.mjs",
+    "release:trellium:publish": "node ./scripts/publish-trellium-release.mjs"
   },
   "devDependencies": {
     "canvas": "^3.2.1",

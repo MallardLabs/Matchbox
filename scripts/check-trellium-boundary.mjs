@@ -99,6 +99,16 @@ function listRefFiles(targetRef) {
     .filter(Boolean)
 }
 
+function matchesIgnoredPath(filePath, ignoredPath) {
+  if (ignoredPath.endsWith("/**")) {
+    const prefix = ignoredPath.slice(0, -3)
+
+    return filePath.startsWith(`${prefix}/`)
+  }
+
+  return filePath === ignoredPath
+}
+
 let filesToCheck
 let targetLabel
 
@@ -121,8 +131,8 @@ if (dir) {
   targetLabel = `${repoRoot} (working tree)`
 }
 
-const forbiddenMatches = ignoredPaths.filter((ignoredPath) =>
-  filesToCheck.includes(ignoredPath),
+const forbiddenMatches = filesToCheck.filter((filePath) =>
+  ignoredPaths.some((ignoredPath) => matchesIgnoredPath(filePath, ignoredPath)),
 )
 
 if (forbiddenMatches.length > 0) {

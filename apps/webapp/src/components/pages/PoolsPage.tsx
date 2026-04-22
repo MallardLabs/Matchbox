@@ -1,6 +1,8 @@
 import AddPoolIncentiveModal from "@/components/AddPoolIncentiveModal"
 import PoolCard from "@/components/PoolCard"
 import { SpringIn } from "@/components/SpringIn"
+import StandaloneVoteableCard from "@/components/StandaloneVoteableCard"
+import { useAllGaugeProfiles } from "@/hooks/useGaugeProfiles"
 import {
   type Pool,
   poolDailyFeesUsd,
@@ -13,6 +15,7 @@ import {
 import { usePoolsIncentivesApr } from "@/hooks/usePoolsIncentivesApr"
 import { formatUsdValue } from "@/hooks/useTokenPrices"
 import { useVotables } from "@/hooks/useVotables"
+import { useVoteableTargetMetadata } from "@/hooks/useVoteableTargetMetadata"
 import {
   ChevronDown,
   ChevronUp,
@@ -47,7 +50,12 @@ export default function PoolsPage(): JSX.Element {
   const { pools, isLoading, error } = usePools()
   const { map: incentivesMap, refetch: refetchIncentives } =
     usePoolsIncentivesApr(pools)
-  const { byPool: votablesByPool } = useVotables()
+  const { byPool: votablesByPool, standalone: standaloneVoteablesRaw } =
+    useVotables()
+  const { profiles: gaugeProfiles } = useAllGaugeProfiles()
+  const { metadata: voteableTargetMetadata } = useVoteableTargetMetadata(
+    standaloneVoteablesRaw.map((voteable) => voteable.targetId),
+  )
 
   const [sortColumn, setSortColumn] = useState<SortColumn>("tvl")
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc")
@@ -139,6 +147,54 @@ export default function PoolsPage(): JSX.Element {
     gaugedOnly,
     incentivesMap,
     votablesByPool,
+  ])
+
+  const standaloneVoteables = useMemo(() => {
+    if (typeFilter !== "all") return []
+
+    const q = search.trim().toLowerCase()
+    let result = standaloneVoteablesRaw
+
+    if (q) {
+      result = result.filter((voteable) => {
+        const profile = gaugeProfiles.get(voteable.gauge.toLowerCase())
+        const metadata = voteableTargetMetadata.get(
+          voteable.targetId.toLowerCase(),
+        )
+
+        return [
+          profile?.display_name,
+          profile?.description,
+          metadata?.name,
+          metadata?.symbol,
+          voteable.targetType,
+          voteable.targetId,
+          voteable.gauge,
+        ].some((value) => value?.toLowerCase().includes(q))
+      })
+    }
+
+    const sorted = [...result]
+    if (sortColumn === "incentives" || sortColumn === "votingApr") {
+      sorted.sort((a, b) => {
+        const av =
+          sortColumn === "incentives" ? a.totalVoterIncentivesUsd : a.votingApr
+        const bv =
+          sortColumn === "incentives" ? b.totalVoterIncentivesUsd : b.votingApr
+        const cmp = av < bv ? -1 : av > bv ? 1 : 0
+        return sortDirection === "asc" ? cmp : -cmp
+      })
+    }
+
+    return sorted
+  }, [
+    gaugeProfiles,
+    search,
+    sortColumn,
+    sortDirection,
+    standaloneVoteablesRaw,
+    typeFilter,
+    voteableTargetMetadata,
   ])
 
   const totals = useMemo(() => {
@@ -313,11 +369,11 @@ export default function PoolsPage(): JSX.Element {
             Failed to load pools: {error.message}
           </p>
         </div>
-      ) : filteredAndSorted.length === 0 ? (
+      ) : filteredAndSorted.length === 0 && standaloneVoteables.length === 0 ? (
         <SpringIn delay={3} variant="card">
           <div className="rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface)] p-12 text-center">
             <p className="font-mono text-sm text-[var(--content-secondary)]">
-              <span className="text-[#F7931A]">$</span> no pools match
+              <span className="text-[#F7931A]">$</span> no voteables match
             </p>
             <p className="mt-2 text-xs text-[var(--content-tertiary)]">
               Try a different filter or search query.
@@ -325,20 +381,52 @@ export default function PoolsPage(): JSX.Element {
           </div>
         </SpringIn>
       ) : (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {filteredAndSorted.map((pool) => {
-            const incentives = incentivesMap.get(pool.address.toLowerCase())
-            const votable = votablesByPool.get(pool.address.toLowerCase())
-            return (
-              <PoolCard
-                key={pool.address}
-                pool={pool}
-                onAddIncentives={setActivePool}
-                {...(incentives ? { incentives } : {})}
-                {...(votable ? { votable } : {})}
-              />
-            )
-          })}
+        <div className="flex flex-col gap-6">
+          {filteredAndSorted.length > 0 ? (
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {filteredAndSorted.map((pool) => {
+                const incentives = incentivesMap.get(pool.address.toLowerCase())
+                const votable = votablesByPool.get(pool.address.toLowerCase())
+                return (
+                  <PoolCard
+                    key={pool.address}
+                    pool={pool}
+                    onAddIncentives={setActivePool}
+                    {...(incentives ? { incentives } : {})}
+                    {...(votable ? { votable } : {})}
+                  />
+                )
+              })}
+            </div>
+          ) : null}
+
+          {standaloneVoteables.length > 0 ? (
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-col gap-1">
+                <h2 className="text-sm font-semibold text-[var(--content-primary)]">
+                  Other voteables
+                </h2>
+                <p className="text-xs text-[var(--content-tertiary)]">
+                  Non-pool targets from `/votes/votables`, such as vault gauges.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {standaloneVoteables.map((voteable) => (
+                  <StandaloneVoteableCard
+                    key={voteable.id}
+                    voteable={voteable}
+                    metadata={voteableTargetMetadata.get(
+                      voteable.targetId.toLowerCase(),
+                    )}
+                    profile={
+                      gaugeProfiles.get(voteable.gauge.toLowerCase()) ?? null
+                    }
+                  />
+                ))}
+              </div>
+            </div>
+          ) : null}
         </div>
       )}
 

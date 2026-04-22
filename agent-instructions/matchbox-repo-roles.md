@@ -92,6 +92,10 @@ Before suggesting a release push to `TrelliumOrg/MatchBox`, verify:
 - docs, env examples, branding, and version references are appropriate for
   `TrelliumOrg`
 - any repo-specific URLs, org names, badges, and CI references are correct
+- prefer the scripted flow:
+  1. `pnpm release:trellium:prepare`
+  2. inspect the exported snapshot
+  3. `pnpm release:trellium:publish`
 
 ## If uncertain
 

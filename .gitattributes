@@ -1,3 +1,5 @@
 AGENT.md export-ignore
 CLAUDE.md export-ignore
+RELEASING.md export-ignore
 agent-instructions/matchbox-repo-roles.md export-ignore
+supabase/migrations/** export-ignore
