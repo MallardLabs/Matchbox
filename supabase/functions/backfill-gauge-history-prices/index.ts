@@ -10,9 +10,21 @@
 //   5. Writes the updated row back with price_source = 'coingecko-historical'
 //
 // Call with:
-//   POST ?epochs=3                 // process up to 3 oldest still-missing epochs
-//   POST ?epoch=1744156800         // re-backfill a specific epoch
-//   POST ?dryRun=true              // compute but don't write
+//   POST ?epochs=3                    // process up to 3 oldest still-missing epochs
+//   POST ?epoch=1744156800            // re-backfill a specific epoch
+//   POST ?dryRun=true                 // compute but don't write
+//   POST ?refreshSubscription=true    // also sweep rows whose prices are set
+//                                     // but optimal_vemezo_weight is null —
+//                                     // lets historical rows pick up
+//                                     // subscription/boost data recomputed
+//                                     // against current chain state
+//
+// Subscription note: for historical epochs we read current chain state for
+// veMEZO/veBTC supplies and the current boost NFT mapping. That's an
+// approximation — boost NFTs can be transferred and supplies drift. The
+// alternative (reconstructing historical NFT ownership + unboosted voting
+// power per epoch) is a much heavier job; current state is "close enough" to
+// surface under/over-subscription signals in the historical table.
 //
 // Env vars:
 //   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
@@ -42,6 +54,8 @@ import {
 import {
   BRIBE_ABI,
   BOOST_VOTER_ABI,
+  NON_STAKING_GAUGE_ABI,
+  VOTING_ESCROW_ABI,
   getMezoNetworkConfig,
 } from "../_shared/contracts.ts"
 import { corsHeaders, handleCors } from "../_shared/cors.ts"
@@ -103,9 +117,16 @@ type HistoryRow = {
   epoch_start: number
   vemezo_weight: string | null
   optimal_vemezo_weight: string | null
+  boost_multiplier: number | null
   price_source: string | null
   btc_price_usd: string | null
   mezo_price_usd: string | null
+}
+
+type GaugeBoostInfo = {
+  boost: number
+  vebtcWeight: bigint
+  unboostedVebtcWeight: bigint
 }
 
 function getTokenUsdPrice(
@@ -157,6 +178,176 @@ function getSubscriptionStatus(
   if (actualWeight < lowerBound) return "under"
   if (actualWeight > upperBound) return "over"
   return "perfect"
+}
+
+function calculateOptimalVeMEZO(
+  unboostedVeBTCWeight: bigint,
+  veMEZOSupply: bigint | null,
+  veBTCSupply: bigint | null,
+): bigint | null {
+  if (
+    unboostedVeBTCWeight <= 0n ||
+    !veMEZOSupply ||
+    veMEZOSupply <= 0n ||
+    !veBTCSupply ||
+    veBTCSupply <= 0n
+  ) {
+    return null
+  }
+  return (unboostedVeBTCWeight * veMEZOSupply) / veBTCSupply
+}
+
+// Walk the gauge → beneficiary → veBTC NFT → boostableTokenIdToGauge chain to
+// recover the NFT currently boosting each gauge, plus the boost multiplier
+// and unboosted voting power. Mirrors the equivalent flow in
+// record-gauge-history. Reads live chain state only — historical epochs get
+// an approximation since boost NFTs and their voting power drift over time.
+async function fetchCurrentBoostInfo(
+  publicClient: PublicClient,
+  boostVoterAddress: Address,
+  veBTCAddress: Address,
+  gaugeAddresses: Address[],
+): Promise<Map<string, GaugeBoostInfo>> {
+  const result = new Map<string, GaugeBoostInfo>()
+  if (gaugeAddresses.length === 0) return result
+
+  const beneficiaryResults = await publicClient.multicall({
+    contracts: gaugeAddresses.map((addr) => ({
+      address: addr,
+      abi: NON_STAKING_GAUGE_ABI,
+      functionName: "rewardsBeneficiary",
+    })),
+  })
+
+  const beneficiaryInfo = beneficiaryResults
+    .map((r, i) => ({
+      gaugeAddress: gaugeAddresses[i],
+      beneficiary:
+        r.status === "success" ? (r.result as Address) : ZERO_ADDRESS,
+    }))
+    .filter((b) => b.beneficiary !== ZERO_ADDRESS)
+
+  if (beneficiaryInfo.length === 0) return result
+
+  const balanceResults = await publicClient.multicall({
+    contracts: beneficiaryInfo.map((b) => ({
+      address: veBTCAddress,
+      abi: VOTING_ESCROW_ABI,
+      functionName: "balanceOf",
+      args: [b.beneficiary],
+    })),
+  })
+
+  // Cap per-beneficiary enumeration to avoid long multicalls for whales.
+  const MAX_TOKENS_PER_BENEFICIARY = 5n
+  const tokenIdCalls: { beneficiaryIdx: number; tokenIndex: bigint }[] = []
+  beneficiaryInfo.forEach((_, bIdx) => {
+    const balance =
+      balanceResults[bIdx].status === "success"
+        ? (balanceResults[bIdx].result as bigint)
+        : 0n
+    const maxTokens =
+      balance > MAX_TOKENS_PER_BENEFICIARY
+        ? MAX_TOKENS_PER_BENEFICIARY
+        : balance
+    for (let i = 0n; i < maxTokens; i++) {
+      tokenIdCalls.push({ beneficiaryIdx: bIdx, tokenIndex: i })
+    }
+  })
+
+  if (tokenIdCalls.length === 0) return result
+
+  const tokenIdResults = await publicClient.multicall({
+    contracts: tokenIdCalls.map((c) => ({
+      address: veBTCAddress,
+      abi: VOTING_ESCROW_ABI,
+      functionName: "ownerToNFTokenIdList",
+      args: [beneficiaryInfo[c.beneficiaryIdx].beneficiary, c.tokenIndex],
+    })),
+  })
+
+  const tokenIds = tokenIdCalls
+    .map((c, idx) => ({
+      ...c,
+      tokenId:
+        tokenIdResults[idx].status === "success"
+          ? (tokenIdResults[idx].result as bigint)
+          : 0n,
+    }))
+    .filter((t) => t.tokenId > 0n)
+
+  if (tokenIds.length === 0) return result
+
+  const mappedGaugeResults = await publicClient.multicall({
+    contracts: tokenIds.map((t) => ({
+      address: boostVoterAddress,
+      abi: BOOST_VOTER_ABI,
+      functionName: "boostableTokenIdToGauge",
+      args: [t.tokenId],
+    })),
+  })
+
+  const gaugeToTokenId = new Map<string, bigint>()
+  tokenIds.forEach((t, idx) => {
+    const mappedGauge =
+      mappedGaugeResults[idx].status === "success"
+        ? (mappedGaugeResults[idx].result as unknown as Address)
+        : ZERO_ADDRESS
+    const expectedGauge = beneficiaryInfo[t.beneficiaryIdx].gaugeAddress
+    if (mappedGauge.toLowerCase() === expectedGauge.toLowerCase()) {
+      gaugeToTokenId.set(expectedGauge.toLowerCase(), t.tokenId)
+    }
+  })
+
+  const matchedTokens = Array.from(gaugeToTokenId.entries())
+  if (matchedTokens.length === 0) return result
+
+  const [boostResults, votingPowerResults, unboostedVotingPowerResults] =
+    await Promise.all([
+      publicClient.multicall({
+        contracts: matchedTokens.map(([, tokenId]) => ({
+          address: boostVoterAddress,
+          abi: BOOST_VOTER_ABI,
+          functionName: "getBoost",
+          args: [tokenId],
+        })),
+      }),
+      publicClient.multicall({
+        contracts: matchedTokens.map(([, tokenId]) => ({
+          address: veBTCAddress,
+          abi: VOTING_ESCROW_ABI,
+          functionName: "votingPowerOfNFT",
+          args: [tokenId],
+        })),
+      }),
+      publicClient.multicall({
+        contracts: matchedTokens.map(([, tokenId]) => ({
+          address: veBTCAddress,
+          abi: VOTING_ESCROW_ABI,
+          functionName: "unboostedVotingPowerOfNFT",
+          args: [tokenId],
+        })),
+      }),
+    ])
+
+  matchedTokens.forEach(([gauge], idx) => {
+    const boost =
+      boostResults[idx].status === "success"
+        ? Number(boostResults[idx].result as bigint) / 1e18
+        : null
+    if (boost === null) return
+    const vebtcWeight =
+      votingPowerResults[idx].status === "success"
+        ? (votingPowerResults[idx].result as bigint)
+        : 0n
+    const unboostedVebtcWeight =
+      unboostedVotingPowerResults[idx].status === "success"
+        ? (unboostedVotingPowerResults[idx].result as bigint)
+        : 0n
+    result.set(gauge, { boost, vebtcWeight, unboostedVebtcWeight })
+  })
+
+  return result
 }
 
 function epochDateString(epochSeconds: number): string {
@@ -264,14 +455,33 @@ async function recomputeEpoch(
   supabase: ReturnType<typeof createClient>,
   publicClient: PublicClient,
   boostVoterAddress: Address,
+  veBTCAddress: Address,
+  veMEZOSupply: bigint | null,
+  veBTCSupply: bigint | null,
   rows: HistoryRow[],
   epochStart: number,
   btcPrice: number,
   mezoPrice: number | null,
   priceSource: string,
   dryRun: boolean,
-): Promise<{ updated: number; gauges: number }> {
-  if (rows.length === 0) return { updated: 0, gauges: 0 }
+): Promise<{
+  updated: number
+  gauges: number
+  subscription_recomputed: number
+}> {
+  if (rows.length === 0)
+    return { updated: 0, gauges: 0, subscription_recomputed: 0 }
+
+  // Pull live boost/unboosted-vebtc data for every gauge in this batch so we
+  // can fill in optimal_vemezo_weight, boost_multiplier, and all derived
+  // subscription metrics for rows where the original recording missed them.
+  const gaugeAddressesForBoost = rows.map((r) => r.gauge_address as Address)
+  const boostInfoByGauge = await fetchCurrentBoostInfo(
+    publicClient,
+    boostVoterAddress,
+    veBTCAddress,
+    gaugeAddressesForBoost,
+  )
 
   const gaugeAddresses = rows.map((r) => r.gauge_address as Address)
 
@@ -299,24 +509,21 @@ async function recomputeEpoch(
   const bribeEntries = Array.from(bribeByGauge.entries())
   if (bribeEntries.length === 0) {
     // Deprecated/retired gauges may no longer have a bribe mapping. Still
-    // stamp the price source so the row isn't re-picked on every run.
-    if (!dryRun) {
-      for (const row of rows) {
-        await supabase
-          .from("gauge_history")
-          .update({
-            btc_price_usd: btcPrice,
-            mezo_price_usd: mezoPrice,
-            price_source: priceSource,
-            incentive_breakdown: [],
-            total_incentives_usd: 0,
-            apy: null,
-            apy_at_optimal: null,
-          })
-          .eq("id", row.id)
-      }
-    }
-    return { updated: rows.length, gauges: rows.length }
+    // stamp the price source + refreshed subscription data so the row isn't
+    // re-picked on every run.
+    return await writeRows({
+      supabase,
+      rows,
+      breakdowns: new Map(),
+      usdTotals: new Map(),
+      boostInfoByGauge,
+      veMEZOSupply,
+      veBTCSupply,
+      btcPrice,
+      mezoPrice,
+      priceSource,
+      dryRun,
+    })
   }
 
   const lengthResults = await publicClient.multicall({
@@ -347,24 +554,20 @@ async function recomputeEpoch(
   })
 
   if (tokenIndexCalls.length === 0) {
-    // No bribe tokens to value; just stamp prices on rows and clear incentives.
-    if (!dryRun) {
-      for (const row of rows) {
-        await supabase
-          .from("gauge_history")
-          .update({
-            btc_price_usd: btcPrice,
-            mezo_price_usd: mezoPrice,
-            price_source: priceSource,
-            incentive_breakdown: [],
-            total_incentives_usd: 0,
-            apy: null,
-            apy_at_optimal: null,
-          })
-          .eq("id", row.id)
-      }
-    }
-    return { updated: rows.length, gauges: rows.length }
+    // No bribe tokens to value; stamp prices and refreshed subscription data.
+    return await writeRows({
+      supabase,
+      rows,
+      breakdowns: new Map(),
+      usdTotals: new Map(),
+      boostInfoByGauge,
+      veMEZOSupply,
+      veBTCSupply,
+      btcPrice,
+      mezoPrice,
+      priceSource,
+      dryRun,
+    })
   }
 
   const tokenAddressResults = await publicClient.multicall({
@@ -471,16 +674,77 @@ async function recomputeEpoch(
     }
   })
 
-  // Write updates
+  return await writeRows({
+    supabase,
+    rows,
+    breakdowns,
+    usdTotals,
+    boostInfoByGauge,
+    veMEZOSupply,
+    veBTCSupply,
+    btcPrice,
+    mezoPrice,
+    priceSource,
+    dryRun,
+  })
+}
+
+async function writeRows(params: {
+  supabase: ReturnType<typeof createClient>
+  rows: HistoryRow[]
+  breakdowns: Map<string, IncentiveEntry[]>
+  usdTotals: Map<string, number>
+  boostInfoByGauge: Map<string, GaugeBoostInfo>
+  veMEZOSupply: bigint | null
+  veBTCSupply: bigint | null
+  btcPrice: number
+  mezoPrice: number | null
+  priceSource: string
+  dryRun: boolean
+}): Promise<{
+  updated: number
+  gauges: number
+  subscription_recomputed: number
+}> {
+  const {
+    supabase,
+    rows,
+    breakdowns,
+    usdTotals,
+    boostInfoByGauge,
+    veMEZOSupply,
+    veBTCSupply,
+    btcPrice,
+    mezoPrice,
+    priceSource,
+    dryRun,
+  } = params
+
   let updated = 0
+  let subscriptionRecomputed = 0
+
   for (const row of rows) {
     const gauge = row.gauge_address.toLowerCase()
     const breakdown = breakdowns.get(gauge) ?? []
     const totalUsd = usdTotals.get(gauge) ?? 0
     const vemezoWeight = row.vemezo_weight ? BigInt(row.vemezo_weight) : 0n
-    const optimalWeight = row.optimal_vemezo_weight
+
+    // Prefer live-chain boost data; fall back to whatever was previously
+    // recorded. If neither is available, optimal stays null.
+    const liveBoost = boostInfoByGauge.get(gauge)
+    const recordedOptimal = row.optimal_vemezo_weight
       ? BigInt(row.optimal_vemezo_weight)
       : null
+    const liveOptimal = liveBoost
+      ? calculateOptimalVeMEZO(
+          liveBoost.unboostedVebtcWeight,
+          veMEZOSupply,
+          veBTCSupply,
+        )
+      : null
+    const optimalWeight = liveOptimal ?? recordedOptimal
+    const boostMultiplier = liveBoost?.boost ?? row.boost_multiplier ?? null
+    const vebtcWeight = liveBoost?.vebtcWeight ?? null
 
     const apy = calculateAPY(totalUsd || null, vemezoWeight, mezoPrice)
     const apyAtOptimal =
@@ -491,13 +755,21 @@ async function recomputeEpoch(
       vemezoWeight,
       optimalWeight,
     )
-    const subscriptionStatus = getSubscriptionStatus(vemezoWeight, optimalWeight)
+    const subscriptionStatus = getSubscriptionStatus(
+      vemezoWeight,
+      optimalWeight,
+    )
+    const subscriptionDelta =
+      optimalWeight !== null ? vemezoWeight - optimalWeight : null
     const oversubscriptionDilution =
       subscriptionRatio !== null && subscriptionRatio > 1
         ? 1 - 1 / subscriptionRatio
         : null
 
-    const update = {
+    const gotNewSubscription =
+      recordedOptimal === null && optimalWeight !== null
+
+    const update: Record<string, unknown> = {
       btc_price_usd: btcPrice,
       mezo_price_usd: mezoPrice,
       price_source: priceSource,
@@ -507,12 +779,21 @@ async function recomputeEpoch(
       apy_at_optimal: apyAtOptimal,
       subscription_ratio: subscriptionRatio,
       subscription_status: subscriptionStatus,
+      subscription_delta_vemezo:
+        subscriptionDelta !== null ? subscriptionDelta.toString() : null,
       oversubscription_dilution: oversubscriptionDilution,
+      optimal_vemezo_weight:
+        optimalWeight !== null ? optimalWeight.toString() : null,
+      boost_multiplier: boostMultiplier,
+    }
+    if (vebtcWeight !== null) {
+      update.vebtc_weight = vebtcWeight.toString()
     }
 
     if (dryRun) {
       console.log(`[dry-run] would update id=${row.id}`, update)
       updated++
+      if (gotNewSubscription) subscriptionRecomputed++
       continue
     }
 
@@ -526,9 +807,14 @@ async function recomputeEpoch(
       continue
     }
     updated++
+    if (gotNewSubscription) subscriptionRecomputed++
   }
 
-  return { updated, gauges: rows.length }
+  return {
+    updated,
+    gauges: rows.length,
+    subscription_recomputed: subscriptionRecomputed,
+  }
 }
 
 Deno.serve(async (req) => {
@@ -543,6 +829,11 @@ Deno.serve(async (req) => {
     )
     const singleEpoch = url.searchParams.get("epoch")
     const dryRun = url.searchParams.get("dryRun") === "true"
+    // When set, also sweeps rows that already have prices but are missing
+    // optimal_vemezo_weight (so historical rows get subscription/boost data
+    // recomputed against current chain state).
+    const refreshSubscription =
+      url.searchParams.get("refreshSubscription") === "true"
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")
@@ -571,18 +862,46 @@ Deno.serve(async (req) => {
       transport: http(rpcUrl),
     })
 
+    // Fetch current veMEZO and veBTC supplies once so every epoch's recompute
+    // can derive optimal_vemezo_weight without re-querying.
+    const supplyResults = await publicClient.multicall({
+      contracts: [
+        {
+          address: contracts.veMEZO as Address,
+          abi: VOTING_ESCROW_ABI,
+          functionName: "supply",
+        },
+        {
+          address: contracts.veBTC as Address,
+          abi: VOTING_ESCROW_ABI,
+          functionName: "supply",
+        },
+      ],
+    })
+    const veMEZOSupply =
+      supplyResults[0].status === "success"
+        ? (supplyResults[0].result as bigint)
+        : null
+    const veBTCSupply =
+      supplyResults[1].status === "success"
+        ? (supplyResults[1].result as bigint)
+        : null
+
     // Pick target epochs. By default: oldest epochs whose price_source is null
-    // or 'live-oracle-pre-backfill' or a legacy placeholder tag.
+    // or 'live-oracle-pre-backfill' or a legacy placeholder tag. With
+    // refreshSubscription, also include rows that have prices but lack
+    // optimal_vemezo_weight (which means no subscription data was recorded).
     let targetEpochs: number[]
     if (singleEpoch) {
       targetEpochs = [Number.parseInt(singleEpoch, 10)]
     } else {
+      const filter = refreshSubscription
+        ? "price_source.is.null,price_source.eq.live-oracle-pre-backfill,price_source.eq.placeholder,optimal_vemezo_weight.is.null"
+        : "price_source.is.null,price_source.eq.live-oracle-pre-backfill,price_source.eq.placeholder"
       const { data, error } = await supabase
         .from("gauge_history")
         .select("epoch_start")
-        .or(
-          "price_source.is.null,price_source.eq.live-oracle-pre-backfill,price_source.eq.placeholder",
-        )
+        .or(filter)
         .order("epoch_start", { ascending: true })
       if (error) throw error
       targetEpochs = Array.from(
@@ -610,6 +929,7 @@ Deno.serve(async (req) => {
       price_source: string
       updated: number
       gauges: number
+      subscription_recomputed?: number
       skipped_reason?: string
       btc_error?: string
       mezo_coingecko_error?: string
@@ -620,7 +940,7 @@ Deno.serve(async (req) => {
       const { data: rows, error: rowsError } = await supabase
         .from("gauge_history")
         .select(
-          "id, gauge_address, epoch_start, vemezo_weight, optimal_vemezo_weight, price_source, btc_price_usd, mezo_price_usd",
+          "id, gauge_address, epoch_start, vemezo_weight, optimal_vemezo_weight, boost_multiplier, price_source, btc_price_usd, mezo_price_usd",
         )
         .eq("epoch_start", epochStart)
       if (rowsError) throw rowsError
@@ -692,10 +1012,13 @@ Deno.serve(async (req) => {
             ? "geckoterminal-historical"
             : "coingecko-historical"
 
-      const { updated, gauges } = await recomputeEpoch(
+      const { updated, gauges, subscription_recomputed } = await recomputeEpoch(
         supabase,
         publicClient,
         contracts.boostVoter as Address,
+        contracts.veBTC as Address,
+        veMEZOSupply,
+        veBTCSupply,
         typedRows,
         epochStart,
         btcPrice,
@@ -712,6 +1035,7 @@ Deno.serve(async (req) => {
         price_source: priceSource,
         updated,
         gauges,
+        subscription_recomputed,
         mezo_coingecko_error:
           mezoPrice === null || mezoPriceSource !== "coingecko-historical"
             ? mezoCoingeckoResult.error ?? undefined

@@ -1123,7 +1123,7 @@ export default function GaugeDetailPage({
                                         </div>
                                       )}
                                       <div className="flex items-baseline gap-1.5 border-t border-[var(--border)] pt-1.5">
-                                        <span className="font-mono text-lg font-semibold tabular-nums text-[var(--content-primary)]">
+                                        <span className="font-mono text-sm font-semibold tabular-nums text-[var(--content-primary)]">
                                           {record.boost_multiplier != null
                                             ? `${record.boost_multiplier.toFixed(2)}×`
                                             : "—"}
