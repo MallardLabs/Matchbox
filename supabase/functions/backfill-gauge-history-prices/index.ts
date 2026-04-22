@@ -155,37 +155,51 @@ function epochDateString(epochSeconds: number): string {
   return `${dd}-${mm}-${yyyy}`
 }
 
+type CoingeckoTier = "demo" | "pro"
+
+// Demo vs Pro keys route through different hosts + headers. Get this wrong
+// and every request 401s — which looks like "missing historical price" but
+// is actually an auth failure. Default to demo because that's what
+// CoinGecko issues to free-tier users and what most projects have.
 async function fetchCoingeckoHistorical(
   coinId: string,
   epochSeconds: number,
   apiKey: string | null,
-): Promise<number | null> {
+  tier: CoingeckoTier,
+): Promise<{ price: number | null; error: string | null }> {
   const date = epochDateString(epochSeconds)
-  const base = apiKey
-    ? "https://pro-api.coingecko.com/api/v3"
-    : "https://api.coingecko.com/api/v3"
+  const base =
+    tier === "pro"
+      ? "https://pro-api.coingecko.com/api/v3"
+      : "https://api.coingecko.com/api/v3"
+  const headerName = tier === "pro" ? "x-cg-pro-api-key" : "x-cg-demo-api-key"
   const url = `${base}/coins/${coinId}/history?date=${date}&localization=false`
 
   try {
     const res = await fetch(url, {
-      headers: apiKey ? { "x-cg-pro-api-key": apiKey } : {},
+      headers: apiKey ? { [headerName]: apiKey } : {},
     })
     if (!res.ok) {
+      const bodyText = await res.text().catch(() => "")
+      const snippet = bodyText.slice(0, 200)
+      const msg = `${res.status} ${res.statusText}${snippet ? `: ${snippet}` : ""}`
       console.warn(
-        `CoinGecko historical fetch failed for ${coinId} @ ${date}: ${res.status}`,
+        `CoinGecko historical fetch failed for ${coinId} @ ${date}: ${msg}`,
       )
-      return null
+      return { price: null, error: msg }
     }
     const body = (await res.json()) as {
       market_data?: { current_price?: { usd?: number } }
     }
     const price = body?.market_data?.current_price?.usd
-    return typeof price === "number" && Number.isFinite(price) && price > 0
-      ? price
-      : null
+    if (typeof price === "number" && Number.isFinite(price) && price > 0) {
+      return { price, error: null }
+    }
+    return { price: null, error: "empty market_data.current_price.usd" }
   } catch (e) {
+    const msg = String(e)
     console.warn(`CoinGecko fetch error for ${coinId} @ ${date}:`, e)
-    return null
+    return { price: null, error: msg }
   }
 }
 
@@ -462,6 +476,10 @@ Deno.serve(async (req) => {
     const mezoCoinId = Deno.env.get("MEZO_COINGECKO_ID") ?? "mezo"
     const btcCoinId = Deno.env.get("BTC_COINGECKO_ID") ?? "bitcoin"
     const coingeckoKey = Deno.env.get("COINGECKO_API_KEY") ?? null
+    const tierEnv = (
+      Deno.env.get("COINGECKO_API_TIER") ?? "demo"
+    ).toLowerCase()
+    const coingeckoTier: CoingeckoTier = tierEnv === "pro" ? "pro" : "demo"
 
     const supabase = createClient(supabaseUrl, supabaseKey, {
       auth: { autoRefreshToken: false, persistSession: false },
@@ -510,6 +528,8 @@ Deno.serve(async (req) => {
       updated: number
       gauges: number
       skipped_reason?: string
+      btc_error?: string
+      mezo_error?: string
     }> = []
 
     for (const epochStart of targetEpochs) {
@@ -523,10 +543,22 @@ Deno.serve(async (req) => {
 
       const typedRows = (rows ?? []) as HistoryRow[]
 
-      const [btcPrice, mezoPrice] = await Promise.all([
-        fetchCoingeckoHistorical(btcCoinId, epochStart, coingeckoKey),
-        fetchCoingeckoHistorical(mezoCoinId, epochStart, coingeckoKey),
+      const [btcResult, mezoResult] = await Promise.all([
+        fetchCoingeckoHistorical(
+          btcCoinId,
+          epochStart,
+          coingeckoKey,
+          coingeckoTier,
+        ),
+        fetchCoingeckoHistorical(
+          mezoCoinId,
+          epochStart,
+          coingeckoKey,
+          coingeckoTier,
+        ),
       ])
+      const btcPrice = btcResult.price
+      const mezoPrice = mezoResult.price
 
       if (btcPrice === null || mezoPrice === null) {
         results.push({
@@ -536,6 +568,8 @@ Deno.serve(async (req) => {
           updated: 0,
           gauges: typedRows.length,
           skipped_reason: "missing-historical-price",
+          btc_error: btcResult.error ?? undefined,
+          mezo_error: mezoResult.error ?? undefined,
         })
         continue
       }
@@ -565,6 +599,10 @@ Deno.serve(async (req) => {
       JSON.stringify({
         success: true,
         dry_run: dryRun,
+        coingecko_tier: coingeckoTier,
+        coingecko_key_present: coingeckoKey !== null,
+        mezo_coin_id: mezoCoinId,
+        btc_coin_id: btcCoinId,
         epochs_processed: results.length,
         results,
       }),
