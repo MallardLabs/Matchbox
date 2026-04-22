@@ -151,46 +151,23 @@ function absBigInt(value: bigint): bigint {
   return value < 0n ? -value : value
 }
 
-function formatSubscriptionRatio(ratio: number | null | undefined): string {
-  if (ratio == null || !Number.isFinite(ratio)) return "-"
-  return `${ratio.toFixed(2)}x`
-}
-
 function formatSubscriptionPercent(value: number | null | undefined): string {
   if (value == null || !Number.isFinite(value)) return "-"
   return `${(value * 100).toFixed(1)}%`
 }
 
-function getSubscriptionColor(
-  status: GaugeHistory["subscription_status"],
-): string {
-  switch (status) {
-    case "under":
-      return "#F7931A"
-    case "perfect":
-      return "var(--positive)"
-    case "over":
-      return "var(--negative)"
-    default:
-      return "var(--content-tertiary)"
-  }
-}
-
-function getSubscriptionHeadline(
-  record: GaugeHistory,
-): { label: string; color: string } | null {
+function getSubscriptionHeadline(record: GaugeHistory): string | null {
   const ratio = record.subscription_ratio
   if (ratio == null || !Number.isFinite(ratio)) return null
-  const color = getSubscriptionColor(record.subscription_status)
   switch (record.subscription_status) {
     case "perfect":
-      return { label: `${formatSubscriptionRatio(ratio)} · Perfect`, color }
+      return "At optimal"
     case "under":
-      return { label: `${formatSubscriptionRatio(ratio)} · Under`, color }
+      return `${(ratio * 100).toFixed(0)}% subscribed`
     case "over":
-      return { label: `${formatSubscriptionRatio(ratio)} · Over`, color }
+      return `${ratio.toFixed(2)}× oversubscribed`
     default:
-      return { label: formatSubscriptionRatio(ratio), color }
+      return `${ratio.toFixed(2)}× subscribed`
   }
 }
 
@@ -216,10 +193,9 @@ function getSubscriptionDetail(record: GaugeHistory): string | null {
   return null
 }
 
-// Visual bar showing where a gauge sits on the under / perfect / over spectrum.
-// Bar spans 0x to 2x. Ratios beyond 2x are pinned to the right edge and flagged
-// with a chevron. The indicator dot renders in a parent that is not clipped,
-// so the dot can overflow the bar's rounded track without being cut off.
+// Compact subscription bar that mirrors the visual style of
+// OptimalVeMEZOProgress: orange fill below optimal, green "shine" at or above
+// optimal, plus a subtle red overflow segment when oversubscribed.
 function SubscriptionBar({
   record,
 }: {
@@ -228,53 +204,55 @@ function SubscriptionBar({
   const ratio = record.subscription_ratio
   if (ratio == null || !Number.isFinite(ratio)) return null
 
-  const maxDisplay = 2
-  // Zone boundaries mirror PERFECT_SUBSCRIPTION_TOLERANCE_BPS = 200 (±2%)
-  const perfectLow = 0.98
-  const perfectHigh = 1.02
-  const underEndPct = (perfectLow / maxDisplay) * 100
-  const perfectEndPct = (perfectHigh / maxDisplay) * 100
-  const targetPct = (1 / maxDisplay) * 100
-
-  const clamped = Math.min(Math.max(ratio, 0), maxDisplay)
-  const positionPct = (clamped / maxDisplay) * 100
-  const isCappedHigh = ratio > maxDisplay
-  const indicatorColor = getSubscriptionColor(record.subscription_status)
+  const clamped = Math.max(ratio, 0)
+  const atOrAbove = clamped >= 1
+  const underFillPct = Math.min(100, clamped * 100)
+  // For over-subscription, render a red overflow wedge that grows with the
+  // ratio but is capped so the bar stays readable at extreme ratios.
+  const overPct = atOrAbove
+    ? Math.min(100, Math.max(0, ((clamped - 1) / 1) * 100))
+    : 0
 
   return (
-    <div className="relative h-3.5 w-full">
-      <div className="absolute inset-x-0 top-1/2 h-1.5 -translate-y-1/2 overflow-hidden rounded-full border border-[var(--border)] bg-[var(--surface-secondary)]">
+    <div
+      className={`relative h-1.5 w-full overflow-hidden rounded-full bg-[var(--surface-secondary)] ring-1 ring-inset ${
+        atOrAbove ? "ring-[rgba(var(--positive-rgb),0.22)]" : "ring-[var(--border)]"
+      }`}
+      aria-hidden="true"
+    >
+      {atOrAbove ? (
+        <>
+          <div className="absolute inset-y-0 left-0 h-full w-full rounded-full bg-[var(--positive)] opacity-70" />
+          {overPct > 0 && (
+            <div
+              className="absolute inset-y-0 right-0 h-full rounded-r-full bg-[var(--negative)] opacity-80"
+              style={{ width: `${overPct}%` }}
+            />
+          )}
+        </>
+      ) : (
         <div
-          className="absolute top-0 h-full bg-[rgba(247,147,26,0.22)]"
-          style={{ left: 0, width: `${underEndPct}%` }}
+          className="h-full rounded-full bg-[rgba(247,147,26,0.9)] transition-[width] duration-300 ease-out"
+          style={{ width: `${underFillPct}%` }}
         />
-        <div
-          className="absolute top-0 h-full bg-[rgba(34,197,94,0.28)]"
-          style={{
-            left: `${underEndPct}%`,
-            width: `${perfectEndPct - underEndPct}%`,
-          }}
-        />
-        <div
-          className="absolute top-0 h-full bg-[rgba(239,68,68,0.22)]"
-          style={{
-            left: `${perfectEndPct}%`,
-            width: `${100 - perfectEndPct}%`,
-          }}
-        />
-        <div
-          className="absolute top-0 h-full w-px bg-[var(--content-tertiary)] opacity-60"
-          style={{ left: `${targetPct}%` }}
-        />
-      </div>
-      <div
-        className="absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-[var(--surface)] shadow-sm"
-        style={{ left: `${positionPct}%`, backgroundColor: indicatorColor }}
-        title={isCappedHigh ? `${ratio.toFixed(2)}x (capped)` : undefined}
-        aria-hidden="true"
-      />
+      )}
     </div>
   )
+}
+
+function getSubscriptionHeadlineColor(
+  status: GaugeHistory["subscription_status"],
+): string {
+  switch (status) {
+    case "under":
+      return "#F7931A"
+    case "perfect":
+      return "var(--positive)"
+    case "over":
+      return "var(--negative)"
+    default:
+      return "var(--content-secondary)"
+  }
 }
 
 // Social link button component
@@ -1109,45 +1087,52 @@ export default function GaugeDetailPage({
                                     </div>
                                   </td>
                                   <td className="py-3 px-4 text-right font-mono text-sm tabular-nums text-[var(--content-primary)]">
-                                    <div>
-                                      {record.vemezo_weight
-                                        ? formatTokenAmount(
-                                            BigInt(record.vemezo_weight),
-                                            18,
-                                          )
-                                        : "—"}
-                                    </div>
-                                    <div className="mt-0.5 text-[10px] text-[var(--content-tertiary)]">
-                                      {record.boost_multiplier != null
-                                        ? `${record.boost_multiplier.toFixed(2)}× boost`
-                                        : "no boost"}
-                                    </div>
+                                    {record.vemezo_weight
+                                      ? formatTokenAmount(
+                                          BigInt(record.vemezo_weight),
+                                          18,
+                                        )
+                                      : "—"}
                                   </td>
                                   <td className="py-3 px-4 align-middle">
-                                    {subscriptionHeadline ? (
-                                      <div className="space-y-1.5">
-                                        <SubscriptionBar record={record} />
-                                        <div className="flex items-baseline gap-2 font-mono text-xs tabular-nums">
-                                          <span
-                                            className="font-medium"
-                                            style={{
-                                              color: subscriptionHeadline.color,
-                                            }}
-                                          >
-                                            {subscriptionHeadline.label}
-                                          </span>
-                                          {subscriptionDetail && (
-                                            <span className="text-[10px] text-[var(--content-tertiary)]">
-                                              {subscriptionDetail}
+                                    <div className="space-y-2">
+                                      {subscriptionHeadline ? (
+                                        <div className="space-y-1.5">
+                                          <SubscriptionBar record={record} />
+                                          <div className="flex items-baseline justify-between gap-2 font-mono text-xs tabular-nums">
+                                            <span
+                                              className="font-medium"
+                                              style={{
+                                                color: getSubscriptionHeadlineColor(
+                                                  record.subscription_status,
+                                                ),
+                                              }}
+                                            >
+                                              {subscriptionHeadline}
                                             </span>
-                                          )}
+                                            {subscriptionDetail && (
+                                              <span className="text-[10px] text-[var(--content-tertiary)]">
+                                                {subscriptionDetail}
+                                              </span>
+                                            )}
+                                          </div>
                                         </div>
+                                      ) : (
+                                        <div className="font-mono text-xs text-[var(--content-tertiary)]">
+                                          No subscription data
+                                        </div>
+                                      )}
+                                      <div className="flex items-baseline gap-1.5 border-t border-[var(--border)] pt-1.5">
+                                        <span className="font-mono text-lg font-semibold tabular-nums text-[var(--content-primary)]">
+                                          {record.boost_multiplier != null
+                                            ? `${record.boost_multiplier.toFixed(2)}×`
+                                            : "—"}
+                                        </span>
+                                        <span className="text-[10px] uppercase tracking-wider text-[var(--content-tertiary)]">
+                                          boost
+                                        </span>
                                       </div>
-                                    ) : (
-                                      <span className="font-mono text-xs text-[var(--content-tertiary)]">
-                                        —
-                                      </span>
-                                    )}
+                                    </div>
                                   </td>
                                   <td className="py-3 px-4 text-right font-mono text-sm tabular-nums text-[var(--content-primary)]">
                                     <div>
