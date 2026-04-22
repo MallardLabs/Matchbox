@@ -402,13 +402,10 @@ export default function PoolsPage(): JSX.Element {
 
           {standaloneVoteables.length > 0 ? (
             <div className="flex flex-col gap-3">
-              <div className="flex flex-col gap-1">
+              <div className="flex items-center justify-between gap-2">
                 <h2 className="text-sm font-semibold text-[var(--content-primary)]">
-                  Other voteables
+                  Vaults & Other Voteables
                 </h2>
-                <p className="text-xs text-[var(--content-tertiary)]">
-                  Non-pool targets from `/votes/votables`, such as vault gauges.
-                </p>
               </div>
 
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">

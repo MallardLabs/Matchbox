@@ -1,4 +1,5 @@
 import IncentiveWarningModal from "@/components/IncentiveWarningModal"
+import { TokenIcon } from "@/components/TokenIcon"
 import { TokenSelector } from "@/components/TokenSelector"
 import type { Token } from "@/hooks/useTokenList"
 import {
@@ -27,6 +28,7 @@ type AddGaugeIncentiveModalProps = {
   gaugeName: string
   gaugeTokenId: bigint | undefined
   gaugeImageUrl: string | null | undefined
+  gaugeIconSymbol?: string
   totalIncentivesUsd: number
   gaugeHasNoVotes: boolean
   onIncentivesAdded?: () => void
@@ -39,6 +41,7 @@ export function AddGaugeIncentiveModal({
   gaugeName,
   gaugeTokenId,
   gaugeImageUrl,
+  gaugeIconSymbol,
   totalIncentivesUsd,
   gaugeHasNoVotes,
   onIncentivesAdded,
@@ -204,6 +207,8 @@ export function AddGaugeIncentiveModal({
                       alt={gaugeName}
                       className="h-full w-full object-cover"
                     />
+                  ) : gaugeIconSymbol ? (
+                    <TokenIcon symbol={gaugeIconSymbol} size={28} />
                   ) : (
                     <span className="font-mono text-sm text-[var(--content-secondary)]">
                       #{gaugeTokenId?.toString() ?? "?"}
