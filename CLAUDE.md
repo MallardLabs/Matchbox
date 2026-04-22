@@ -13,6 +13,7 @@
 - Extension dev: `pnpm run extension/dev`
 - Lint: `pnpm lint` (fix automatically: `pnpm lint:fix`)
 - Format config files: `pnpm lint:config` (fix: `pnpm lint:config:fix`)
+- Trellium release boundary check: `pnpm check:trellium`
 
 ## Code Layout
 
@@ -30,6 +31,7 @@
 
 ALWAYS RESPECT the more detailed information in:
 
+- MatchBox repo roles and release promotion: ./agent-instructions/matchbox-repo-roles.md
 - TypeScript and JavaScript: ./agent-instructions/typescript.md
 - Financial Precision: ./agent-instructions/financial-precision.md
 - Git commits and messages: ./agent-instructions/git.md

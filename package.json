@@ -10,7 +10,8 @@
     "lint:fix": "turbo run lint:fix",
     "lint:config": "prettier --check '**/*.{json,yaml,yml}'",
     "lint:config:fix": "prettier --write '**/*.{json,yaml,yml}'",
-    "typecheck": "turbo run typecheck"
+    "typecheck": "turbo run typecheck",
+    "check:trellium": "node ./scripts/check-trellium-boundary.mjs"
   },
   "devDependencies": {
     "canvas": "^3.2.1",
