@@ -222,21 +222,21 @@ function SubscriptionBar({
   record,
 }: {
   record: GaugeHistory
-}): JSX.Element | null {
+}): JSX.Element {
   const ratio = record.subscription_ratio
-  if (ratio == null || !Number.isFinite(ratio)) return null
+  const hasData = ratio != null && Number.isFinite(ratio)
 
   const maxDisplay = 2
-  const clamped = Math.min(Math.max(ratio, 0), maxDisplay)
-  const positionPct = (clamped / maxDisplay) * 100
-  const isCappedHigh = ratio > maxDisplay
-
   // Zone boundaries mirror PERFECT_SUBSCRIPTION_TOLERANCE_BPS = 200 (±2%)
   const perfectLow = 0.98
   const perfectHigh = 1.02
   const underEndPct = (perfectLow / maxDisplay) * 100
   const perfectEndPct = (perfectHigh / maxDisplay) * 100
   const targetPct = (1 / maxDisplay) * 100
+
+  const clamped = hasData ? Math.min(Math.max(ratio, 0), maxDisplay) : 0
+  const positionPct = (clamped / maxDisplay) * 100
+  const isCappedHigh = hasData && ratio > maxDisplay
 
   const indicatorColor =
     record.subscription_status === "under"
@@ -246,8 +246,11 @@ function SubscriptionBar({
         : "var(--positive)"
 
   return (
-    <div className="w-full">
-      <div className="relative h-2 overflow-hidden rounded-full border border-[var(--border)] bg-[var(--surface-secondary)]">
+    <div className={`w-full ${hasData ? "" : "opacity-40"}`}>
+      <div
+        className="relative h-2 overflow-hidden rounded-full border border-[var(--border)] bg-[var(--surface-secondary)]"
+        title={hasData ? undefined : "Subscription data not recorded for this epoch"}
+      >
         <div
           className="absolute top-0 h-full bg-[rgba(247,147,26,0.22)]"
           style={{ left: 0, width: `${underEndPct}%` }}
@@ -270,16 +273,20 @@ function SubscriptionBar({
           className="absolute top-0 h-full w-px bg-[var(--content-tertiary)] opacity-60"
           style={{ left: `${targetPct}%` }}
         />
-        <div
-          className="absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-[var(--surface)] shadow"
-          style={{ left: `${positionPct}%`, backgroundColor: indicatorColor }}
-          aria-hidden="true"
-        />
+        {hasData && (
+          <div
+            className="absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-[var(--surface)] shadow"
+            style={{ left: `${positionPct}%`, backgroundColor: indicatorColor }}
+            aria-hidden="true"
+          />
+        )}
       </div>
       <div className="mt-1 flex justify-between text-[10px] uppercase tracking-wider text-[var(--content-tertiary)]">
         <span>0x</span>
         <span>1x</span>
-        <span>{isCappedHigh ? `${ratio.toFixed(1)}x ›` : "2x"}</span>
+        <span>
+          {isCappedHigh && hasData ? `${ratio.toFixed(1)}x ›` : "2x"}
+        </span>
       </div>
     </div>
   )
@@ -1206,11 +1213,6 @@ export default function GaugeDetailPage({
                                               })
                                             : "—"}
                                         </span>
-                                        {record.price_source && (
-                                          <span>
-                                            source: {record.price_source}
-                                          </span>
-                                        )}
                                       </div>
                                       <table className="w-full">
                                         <thead>
