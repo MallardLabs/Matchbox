@@ -1,4 +1,5 @@
 import AddPoolIncentiveModal from "@/components/AddPoolIncentiveModal"
+import { AnimatedNumber } from "@/components/AnimatedNumber"
 import PoolCard from "@/components/PoolCard"
 import { SpringIn } from "@/components/SpringIn"
 import StandaloneVoteableCard from "@/components/StandaloneVoteableCard"
@@ -13,7 +14,6 @@ import {
   usePools,
 } from "@/hooks/usePools"
 import { usePoolsIncentivesApr } from "@/hooks/usePoolsIncentivesApr"
-import { formatUsdValue } from "@/hooks/useTokenPrices"
 import { useVotables } from "@/hooks/useVotables"
 import { useVoteableTargetMetadata } from "@/hooks/useVoteableTargetMetadata"
 import {
@@ -208,6 +208,7 @@ export default function PoolsPage(): JSX.Element {
     }
     return { tvl, volume, fees }
   }, [pools])
+  const hasLoadedPools = !isLoading && !error
 
   return (
     <div className="flex flex-col gap-6">
@@ -228,7 +229,16 @@ export default function PoolsPage(): JSX.Element {
               Total Pools
             </p>
             <p className="font-mono text-2xl font-semibold text-[var(--content-primary)]">
-              {pools.length}
+              {hasLoadedPools ? (
+                <AnimatedNumber
+                  value={pools.length}
+                  minFractionDigits={0}
+                  maxFractionDigits={0}
+                  initialValue={0}
+                />
+              ) : (
+                "0"
+              )}
             </p>
           </div>
         </SpringIn>
@@ -238,7 +248,15 @@ export default function PoolsPage(): JSX.Element {
               Total TVL
             </p>
             <p className="font-mono text-2xl font-semibold tabular-nums text-[var(--content-primary)]">
-              {formatUsdValue(totals.tvl)}
+              {hasLoadedPools ? (
+                <AnimatedNumber
+                  value={totals.tvl}
+                  prefix="~$"
+                  initialValue={0}
+                />
+              ) : (
+                "~$0.00"
+              )}
             </p>
           </div>
         </SpringIn>
@@ -248,7 +266,15 @@ export default function PoolsPage(): JSX.Element {
               24h Volume
             </p>
             <p className="font-mono text-2xl font-semibold tabular-nums text-[var(--content-primary)]">
-              {formatUsdValue(totals.volume)}
+              {hasLoadedPools ? (
+                <AnimatedNumber
+                  value={totals.volume}
+                  prefix="~$"
+                  initialValue={0}
+                />
+              ) : (
+                "~$0.00"
+              )}
             </p>
           </div>
         </SpringIn>

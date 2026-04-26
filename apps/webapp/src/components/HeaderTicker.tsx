@@ -1,3 +1,4 @@
+import { AnimatedTickerText } from "@/components/AnimatedNumber"
 import { useBtcPrice } from "@/hooks/useBtcPrice"
 import { useEpochCountdown } from "@/hooks/useEpochCountdown"
 import { useMezoPrice } from "@/hooks/useMezoPrice"
@@ -9,6 +10,7 @@ type TickerMetric = {
   id: string
   label: string
   value: string
+  valueKey?: string
   icon?: string
   isClockIcon?: boolean
 }
@@ -80,7 +82,10 @@ function TickerItem({
       <span
         className={`whitespace-nowrap font-mono ${isInline ? "text-xl font-semibold md:text-3xl" : "text-xs"} tabular-nums text-[#F7931A]`}
       >
-        {metric.value}
+        <AnimatedTickerText
+          key={`${metric.id}-${metric.valueKey ?? "value"}`}
+          value={metric.value}
+        />
       </span>
     </div>
   )
@@ -118,6 +123,8 @@ export function HeaderTicker({
         : mezoError
           ? "N/A"
           : `$${formatPrice(mezoPrice)}`,
+      valueKey:
+        !mezoLoading && !mezoError && mezoPrice !== null ? "ready" : "pending",
       icon: "/token icons/Mezo.svg",
     },
     {
@@ -128,12 +135,15 @@ export function HeaderTicker({
         : btcError || btcPrice === null
           ? "N/A"
           : `$${formatPrice(btcPrice)}`,
+      valueKey:
+        !btcLoading && !btcError && btcPrice !== null ? "ready" : "pending",
       icon: "/token icons/Bitcoin.svg",
     },
     {
       id: "epoch",
       label: "Epoch",
       value: timeRemaining,
+      valueKey: "ready",
       isClockIcon: true,
     },
   ]
@@ -309,7 +319,10 @@ export function HeaderTicker({
                   {metric.label}
                 </span>
                 <span className="font-mono text-sm tabular-nums text-[#F7931A]">
-                  {metric.value}
+                  <AnimatedTickerText
+                    key={`${metric.id}-${metric.valueKey ?? "value"}`}
+                    value={metric.value}
+                  />
                 </span>
               </div>
             </div>

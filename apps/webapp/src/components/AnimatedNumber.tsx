@@ -45,6 +45,7 @@ export function AnimatedNumber({
   minFractionDigits = 2,
   maxFractionDigits = 2,
   initialValue = 0,
+  animateOnMount = true,
 }: {
   value: number
   prefix?: string
@@ -52,34 +53,54 @@ export function AnimatedNumber({
   minFractionDigits?: number
   maxFractionDigits?: number
   initialValue?: number
+  animateOnMount?: boolean
 }) {
-  const [displayString, setDisplayString] = useState(() => {
-    return initialValue.toLocaleString("en-US", {
+  const formatValue = (n: number) =>
+    n.toLocaleString("en-US", {
       minimumFractionDigits: minFractionDigits,
       maximumFractionDigits: maxFractionDigits,
     })
-  })
+
+  return (
+    <AnimatedTickerText
+      value={formatValue(value)}
+      initialValue={formatValue(initialValue)}
+      prefix={prefix}
+      suffix={suffix}
+      animateOnMount={animateOnMount}
+    />
+  )
+}
+
+export function AnimatedTickerText({
+  value,
+  prefix = "",
+  suffix = "",
+  initialValue,
+  animateOnMount = false,
+}: {
+  value: string
+  prefix?: string
+  suffix?: string
+  initialValue?: string
+  animateOnMount?: boolean
+}) {
+  const [displayString, setDisplayString] = useState(() =>
+    animateOnMount ? (initialValue ?? value.replace(/[0-9]/g, "0")) : value,
+  )
 
   useEffect(() => {
-    const formatOptions = {
-      minimumFractionDigits: minFractionDigits,
-      maximumFractionDigits: maxFractionDigits,
-    }
-    const targetString = value.toLocaleString("en-US", formatOptions)
-
-    if (targetString.length !== displayString.length) {
-      // Structure changed (e.g. 9.99 -> 10.00), zero-fill target structure
-      const zeroedString = targetString.replace(/[0-9]/g, "0")
-      setDisplayString(zeroedString)
-
+    if (value.length !== displayString.length) {
+      // Structure changed (e.g. 9.99 -> 10.00), zero-fill target structure.
+      setDisplayString(value.replace(/[0-9]/g, "0"))
       const timer = setTimeout(() => {
-        setDisplayString(targetString)
+        setDisplayString(value)
       }, 50)
       return () => clearTimeout(timer)
     }
 
-    setDisplayString(targetString)
-  }, [value, minFractionDigits, maxFractionDigits])
+    setDisplayString(value)
+  }, [value, displayString.length])
 
   const chars = displayString.split("")
 
