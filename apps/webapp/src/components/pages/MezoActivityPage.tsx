@@ -56,7 +56,7 @@ export default function MezoActivityPage() {
       <SpringIn delay={0} variant="card">
         <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-6">
           <h1 className="font-mono text-2xl text-[var(--content-primary)] md:text-3xl">
-            mezo global activity
+            global activity
           </h1>
           <p className="mt-2 text-sm text-[var(--content-secondary)]">
             Live feed for veMEZO locks, BTC boosts, and lock extensions.
@@ -118,45 +118,44 @@ export default function MezoActivityPage() {
 
           {!isLoading &&
             !isError &&
-            data.map((item) => (
-              <div
-                key={item.id}
-                className="grid grid-cols-[1.7fr_0.9fr_0.9fr_1fr_0.8fr] gap-3 border-b border-[var(--border)] px-4 py-3 text-sm text-[var(--content-primary)] last:border-b-0"
-              >
-                <div className="min-w-0">
-                  <p className="truncate">{actionLabel(item)}</p>
-                  <p className="truncate text-xs text-[var(--content-tertiary)]">
-                    {item.actorAddress ?? "unknown actor"}
-                  </p>
-                </div>
-                <span className="text-[var(--content-secondary)]">
-                  {formatCompactAmount(item.amount)}
-                </span>
-                <span className="text-[var(--content-secondary)]">
-                  {item.tokenId?.toString() ?? "-"}
-                </span>
-                <div className="flex items-center gap-2">
-                  <span className="rounded border border-[var(--border)] px-1.5 py-0.5 text-xs text-[var(--content-secondary)]">
-                    {item.source}
+            data.map((item, index) => (
+              <SpringIn key={item.id} delay={index + 3} variant="card-subtle">
+                <div className="grid grid-cols-[1.7fr_0.9fr_0.9fr_1fr_0.8fr] gap-3 border-b border-[var(--border)] px-4 py-3 text-sm text-[var(--content-primary)] last:border-b-0">
+                  <div className="min-w-0">
+                    <p className="truncate">{actionLabel(item)}</p>
+                    <p className="truncate text-xs text-[var(--content-tertiary)]">
+                      {item.actorAddress ?? "unknown actor"}
+                    </p>
+                  </div>
+                  <span className="text-[var(--content-secondary)]">
+                    {formatCompactAmount(item.amount)}
                   </span>
-                  <a
-                    href={item.explorerUrl ?? `https://explorer.mezo.org/tx/${item.txHash}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-xs text-[#F7931A] no-underline hover:underline"
-                  >
-                    tx
-                  </a>
+                  <span className="text-[var(--content-secondary)]">
+                    {item.tokenId?.toString() ?? "-"}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="rounded border border-[var(--border)] px-1.5 py-0.5 text-xs text-[var(--content-secondary)]">
+                      {item.source}
+                    </span>
+                    <a
+                      href={item.explorerUrl ?? `https://explorer.mezo.org/tx/${item.txHash}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-[#F7931A] no-underline hover:underline"
+                    >
+                      tx
+                    </a>
+                  </div>
+                  <span className="text-xs text-[var(--content-tertiary)]">
+                    {formatRelativeTime(item.timestamp)}
+                  </span>
                 </div>
-                <span className="text-xs text-[var(--content-tertiary)]">
-                  {formatRelativeTime(item.timestamp)}
-                </span>
-              </div>
+              </SpringIn>
             ))}
         </div>
       </SpringIn>
 
-      <div>
+      <SpringIn delay={4} variant="card-subtle">
         <button
           type="button"
           disabled={!nextCursorString || isFetching}
@@ -165,7 +164,7 @@ export default function MezoActivityPage() {
         >
           {isFetching ? "Loading..." : "Load More"}
         </button>
-      </div>
+      </SpringIn>
     </div>
   )
 }

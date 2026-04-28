@@ -3,15 +3,18 @@ import { getAppUrl, getOgImageUrl } from "@/utils/seo"
 import dynamic from "next/dynamic"
 import Head from "next/head"
 
-const MezoActivityPage = dynamic(() => import("@/components/pages/MezoActivityPage"), {
-  ssr: false,
-  loading: () => <InitialLoader />,
-})
+const MezoActivityPage = dynamic(
+  () => import("@/components/pages/MezoActivityPage"),
+  {
+    ssr: false,
+    loading: () => <InitialLoader />,
+  },
+)
 
-export default function MezoActivity() {
+export default function Activity() {
   const ogImageUrl = getOgImageUrl()
-  const pageUrl = getAppUrl("/mezo-activity")
-  const title = "Mezo Activity | Matchbox"
+  const pageUrl = getAppUrl("/activity")
+  const title = "Activity | Matchbox"
   const description =
     "Global activity feed for veMEZO lock creation, BTC boost actions, and veMEZO lock extensions."
 

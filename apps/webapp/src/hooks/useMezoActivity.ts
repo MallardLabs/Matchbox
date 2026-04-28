@@ -48,18 +48,18 @@ export function useMezoActivity({
   const network = NETWORK_BY_CHAIN[chainId]
 
   const query = useQuery({
-    queryKey: ["mezo-activity", network, cursor, limit],
+    queryKey: ["activity", network, cursor, limit],
     enabled: isNetworkReady && !!network,
     queryFn: async () => {
       const params = new URLSearchParams()
       if (network) params.set("network", network)
       params.set("limit", String(limit))
       if (cursor) params.set("cursor", cursor)
-      const response = await fetch(`/api/mezo-activity?${params.toString()}`, {
+      const response = await fetch(`/api/activity?${params.toString()}`, {
         cache: "no-store",
       })
       if (!response.ok) {
-        throw new Error(`Failed to fetch mezo activity: ${response.status}`)
+        throw new Error(`Failed to fetch activity: ${response.status}`)
       }
       const json = (await response.json()) as MezoActivityApiResponse
       if (!json.success) throw new Error("Activity API reported failure")

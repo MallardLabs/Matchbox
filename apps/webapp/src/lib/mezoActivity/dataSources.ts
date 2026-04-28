@@ -145,8 +145,9 @@ async function fetchSubgraphLocks(
   chainId: SupportedChainId,
   limit: number,
 ): Promise<MezoActivityItem[]> {
-  const endpoint = getGoldskyUrl(chainId)
-  const query = `
+  try {
+    const endpoint = getGoldskyUrl(chainId)
+    const query = `
     query RecentStakes($limit: Int!) {
       stakes(first: $limit, orderBy: initializedAt, orderDirection: desc) {
         id
@@ -160,60 +161,67 @@ async function fetchSubgraphLocks(
       }
     }
   `
-  const response = await fetch(endpoint, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ query, variables: { limit } }),
-  })
-  if (!response.ok) return []
-  const json = (await response.json()) as StakeResponse
-  const stakes = json.data?.stakes ?? []
-  return stakes.flatMap((stake) => {
-    const txHash = stake.transactionHash
-    if (!txHash || !/^0x[a-fA-F0-9]{64}$/.test(txHash)) {
-      return []
-    }
-    const actorAddress = normalizeAddress(stake.staker)
-    const parsedBlockNumber =
-      stake.blockNumber && /^-?\d+$/.test(stake.blockNumber)
-        ? BigInt(stake.blockNumber)
-        : 0n
-    const parsedLogIndex =
-      stake.logIndex && /^-?\d+$/.test(stake.logIndex)
-        ? Number.parseInt(stake.logIndex, 10)
-        : -1
-    return {
-      id: `subgraph-lock-${stake.id}-${stake.initializedAt}`,
-      blockNumber: parsedBlockNumber,
-      timestamp: Number(stake.initializedAt),
-      txHash: txHash as Hash,
-      ...(actorAddress ? { actorAddress } : {}),
-      amount: BigInt(stake.amount),
-      duration: BigInt(stake.lockDuration),
-      actionType: "lockCreated" as const,
-      boostContext: "unknown" as const,
-      source: "subgraph" as const,
-      logIndex: parsedLogIndex,
-    }
-  })
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query, variables: { limit } }),
+    })
+    if (!response.ok) return []
+    const json = (await response.json()) as StakeResponse
+    const stakes = json.data?.stakes ?? []
+    return stakes.flatMap((stake) => {
+      const txHash = stake.transactionHash
+      if (!txHash || !/^0x[a-fA-F0-9]{64}$/.test(txHash)) {
+        return []
+      }
+      const actorAddress = normalizeAddress(stake.staker)
+      const parsedBlockNumber =
+        stake.blockNumber && /^-?\d+$/.test(stake.blockNumber)
+          ? BigInt(stake.blockNumber)
+          : 0n
+      const parsedLogIndex =
+        stake.logIndex && /^-?\d+$/.test(stake.logIndex)
+          ? Number.parseInt(stake.logIndex, 10)
+          : -1
+      return {
+        id: `subgraph-lock-${stake.id}-${stake.initializedAt}`,
+        blockNumber: parsedBlockNumber,
+        timestamp: Number(stake.initializedAt),
+        txHash: txHash as Hash,
+        ...(actorAddress ? { actorAddress } : {}),
+        amount: BigInt(stake.amount),
+        duration: BigInt(stake.lockDuration),
+        actionType: "lockCreated" as const,
+        boostContext: "unknown" as const,
+        source: "subgraph" as const,
+        logIndex: parsedLogIndex,
+      }
+    })
+  } catch {
+    return []
+  }
 }
 
 async function fetchRpcActivity(options: SourceOptions): Promise<MezoActivityItem[]> {
-  const rpcUrl = getRpcUrl(options.chainId)
-  const contracts = getContractConfig(options.chainId)
-  const watchedAddresses = [
-    contracts.veMEZO.address,
-    contracts.boostVoter.address,
-    contracts.poolsVoter.address,
-  ].map((value) => getAddress(value))
+  try {
+    if (options.toBlock <= 0n) {
+      return []
+    }
+    const rpcUrl = getRpcUrl(options.chainId)
+    const contracts = getContractConfig(options.chainId)
+    const watchedAddresses = [
+      contracts.veMEZO.address,
+      contracts.boostVoter.address,
+      contracts.poolsVoter.address,
+    ].map((value) => getAddress(value))
 
-  const logs = await rpcRequest<JsonRpcLog[]>(rpcUrl, "eth_getLogs", [
-    {
-      address: watchedAddresses,
-      fromBlock: asHex(options.fromBlock),
-      toBlock: asHex(options.toBlock),
-    },
-  ])
+    const logs = await rpcRequest<JsonRpcLog[]>(rpcUrl, "eth_getLogs", [
+      {
+        address: watchedAddresses,
+        fromBlock: asHex(options.fromBlock),
+        toBlock: asHex(options.toBlock),
+      },
+    ])
 
   const uniqueTxHashes = [...new Set(logs.map((log) => log.transactionHash.toLowerCase()))]
   const txByHash = new Map<string, JsonRpcTx>()
@@ -316,7 +324,10 @@ async function fetchRpcActivity(options: SourceOptions): Promise<MezoActivityIte
       logIndex,
     })
   }
-  return items
+    return items
+  } catch {
+    return []
+  }
 }
 
 export async function fetchMezoActivity(options: SourceOptions): Promise<{

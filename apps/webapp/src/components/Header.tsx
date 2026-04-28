@@ -159,7 +159,7 @@ const navItems: NavItem[] = [
     label: "more",
     children: [
       { href: "/how-to", label: "how2" },
-      { href: "/mezo-activity", label: "activity" },
+      { href: "/activity", label: "activity" },
     ],
   },
 ]
