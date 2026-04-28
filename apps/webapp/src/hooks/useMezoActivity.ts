@@ -10,7 +10,7 @@ import { useQuery } from "@tanstack/react-query"
 import { useMemo } from "react"
 
 type UseMezoActivityParams = {
-  filter: MezoActivityFilter
+  filters: MezoActivityFilter[]
   fromTimestamp?: number
   toTimestamp?: number
   cursor?: string
@@ -24,25 +24,24 @@ const NETWORK_BY_CHAIN: Record<number, "mainnet" | "testnet"> = {
 
 function filterItems(
   items: MezoActivityItem[],
-  filter: MezoActivityFilter,
+  filters: MezoActivityFilter[],
 ): MezoActivityItem[] {
-  switch (filter) {
-    case "locks":
-      return items.filter((item) => item.actionType === "lockCreated")
-    case "extensions":
-      return items.filter((item) => item.actionType === "lockExtended")
-    case "boostMatchbox":
-      return items.filter((item) => item.boostContext === "matchboxGaugeBoost")
-    case "boostPair":
-      return items.filter((item) => item.boostContext === "mezoVeBtcPairBoost")
-    case "all":
-    default:
-      return items
-  }
+  const selected = new Set(filters)
+  return items.filter((item) => {
+    if (item.actionType === "lockCreated") return selected.has("locks")
+    if (item.actionType === "lockExtended") return selected.has("extensions")
+    if (item.boostContext === "matchboxGaugeBoost") {
+      return selected.has("boostMatchbox")
+    }
+    if (item.boostContext === "mezoVeBtcPairBoost") {
+      return selected.has("boostPair")
+    }
+    return selected.has("boostMatchbox") || selected.has("boostPair")
+  })
 }
 
 export function useMezoActivity({
-  filter,
+  filters,
   fromTimestamp,
   toTimestamp,
   cursor,
@@ -79,12 +78,13 @@ export function useMezoActivity({
   })
 
   const filteredData = useMemo(() => {
-    return filterItems(query.data?.data ?? [], filter)
-  }, [query.data, filter])
+    return filterItems(query.data?.data ?? [], filters)
+  }, [query.data, filters])
 
   return {
     ...query,
     data: filteredData,
     nextCursor: query.data?.nextCursor ?? null,
+    meta: query.data?.meta,
   }
 }

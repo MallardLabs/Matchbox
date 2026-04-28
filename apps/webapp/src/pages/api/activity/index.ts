@@ -74,7 +74,7 @@ export default async function handler(request: Request): Promise<Response> {
   const chainId = parseChainId(url.searchParams.get("network"))
   const limit = Math.min(
     Math.max(Number(url.searchParams.get("limit") ?? "50"), 1),
-    200,
+    1000,
   )
   const cursor = parseCursor(url.searchParams.get("cursor"))
   const now = Math.floor(Date.now() / 1000)
@@ -106,6 +106,17 @@ export default async function handler(request: Request): Promise<Response> {
         : {}),
     })),
     nextCursor: result.nextCursor,
+    meta: {
+      coverage: {
+        locks: "indexed",
+        boosts: "recentRpcOnly",
+        extensions: "recentRpcOnly",
+      },
+      range: {
+        fromTimestamp,
+        toTimestamp,
+      },
+    },
   }
 
   return new Response(JSON.stringify(response), {

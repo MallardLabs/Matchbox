@@ -330,7 +330,11 @@ async function fetchRpcActivity(options: SourceOptions): Promise<MezoActivityIte
       logIndex,
     })
   }
-    return items
+    return items.filter(
+      (item) =>
+        item.timestamp >= options.fromTimestamp &&
+        item.timestamp <= options.toTimestamp,
+    )
   } catch {
     return []
   }

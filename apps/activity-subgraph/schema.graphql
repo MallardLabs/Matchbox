@@ -1,0 +1,55 @@
+enum ActivityActionType {
+  LOCK_CREATED
+  LOCK_AMOUNT_INCREASED
+  LOCK_EXTENDED
+  BOOST_VOTE
+  BOOST_POKE
+  PAIR_CREATED
+  GAUGE_CREATED
+}
+
+enum BoostContext {
+  MATCHBOX_GAUGE_BOOST
+  MEZO_VEBTC_PAIR_BOOST
+  UNKNOWN
+}
+
+enum ActivitySource {
+  VOTING_ESCROW
+  BOOST_VOTER
+  POOLS_VOTER
+}
+
+type ActivityEvent @entity(immutable: true) {
+  id: ID!
+  actionType: ActivityActionType!
+  boostContext: BoostContext!
+  source: ActivitySource!
+
+  txHash: Bytes!
+  logIndex: BigInt!
+  blockNumber: BigInt!
+  timestamp: BigInt!
+
+  actor: Bytes
+  tokenId: BigInt
+  amount: BigInt
+  duration: BigInt
+  gauge: Bytes
+  pool: Bytes
+  rewardContract: Bytes
+  boostableTokenId: BigInt
+  boost: BigInt
+  weight: BigInt
+  totalWeight: BigInt
+  contractAddress: Bytes!
+}
+
+type ActivityStats @entity(immutable: false) {
+  id: ID!
+  totalEvents: BigInt!
+  locks: BigInt!
+  boosts: BigInt!
+  extensions: BigInt!
+  lastUpdatedAt: BigInt!
+}

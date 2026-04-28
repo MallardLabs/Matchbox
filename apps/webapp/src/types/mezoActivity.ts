@@ -41,9 +41,26 @@ export type MezoActivityResponse = {
   success: boolean
   data: MezoActivityItem[]
   nextCursor: MezoActivityCursor | null
+  meta?: MezoActivityMeta
 }
 
-export type MezoActivityFilter = "all" | "locks" | "boostMatchbox" | "boostPair" | "extensions"
+export type MezoActivityFilter =
+  | "locks"
+  | "boostMatchbox"
+  | "boostPair"
+  | "extensions"
+
+export type MezoActivityMeta = {
+  coverage: {
+    locks: "indexed"
+    boosts: "recentRpcOnly"
+    extensions: "recentRpcOnly"
+  }
+  range: {
+    fromTimestamp: number
+    toTimestamp: number
+  }
+}
 
 export type MezoActivityApiItem = Omit<
   MezoActivityItem,
@@ -60,4 +77,5 @@ export type MezoActivityApiResponse = {
   success: boolean
   data: MezoActivityApiItem[]
   nextCursor: MezoActivityCursor | null
+  meta?: MezoActivityMeta
 }

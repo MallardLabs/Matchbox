@@ -1,0 +1,30 @@
+[
+  {
+    "anonymous": false,
+    "inputs": [
+      { "indexed": true, "internalType": "address", "name": "poolFactory", "type": "address" },
+      { "indexed": true, "internalType": "address", "name": "votingRewardsFactory", "type": "address" },
+      { "indexed": true, "internalType": "address", "name": "gaugeFactory", "type": "address" },
+      { "indexed": false, "internalType": "address", "name": "pool", "type": "address" },
+      { "indexed": false, "internalType": "address", "name": "bribeVotingReward", "type": "address" },
+      { "indexed": false, "internalType": "address", "name": "feeVotingReward", "type": "address" },
+      { "indexed": false, "internalType": "address", "name": "gauge", "type": "address" },
+      { "indexed": false, "internalType": "address", "name": "creator", "type": "address" }
+    ],
+    "name": "GaugeCreated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      { "indexed": true, "internalType": "address", "name": "voter", "type": "address" },
+      { "indexed": true, "internalType": "address", "name": "pool", "type": "address" },
+      { "indexed": true, "internalType": "uint256", "name": "tokenId", "type": "uint256" },
+      { "indexed": false, "internalType": "uint256", "name": "weight", "type": "uint256" },
+      { "indexed": false, "internalType": "uint256", "name": "totalWeight", "type": "uint256" },
+      { "indexed": false, "internalType": "uint256", "name": "timestamp", "type": "uint256" }
+    ],
+    "name": "Voted",
+    "type": "event"
+  }
+]

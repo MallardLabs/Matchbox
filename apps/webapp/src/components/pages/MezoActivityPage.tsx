@@ -1,15 +1,20 @@
 import { SpringIn } from "@/components/SpringIn"
 import { useMezoActivity } from "@/hooks/useMezoActivity"
-import type { MezoActivityFilter, MezoActivityItem } from "@/types/mezoActivity"
+import {
+  type MezoActivityApiResponse,
+  type MezoActivityFilter,
+  type MezoActivityItem,
+} from "@/types/mezoActivity"
 import { useMemo, useState } from "react"
 
 const FILTERS: Array<{ key: MezoActivityFilter; label: string }> = [
-  { key: "all", label: "All" },
   { key: "locks", label: "Locks" },
   { key: "boostMatchbox", label: "Boost (Matchbox)" },
   { key: "boostPair", label: "Boost (Mezo Pairing)" },
   { key: "extensions", label: "Extensions" },
 ]
+
+const ALL_FILTERS = FILTERS.map((filter) => filter.key)
 
 const now = Math.floor(Date.now() / 1000)
 const DEFAULT_FROM = now - 30 * 86_400
@@ -51,23 +56,110 @@ function actionLabel(item: MezoActivityItem): string {
   return "Boost Vote"
 }
 
+function itemMatchesFilters(
+  item: Pick<MezoActivityItem, "actionType" | "boostContext">,
+  filters: MezoActivityFilter[],
+): boolean {
+  const selected = new Set(filters)
+  if (item.actionType === "lockCreated") return selected.has("locks")
+  if (item.actionType === "lockExtended") return selected.has("extensions")
+  if (item.boostContext === "matchboxGaugeBoost") {
+    return selected.has("boostMatchbox")
+  }
+  if (item.boostContext === "mezoVeBtcPairBoost") return selected.has("boostPair")
+  return selected.has("boostMatchbox") || selected.has("boostPair")
+}
+
+function csvEscape(value: string | number | bigint | undefined): string {
+  const raw = value === undefined ? "" : value.toString()
+  return `"${raw.replaceAll('"', '""')}"`
+}
+
 export default function MezoActivityPage() {
-  const [filter, setFilter] = useState<MezoActivityFilter>("all")
+  const [filters, setFilters] = useState<MezoActivityFilter[]>(ALL_FILTERS)
   const [fromDate, setFromDate] = useState(() => toDateInputValue(DEFAULT_FROM))
   const [toDate, setToDate] = useState(() => toDateInputValue(now))
   const [cursor, setCursor] = useState<string | undefined>()
+  const [isExporting, setIsExporting] = useState(false)
   const fromTimestamp = useMemo(() => fromDateInputValue(fromDate), [fromDate])
   const toTimestamp = useMemo(() => fromDateInputValue(toDate, true), [toDate])
   const { data, isLoading, isError, error, nextCursor, isFetching } = useMezoActivity(
     cursor
-      ? { filter, fromTimestamp, toTimestamp, cursor, limit: 50 }
-      : { filter, fromTimestamp, toTimestamp, limit: 50 },
+      ? { filters, fromTimestamp, toTimestamp, cursor, limit: 50 }
+      : { filters, fromTimestamp, toTimestamp, limit: 50 },
   )
 
   const nextCursorString = useMemo(
     () => (nextCursor ? JSON.stringify(nextCursor) : undefined),
     [nextCursor],
   )
+
+  const toggleFilter = (filter: MezoActivityFilter) => {
+    setFilters((current) => {
+      if (current.includes(filter)) {
+        return current.filter((item) => item !== filter)
+      }
+      return [...current, filter]
+    })
+    setCursor(undefined)
+  }
+
+  const exportCsv = async () => {
+    setIsExporting(true)
+    try {
+      const params = new URLSearchParams({
+        from: fromTimestamp.toString(),
+        to: toTimestamp.toString(),
+        limit: "1000",
+      })
+      const response = await fetch(`/api/activity?${params.toString()}`)
+      if (!response.ok) throw new Error(`Export failed: ${response.status}`)
+      const json = (await response.json()) as MezoActivityApiResponse
+      const rows = json.data.filter((item) => itemMatchesFilters(item, filters))
+      const header = [
+        "timestamp",
+        "actionType",
+        "boostContext",
+        "source",
+        "actorAddress",
+        "tokenId",
+        "amount",
+        "duration",
+        "gaugeAddress",
+        "txHash",
+        "explorerUrl",
+      ]
+      const csv = [
+        header.join(","),
+        ...rows.map((item) =>
+          [
+            csvEscape(item.timestamp),
+            csvEscape(item.actionType),
+            csvEscape(item.boostContext),
+            csvEscape(item.source),
+            csvEscape(item.actorAddress),
+            csvEscape(item.tokenId),
+            csvEscape(item.amount),
+            csvEscape(item.duration),
+            csvEscape(item.gaugeAddress),
+            csvEscape(item.txHash),
+            csvEscape(item.explorerUrl),
+          ].join(","),
+        ),
+      ].join("\n")
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8" })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement("a")
+      link.href = url
+      link.download = `matchbox-activity-${fromDate}-to-${toDate}.csv`
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(url)
+    } finally {
+      setIsExporting(false)
+    }
+  }
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-8 md:py-12">
@@ -86,26 +178,34 @@ export default function MezoActivityPage() {
       <SpringIn delay={1} variant="card">
         <div className="flex flex-col gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
           <div className="flex flex-wrap gap-2">
-          {FILTERS.map((f) => {
-            const active = f.key === filter
-            return (
-              <button
-                key={f.key}
-                type="button"
-                onClick={() => {
-                  setFilter(f.key)
-                  setCursor(undefined)
-                }}
-                className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
-                  active
-                    ? "border-[#F7931A] bg-[#F7931A]/10 text-[#F7931A]"
-                    : "border-[var(--border)] text-[var(--content-secondary)] hover:text-[var(--content-primary)]"
-                }`}
-              >
-                {f.label}
-              </button>
-            )
-          })}
+            {FILTERS.map((f) => {
+              const active = filters.includes(f.key)
+              return (
+                <button
+                  key={f.key}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => toggleFilter(f.key)}
+                  className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                    active
+                      ? "border-[#F7931A] bg-[#F7931A]/10 text-[#F7931A]"
+                      : "border-[var(--border)] text-[var(--content-secondary)] hover:text-[var(--content-primary)]"
+                  }`}
+                >
+                  <span
+                    className={`flex h-3.5 w-3.5 items-center justify-center rounded-sm border text-[9px] leading-none ${
+                      active
+                        ? "border-[#F7931A] bg-[#F7931A] text-black"
+                        : "border-[var(--content-muted)] text-transparent"
+                    }`}
+                    aria-hidden="true"
+                  >
+                    ✓
+                  </span>
+                  {f.label}
+                </button>
+              )
+            })}
           </div>
           <div className="flex flex-wrap items-center gap-3 text-xs text-[var(--content-secondary)]">
             <label className="flex items-center gap-2">
@@ -134,7 +234,20 @@ export default function MezoActivityPage() {
                 className="rounded-lg border border-[var(--border)] bg-[var(--surface-secondary)] px-2 py-1 font-mono text-[var(--content-primary)]"
               />
             </label>
+            <button
+              type="button"
+              onClick={exportCsv}
+              disabled={isExporting || filters.length === 0}
+              className="rounded-lg border border-[var(--border)] px-3 py-1 font-mono text-xs text-[var(--content-secondary)] transition-colors hover:text-[#F7931A] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isExporting ? "Exporting..." : "Export CSV"}
+            </button>
           </div>
+          <p className="text-xs leading-relaxed text-[var(--content-tertiary)]">
+            Locks use indexed Goldsky stake data. Boosts and extensions will be
+            fully historical once the dedicated Matchbox Activity Goldsky subgraph
+            is deployed; until then, only recent RPC fallback events may appear.
+          </p>
         </div>
       </SpringIn>
 
