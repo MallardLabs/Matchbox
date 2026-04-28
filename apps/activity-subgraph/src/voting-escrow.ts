@@ -1,10 +1,24 @@
-import { Deposit } from "../generated/VeMEZO/VotingEscrow"
+import {
+  Deposit,
+  LockPermanent,
+  Transfer,
+  UnlockPermanent,
+  UpdateBoost,
+  Withdraw,
+} from "../generated/VeMEZO/VotingEscrow"
 import {
   baseActivity,
+  getOrCreateAccount,
+  getOrCreateLock,
   LOCK_AMOUNT_INCREASED,
   LOCK_CREATED,
   LOCK_EXTENDED,
+  LOCK_PERMANENT,
+  LOCK_PERMANENT_UNLOCKED,
+  LOCK_WITHDRAWN,
+  ONE,
   saveActivity,
+  ZERO,
   UNKNOWN,
   VOTING_ESCROW,
 } from "./helpers"
@@ -31,4 +45,79 @@ export function handleVotingEscrowDeposit(event: Deposit): void {
   activity.amount = event.params.value
   activity.duration = event.params.locktime
   saveActivity(activity)
+
+  const account = getOrCreateAccount(event.params.provider, event.block.timestamp)
+  if (actionType == LOCK_CREATED) {
+    account.lockCount = account.lockCount.plus(ONE)
+  }
+  account.save()
+
+  const lock = getOrCreateLock(event.address, event.params.tokenId)
+  lock.owner = event.params.provider
+  if (actionType == LOCK_CREATED) {
+    lock.createdAt = event.block.timestamp
+  }
+  if (actionType == LOCK_EXTENDED) {
+    lock.lastExtendedAt = event.block.timestamp
+  }
+  lock.amount = event.params.value
+  lock.unlockAt = event.params.locktime
+  lock.activityCount = lock.activityCount.plus(ONE)
+  lock.save()
+}
+
+export function handleLockPermanent(event: LockPermanent): void {
+  const activity = baseActivity(event, LOCK_PERMANENT, UNKNOWN, VOTING_ESCROW)
+  activity.actor = event.params._owner
+  activity.tokenId = event.params._tokenId
+  activity.amount = event.params.amount
+  saveActivity(activity)
+
+  const lock = getOrCreateLock(event.address, event.params._tokenId)
+  lock.owner = event.params._owner
+  lock.isPermanent = true
+  lock.activityCount = lock.activityCount.plus(ONE)
+  lock.save()
+}
+
+export function handleUnlockPermanent(event: UnlockPermanent): void {
+  const activity = baseActivity(event, LOCK_PERMANENT_UNLOCKED, UNKNOWN, VOTING_ESCROW)
+  activity.actor = event.params._owner
+  activity.tokenId = event.params._tokenId
+  activity.amount = event.params.amount
+  saveActivity(activity)
+
+  const lock = getOrCreateLock(event.address, event.params._tokenId)
+  lock.owner = event.params._owner
+  lock.isPermanent = false
+  lock.activityCount = lock.activityCount.plus(ONE)
+  lock.save()
+}
+
+export function handleWithdraw(event: Withdraw): void {
+  const activity = baseActivity(event, LOCK_WITHDRAWN, UNKNOWN, VOTING_ESCROW)
+  activity.actor = event.params.provider
+  activity.tokenId = event.params.tokenId
+  activity.amount = event.params.value
+  saveActivity(activity)
+
+  const lock = getOrCreateLock(event.address, event.params.tokenId)
+  lock.owner = event.params.provider
+  lock.amount = ZERO
+  lock.withdrawnAt = event.block.timestamp
+  lock.isWithdrawn = true
+  lock.activityCount = lock.activityCount.plus(ONE)
+  lock.save()
+}
+
+export function handleTransfer(event: Transfer): void {
+  const lock = getOrCreateLock(event.address, event.params.tokenId)
+  lock.owner = event.params.to
+  lock.save()
+}
+
+export function handleUpdateBoost(event: UpdateBoost): void {
+  const lock = getOrCreateLock(event.address, event.params._tokenId)
+  lock.boost = event.params._boost
+  lock.save()
 }

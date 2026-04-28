@@ -5,8 +5,11 @@
   "scripts": {
     "codegen": "graph codegen",
     "build": "graph build",
-    "deploy:mainnet": "goldsky subgraph deploy matchbox-activity-mezo/1.0.0 --path .",
-    "deploy:testnet": "goldsky subgraph deploy matchbox-activity-mezo-testnet/1.0.0 --path . --manifest subgraph.testnet.yaml"
+    "build:mezo-testnet": "graph build testnet/subgraph.yaml",
+    "deploy:mezo": "goldsky subgraph deploy matchbox-explorer/1.0.0 --path .",
+    "deploy:mezo-testnet": "pnpm run build:mezo-testnet && goldsky subgraph deploy matchbox-explorer-testnet/1.0.0 --path .",
+    "deploy:mainnet": "pnpm run deploy:mezo",
+    "deploy:testnet": "pnpm run deploy:mezo-testnet"
   },
   "dependencies": {
     "@graphprotocol/graph-cli": "^0.97.1",

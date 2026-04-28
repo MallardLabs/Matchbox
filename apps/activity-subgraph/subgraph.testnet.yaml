@@ -22,6 +22,16 @@ dataSources:
       eventHandlers:
         - event: Deposit(indexed address,indexed uint256,indexed uint8,uint256,uint256,uint256)
           handler: handleVotingEscrowDeposit
+        - event: LockPermanent(indexed address,indexed uint256,uint256,uint256)
+          handler: handleLockPermanent
+        - event: UnlockPermanent(indexed address,indexed uint256,uint256,uint256)
+          handler: handleUnlockPermanent
+        - event: Withdraw(indexed address,indexed uint256,uint256,uint256)
+          handler: handleWithdraw
+        - event: Transfer(indexed address,indexed address,indexed uint256)
+          handler: handleTransfer
+        - event: UpdateBoost(indexed uint256,uint256)
+          handler: handleUpdateBoost
       file: ./src/voting-escrow.ts
   - kind: ethereum
     name: BoostVoter
@@ -41,12 +51,26 @@ dataSources:
         - name: BoostVoter
           file: ./abis/BoostVoter.json
       eventHandlers:
+        - event: Abstained(indexed address,indexed address,indexed uint256,uint256,uint256,uint256)
+          handler: handleBoostAbstained
         - event: GaugeCreated(indexed address,indexed address,indexed address)
           handler: handleBoostGaugeCreated
         - event: Voted(indexed address,indexed address,indexed uint256,uint256,uint256,uint256)
           handler: handleBoostVoted
         - event: BoostPoked(indexed uint256,uint256)
           handler: handleBoostPoked
+        - event: BoostableTokenBurned(indexed uint256,indexed address)
+          handler: handleBoostableTokenBurned
+        - event: BribesAdded(indexed address,indexed address,uint256,address)
+          handler: handleBoostBribesAdded
+        - event: DistributeReward(indexed address,indexed address,uint256)
+          handler: handleBoostDistributeReward
+        - event: GaugeKilled(indexed address)
+          handler: handleBoostGaugeKilled
+        - event: GaugeRevived(indexed address)
+          handler: handleBoostGaugeRevived
+        - event: NotifyReward(indexed address,indexed address,uint256)
+          handler: handleBoostNotifyReward
       file: ./src/boost-voter.ts
   - kind: ethereum
     name: PoolsVoter
@@ -66,8 +90,18 @@ dataSources:
         - name: PoolsVoter
           file: ./abis/PoolsVoter.json
       eventHandlers:
+        - event: Abstained(indexed address,indexed address,indexed uint256,uint256,uint256,uint256)
+          handler: handlePoolAbstained
         - event: GaugeCreated(indexed address,indexed address,indexed address,address,address,address,address,address)
           handler: handlePoolGaugeCreated
         - event: Voted(indexed address,indexed address,indexed uint256,uint256,uint256,uint256)
           handler: handlePoolVoted
+        - event: DistributeReward(indexed address,indexed address,uint256)
+          handler: handlePoolDistributeReward
+        - event: GaugeKilled(indexed address)
+          handler: handlePoolGaugeKilled
+        - event: GaugeRevived(indexed address)
+          handler: handlePoolGaugeRevived
+        - event: NotifyReward(indexed address,indexed address,uint256)
+          handler: handlePoolNotifyReward
       file: ./src/pools-voter.ts

@@ -2,10 +2,22 @@ import type { Address, Hash } from "viem"
 
 export type MezoActivityActionType =
   | "lockCreated"
+  | "lockAmountIncreased"
   | "lockExtended"
+  | "lockWithdrawn"
+  | "lockPermanent"
+  | "lockPermanentUnlocked"
   | "boostVote"
+  | "boostAbstain"
   | "boostPoke"
   | "pairCreated"
+  | "gaugeCreated"
+  | "gaugeKilled"
+  | "gaugeRevived"
+  | "boostableTokenBurned"
+  | "incentiveAdded"
+  | "rewardDistributed"
+  | "rewardNotified"
 
 export type MezoBoostContext =
   | "matchboxGaugeBoost"
@@ -53,8 +65,9 @@ export type MezoActivityFilter =
 export type MezoActivityMeta = {
   coverage: {
     locks: "indexed"
-    boosts: "recentRpcOnly"
-    extensions: "recentRpcOnly"
+    boosts: "indexed"
+    extensions: "indexed"
+    incentives: "indexed"
   }
   range: {
     fromTimestamp: number

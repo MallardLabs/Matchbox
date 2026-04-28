@@ -13,8 +13,6 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Methods": "GET, OPTIONS",
 } as const
 
-const DEFAULT_BLOCK_WINDOW = 60_000n
-
 function parseCursor(raw: string | null): MezoActivityCursor | undefined {
   if (!raw) return undefined
   try {
@@ -27,42 +25,9 @@ function parseCursor(raw: string | null): MezoActivityCursor | undefined {
 }
 
 function parseChainId(network: string | null): SupportedChainId {
-  return network === "testnet" ? CHAIN_ID.testnet : CHAIN_ID.mainnet
-}
-
-async function getLatestBlock(rpcUrl: string): Promise<bigint> {
-  try {
-    const response = await fetch(rpcUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        id: "latest-block",
-        method: "eth_blockNumber",
-        params: [],
-      }),
-    })
-    const json = (await response.json()) as { result?: string }
-    if (!json.result) return 0n
-    return BigInt(json.result)
-  } catch {
-    return 0n
-  }
-}
-
-function getRpcUrl(chainId: SupportedChainId) {
-  if (chainId === CHAIN_ID.mainnet) {
-    return (
-      process.env.NEXT_PUBLIC_RPC_MAINNET_URL ??
-      process.env.NEXT_PUBLIC_RPC_URL ??
-      "https://rpc-internal.mezo.org"
-    )
-  }
-  return (
-    process.env.NEXT_PUBLIC_RPC_TESTNET_URL ??
-    process.env.NEXT_PUBLIC_RPC_URL ??
-    "https://rpc.test.mezo.org"
-  )
+  return network === "testnet" || network === "mezo-testnet"
+    ? CHAIN_ID.testnet
+    : CHAIN_ID.mainnet
 }
 
 export default async function handler(request: Request): Promise<Response> {
@@ -83,14 +48,9 @@ export default async function handler(request: Request): Promise<Response> {
     0,
   )
   const toTimestamp = Math.max(Number(url.searchParams.get("to") ?? now), 0)
-  const latestBlock = await getLatestBlock(getRpcUrl(chainId))
-  const fromBlock =
-    latestBlock > DEFAULT_BLOCK_WINDOW ? latestBlock - DEFAULT_BLOCK_WINDOW : 0n
 
   const result = await fetchMezoActivity({
     chainId,
-    fromBlock,
-    toBlock: latestBlock,
     fromTimestamp,
     toTimestamp,
     limit,
@@ -109,8 +69,9 @@ export default async function handler(request: Request): Promise<Response> {
     meta: {
       coverage: {
         locks: "indexed",
-        boosts: "recentRpcOnly",
-        extensions: "recentRpcOnly",
+        boosts: "indexed",
+        extensions: "indexed",
+        incentives: "indexed",
       },
       range: {
         fromTimestamp,

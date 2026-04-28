@@ -2,10 +2,20 @@ enum ActivityActionType {
   LOCK_CREATED
   LOCK_AMOUNT_INCREASED
   LOCK_EXTENDED
+  LOCK_WITHDRAWN
+  LOCK_PERMANENT
+  LOCK_PERMANENT_UNLOCKED
   BOOST_VOTE
+  BOOST_ABSTAIN
   BOOST_POKE
   PAIR_CREATED
   GAUGE_CREATED
+  GAUGE_KILLED
+  GAUGE_REVIVED
+  BOOSTABLE_TOKEN_BURNED
+  INCENTIVE_ADDED
+  REWARD_DISTRIBUTED
+  REWARD_NOTIFIED
 }
 
 enum BoostContext {
@@ -35,14 +45,84 @@ type ActivityEvent @entity(immutable: true) {
   tokenId: BigInt
   amount: BigInt
   duration: BigInt
+  token: Bytes
   gauge: Bytes
   pool: Bytes
   rewardContract: Bytes
+  rewardType: String
   boostableTokenId: BigInt
   boost: BigInt
   weight: BigInt
   totalWeight: BigInt
   contractAddress: Bytes!
+}
+
+type Account @entity(immutable: false) {
+  id: ID!
+  address: Bytes!
+  lockCount: BigInt!
+  voteCount: BigInt!
+  incentiveCount: BigInt!
+  totalIncentiveAmount: BigInt!
+  firstSeenAt: BigInt!
+  lastSeenAt: BigInt!
+}
+
+type LockPosition @entity(immutable: false) {
+  id: ID!
+  tokenId: BigInt!
+  contractAddress: Bytes!
+  owner: Bytes
+  amount: BigInt!
+  unlockAt: BigInt
+  createdAt: BigInt
+  lastExtendedAt: BigInt
+  withdrawnAt: BigInt
+  isPermanent: Boolean!
+  isWithdrawn: Boolean!
+  boost: BigInt
+  activityCount: BigInt!
+}
+
+type Gauge @entity(immutable: false) {
+  id: ID!
+  address: Bytes!
+  boostContext: BoostContext!
+  source: ActivitySource!
+  creator: Bytes
+  pool: Bytes
+  rewardContract: Bytes
+  feeRewardContract: Bytes
+  boostableTokenId: BigInt
+  isAlive: Boolean!
+  createdAt: BigInt
+  killedAt: BigInt
+  revivedAt: BigInt
+  voteCount: BigInt!
+  incentiveCount: BigInt!
+  totalIncentiveAmount: BigInt!
+  lastVoteAt: BigInt
+  lastIncentiveAt: BigInt
+}
+
+type Token @entity(immutable: false) {
+  id: ID!
+  address: Bytes!
+  incentiveCount: BigInt!
+  totalIncentiveAmount: BigInt!
+  firstSeenAt: BigInt!
+  lastSeenAt: BigInt!
+}
+
+type GaugeEpoch @entity(immutable: false) {
+  id: ID!
+  gauge: Gauge!
+  epochStart: BigInt!
+  voteCount: BigInt!
+  incentiveCount: BigInt!
+  totalWeight: BigInt!
+  totalIncentiveAmount: BigInt!
+  lastUpdatedAt: BigInt!
 }
 
 type ActivityStats @entity(immutable: false) {
@@ -51,5 +131,7 @@ type ActivityStats @entity(immutable: false) {
   locks: BigInt!
   boosts: BigInt!
   extensions: BigInt!
+  incentives: BigInt!
+  gauges: BigInt!
   lastUpdatedAt: BigInt!
 }

@@ -27,8 +27,15 @@ function filterItems(
   filters: MezoActivityFilter[],
 ): MezoActivityItem[] {
   const selected = new Set(filters)
+  const lockActions: MezoActivityItem["actionType"][] = [
+    "lockCreated",
+    "lockAmountIncreased",
+    "lockWithdrawn",
+    "lockPermanent",
+    "lockPermanentUnlocked",
+  ]
   return items.filter((item) => {
-    if (item.actionType === "lockCreated") return selected.has("locks")
+    if (lockActions.includes(item.actionType)) return selected.has("locks")
     if (item.actionType === "lockExtended") return selected.has("extensions")
     if (item.boostContext === "matchboxGaugeBoost") {
       return selected.has("boostMatchbox")

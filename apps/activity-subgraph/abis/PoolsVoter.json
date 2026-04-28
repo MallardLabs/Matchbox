@@ -2,6 +2,19 @@
   {
     "anonymous": false,
     "inputs": [
+      { "indexed": true, "internalType": "address", "name": "voter", "type": "address" },
+      { "indexed": true, "internalType": "address", "name": "pool", "type": "address" },
+      { "indexed": true, "internalType": "uint256", "name": "tokenId", "type": "uint256" },
+      { "indexed": false, "internalType": "uint256", "name": "weight", "type": "uint256" },
+      { "indexed": false, "internalType": "uint256", "name": "totalWeight", "type": "uint256" },
+      { "indexed": false, "internalType": "uint256", "name": "timestamp", "type": "uint256" }
+    ],
+    "name": "Abstained",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
       { "indexed": true, "internalType": "address", "name": "poolFactory", "type": "address" },
       { "indexed": true, "internalType": "address", "name": "votingRewardsFactory", "type": "address" },
       { "indexed": true, "internalType": "address", "name": "gaugeFactory", "type": "address" },
@@ -25,6 +38,42 @@
       { "indexed": false, "internalType": "uint256", "name": "timestamp", "type": "uint256" }
     ],
     "name": "Voted",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      { "indexed": true, "internalType": "address", "name": "sender", "type": "address" },
+      { "indexed": true, "internalType": "address", "name": "gauge", "type": "address" },
+      { "indexed": false, "internalType": "uint256", "name": "amount", "type": "uint256" }
+    ],
+    "name": "DistributeReward",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      { "indexed": true, "internalType": "address", "name": "gauge", "type": "address" }
+    ],
+    "name": "GaugeKilled",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      { "indexed": true, "internalType": "address", "name": "gauge", "type": "address" }
+    ],
+    "name": "GaugeRevived",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      { "indexed": true, "internalType": "address", "name": "sender", "type": "address" },
+      { "indexed": true, "internalType": "address", "name": "reward", "type": "address" },
+      { "indexed": false, "internalType": "uint256", "name": "amount", "type": "uint256" }
+    ],
+    "name": "NotifyReward",
     "type": "event"
   }
 ]

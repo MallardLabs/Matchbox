@@ -27,8 +27,8 @@ pnpm --filter @repo/activity-subgraph build
 ## Deploy
 
 ```bash
-pnpm --filter @repo/activity-subgraph deploy:mainnet
-pnpm --filter @repo/activity-subgraph deploy:testnet
+pnpm --filter @repo/activity-subgraph deploy:mezo
+pnpm --filter @repo/activity-subgraph deploy:mezo-testnet
 ```
 
 ## Public API Shape

@@ -10,6 +10,44 @@ import {
   BigInt,
 } from "@graphprotocol/graph-ts";
 
+export class Abstained extends ethereum.Event {
+  get params(): Abstained__Params {
+    return new Abstained__Params(this);
+  }
+}
+
+export class Abstained__Params {
+  _event: Abstained;
+
+  constructor(event: Abstained) {
+    this._event = event;
+  }
+
+  get voter(): Address {
+    return this._event.parameters[0].value.toAddress();
+  }
+
+  get pool(): Address {
+    return this._event.parameters[1].value.toAddress();
+  }
+
+  get tokenId(): BigInt {
+    return this._event.parameters[2].value.toBigInt();
+  }
+
+  get weight(): BigInt {
+    return this._event.parameters[3].value.toBigInt();
+  }
+
+  get totalWeight(): BigInt {
+    return this._event.parameters[4].value.toBigInt();
+  }
+
+  get timestamp(): BigInt {
+    return this._event.parameters[5].value.toBigInt();
+  }
+}
+
 export class GaugeCreated extends ethereum.Event {
   get params(): GaugeCreated__Params {
     return new GaugeCreated__Params(this);
@@ -91,6 +129,94 @@ export class Voted__Params {
 
   get timestamp(): BigInt {
     return this._event.parameters[5].value.toBigInt();
+  }
+}
+
+export class DistributeReward extends ethereum.Event {
+  get params(): DistributeReward__Params {
+    return new DistributeReward__Params(this);
+  }
+}
+
+export class DistributeReward__Params {
+  _event: DistributeReward;
+
+  constructor(event: DistributeReward) {
+    this._event = event;
+  }
+
+  get sender(): Address {
+    return this._event.parameters[0].value.toAddress();
+  }
+
+  get gauge(): Address {
+    return this._event.parameters[1].value.toAddress();
+  }
+
+  get amount(): BigInt {
+    return this._event.parameters[2].value.toBigInt();
+  }
+}
+
+export class GaugeKilled extends ethereum.Event {
+  get params(): GaugeKilled__Params {
+    return new GaugeKilled__Params(this);
+  }
+}
+
+export class GaugeKilled__Params {
+  _event: GaugeKilled;
+
+  constructor(event: GaugeKilled) {
+    this._event = event;
+  }
+
+  get gauge(): Address {
+    return this._event.parameters[0].value.toAddress();
+  }
+}
+
+export class GaugeRevived extends ethereum.Event {
+  get params(): GaugeRevived__Params {
+    return new GaugeRevived__Params(this);
+  }
+}
+
+export class GaugeRevived__Params {
+  _event: GaugeRevived;
+
+  constructor(event: GaugeRevived) {
+    this._event = event;
+  }
+
+  get gauge(): Address {
+    return this._event.parameters[0].value.toAddress();
+  }
+}
+
+export class NotifyReward extends ethereum.Event {
+  get params(): NotifyReward__Params {
+    return new NotifyReward__Params(this);
+  }
+}
+
+export class NotifyReward__Params {
+  _event: NotifyReward;
+
+  constructor(event: NotifyReward) {
+    this._event = event;
+  }
+
+  get sender(): Address {
+    return this._event.parameters[0].value.toAddress();
+  }
+
+  get reward(): Address {
+    return this._event.parameters[1].value.toAddress();
+  }
+
+  get amount(): BigInt {
+    return this._event.parameters[2].value.toBigInt();
   }
 }
 

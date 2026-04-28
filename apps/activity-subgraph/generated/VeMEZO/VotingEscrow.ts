@@ -48,6 +48,144 @@ export class Deposit__Params {
   }
 }
 
+export class LockPermanent extends ethereum.Event {
+  get params(): LockPermanent__Params {
+    return new LockPermanent__Params(this);
+  }
+}
+
+export class LockPermanent__Params {
+  _event: LockPermanent;
+
+  constructor(event: LockPermanent) {
+    this._event = event;
+  }
+
+  get _owner(): Address {
+    return this._event.parameters[0].value.toAddress();
+  }
+
+  get _tokenId(): BigInt {
+    return this._event.parameters[1].value.toBigInt();
+  }
+
+  get amount(): BigInt {
+    return this._event.parameters[2].value.toBigInt();
+  }
+
+  get _ts(): BigInt {
+    return this._event.parameters[3].value.toBigInt();
+  }
+}
+
+export class UnlockPermanent extends ethereum.Event {
+  get params(): UnlockPermanent__Params {
+    return new UnlockPermanent__Params(this);
+  }
+}
+
+export class UnlockPermanent__Params {
+  _event: UnlockPermanent;
+
+  constructor(event: UnlockPermanent) {
+    this._event = event;
+  }
+
+  get _owner(): Address {
+    return this._event.parameters[0].value.toAddress();
+  }
+
+  get _tokenId(): BigInt {
+    return this._event.parameters[1].value.toBigInt();
+  }
+
+  get amount(): BigInt {
+    return this._event.parameters[2].value.toBigInt();
+  }
+
+  get _ts(): BigInt {
+    return this._event.parameters[3].value.toBigInt();
+  }
+}
+
+export class UpdateBoost extends ethereum.Event {
+  get params(): UpdateBoost__Params {
+    return new UpdateBoost__Params(this);
+  }
+}
+
+export class UpdateBoost__Params {
+  _event: UpdateBoost;
+
+  constructor(event: UpdateBoost) {
+    this._event = event;
+  }
+
+  get _tokenId(): BigInt {
+    return this._event.parameters[0].value.toBigInt();
+  }
+
+  get _boost(): BigInt {
+    return this._event.parameters[1].value.toBigInt();
+  }
+}
+
+export class Withdraw extends ethereum.Event {
+  get params(): Withdraw__Params {
+    return new Withdraw__Params(this);
+  }
+}
+
+export class Withdraw__Params {
+  _event: Withdraw;
+
+  constructor(event: Withdraw) {
+    this._event = event;
+  }
+
+  get provider(): Address {
+    return this._event.parameters[0].value.toAddress();
+  }
+
+  get tokenId(): BigInt {
+    return this._event.parameters[1].value.toBigInt();
+  }
+
+  get value(): BigInt {
+    return this._event.parameters[2].value.toBigInt();
+  }
+
+  get ts(): BigInt {
+    return this._event.parameters[3].value.toBigInt();
+  }
+}
+
+export class Transfer extends ethereum.Event {
+  get params(): Transfer__Params {
+    return new Transfer__Params(this);
+  }
+}
+
+export class Transfer__Params {
+  _event: Transfer;
+
+  constructor(event: Transfer) {
+    this._event = event;
+  }
+
+  get from(): Address {
+    return this._event.parameters[0].value.toAddress();
+  }
+
+  get to(): Address {
+    return this._event.parameters[1].value.toAddress();
+  }
+
+  get tokenId(): BigInt {
+    return this._event.parameters[2].value.toBigInt();
+  }
+}
+
 export class VotingEscrow extends ethereum.SmartContract {
   static bind(address: Address): VotingEscrow {
     return new VotingEscrow("VotingEscrow", address);

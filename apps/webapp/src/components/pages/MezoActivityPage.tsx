@@ -48,11 +48,23 @@ function formatCompactAmount(value?: bigint): string {
 
 function actionLabel(item: MezoActivityItem): string {
   if (item.actionType === "lockCreated") return "Locked MEZO > veMEZO"
+  if (item.actionType === "lockAmountIncreased") return "Added MEZO to Lock"
   if (item.actionType === "lockExtended") return "Extended veMEZO Lock"
+  if (item.actionType === "lockWithdrawn") return "Withdrew veMEZO Lock"
+  if (item.actionType === "lockPermanent") return "Made Lock Permanent"
+  if (item.actionType === "lockPermanentUnlocked") return "Unlocked Permanent Lock"
   if (item.boostContext === "matchboxGaugeBoost") return "Boosted BTC (Matchbox)"
   if (item.boostContext === "mezoVeBtcPairBoost") return "Boosted BTC (Mezo Pairing)"
   if (item.actionType === "pairCreated") return "Created Pair & Boost Gauge"
   if (item.actionType === "boostPoke") return "Poked Boost"
+  if (item.actionType === "boostAbstain") return "Reset Boost Vote"
+  if (item.actionType === "gaugeCreated") return "Created Matchbox Gauge"
+  if (item.actionType === "gaugeKilled") return "Killed Gauge"
+  if (item.actionType === "gaugeRevived") return "Revived Gauge"
+  if (item.actionType === "boostableTokenBurned") return "Boostable Token Burned"
+  if (item.actionType === "incentiveAdded") return "Added Incentive"
+  if (item.actionType === "rewardDistributed") return "Distributed Reward"
+  if (item.actionType === "rewardNotified") return "Notified Reward"
   return "Boost Vote"
 }
 
@@ -61,7 +73,15 @@ function itemMatchesFilters(
   filters: MezoActivityFilter[],
 ): boolean {
   const selected = new Set(filters)
-  if (item.actionType === "lockCreated") return selected.has("locks")
+  if (
+    item.actionType === "lockCreated" ||
+    item.actionType === "lockAmountIncreased" ||
+    item.actionType === "lockWithdrawn" ||
+    item.actionType === "lockPermanent" ||
+    item.actionType === "lockPermanentUnlocked"
+  ) {
+    return selected.has("locks")
+  }
   if (item.actionType === "lockExtended") return selected.has("extensions")
   if (item.boostContext === "matchboxGaugeBoost") {
     return selected.has("boostMatchbox")
