@@ -22,7 +22,6 @@ import {
   useMultiLockClaimBribes,
 } from "@/hooks/useMultiLockClaimBribes"
 import { usePagination } from "@/hooks/usePagination"
-import { getAtomicBatchFallbackMessage } from "@/utils/eip5792"
 import {
   type ClaimableBribe,
   type VoteAllocation,
@@ -33,6 +32,7 @@ import {
   useClaimableBribes,
   usePokeBoost,
 } from "@/hooks/useVoting"
+import { getAtomicBatchFallbackMessage } from "@/utils/eip5792"
 import {
   Button,
   Card,

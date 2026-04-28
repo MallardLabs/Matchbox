@@ -60,7 +60,8 @@ export function useVeBTCLocks() {
   })
 
   const tokenIdList =
-    tokenIds?.map((r) => r.result as bigint).filter((id) => id !== undefined) ?? []
+    tokenIds?.map((r) => r.result as bigint).filter((id) => id !== undefined) ??
+    []
 
   const { data: lockData, isLoading } = useReadContracts({
     contracts: tokenIdList.flatMap((tokenId) => [
@@ -154,7 +155,8 @@ export function useVeMEZOLocks(): {
   })
 
   const tokenIdList =
-    tokenIds?.map((r) => r.result as bigint).filter((id) => id !== undefined) ?? []
+    tokenIds?.map((r) => r.result as bigint).filter((id) => id !== undefined) ??
+    []
 
   const {
     data: lockData,

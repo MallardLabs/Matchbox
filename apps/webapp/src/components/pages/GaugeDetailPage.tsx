@@ -216,7 +216,9 @@ function SubscriptionBar({
   return (
     <div
       className={`relative h-1.5 w-full overflow-hidden rounded-full bg-[var(--surface-secondary)] ring-1 ring-inset ${
-        atOrAbove ? "ring-[rgba(var(--positive-rgb),0.22)]" : "ring-[var(--border)]"
+        atOrAbove
+          ? "ring-[rgba(var(--positive-rgb),0.22)]"
+          : "ring-[var(--border)]"
       }`}
       aria-hidden="true"
     >
@@ -1103,9 +1105,10 @@ export default function GaugeDetailPage({
                                             <span
                                               className="font-medium"
                                               style={{
-                                                color: getSubscriptionHeadlineColor(
-                                                  record.subscription_status,
-                                                ),
+                                                color:
+                                                  getSubscriptionHeadlineColor(
+                                                    record.subscription_status,
+                                                  ),
                                               }}
                                             >
                                               {subscriptionHeadline}
