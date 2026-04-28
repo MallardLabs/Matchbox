@@ -11,6 +11,8 @@ import { useMemo } from "react"
 
 type UseMezoActivityParams = {
   filter: MezoActivityFilter
+  fromTimestamp?: number
+  toTimestamp?: number
   cursor?: string
   limit?: number
 }
@@ -41,6 +43,8 @@ function filterItems(
 
 export function useMezoActivity({
   filter,
+  fromTimestamp,
+  toTimestamp,
   cursor,
   limit = 50,
 }: UseMezoActivityParams) {
@@ -48,12 +52,14 @@ export function useMezoActivity({
   const network = NETWORK_BY_CHAIN[chainId]
 
   const query = useQuery({
-    queryKey: ["activity", network, cursor, limit],
+    queryKey: ["activity", network, fromTimestamp, toTimestamp, cursor, limit],
     enabled: isNetworkReady && !!network,
     queryFn: async () => {
       const params = new URLSearchParams()
       if (network) params.set("network", network)
       params.set("limit", String(limit))
+      if (fromTimestamp !== undefined) params.set("from", String(fromTimestamp))
+      if (toTimestamp !== undefined) params.set("to", String(toTimestamp))
       if (cursor) params.set("cursor", cursor)
       const response = await fetch(`/api/activity?${params.toString()}`, {
         cache: "no-store",

@@ -41,6 +41,8 @@ type SourceOptions = {
   chainId: SupportedChainId
   fromBlock: bigint
   toBlock: bigint
+  fromTimestamp: number
+  toTimestamp: number
   limit: number
   cursor?: MezoActivityCursor
 }
@@ -51,11 +53,10 @@ type StakeResponse = {
       id: string
       amount: string
       lockDuration: string
-      initializedAt: number
-      staker: string
-      transactionHash?: string
-      blockNumber?: string
-      logIndex?: string
+      initializedAt: string
+      token: string
+      unlockAt: string
+      staker: { id: string } | null
     }>
   }
 }
@@ -137,64 +138,69 @@ function applyCursor(items: MezoActivityItem[], cursor?: MezoActivityCursor) {
     const itemIndex = item.logIndex ?? -1
     if (itemIndex < cursor.logIndex) return true
     if (itemIndex > cursor.logIndex) return false
-    return item.txHash.toLowerCase() < cursor.txHash.toLowerCase()
+    return item.id < cursor.id
   })
 }
 
 async function fetchSubgraphLocks(
   chainId: SupportedChainId,
+  fromTimestamp: number,
+  toTimestamp: number,
   limit: number,
 ): Promise<MezoActivityItem[]> {
   try {
     const endpoint = getGoldskyUrl(chainId)
+    const contracts = getContractConfig(chainId)
+    const veMEZOAddress = contracts.veMEZO.address.toLowerCase()
     const query = `
-    query RecentStakes($limit: Int!) {
-      stakes(first: $limit, orderBy: initializedAt, orderDirection: desc) {
+      query {
+        stakes(
+          first: ${limit},
+          orderBy: initializedAt,
+          orderDirection: desc,
+          where: {
+            token: "${veMEZOAddress}",
+            initializedAt_gte: "${fromTimestamp}",
+            initializedAt_lte: "${toTimestamp}"
+          }
+        ) {
         id
         amount
         lockDuration
         initializedAt
-        staker
-        transactionHash
-        blockNumber
-        logIndex
+        token
+        unlockAt
+        staker { id }
       }
     }
   `
     const response = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query, variables: { limit } }),
+      body: JSON.stringify({ query }),
     })
     if (!response.ok) return []
     const json = (await response.json()) as StakeResponse
     const stakes = json.data?.stakes ?? []
     return stakes.flatMap((stake) => {
-      const txHash = stake.transactionHash
-      if (!txHash || !/^0x[a-fA-F0-9]{64}$/.test(txHash)) {
+      const timestamp = Number(stake.initializedAt ?? 0)
+      if (!timestamp) {
         return []
       }
-      const actorAddress = normalizeAddress(stake.staker)
-      const parsedBlockNumber =
-        stake.blockNumber && /^-?\d+$/.test(stake.blockNumber)
-          ? BigInt(stake.blockNumber)
-          : 0n
-      const parsedLogIndex =
-        stake.logIndex && /^-?\d+$/.test(stake.logIndex)
-          ? Number.parseInt(stake.logIndex, 10)
-          : -1
+      const actorAddress = normalizeAddress(stake.staker?.id)
+      const tokenId = BigInt(stake.id.split("-")[0] ?? "0")
       return {
-        id: `subgraph-lock-${stake.id}-${stake.initializedAt}`,
-        blockNumber: parsedBlockNumber,
-        timestamp: Number(stake.initializedAt),
-        txHash: txHash as Hash,
+        id: `subgraph-lock-${stake.id}-${timestamp}`,
+        blockNumber: 0n,
+        timestamp,
         ...(actorAddress ? { actorAddress } : {}),
+        tokenId,
         amount: BigInt(stake.amount),
         duration: BigInt(stake.lockDuration),
         actionType: "lockCreated" as const,
         boostContext: "unknown" as const,
         source: "subgraph" as const,
-        logIndex: parsedLogIndex,
+        logIndex: -1,
       }
     })
   } catch {
@@ -335,7 +341,12 @@ export async function fetchMezoActivity(options: SourceOptions): Promise<{
   nextCursor: MezoActivityCursor | null
 }> {
   const [primaryItems, fallbackItems] = await Promise.all([
-    fetchSubgraphLocks(options.chainId, Math.max(options.limit * 2, 50)),
+    fetchSubgraphLocks(
+      options.chainId,
+      options.fromTimestamp,
+      options.toTimestamp,
+      Math.max(options.limit * 2, 50),
+    ),
     fetchRpcActivity(options),
   ])
 
@@ -349,7 +360,7 @@ export async function fetchMezoActivity(options: SourceOptions): Promise<{
     nextCursor: last
       ? {
           timestamp: last.timestamp,
-          txHash: last.txHash,
+          id: last.id,
           logIndex: last.logIndex ?? -1,
         }
       : null,

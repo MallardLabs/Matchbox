@@ -19,7 +19,7 @@ function parseCursor(raw: string | null): MezoActivityCursor | undefined {
   if (!raw) return undefined
   try {
     const parsed = JSON.parse(raw) as MezoActivityCursor
-    if (!parsed?.txHash || typeof parsed.timestamp !== "number") return undefined
+    if (!parsed?.id || typeof parsed.timestamp !== "number") return undefined
     return parsed
   } catch {
     return undefined
@@ -77,6 +77,12 @@ export default async function handler(request: Request): Promise<Response> {
     200,
   )
   const cursor = parseCursor(url.searchParams.get("cursor"))
+  const now = Math.floor(Date.now() / 1000)
+  const fromTimestamp = Math.max(
+    Number(url.searchParams.get("from") ?? now - 30 * 86_400),
+    0,
+  )
+  const toTimestamp = Math.max(Number(url.searchParams.get("to") ?? now), 0)
   const latestBlock = await getLatestBlock(getRpcUrl(chainId))
   const fromBlock =
     latestBlock > DEFAULT_BLOCK_WINDOW ? latestBlock - DEFAULT_BLOCK_WINDOW : 0n
@@ -85,6 +91,8 @@ export default async function handler(request: Request): Promise<Response> {
     chainId,
     fromBlock,
     toBlock: latestBlock,
+    fromTimestamp,
+    toTimestamp,
     limit,
     ...(cursor ? { cursor } : {}),
   })
@@ -93,7 +101,9 @@ export default async function handler(request: Request): Promise<Response> {
     success: true,
     data: result.data.map((item) => ({
       ...serializeActivityItem(item),
-      explorerUrl: getExplorerTransactionUrl(chainId, item.txHash),
+      ...(item.txHash
+        ? { explorerUrl: getExplorerTransactionUrl(chainId, item.txHash) }
+        : {}),
     })),
     nextCursor: result.nextCursor,
   }

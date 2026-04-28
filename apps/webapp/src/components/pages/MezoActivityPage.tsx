@@ -11,6 +11,18 @@ const FILTERS: Array<{ key: MezoActivityFilter; label: string }> = [
   { key: "extensions", label: "Extensions" },
 ]
 
+const now = Math.floor(Date.now() / 1000)
+const DEFAULT_FROM = now - 30 * 86_400
+
+function toDateInputValue(timestamp: number): string {
+  return new Date(timestamp * 1000).toISOString().slice(0, 10)
+}
+
+function fromDateInputValue(value: string, endOfDay = false): number {
+  const suffix = endOfDay ? "T23:59:59.999Z" : "T00:00:00.000Z"
+  return Math.floor(new Date(`${value}${suffix}`).getTime() / 1000)
+}
+
 function formatRelativeTime(timestamp: number): string {
   const now = Math.floor(Date.now() / 1000)
   const diff = Math.max(now - timestamp, 0)
@@ -41,9 +53,15 @@ function actionLabel(item: MezoActivityItem): string {
 
 export default function MezoActivityPage() {
   const [filter, setFilter] = useState<MezoActivityFilter>("all")
+  const [fromDate, setFromDate] = useState(() => toDateInputValue(DEFAULT_FROM))
+  const [toDate, setToDate] = useState(() => toDateInputValue(now))
   const [cursor, setCursor] = useState<string | undefined>()
+  const fromTimestamp = useMemo(() => fromDateInputValue(fromDate), [fromDate])
+  const toTimestamp = useMemo(() => fromDateInputValue(toDate, true), [toDate])
   const { data, isLoading, isError, error, nextCursor, isFetching } = useMezoActivity(
-    cursor ? { filter, cursor, limit: 50 } : { filter, limit: 50 },
+    cursor
+      ? { filter, fromTimestamp, toTimestamp, cursor, limit: 50 }
+      : { filter, fromTimestamp, toTimestamp, limit: 50 },
   )
 
   const nextCursorString = useMemo(
@@ -66,7 +84,8 @@ export default function MezoActivityPage() {
       </SpringIn>
 
       <SpringIn delay={1} variant="card">
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-col gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
+          <div className="flex flex-wrap gap-2">
           {FILTERS.map((f) => {
             const active = f.key === filter
             return (
@@ -87,6 +106,35 @@ export default function MezoActivityPage() {
               </button>
             )
           })}
+          </div>
+          <div className="flex flex-wrap items-center gap-3 text-xs text-[var(--content-secondary)]">
+            <label className="flex items-center gap-2">
+              From
+              <input
+                type="date"
+                value={fromDate}
+                max={toDate}
+                onChange={(event) => {
+                  setFromDate(event.target.value)
+                  setCursor(undefined)
+                }}
+                className="rounded-lg border border-[var(--border)] bg-[var(--surface-secondary)] px-2 py-1 font-mono text-[var(--content-primary)]"
+              />
+            </label>
+            <label className="flex items-center gap-2">
+              To
+              <input
+                type="date"
+                value={toDate}
+                min={fromDate}
+                onChange={(event) => {
+                  setToDate(event.target.value)
+                  setCursor(undefined)
+                }}
+                className="rounded-lg border border-[var(--border)] bg-[var(--surface-secondary)] px-2 py-1 font-mono text-[var(--content-primary)]"
+              />
+            </label>
+          </div>
         </div>
       </SpringIn>
 
@@ -118,25 +166,28 @@ export default function MezoActivityPage() {
 
           {!isLoading &&
             !isError &&
-            data.map((item, index) => (
-              <SpringIn key={item.id} delay={index + 3} variant="card-subtle">
-                <div className="grid grid-cols-[1.7fr_0.9fr_0.9fr_1fr_0.8fr] gap-3 border-b border-[var(--border)] px-4 py-3 text-sm text-[var(--content-primary)] last:border-b-0">
-                  <div className="min-w-0">
-                    <p className="truncate">{actionLabel(item)}</p>
-                    <p className="truncate text-xs text-[var(--content-tertiary)]">
-                      {item.actorAddress ?? "unknown actor"}
-                    </p>
-                  </div>
-                  <span className="text-[var(--content-secondary)]">
-                    {formatCompactAmount(item.amount)}
+            data.map((item) => (
+              <div
+                key={item.id}
+                className="grid grid-cols-[1.7fr_0.9fr_0.9fr_1fr_0.8fr] gap-3 border-b border-[var(--border)] px-4 py-3 text-sm text-[var(--content-primary)] last:border-b-0"
+              >
+                <div className="min-w-0">
+                  <p className="truncate">{actionLabel(item)}</p>
+                  <p className="truncate text-xs text-[var(--content-tertiary)]">
+                    {item.actorAddress ?? "unknown actor"}
+                  </p>
+                </div>
+                <span className="text-[var(--content-secondary)]">
+                  {formatCompactAmount(item.amount)}
+                </span>
+                <span className="text-[var(--content-secondary)]">
+                  {item.tokenId?.toString() ?? "-"}
+                </span>
+                <div className="flex items-center gap-2">
+                  <span className="rounded border border-[var(--border)] px-1.5 py-0.5 text-xs text-[var(--content-secondary)]">
+                    {item.source}
                   </span>
-                  <span className="text-[var(--content-secondary)]">
-                    {item.tokenId?.toString() ?? "-"}
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <span className="rounded border border-[var(--border)] px-1.5 py-0.5 text-xs text-[var(--content-secondary)]">
-                      {item.source}
-                    </span>
+                  {item.txHash ? (
                     <a
                       href={item.explorerUrl ?? `https://explorer.mezo.org/tx/${item.txHash}`}
                       target="_blank"
@@ -145,17 +196,21 @@ export default function MezoActivityPage() {
                     >
                       tx
                     </a>
-                  </div>
-                  <span className="text-xs text-[var(--content-tertiary)]">
-                    {formatRelativeTime(item.timestamp)}
-                  </span>
+                  ) : (
+                    <span className="text-xs text-[var(--content-tertiary)]">
+                      indexed
+                    </span>
+                  )}
                 </div>
-              </SpringIn>
+                <span className="text-xs text-[var(--content-tertiary)]">
+                  {formatRelativeTime(item.timestamp)}
+                </span>
+              </div>
             ))}
         </div>
       </SpringIn>
 
-      <SpringIn delay={4} variant="card-subtle">
+      <div>
         <button
           type="button"
           disabled={!nextCursorString || isFetching}
@@ -164,7 +219,7 @@ export default function MezoActivityPage() {
         >
           {isFetching ? "Loading..." : "Load More"}
         </button>
-      </SpringIn>
+      </div>
     </div>
   )
 }

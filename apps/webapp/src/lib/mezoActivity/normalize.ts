@@ -41,7 +41,9 @@ export function sortActivityDesc(items: MezoActivityItem[]): MezoActivityItem[] 
 export function dedupeActivity(items: MezoActivityItem[]): MezoActivityItem[] {
   const byId = new Map<string, MezoActivityItem>()
   for (const item of items) {
-    const key = `${item.txHash}:${item.logIndex ?? -1}:${item.actionType}`
+    const key = item.txHash
+      ? `${item.txHash}:${item.logIndex ?? -1}:${item.actionType}`
+      : item.id
     const existing = byId.get(key)
     if (!existing || existing.source !== "subgraph") {
       byId.set(key, item)
@@ -64,10 +66,10 @@ export function serializeActivityItem(item: MezoActivityItem): MezoActivityApiIt
     id: item.id,
     blockNumber: item.blockNumber.toString(),
     timestamp: item.timestamp,
-    txHash: item.txHash,
     actionType: item.actionType,
     boostContext: item.boostContext,
     source: item.source,
+    ...(item.txHash ? { txHash: item.txHash } : {}),
     ...(item.actorAddress ? { actorAddress: item.actorAddress } : {}),
     ...(item.gaugeAddress ? { gaugeAddress: item.gaugeAddress } : {}),
     ...(item.logIndex !== undefined ? { logIndex: item.logIndex } : {}),
@@ -83,10 +85,10 @@ export function deserializeActivityItem(item: MezoActivityApiItem): MezoActivity
     id: item.id,
     blockNumber: BigInt(item.blockNumber),
     timestamp: item.timestamp,
-    txHash: item.txHash,
     actionType: item.actionType,
     boostContext: item.boostContext,
     source: item.source,
+    ...(item.txHash ? { txHash: item.txHash } : {}),
     ...(item.actorAddress ? { actorAddress: item.actorAddress } : {}),
     ...(item.gaugeAddress ? { gaugeAddress: item.gaugeAddress } : {}),
     ...(item.logIndex !== undefined ? { logIndex: item.logIndex } : {}),

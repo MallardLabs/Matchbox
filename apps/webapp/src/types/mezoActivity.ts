@@ -18,7 +18,7 @@ export type MezoActivityItem = {
   id: string
   blockNumber: bigint
   timestamp: number
-  txHash: Hash
+  txHash?: Hash
   actorAddress?: Address
   tokenId?: bigint
   amount?: bigint
@@ -32,8 +32,8 @@ export type MezoActivityItem = {
 }
 
 export type MezoActivityCursor = {
+  id: string
   timestamp: number
-  txHash: Hash
   logIndex: number
 }
 
