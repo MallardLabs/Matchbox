@@ -1,9 +1,9 @@
 import { SpringIn } from "@/components/SpringIn"
 import { useMezoActivity } from "@/hooks/useMezoActivity"
-import {
-  type MezoActivityApiResponse,
-  type MezoActivityFilter,
-  type MezoActivityItem,
+import type {
+  MezoActivityApiResponse,
+  MezoActivityFilter,
+  MezoActivityItem,
 } from "@/types/mezoActivity"
 import { useMemo, useState } from "react"
 
@@ -52,16 +52,20 @@ function actionLabel(item: MezoActivityItem): string {
   if (item.actionType === "lockExtended") return "Extended veMEZO Lock"
   if (item.actionType === "lockWithdrawn") return "Withdrew veMEZO Lock"
   if (item.actionType === "lockPermanent") return "Made Lock Permanent"
-  if (item.actionType === "lockPermanentUnlocked") return "Unlocked Permanent Lock"
-  if (item.boostContext === "matchboxGaugeBoost") return "Boosted BTC (Matchbox)"
-  if (item.boostContext === "mezoVeBtcPairBoost") return "Boosted BTC (Mezo Pairing)"
+  if (item.actionType === "lockPermanentUnlocked")
+    return "Unlocked Permanent Lock"
+  if (item.boostContext === "matchboxGaugeBoost")
+    return "Boosted BTC (Matchbox)"
+  if (item.boostContext === "mezoVeBtcPairBoost")
+    return "Boosted BTC (Mezo Pairing)"
   if (item.actionType === "pairCreated") return "Created Pair & Boost Gauge"
   if (item.actionType === "boostPoke") return "Poked Boost"
   if (item.actionType === "boostAbstain") return "Reset Boost Vote"
   if (item.actionType === "gaugeCreated") return "Created Matchbox Gauge"
   if (item.actionType === "gaugeKilled") return "Killed Gauge"
   if (item.actionType === "gaugeRevived") return "Revived Gauge"
-  if (item.actionType === "boostableTokenBurned") return "Boostable Token Burned"
+  if (item.actionType === "boostableTokenBurned")
+    return "Boostable Token Burned"
   if (item.actionType === "incentiveAdded") return "Added Incentive"
   if (item.actionType === "rewardDistributed") return "Distributed Reward"
   if (item.actionType === "rewardNotified") return "Notified Reward"
@@ -86,7 +90,8 @@ function itemMatchesFilters(
   if (item.boostContext === "matchboxGaugeBoost") {
     return selected.has("boostMatchbox")
   }
-  if (item.boostContext === "mezoVeBtcPairBoost") return selected.has("boostPair")
+  if (item.boostContext === "mezoVeBtcPairBoost")
+    return selected.has("boostPair")
   return selected.has("boostMatchbox") || selected.has("boostPair")
 }
 
@@ -103,11 +108,12 @@ export default function MezoActivityPage() {
   const [isExporting, setIsExporting] = useState(false)
   const fromTimestamp = useMemo(() => fromDateInputValue(fromDate), [fromDate])
   const toTimestamp = useMemo(() => fromDateInputValue(toDate, true), [toDate])
-  const { data, isLoading, isError, error, nextCursor, isFetching } = useMezoActivity(
-    cursor
-      ? { filters, fromTimestamp, toTimestamp, cursor, limit: 50 }
-      : { filters, fromTimestamp, toTimestamp, limit: 50 },
-  )
+  const { data, isLoading, isError, error, nextCursor, isFetching } =
+    useMezoActivity(
+      cursor
+        ? { filters, fromTimestamp, toTimestamp, cursor, limit: 50 }
+        : { filters, fromTimestamp, toTimestamp, limit: 50 },
+    )
 
   const nextCursorString = useMemo(
     () => (nextCursor ? JSON.stringify(nextCursor) : undefined),
@@ -189,8 +195,8 @@ export default function MezoActivityPage() {
             global activity
           </h1>
           <p className="mt-2 text-sm text-[var(--content-secondary)]">
-            Live feed for veMEZO locks, BTC boosts, and lock extensions.
-            Boost rows are labeled as Matchbox gauge boosts vs Mezo pairing boosts.
+            Live feed for veMEZO locks, BTC boosts, and lock extensions. Boost
+            rows are labeled as Matchbox gauge boosts vs Mezo pairing boosts.
           </p>
         </div>
       </SpringIn>
@@ -265,8 +271,9 @@ export default function MezoActivityPage() {
           </div>
           <p className="text-xs leading-relaxed text-[var(--content-tertiary)]">
             Locks use indexed Goldsky stake data. Boosts and extensions will be
-            fully historical once the dedicated Matchbox Activity Goldsky subgraph
-            is deployed; until then, only recent RPC fallback events may appear.
+            fully historical once the dedicated Matchbox Activity Goldsky
+            subgraph is deployed; until then, only recent RPC fallback events
+            may appear.
           </p>
         </div>
       </SpringIn>
@@ -288,7 +295,8 @@ export default function MezoActivityPage() {
           )}
           {isError && (
             <div className="px-4 py-8 text-sm text-red-400">
-              Failed to load activity: {error instanceof Error ? error.message : "unknown"}
+              Failed to load activity:{" "}
+              {error instanceof Error ? error.message : "unknown"}
             </div>
           )}
           {!isLoading && !isError && data.length === 0 && (
@@ -322,7 +330,10 @@ export default function MezoActivityPage() {
                   </span>
                   {item.txHash ? (
                     <a
-                      href={item.explorerUrl ?? `https://explorer.mezo.org/tx/${item.txHash}`}
+                      href={
+                        item.explorerUrl ??
+                        `https://explorer.mezo.org/tx/${item.txHash}`
+                      }
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-xs text-[#F7931A] no-underline hover:underline"

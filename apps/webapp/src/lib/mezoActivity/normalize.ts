@@ -3,7 +3,7 @@ import type {
   MezoActivityItem,
   MezoBoostContext,
 } from "@/types/mezoActivity"
-import { getAddress, isAddressEqual, type Address } from "viem"
+import { type Address, getAddress, isAddressEqual } from "viem"
 
 type NormalizeContext = {
   boostVoter: Address
@@ -26,7 +26,9 @@ export function classifyBoostContext(
   return "unknown"
 }
 
-export function sortActivityDesc(items: MezoActivityItem[]): MezoActivityItem[] {
+export function sortActivityDesc(
+  items: MezoActivityItem[],
+): MezoActivityItem[] {
   return [...items].sort((a, b) => {
     if (a.timestamp !== b.timestamp) return b.timestamp - a.timestamp
     if (a.blockNumber !== b.blockNumber) {
@@ -52,7 +54,9 @@ export function dedupeActivity(items: MezoActivityItem[]): MezoActivityItem[] {
   return [...byId.values()]
 }
 
-export function normalizeAddress(value: string | undefined): Address | undefined {
+export function normalizeAddress(
+  value: string | undefined,
+): Address | undefined {
   if (!value) return undefined
   try {
     return getAddress(value)
@@ -61,7 +65,9 @@ export function normalizeAddress(value: string | undefined): Address | undefined
   }
 }
 
-export function serializeActivityItem(item: MezoActivityItem): MezoActivityApiItem {
+export function serializeActivityItem(
+  item: MezoActivityItem,
+): MezoActivityApiItem {
   return {
     id: item.id,
     blockNumber: item.blockNumber.toString(),
@@ -76,11 +82,17 @@ export function serializeActivityItem(item: MezoActivityItem): MezoActivityApiIt
     ...(item.explorerUrl ? { explorerUrl: item.explorerUrl } : {}),
     ...(item.tokenId !== undefined ? { tokenId: item.tokenId.toString() } : {}),
     ...(item.amount !== undefined ? { amount: item.amount.toString() } : {}),
-    ...(item.duration !== undefined ? { duration: item.duration.toString() } : {}),
+    ...(item.duration !== undefined
+      ? { duration: item.duration.toString() }
+      : {}),
+    ...(item.weight !== undefined ? { weight: item.weight.toString() } : {}),
+    ...(item.boost !== undefined ? { boost: item.boost.toString() } : {}),
   }
 }
 
-export function deserializeActivityItem(item: MezoActivityApiItem): MezoActivityItem {
+export function deserializeActivityItem(
+  item: MezoActivityApiItem,
+): MezoActivityItem {
   return {
     id: item.id,
     blockNumber: BigInt(item.blockNumber),
@@ -96,6 +108,8 @@ export function deserializeActivityItem(item: MezoActivityApiItem): MezoActivity
     ...(item.tokenId ? { tokenId: BigInt(item.tokenId) } : {}),
     ...(item.amount ? { amount: BigInt(item.amount) } : {}),
     ...(item.duration ? { duration: BigInt(item.duration) } : {}),
+    ...(item.weight ? { weight: BigInt(item.weight) } : {}),
+    ...(item.boost ? { boost: BigInt(item.boost) } : {}),
   }
 }
 

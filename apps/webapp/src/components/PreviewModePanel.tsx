@@ -51,7 +51,7 @@ export default function PreviewModePanel() {
     <>
       <div
         className="fixed bottom-4 right-4 z-[60] flex items-center gap-2 rounded-full bg-[#F7931A] px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-white shadow-[0_0_12px_rgba(247,147,26,0.5)]"
-        title="Dashboard stats are simulated. Press Shift+P to exit."
+        title="Dashboard stats are simulated. Press Shift+M to exit."
       >
         <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-white" />
         Preview mode
@@ -80,7 +80,7 @@ export default function PreviewModePanel() {
                 Tweak to see boosts and optimal veMEZO across the dashboard
                 update live. Press{" "}
                 <kbd className="rounded bg-[var(--surface-tertiary)] px-1 font-mono text-[10px]">
-                  Shift+P
+                  Shift+M
                 </kbd>{" "}
                 to exit.
               </p>

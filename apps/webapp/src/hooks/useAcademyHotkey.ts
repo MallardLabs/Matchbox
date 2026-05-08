@@ -1,4 +1,4 @@
-import { usePreviewMode } from "@/contexts/PreviewModeContext"
+import { useAcademy } from "@/contexts/AcademyContext"
 import { useEffect } from "react"
 
 function isTextInputFocused(): boolean {
@@ -11,15 +11,15 @@ function isTextInputFocused(): boolean {
 }
 
 /**
- * Binds Shift+M to toggle preview mode. Ignored while the user is typing in
- * an input / textarea / contenteditable.
+ * Binds Shift+P to toggle the Mezo Academy simulator. Ignored while typing
+ * in an input / textarea / contenteditable.
  */
-export function usePreviewModeHotkey() {
-  const { toggle } = usePreviewMode()
+export function useAcademyHotkey() {
+  const { toggle } = useAcademy()
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.key !== "M") return
+      if (e.key !== "P") return
       if (!e.shiftKey) return
       if (e.ctrlKey || e.metaKey || e.altKey) return
       if (isTextInputFocused()) return

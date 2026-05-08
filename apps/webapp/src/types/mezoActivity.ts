@@ -35,6 +35,8 @@ export type MezoActivityItem = {
   tokenId?: bigint
   amount?: bigint
   duration?: bigint
+  weight?: bigint
+  boost?: bigint
   gaugeAddress?: Address
   actionType: MezoActivityActionType
   boostContext: MezoBoostContext
@@ -77,12 +79,14 @@ export type MezoActivityMeta = {
 
 export type MezoActivityApiItem = Omit<
   MezoActivityItem,
-  "blockNumber" | "tokenId" | "amount" | "duration"
+  "blockNumber" | "tokenId" | "amount" | "duration" | "weight" | "boost"
 > & {
   blockNumber: string
   tokenId?: string
   amount?: string
   duration?: string
+  weight?: string
+  boost?: string
   explorerUrl?: string
 }
 

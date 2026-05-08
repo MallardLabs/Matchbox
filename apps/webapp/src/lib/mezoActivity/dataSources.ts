@@ -1,4 +1,7 @@
-import { normalizeAddress, sortActivityDesc } from "@/lib/mezoActivity/normalize"
+import {
+  normalizeAddress,
+  sortActivityDesc,
+} from "@/lib/mezoActivity/normalize"
 import type {
   MezoActivityActionType,
   MezoActivityCursor,
@@ -78,7 +81,9 @@ function mapBoostContext(value: string): MezoActivityItem["boostContext"] {
 }
 
 function maybeHash(value: string | undefined): Hash | undefined {
-  return value && /^0x[a-fA-F0-9]{64}$/.test(value) ? (value as Hash) : undefined
+  return value && /^0x[a-fA-F0-9]{64}$/.test(value)
+    ? (value as Hash)
+    : undefined
 }
 
 function applyCursor(items: MezoActivityItem[], cursor?: MezoActivityCursor) {
@@ -153,6 +158,8 @@ async function fetchExplorerActivity(
         ...(event.tokenId ? { tokenId: BigInt(event.tokenId) } : {}),
         ...(event.amount ? { amount: BigInt(event.amount) } : {}),
         ...(event.duration ? { duration: BigInt(event.duration) } : {}),
+        ...(event.weight ? { weight: BigInt(event.weight) } : {}),
+        ...(event.boost ? { boost: BigInt(event.boost) } : {}),
         ...(gaugeAddress ? { gaugeAddress } : {}),
         actionType,
         boostContext: mapBoostContext(event.boostContext),
