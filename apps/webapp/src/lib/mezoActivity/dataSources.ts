@@ -165,11 +165,15 @@ function buildWhereClause(options: SourceOptions): string {
   return `{ ${parts.join(", ")} }`
 }
 
+// The Graph caps the `first` argument at 1000. Asking for 1001 (limit + 1 to
+// peek ahead for hasMore) silently errors out and returns []. Clamp here.
+const SUBGRAPH_FIRST_MAX = 1000
+
 async function fetchExplorerActivity(
   options: SourceOptions,
 ): Promise<MezoActivityItem[]> {
   const endpoint = MATCHBOX_EXPLORER_SUBGRAPH_BY_CHAIN[options.chainId]
-  const fetchSize = options.limit + 1
+  const fetchSize = Math.min(options.limit + 1, SUBGRAPH_FIRST_MAX)
   const skip = Math.max(options.page, 0) * options.limit
   const where = buildWhereClause(options)
   const query = `
@@ -252,6 +256,9 @@ async function fetchExplorerActivity(
           ? { totalWeight: BigInt(event.totalWeight) }
           : {}),
         ...(event.boost ? { boost: BigInt(event.boost) } : {}),
+        ...(event.boostableTokenId
+          ? { boostableTokenId: BigInt(event.boostableTokenId) }
+          : {}),
         ...(gaugeAddress ? { gaugeAddress } : {}),
         ...(pokeMethod ? { pokeMethod } : {}),
         ...(contract ? { contract } : {}),
@@ -289,7 +296,12 @@ export async function fetchMezoActivity(options: SourceOptions): Promise<{
 }> {
   const explorerItems = await fetchExplorerActivity(options)
   const merged = sortActivityDesc(explorerItems)
-  const hasMore = merged.length > options.limit
+  // When limit ≥ 1000 we couldn't peek ahead (capped at 1000). Treat a full
+  // page as "maybe more" so callers can page forward.
+  const hasMore =
+    options.limit >= SUBGRAPH_FIRST_MAX
+      ? merged.length >= SUBGRAPH_FIRST_MAX
+      : merged.length > options.limit
   const data = merged.slice(0, options.limit)
 
   return {

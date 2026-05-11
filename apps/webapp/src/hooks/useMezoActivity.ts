@@ -6,7 +6,7 @@ import type {
   MezoActivityItem,
 } from "@/types/mezoActivity"
 import { CHAIN_ID } from "@repo/shared/contracts"
-import { keepPreviousData, useQuery } from "@tanstack/react-query"
+import { useQuery } from "@tanstack/react-query"
 import { useMemo } from "react"
 
 type UseMezoActivityParams = {
@@ -86,7 +86,10 @@ export function useMezoActivity({
       actionTypesKey,
     ],
     enabled: isNetworkReady && !!network,
-    placeholderData: keepPreviousData,
+    // Don't use keepPreviousData here: when the user pages forward and back,
+    // stale page data would briefly flash in for the new page and (worse) the
+    // visible rows would not reliably update to the new page's contents. Clear
+    // the table on page change and show a loading state instead.
     queryFn: async () => {
       const params = new URLSearchParams()
       if (network) params.set("network", network)

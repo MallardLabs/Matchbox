@@ -299,6 +299,10 @@ export function simulate(
       droppedCronEvents += 1
       continue
     }
+    // PoolsVoter votes (matchboxGaugeBoost) allocate emissions to Mezo Earn
+    // pool/vault gauges — they do not boost a specific BTC lock and should
+    // not count toward the Academy boost track.
+    if (ev.boostContext === "matchboxGaugeBoost") continue
     // Snapshot any epoch boundaries we've passed (or just crossed).
     while (
       nextEpochIdx < epochs.length &&

@@ -411,6 +411,12 @@ export function formatActivity(
       const weightLabel = item.weight
         ? `${formatCompactAmount(item.weight)} weight`
         : ""
+      // PoolsVoter votes (matchboxGaugeBoost) allocate emissions to Mezo Earn
+      // pool/vault gauges — they do not boost a specific veBTC lock. BoostVoter
+      // votes (mezoVeBtcPairBoost) boost the veBTC NFT registered to that
+      // gauge. We label them differently and only the boost variant carries
+      // veBTC lock context.
+      const isPairBoost = item.boostContext === "mezoVeBtcPairBoost"
       drawer.unshift(
         { label: "Voter", value: actor, mono: true },
         ...(item.tokenId
@@ -419,6 +425,23 @@ export function formatActivity(
                 label: "veMEZO token",
                 value: `#${item.tokenId.toString()}`,
                 mono: true,
+              },
+            ]
+          : []),
+        ...(isPairBoost && item.boostableTokenId
+          ? [
+              {
+                label: "Boosted veBTC",
+                value: `#${item.boostableTokenId.toString()}`,
+                mono: true,
+              },
+            ]
+          : []),
+        ...(isPairBoost && item.boost
+          ? [
+              {
+                label: "New boost",
+                value: formatBoost(item.boost),
               },
             ]
           : []),
@@ -451,25 +474,20 @@ export function formatActivity(
         ...(pct ? [{ label: "% of voter power", value: pct }] : []),
       )
       const subjectLabel = where?.label ?? "gauge"
-      const titleVerb =
-        item.boostContext === "matchboxGaugeBoost"
-          ? "Boosted"
-          : item.boostContext === "mezoVeBtcPairBoost"
-            ? "Boosted (Pair)"
-            : "Voted on"
-      const sub = [
-        actor,
+      const titleVerb = isPairBoost ? "Boosted" : "Voted on"
+      const veMezoLabel = item.tokenId ? `veMEZO #${item.tokenId}` : undefined
+      const subParts = [
+        veMezoLabel,
         weightLabel,
-        pct ? `${pct} of voting power` : undefined,
-      ]
-        .filter(Boolean)
-        .join(" · ")
+        pct ? `${pct} of voter power` : undefined,
+      ].filter(Boolean) as string[]
       return {
         category: "vote",
-        emoji: "🗳",
+        emoji: isPairBoost ? "⚡" : "🗳",
         title: `${titleVerb} ${subjectLabel}`,
-        subtitle: sub,
-        amount: weightLabel || undefined,
+        subtitle: subParts.join(" · "),
+        amount: veMezoLabel,
+        amountSubtext: weightLabel || undefined,
         ...(where ? { where } : {}),
         drawer,
       }

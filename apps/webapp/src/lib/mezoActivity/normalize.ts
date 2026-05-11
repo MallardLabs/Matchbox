@@ -127,6 +127,9 @@ export function serializeActivityItem(
       ? { totalWeight: item.totalWeight.toString() }
       : {}),
     ...(item.boost !== undefined ? { boost: item.boost.toString() } : {}),
+    ...(item.boostableTokenId !== undefined
+      ? { boostableTokenId: item.boostableTokenId.toString() }
+      : {}),
     ...(item.period !== undefined ? { period: item.period.toString() } : {}),
     ...(item.newPeriod !== undefined
       ? { newPeriod: item.newPeriod.toString() }
@@ -183,6 +186,9 @@ export function deserializeActivityItem(
     ...(item.weight ? { weight: BigInt(item.weight) } : {}),
     ...(item.totalWeight ? { totalWeight: BigInt(item.totalWeight) } : {}),
     ...(item.boost ? { boost: BigInt(item.boost) } : {}),
+    ...(item.boostableTokenId
+      ? { boostableTokenId: BigInt(item.boostableTokenId) }
+      : {}),
     ...(item.period ? { period: BigInt(item.period) } : {}),
     ...(item.newPeriod ? { newPeriod: BigInt(item.newPeriod) } : {}),
     ...(item.firstRecipientAmount
