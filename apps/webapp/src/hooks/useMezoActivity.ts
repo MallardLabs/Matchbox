@@ -15,6 +15,7 @@ type UseMezoActivityParams = {
   toTimestamp?: number
   page?: number
   limit?: number
+  actionTypes?: readonly string[]
 }
 
 const NETWORK_BY_CHAIN: Record<number, "mainnet" | "testnet"> = {
@@ -68,12 +69,22 @@ export function useMezoActivity({
   toTimestamp,
   page = 0,
   limit = 50,
+  actionTypes,
 }: UseMezoActivityParams) {
   const { chainId, isNetworkReady } = useNetwork()
   const network = NETWORK_BY_CHAIN[chainId]
+  const actionTypesKey = actionTypes ? [...actionTypes].sort().join(",") : ""
 
   const query = useQuery({
-    queryKey: ["activity", network, fromTimestamp, toTimestamp, limit, page],
+    queryKey: [
+      "activity",
+      network,
+      fromTimestamp,
+      toTimestamp,
+      limit,
+      page,
+      actionTypesKey,
+    ],
     enabled: isNetworkReady && !!network,
     placeholderData: keepPreviousData,
     queryFn: async () => {
@@ -83,6 +94,9 @@ export function useMezoActivity({
       params.set("page", String(page))
       if (fromTimestamp !== undefined) params.set("from", String(fromTimestamp))
       if (toTimestamp !== undefined) params.set("to", String(toTimestamp))
+      if (actionTypes && actionTypes.length > 0) {
+        params.set("actionTypes", actionTypes.join(","))
+      }
       const response = await fetch(`/api/activity?${params.toString()}`, {
         cache: "no-store",
       })

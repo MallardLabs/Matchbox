@@ -175,7 +175,7 @@ export default function AcademyLeaderboard({ rows, budgetMezoWad }: Props) {
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] text-[var(--content-secondary)]">
+      <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-[var(--content-secondary)]">
         <span>
           {rows.length.toLocaleString()} actor{rows.length === 1 ? "" : "s"} · Σ
           budget {fmtMezo(budgetMezoWad)} MEZO
@@ -186,7 +186,7 @@ export default function AcademyLeaderboard({ rows, budgetMezoWad }: Props) {
             <select
               value={limit}
               onChange={(e) => setLimit(Number(e.target.value))}
-              className="rounded border border-[var(--border)] bg-[var(--surface-tertiary)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--content-primary)]"
+              className="rounded border border-[var(--border)] bg-[var(--surface-tertiary)] px-1.5 py-0.5 font-mono text-[11px] text-[var(--content-primary)]"
             >
               <option value={50}>50</option>
               <option value={100}>100</option>
@@ -197,7 +197,7 @@ export default function AcademyLeaderboard({ rows, budgetMezoWad }: Props) {
           <button
             type="button"
             onClick={exportCsv}
-            className="rounded border border-[var(--border)] px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-[var(--content-secondary)] hover:text-[#F7931A]"
+            className="rounded border border-[var(--border)] px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-[var(--content-secondary)] hover:text-[#F7931A]"
           >
             Export CSV
           </button>
@@ -205,8 +205,8 @@ export default function AcademyLeaderboard({ rows, budgetMezoWad }: Props) {
       </div>
       <div className="overflow-hidden rounded border border-[var(--border)]">
         <div className="max-h-[480px] overflow-auto">
-          <table className="w-full text-[11px]">
-            <thead className="sticky top-0 bg-[var(--surface-tertiary)] text-[10px] uppercase tracking-wider">
+          <table className="w-full text-xs">
+            <thead className="sticky top-0 bg-[var(--surface-tertiary)] text-[11px] uppercase tracking-wider">
               <tr>
                 <th className="px-2 py-1.5 text-left">#</th>
                 <th className="px-2 py-1.5 text-left">Actor</th>
@@ -242,10 +242,10 @@ export default function AcademyLeaderboard({ rows, budgetMezoWad }: Props) {
                   key={row.actor}
                   className="border-t border-[var(--border)] hover:bg-[var(--surface-tertiary)]"
                 >
-                  <td className="px-2 py-1 text-left text-[10px] text-[var(--content-tertiary)]">
+                  <td className="px-2 py-1 text-left text-[11px] text-[var(--content-tertiary)]">
                     {i + 1}
                   </td>
-                  <td className="px-2 py-1 font-mono text-[10px] text-[var(--content-primary)]">
+                  <td className="px-2 py-1 font-mono text-[11px] text-[var(--content-primary)]">
                     {fmtAddr(row.actor)}
                     {row.fullyParticipated ? (
                       <span
@@ -257,7 +257,7 @@ export default function AcademyLeaderboard({ rows, budgetMezoWad }: Props) {
                     ) : null}
                     {row.flagged ? (
                       <span
-                        className="ml-1 text-[10px] text-[var(--content-secondary)]"
+                        className="ml-1 text-[11px] text-[var(--content-secondary)]"
                         title="Approximated — missing weight or prior-lock data"
                       >
                         ~
@@ -267,7 +267,7 @@ export default function AcademyLeaderboard({ rows, budgetMezoWad }: Props) {
                   <td className="px-2 py-1 text-right font-mono text-[var(--content-primary)]">
                     {fmtPoints(row.pointsWad)}
                   </td>
-                  <td className="px-2 py-1 text-right font-mono text-[10px] text-[var(--content-secondary)]">
+                  <td className="px-2 py-1 text-right font-mono text-[11px] text-[var(--content-secondary)]">
                     {pointsShare(row, total).toFixed(2)}%
                   </td>
                   <td className="px-2 py-1 text-right font-mono text-[var(--content-primary)]">
@@ -278,16 +278,16 @@ export default function AcademyLeaderboard({ rows, budgetMezoWad }: Props) {
                       ? `${row.apr.toLocaleString(undefined, { maximumFractionDigits: 1 })}%`
                       : "—"}
                   </td>
-                  <td className="px-2 py-1 text-right font-mono text-[10px] text-[var(--content-secondary)]">
+                  <td className="px-2 py-1 text-right font-mono text-[11px] text-[var(--content-secondary)]">
                     {fmtVePower(row.vePowerWad)}
                   </td>
-                  <td className="px-2 py-1 text-right font-mono text-[10px] text-[var(--content-secondary)]">
+                  <td className="px-2 py-1 text-right font-mono text-[11px] text-[var(--content-secondary)]">
                     {row.newLockCount}
                   </td>
-                  <td className="px-2 py-1 text-right font-mono text-[10px] text-[var(--content-secondary)]">
+                  <td className="px-2 py-1 text-right font-mono text-[11px] text-[var(--content-secondary)]">
                     {row.extensionCount}
                   </td>
-                  <td className="px-2 py-1 text-right font-mono text-[10px] text-[var(--content-secondary)]">
+                  <td className="px-2 py-1 text-right font-mono text-[11px] text-[var(--content-secondary)]">
                     {row.boostCount}
                   </td>
                 </tr>
@@ -296,7 +296,7 @@ export default function AcademyLeaderboard({ rows, budgetMezoWad }: Props) {
           </table>
         </div>
         {sorted.length > limit ? (
-          <div className="border-t border-[var(--border)] bg-[var(--surface-tertiary)] px-2 py-1 text-center text-[10px] text-[var(--content-secondary)]">
+          <div className="border-t border-[var(--border)] bg-[var(--surface-tertiary)] px-2 py-1 text-center text-[11px] text-[var(--content-secondary)]">
             showing top {limit.toLocaleString()} of{" "}
             {sorted.length.toLocaleString()}
           </div>

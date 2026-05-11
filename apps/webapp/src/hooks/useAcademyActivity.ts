@@ -1,5 +1,6 @@
 import { useNetwork } from "@/contexts/NetworkContext"
 import { WEEK } from "@/lib/academy/epoch"
+import { ACADEMY_ACTION_TYPES_GRAPHQL } from "@/lib/mezoActivity/constants"
 import { deserializeActivityItem } from "@/lib/mezoActivity/normalize"
 import type {
   MezoActivityApiResponse,
@@ -35,6 +36,7 @@ async function fetchPage(args: {
   params.set("from", String(args.from))
   params.set("to", String(args.to))
   params.set("page", String(args.page))
+  params.set("actionTypes", ACADEMY_ACTION_TYPES_GRAPHQL.join(","))
   const res = await fetch(`/api/activity?${params.toString()}`, {
     cache: "no-store",
   })

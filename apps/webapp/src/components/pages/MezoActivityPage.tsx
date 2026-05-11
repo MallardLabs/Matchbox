@@ -1,7 +1,11 @@
 import { SpringIn } from "@/components/SpringIn"
 import { useActivityEnrichment } from "@/hooks/useActivityEnrichment"
 import { useMezoActivity } from "@/hooks/useMezoActivity"
-import { isAutomatedAddress } from "@/lib/mezoActivity/constants"
+import {
+  SYSTEM_ACTION_TYPES_GRAPHQL,
+  USER_ACTION_TYPES_GRAPHQL,
+  isAutomatedAddress,
+} from "@/lib/mezoActivity/constants"
 import {
   type EnrichmentContext,
   formatActivity,
@@ -728,6 +732,11 @@ export default function MezoActivityPage() {
     () => ALL_ACTIVITY_FILTERS,
     [],
   )
+  const apiActionTypes =
+    tab === "activity"
+      ? (USER_ACTION_TYPES_GRAPHQL as readonly string[])
+      : (SYSTEM_ACTION_TYPES_GRAPHQL as readonly string[])
+
   const { rawData, isLoading, isError, error, isFetching, hasMore } =
     useMezoActivity({
       filters: allFilters,
@@ -735,6 +744,7 @@ export default function MezoActivityPage() {
       toTimestamp,
       page,
       limit: PAGE_SIZE,
+      actionTypes: apiActionTypes,
     })
 
   useEffect(() => {

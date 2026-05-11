@@ -1,7 +1,61 @@
 import { enumerateEpochs, epochStartFor } from "@/lib/academy/epoch"
 import { isSnfActor } from "@/lib/academy/snfActors"
+import { MEZO_BOOST_POKE_CRON_ADDRESS } from "@/lib/mezoActivity/constants"
 import type { MezoActivityItem } from "@/types/mezoActivity"
-import type { Address } from "viem"
+import { type Address, getAddress, isAddressEqual } from "viem"
+
+// ──────────────────────────────────────────────────────────────────────────
+// Academy reward model — single source of truth
+// ──────────────────────────────────────────────────────────────────────────
+//
+// Three tracks of behavior earn points. Each is weighted independently so you
+// can tune the program toward what you want to incentivize.
+//
+//   1. Locking veMEZO         (LOCK_CREATED + LOCK_AMOUNT_INCREASED + LOCK_PERMANENT)
+//        points = weightNew  × ΔvePower      (one-shot, at the time of the lock)
+//
+//   2. Extending a lock        (LOCK_EXTENDED)
+//        points = weightExt  × ΔvePower      (one-shot, at the extension event)
+//
+//   3. Casting boost votes     (BOOST_VOTE) — covers both
+//        a) voting on Matchbox gauges via PoolsVoter
+//        b) pairing a veMEZO lock with a veBTC position (BoostVoter)
+//        points = weightBoost × voteWeight   (one-shot, per (epoch, gauge))
+//
+// Notes:
+//
+//   ve-power is computed as `amount × min(duration, 4 years) / 4 years`. A 1-year
+//   lock of 100 MEZO produces 25 ve-power; a 4-year lock of 100 MEZO produces
+//   100 ve-power. Permanent locks are treated as the 4-year cap.
+//
+//   The boost MULTIPLIER (2× vs 3×) that the Mezo app shows is a property of the
+//   gauge, not the voter: it's how much veMEZO the gauge has attracted relative
+//   to supply. A user with weight W on a gauge earns the same W points regardless
+//   of the multiplier — the multiplier is just the public-facing "popularity".
+//
+//   If a user votes on the same gauge multiple times in the same epoch (e.g. spam),
+//   only the first vote scores at full weight; further votes are discounted to
+//   25% × weightBoost via `boostCapPerEpoch` (default 1).
+//
+//   Full-participation bonus: if an actor cast at least one vote in EVERY epoch
+//   of the range, their lock+extension points are multiplied by
+//   (participationMultiplier − 1) and added as a bonus.
+//
+//   The CRON address `0xf8176Df5…` (Tigris maintainer) is hard-filtered out of
+//   the actor set, because some Voted events emitted by the contract carry
+//   `voter = msg.sender` when the maintainer calls `poke(tokenId)` to refresh a
+//   user's vote — that's NOT a user action, just maintenance. The subgraph
+//   should ideally resolve these back to the original lock owner; until that's
+//   live the simulator just drops them rather than mis-attribute.
+//
+//   Reward distribution is a simple proportional split:
+//        reward(actor) = budgetMezo × (actor.points / Σ all_actors.points)
+//
+//   APR is annualised from epoch returns:
+//        apr = (reward × mezoUsd / vePower × mezoUsd) × (52 / epochsInRange) × 100
+//   The mezoUsd factor cancels; it's there for parity with real-world inputs.
+//
+// ──────────────────────────────────────────────────────────────────────────
 
 const MAXTIME = BigInt(4 * 365 * 86_400)
 const WAD = 10n ** 18n
@@ -19,6 +73,9 @@ export type AcademyParams = {
 export type LeaderboardRow = {
   actor: Address
   pointsWad: bigint
+  lockPointsWad: bigint
+  extensionPointsWad: bigint
+  votePointsWad: bigint
   rewardMezoWad: bigint
   apr: number
   vePowerWad: bigint
@@ -38,6 +95,7 @@ export type SimTotals = {
   avgApr: number
   totalEpochs: number
   fullParticipationCount: number
+  droppedCronEvents: number
 }
 
 export type SimResult = {
@@ -57,10 +115,20 @@ function scaleWad(value: bigint, factor: number): bigint {
   return (value * BigInt(scaled)) / 1_000_000n
 }
 
+function isCronActor(addr: Address | undefined): boolean {
+  if (!addr) return false
+  try {
+    return isAddressEqual(getAddress(addr), MEZO_BOOST_POKE_CRON_ADDRESS)
+  } catch {
+    return false
+  }
+}
+
 type ActorAccumulator = {
   actor: Address
-  pointsWad: bigint
-  newLockPointsWad: bigint
+  lockPointsWad: bigint
+  extensionPointsWad: bigint
+  votePointsWad: bigint
   vePowerWad: bigint
   newLockCount: number
   extensionCount: number
@@ -75,8 +143,9 @@ type ActorAccumulator = {
 function emptyActor(actor: Address): ActorAccumulator {
   return {
     actor,
-    pointsWad: 0n,
-    newLockPointsWad: 0n,
+    lockPointsWad: 0n,
+    extensionPointsWad: 0n,
+    votePointsWad: 0n,
     vePowerWad: 0n,
     newLockCount: 0,
     extensionCount: 0,
@@ -110,17 +179,31 @@ export function simulate(
     return acc
   }
 
+  let droppedCronEvents = 0
+
   for (const ev of sorted) {
     if (!ev.actorAddress) continue
+    // Drop maintainer-impersonated events outright. Some Voted events carry
+    // `voter = msg.sender` when the maintainer calls poke() to refresh a vote;
+    // those should belong to the original lock owner, not the cron. Without a
+    // subgraph-side resolution we drop them so the cron can't earn points.
+    if (isCronActor(ev.actorAddress)) {
+      droppedCronEvents += 1
+      continue
+    }
     const acc = get(ev.actorAddress)
     const actionType = ev.actionType
 
-    if (actionType === "lockCreated") {
+    if (
+      actionType === "lockCreated" ||
+      actionType === "lockAmountIncreased" ||
+      actionType === "lockPermanent"
+    ) {
+      // New money entering, or existing money becoming non-decaying.
       if (isSnfActor(ev.actorAddress)) continue
       const ve = vePowerWad(ev.amount ?? 0n, ev.duration ?? 0n)
       const pts = scaleWad(ve, params.weightNew)
-      acc.pointsWad += pts
-      acc.newLockPointsWad += pts
+      acc.lockPointsWad += pts
       acc.vePowerWad += ve
       acc.newLockCount += 1
       if (ev.tokenId !== undefined) {
@@ -133,6 +216,7 @@ export function simulate(
         acc.lastLockSnapshot = { amount: ev.amount, duration: ev.duration }
       }
     } else if (actionType === "lockExtended") {
+      // Duration extended on an existing lock — credit the delta ve-power only.
       const tokenKey = ev.tokenId?.toString()
       const prev = tokenKey ? acc.lastLockByToken.get(tokenKey) : undefined
       const newAmount = ev.amount ?? prev?.amount ?? 0n
@@ -143,12 +227,12 @@ export function simulate(
         const newPower = vePowerWad(newAmount, newDuration)
         deltaWad = newPower > prevPower ? newPower - prevPower : 0n
       } else {
-        // No prior lock event in this stream — coarse fallback proxy.
+        // No prior lock event in this stream — coarse fallback (¼ of full).
         deltaWad = vePowerWad(newAmount, newDuration) / 4n
         acc.flagged = true
       }
       const pts = scaleWad(deltaWad, params.weightExt)
-      acc.pointsWad += pts
+      acc.extensionPointsWad += pts
       acc.vePowerWad += deltaWad
       acc.extensionCount += 1
       if (tokenKey) {
@@ -183,39 +267,43 @@ export function simulate(
 
       let factor = params.weightBoost
       if (seen >= params.boostCapPerEpoch) {
-        // Over the per-epoch-per-gauge cap → discount.
+        // Over the per-epoch-per-gauge cap → discount to 25 %.
         factor = params.weightBoost * 0.25
       }
-      acc.pointsWad += scaleWad(weightWad, factor)
+      acc.votePointsWad += scaleWad(weightWad, factor)
     }
   }
 
   const allActors = [...accs.values()]
-  // Apply full-participation bonus.
+  // Apply full-participation bonus to lock+extension points.
   for (const acc of allActors) {
     if (
       totalEpochs > 0 &&
       acc.participatedEpochs.size >= totalEpochs &&
       params.participationMultiplier > 1
     ) {
-      const bonus = scaleWad(
-        acc.newLockPointsWad,
-        params.participationMultiplier - 1,
-      )
-      acc.pointsWad += bonus
+      const eligible = acc.lockPointsWad + acc.extensionPointsWad
+      const bonus = scaleWad(eligible, params.participationMultiplier - 1)
+      acc.lockPointsWad += bonus
     }
   }
 
   let totalPoints = 0n
-  for (const acc of allActors) totalPoints += acc.pointsWad
+  for (const acc of allActors) {
+    totalPoints +=
+      acc.lockPointsWad + acc.extensionPointsWad + acc.votePointsWad
+  }
 
   const rows: LeaderboardRow[] = allActors
-    .filter((a) => a.pointsWad > 0n)
     .map((acc) => {
+      const pointsWad =
+        acc.lockPointsWad + acc.extensionPointsWad + acc.votePointsWad
+      return { acc, pointsWad }
+    })
+    .filter((entry) => entry.pointsWad > 0n)
+    .map(({ acc, pointsWad }) => {
       const rewardMezoWad =
-        totalPoints > 0n
-          ? (params.budgetMezoWad * acc.pointsWad) / totalPoints
-          : 0n
+        totalPoints > 0n ? (params.budgetMezoWad * pointsWad) / totalPoints : 0n
 
       const fullyParticipated =
         totalEpochs > 0 && acc.participatedEpochs.size >= totalEpochs
@@ -229,7 +317,10 @@ export function simulate(
 
       return {
         actor: acc.actor,
-        pointsWad: acc.pointsWad,
+        pointsWad,
+        lockPointsWad: acc.lockPointsWad,
+        extensionPointsWad: acc.extensionPointsWad,
+        votePointsWad: acc.votePointsWad,
         rewardMezoWad,
         apr,
         vePowerWad: acc.vePowerWad,
@@ -257,6 +348,7 @@ export function simulate(
     avgApr,
     totalEpochs,
     fullParticipationCount: rows.filter((r) => r.fullyParticipated).length,
+    droppedCronEvents,
   }
 
   return { rows, totals }

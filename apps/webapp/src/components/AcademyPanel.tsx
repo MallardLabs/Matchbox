@@ -208,15 +208,15 @@ export default function AcademyPanel() {
                 <span className="text-base font-semibold tracking-tight text-[var(--content-primary)]">
                   Mezo Academy Simulator
                 </span>
-                <span className="rounded bg-[#F7931A]/15 px-1.5 py-0.5 font-mono text-[9px] font-bold uppercase tracking-wider text-[#F7931A]">
+                <span className="rounded bg-[#F7931A]/15 px-1.5 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider text-[#F7931A]">
                   Sim
                 </span>
               </div>
-              <p className="mt-0.5 text-[11px] leading-snug text-[var(--content-secondary)]">
+              <p className="mt-0.5 text-xs leading-snug text-[var(--content-secondary)]">
                 {fmtDate(fromTs)} → {fmtDate(toTs)} · {epochs.length} epoch
                 {epochs.length === 1 ? "" : "s"} ·{" "}
                 {sim?.totals.participants ?? 0} actors · press{" "}
-                <kbd className="rounded bg-[var(--surface-tertiary)] px-1 font-mono text-[10px]">
+                <kbd className="rounded bg-[var(--surface-tertiary)] px-1 font-mono text-[11px]">
                   Shift+P
                 </kbd>{" "}
                 to close
@@ -224,7 +224,7 @@ export default function AcademyPanel() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <label className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-[var(--content-secondary)]">
+            <label className="flex items-center gap-1 text-[11px] uppercase tracking-wider text-[var(--content-secondary)]">
               From
               <input
                 type="date"
@@ -236,7 +236,7 @@ export default function AcademyPanel() {
                 className="rounded border border-[var(--border)] bg-[var(--surface-tertiary)] px-2 py-1 text-xs text-[var(--content-primary)] outline-none focus:border-[#F7931A]"
               />
             </label>
-            <label className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-[var(--content-secondary)]">
+            <label className="flex items-center gap-1 text-[11px] uppercase tracking-wider text-[var(--content-secondary)]">
               To
               <input
                 type="date"
@@ -276,7 +276,7 @@ export default function AcademyPanel() {
             <DataStatus activity={activity} />
 
             <section>
-              <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-[var(--content-primary)]">
+              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-[var(--content-primary)]">
                 Totals
               </h3>
               {activity.isLoading ? (
@@ -325,7 +325,7 @@ export default function AcademyPanel() {
             </section>
 
             <section>
-              <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-[var(--content-primary)]">
+              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-[var(--content-primary)]">
                 Activity per epoch
               </h3>
               {epochSummaries.length === 0 ? (
@@ -341,7 +341,7 @@ export default function AcademyPanel() {
             </section>
 
             <section>
-              <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-[var(--content-primary)]">
+              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-[var(--content-primary)]">
                 Leaderboard
               </h3>
               {sim ? (
@@ -361,7 +361,7 @@ export default function AcademyPanel() {
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded border border-[var(--border)] bg-[var(--surface-tertiary)] px-2.5 py-2">
-      <div className="text-[9px] uppercase tracking-wider text-[var(--content-secondary)]">
+      <div className="text-[10px] uppercase tracking-wider text-[var(--content-secondary)]">
         {label}
       </div>
       <div className="font-mono text-sm text-[var(--content-primary)]">
@@ -383,7 +383,7 @@ function DataStatus({
   const truncated = data.truncatedChunks > 0
   return (
     <div
-      className={`flex flex-wrap items-center gap-3 rounded border px-3 py-2 text-[11px] ${
+      className={`flex flex-wrap items-center gap-3 rounded border px-3 py-2 text-xs ${
         truncated
           ? "border-amber-500/40 bg-amber-500/5 text-amber-300"
           : "border-[var(--border)] bg-[var(--surface-tertiary)] text-[var(--content-secondary)]"
@@ -433,17 +433,17 @@ function EpochChart({ rows, peak }: { rows: EpochSummary[]; peak: number }) {
                 className="w-full rounded-t bg-gradient-to-t from-[#F7931A] to-[#FFD89A]"
                 style={{ height: `${heightPct * 1.2}px` }}
               />
-              <div className="font-mono text-[9px] text-[var(--content-secondary)]">
+              <div className="font-mono text-[10px] text-[var(--content-secondary)]">
                 {row.epoch + 1}
               </div>
-              <div className="font-mono text-[9px] text-[var(--content-tertiary)]">
+              <div className="font-mono text-[10px] text-[var(--content-tertiary)]">
                 {row.total}
               </div>
             </div>
           )
         })}
       </div>
-      <div className="mt-1 flex flex-wrap gap-3 text-[10px] text-[var(--content-secondary)]">
+      <div className="mt-1 flex flex-wrap gap-3 text-[11px] text-[var(--content-secondary)]">
         <Legend swatch="#F7931A" label="Events per epoch" />
         <span>
           Hover a bar for the new-lock / extension / boost split per epoch

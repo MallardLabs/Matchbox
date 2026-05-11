@@ -36,11 +36,11 @@ function Section({
   return (
     <div className="rounded border border-[var(--border)] bg-[var(--surface)] p-3">
       <div className="mb-2">
-        <h4 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--content-primary)]">
+        <h4 className="text-xs font-semibold uppercase tracking-wider text-[var(--content-primary)]">
           {title}
         </h4>
         {hint ? (
-          <p className="mt-0.5 text-[10px] leading-snug text-[var(--content-secondary)]">
+          <p className="mt-0.5 text-[11px] leading-snug text-[var(--content-secondary)]">
             {hint}
           </p>
         ) : null}
@@ -69,7 +69,7 @@ function NumberField({
 }) {
   return (
     <label className="flex flex-col gap-1">
-      <span className="text-[10px] uppercase tracking-wider text-[var(--content-secondary)]">
+      <span className="text-[11px] uppercase tracking-wider text-[var(--content-secondary)]">
         {label}
       </span>
       <input
@@ -85,7 +85,7 @@ function NumberField({
         className="rounded border border-[var(--border)] bg-[var(--surface-tertiary)] px-2 py-1 text-sm text-[var(--content-primary)] outline-none focus:border-[#F7931A]"
       />
       {hint ? (
-        <span className="text-[10px] leading-snug text-[var(--content-tertiary)]">
+        <span className="text-[11px] leading-snug text-[var(--content-tertiary)]">
           {hint}
         </span>
       ) : null}
@@ -109,7 +109,7 @@ export default function AcademyKnobs({ params, onChange, onReset }: Props) {
               type="button"
               key={preset.label}
               onClick={() => update({ budgetMezoWad: mezoToWad(preset.mezo) })}
-              className="rounded bg-[var(--surface-tertiary)] px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--content-primary)] hover:bg-[var(--surface-secondary)]"
+              className="rounded bg-[var(--surface-tertiary)] px-2 py-1 text-xs font-semibold uppercase tracking-wider text-[var(--content-primary)] hover:bg-[var(--surface-secondary)]"
             >
               {preset.label}
             </button>
@@ -202,7 +202,7 @@ export default function AcademyKnobs({ params, onChange, onReset }: Props) {
       <button
         type="button"
         onClick={onReset}
-        className="self-start rounded border border-[var(--border)] bg-[var(--surface-tertiary)] px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--content-secondary)] hover:bg-[var(--surface-secondary)] hover:text-[var(--content-primary)]"
+        className="self-start rounded border border-[var(--border)] bg-[var(--surface-tertiary)] px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-[var(--content-secondary)] hover:bg-[var(--surface-secondary)] hover:text-[var(--content-primary)]"
       >
         Reset to defaults
       </button>

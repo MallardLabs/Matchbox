@@ -25,6 +25,7 @@ type SourceOptions = {
   toTimestamp: number
   limit: number
   page: number
+  actionTypes?: string[]
 }
 
 type ExplorerActivityEvent = {
@@ -153,7 +154,15 @@ function maybeHash(value: string | undefined): Hash | undefined {
 }
 
 function buildWhereClause(options: SourceOptions): string {
-  return `{ timestamp_gte: "${options.fromTimestamp}", timestamp_lte: "${options.toTimestamp}" }`
+  const parts: string[] = [
+    `timestamp_gte: "${options.fromTimestamp}"`,
+    `timestamp_lte: "${options.toTimestamp}"`,
+  ]
+  if (options.actionTypes && options.actionTypes.length > 0) {
+    const list = options.actionTypes.map((t) => t).join(", ")
+    parts.push(`actionType_in: [${list}]`)
+  }
+  return `{ ${parts.join(", ")} }`
 }
 
 async function fetchExplorerActivity(

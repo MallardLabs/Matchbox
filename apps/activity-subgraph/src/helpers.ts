@@ -103,6 +103,32 @@ export function detectPokeMethod(input: Bytes): string | null {
   return null
 }
 
+// veMEZO VotingEscrow addresses across supported networks. Voted events on
+// BoostVoter/PoolsVoter carry `voter = msg.sender`, which is the maintainer
+// when the cron calls `poke(tokenId)`. Resolve the real owner by looking up
+// the LockPosition entity keyed on (veMEZO contract, tokenId).
+const VE_MEZO_MAINNET_HEX = "0xb90fdad3dfd180458d62cc6acedc983d78e20122"
+const VE_MEZO_TESTNET_HEX = "0xace816ca2bcc9b12c59799dcc5a959fb9b98111b"
+
+// Returns the lock owner's address, or the provided fallback if no lock exists.
+// Avoids returning a nullable Bytes across modules — the AS compiler crashes on
+// that pattern. Callers pass the event's `voter` field as the fallback.
+export function resolveLockOwner(tokenId: BigInt, fallback: Bytes): Bytes {
+  const idMainnet = VE_MEZO_MAINNET_HEX + "-" + tokenId.toString()
+  const mainnet = LockPosition.load(idMainnet)
+  if (mainnet != null) {
+    const owner = mainnet.owner
+    if (owner) return owner
+  }
+  const idTestnet = VE_MEZO_TESTNET_HEX + "-" + tokenId.toString()
+  const testnet = LockPosition.load(idTestnet)
+  if (testnet != null) {
+    const owner = testnet.owner
+    if (owner) return owner
+  }
+  return fallback
+}
+
 export function accountId(address: Bytes): string {
   return address.toHexString()
 }

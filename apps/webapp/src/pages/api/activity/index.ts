@@ -43,6 +43,13 @@ export default async function handler(request: Request): Promise<Response> {
     0,
   )
   const toTimestamp = Math.max(Number(url.searchParams.get("to") ?? now), 0)
+  const rawActionTypes = url.searchParams.get("actionTypes")
+  const actionTypes = rawActionTypes
+    ? rawActionTypes
+        .split(",")
+        .map((t) => t.trim())
+        .filter((t) => /^[A-Z_]+$/.test(t))
+    : undefined
 
   const result = await fetchMezoActivity({
     chainId,
@@ -50,6 +57,7 @@ export default async function handler(request: Request): Promise<Response> {
     toTimestamp,
     limit,
     page,
+    ...(actionTypes && actionTypes.length > 0 ? { actionTypes } : {}),
   })
 
   const response = {

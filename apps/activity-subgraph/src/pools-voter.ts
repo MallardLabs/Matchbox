@@ -1,3 +1,4 @@
+import { Bytes } from "@graphprotocol/graph-ts"
 import {
   Abstained,
   DistributeReward,
@@ -22,6 +23,7 @@ import {
   POOLS_VOTER,
   REWARD_DISTRIBUTED,
   REWARD_NOTIFIED,
+  resolveLockOwner,
   saveActivity,
 } from "./helpers"
 
@@ -56,14 +58,16 @@ export function handlePoolVoted(event: Voted): void {
     MATCHBOX_GAUGE_BOOST,
     POOLS_VOTER,
   )
-  activity.actor = event.params.voter
+  // Resolve actor via the underlying veMEZO lock — see boost-voter.ts for why.
+  const actor = resolveLockOwner(event.params.tokenId, event.params.voter)
+  activity.actor = actor
   activity.pool = event.params.pool
   activity.tokenId = event.params.tokenId
   activity.weight = event.params.weight
   activity.totalWeight = event.params.totalWeight
   saveActivity(activity)
 
-  const account = getOrCreateAccount(event.params.voter, event.block.timestamp)
+  const account = getOrCreateAccount(actor, event.block.timestamp)
   account.voteCount = account.voteCount.plus(ONE)
   account.save()
 
@@ -90,7 +94,7 @@ export function handlePoolAbstained(event: Abstained): void {
     MATCHBOX_GAUGE_BOOST,
     POOLS_VOTER,
   )
-  activity.actor = event.params.voter
+  activity.actor = resolveLockOwner(event.params.tokenId, event.params.voter)
   activity.pool = event.params.pool
   activity.tokenId = event.params.tokenId
   activity.weight = event.params.weight
