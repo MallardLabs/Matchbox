@@ -37,7 +37,6 @@ function defaultParams(): AcademyParams {
     weightExt: 1,
     weightBoost: 1,
     participationMultiplier: 2,
-    boostCapPerEpoch: 1,
     mezoUsd: 0.05,
   }
 }
@@ -66,7 +65,6 @@ function loadStored(): {
         weightExt: parsed.params?.weightExt ?? 1,
         weightBoost: parsed.params?.weightBoost ?? 1,
         participationMultiplier: parsed.params?.participationMultiplier ?? 2,
-        boostCapPerEpoch: parsed.params?.boostCapPerEpoch ?? 1,
         mezoUsd: parsed.params?.mezoUsd ?? 0.05,
       },
     }
@@ -163,7 +161,6 @@ export default function AcademyPanel() {
         weightExt: params.weightExt,
         weightBoost: params.weightBoost,
         participationMultiplier: params.participationMultiplier,
-        boostCapPerEpoch: params.boostCapPerEpoch,
         mezoUsd: params.mezoUsd,
       },
     }

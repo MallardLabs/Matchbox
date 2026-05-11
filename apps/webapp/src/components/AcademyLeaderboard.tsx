@@ -86,7 +86,7 @@ export default function AcademyLeaderboard({ rows, budgetMezoWad }: Props) {
           diff = cmpNumber(a.apr, b.apr)
           break
         case "vePower":
-          diff = cmpBigint(a.vePowerWad, b.vePowerWad)
+          diff = cmpBigint(a.aprBasisWad, b.aprBasisWad)
           break
         case "newLocks":
           diff = cmpNumber(a.newLockCount, b.newLockCount)
@@ -124,6 +124,7 @@ export default function AcademyLeaderboard({ rows, budgetMezoWad }: Props) {
       "rewardMezo",
       "aprPct",
       "vePowerWad",
+      "aprBasisWad",
       "newLocks",
       "extensions",
       "boosts",
@@ -142,6 +143,7 @@ export default function AcademyLeaderboard({ rows, budgetMezoWad }: Props) {
       fmtMezo(row.rewardMezoWad),
       row.apr.toFixed(2),
       row.vePowerWad.toString(),
+      row.aprBasisWad.toString(),
       row.newLockCount,
       row.extensionCount,
       row.boostCount,
@@ -231,7 +233,7 @@ export default function AcademyLeaderboard({ rows, budgetMezoWad }: Props) {
                   <SortHeader k="apr">APR</SortHeader>
                 </th>
                 <th className="px-2 py-1.5 text-right">
-                  <SortHeader k="vePower">ve-power</SortHeader>
+                  <SortHeader k="vePower">APR basis</SortHeader>
                 </th>
                 <th className="px-2 py-1.5 text-right">
                   <SortHeader k="newLocks">New</SortHeader>
@@ -293,7 +295,15 @@ export default function AcademyLeaderboard({ rows, budgetMezoWad }: Props) {
                       : "—"}
                   </td>
                   <td className="px-2 py-1 text-right font-mono text-[11px] text-[var(--content-secondary)]">
-                    {fmtVePower(row.vePowerWad)}
+                    {fmtVePower(row.aprBasisWad)}
+                    {row.vePowerWad === 0n && row.aprBasisWad > 0n ? (
+                      <span
+                        className="ml-1 text-[var(--content-tertiary)]"
+                        title="Average active vote weight across the selected epochs"
+                      >
+                        avg vote
+                      </span>
+                    ) : null}
                   </td>
                   <td className="px-2 py-1 text-right font-mono text-[11px] text-[var(--content-secondary)]">
                     {row.newLockCount}

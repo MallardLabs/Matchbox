@@ -159,10 +159,10 @@ export default function AcademyKnobs({ params, onChange, onReset }: Props) {
       </Section>
 
       <Section
-        title="Participation Bonus & Caps"
-        hint="Reward consistent voters; soft-cap actors who spam votes on the same gauge in one epoch."
+        title="Participation Bonus"
+        hint="Reward consistent voters who stay active across the full selected range."
       >
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-1 gap-2">
           <NumberField
             label="Full-epoch ×"
             value={params.participationMultiplier}
@@ -171,17 +171,6 @@ export default function AcademyKnobs({ params, onChange, onReset }: Props) {
             max={5}
             onChange={(n) => update({ participationMultiplier: n })}
             hint="Multiplier on lock points if actor voted in every epoch of the range"
-          />
-          <NumberField
-            label="Boost cap / epoch / gauge"
-            value={params.boostCapPerEpoch}
-            step={1}
-            min={1}
-            max={20}
-            onChange={(n) =>
-              update({ boostCapPerEpoch: Math.max(1, Math.round(n)) })
-            }
-            hint="Excess boost events on the same gauge are scored at 25% weight"
           />
         </div>
       </Section>

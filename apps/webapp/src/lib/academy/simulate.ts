@@ -71,7 +71,6 @@ export type AcademyParams = {
   weightExt: number
   weightBoost: number
   participationMultiplier: number
-  boostCapPerEpoch: number
   mezoUsd: number
 }
 
@@ -84,6 +83,7 @@ export type LeaderboardRow = {
   rewardMezoWad: bigint
   apr: number
   vePowerWad: bigint
+  aprBasisWad: bigint
   newLockCount: number
   extensionCount: number
   boostCount: number
@@ -143,6 +143,7 @@ type ActorAccumulator = {
   extensionPointsWad: bigint
   votePointsWad: bigint
   vePowerWad: bigint
+  voteWeightEpochSumWad: bigint
   newLockCount: number
   extensionCount: number
   boostCount: number
@@ -158,6 +159,7 @@ function emptyActor(actor: Address): ActorAccumulator {
     extensionPointsWad: 0n,
     votePointsWad: 0n,
     vePowerWad: 0n,
+    voteWeightEpochSumWad: 0n,
     newLockCount: 0,
     extensionCount: 0,
     boostCount: 0,
@@ -290,6 +292,7 @@ export function simulate(
       if (vote.weight <= 0n) continue
       const acc = get(vote.owner)
       acc.votePointsWad += scaleWad(vote.weight, params.weightBoost)
+      acc.voteWeightEpochSumWad += vote.weight
       acc.participatedEpochs.add(epochStart)
     }
   }
@@ -383,9 +386,14 @@ export function simulate(
       const fullyParticipated =
         totalEpochs > 0 && acc.participatedEpochs.size >= totalEpochs
 
+      const avgActiveVoteWeightWad =
+        totalEpochs > 0 ? acc.voteWeightEpochSumWad / BigInt(totalEpochs) : 0n
+      const aprBasisWad =
+        acc.vePowerWad > 0n ? acc.vePowerWad : avgActiveVoteWeightWad
+
       const apr = computeAprPct({
         rewardMezoWad,
-        vePowerWad: acc.vePowerWad,
+        vePowerWad: aprBasisWad,
         mezoUsd: params.mezoUsd,
         totalEpochs,
       })
@@ -399,6 +407,7 @@ export function simulate(
         rewardMezoWad,
         apr,
         vePowerWad: acc.vePowerWad,
+        aprBasisWad,
         newLockCount: acc.newLockCount,
         extensionCount: acc.extensionCount,
         boostCount: acc.boostCount,
