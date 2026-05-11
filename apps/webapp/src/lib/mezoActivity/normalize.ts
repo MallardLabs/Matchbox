@@ -66,9 +66,12 @@ export type GroupedActivity = {
 export function groupActivityByTx(
   items: MezoActivityItem[],
 ): GroupedActivity[] {
+  const seenEventIds = new Set<string>()
   const groups = new Map<string, GroupedActivity>()
   const order: string[] = []
   for (const item of items) {
+    if (seenEventIds.has(item.id)) continue
+    seenEventIds.add(item.id)
     const key = item.txHash
       ? `${item.txHash}:${item.actorAddress ?? "unknown"}`
       : item.id

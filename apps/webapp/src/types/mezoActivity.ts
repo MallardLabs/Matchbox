@@ -113,16 +113,11 @@ export type MezoActivityItem = {
   distributionId?: bigint
 }
 
-export type MezoActivityCursor = {
-  id: string
-  timestamp: number
-  logIndex: number
-}
-
 export type MezoActivityResponse = {
   success: boolean
   data: MezoActivityItem[]
-  nextCursor: MezoActivityCursor | null
+  page: number
+  hasMore: boolean
   meta?: MezoActivityMeta
 }
 
@@ -206,6 +201,7 @@ export type MezoActivityApiItem = Omit<
 export type MezoActivityApiResponse = {
   success: boolean
   data: MezoActivityApiItem[]
-  nextCursor: MezoActivityCursor | null
+  page: number
+  hasMore: boolean
   meta?: MezoActivityMeta
 }

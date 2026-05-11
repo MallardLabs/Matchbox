@@ -1,7 +1,6 @@
 import { getExplorerTransactionUrl } from "@/config/explorer"
 import { fetchMezoActivity } from "@/lib/mezoActivity/dataSources"
 import { serializeActivityItem } from "@/lib/mezoActivity/normalize"
-import type { MezoActivityCursor } from "@/types/mezoActivity"
 import { CHAIN_ID, type SupportedChainId } from "@repo/shared/contracts"
 
 export const config = {
@@ -13,15 +12,11 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Methods": "GET, OPTIONS",
 } as const
 
-function parseCursor(raw: string | null): MezoActivityCursor | undefined {
-  if (!raw) return undefined
-  try {
-    const parsed = JSON.parse(raw) as MezoActivityCursor
-    if (!parsed?.id || typeof parsed.timestamp !== "number") return undefined
-    return parsed
-  } catch {
-    return undefined
-  }
+function parsePage(raw: string | null): number {
+  if (!raw) return 0
+  const n = Number.parseInt(raw, 10)
+  if (!Number.isFinite(n) || n < 0) return 0
+  return n
 }
 
 function parseChainId(network: string | null): SupportedChainId {
@@ -41,7 +36,7 @@ export default async function handler(request: Request): Promise<Response> {
     Math.max(Number(url.searchParams.get("limit") ?? "50"), 1),
     1000,
   )
-  const cursor = parseCursor(url.searchParams.get("cursor"))
+  const page = parsePage(url.searchParams.get("page"))
   const now = Math.floor(Date.now() / 1000)
   const fromTimestamp = Math.max(
     Number(url.searchParams.get("from") ?? now - 30 * 86_400),
@@ -54,7 +49,7 @@ export default async function handler(request: Request): Promise<Response> {
     fromTimestamp,
     toTimestamp,
     limit,
-    ...(cursor ? { cursor } : {}),
+    page,
   })
 
   const response = {
@@ -65,7 +60,8 @@ export default async function handler(request: Request): Promise<Response> {
         ? { explorerUrl: getExplorerTransactionUrl(chainId, item.txHash) }
         : {}),
     })),
-    nextCursor: result.nextCursor,
+    page: result.page,
+    hasMore: result.hasMore,
     meta: {
       coverage: {
         locks: "indexed",

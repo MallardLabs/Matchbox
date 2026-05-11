@@ -17,7 +17,7 @@ import type {
   MezoActivityTab,
   MezoSystemFilter,
 } from "@/types/mezoActivity"
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 
 const ACTIVITY_FILTERS: Array<{ key: MezoActivityFilter; label: string }> = [
   { key: "locks", label: "Locks" },
@@ -703,6 +703,8 @@ function ActivityRow({
   )
 }
 
+const PAGE_SIZE = 50
+
 export default function MezoActivityPage() {
   const [tab, setTab] = useState<MezoActivityTab>("activity")
   const [activityFilters, setActivityFilters] =
@@ -716,6 +718,9 @@ export default function MezoActivityPage() {
   const [toDate, setToDate] = useState(() => toDateInputValue(initialNow))
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [isExporting, setIsExporting] = useState(false)
+  const [page, setPage] = useState(0)
+  const [jumpInput, setJumpInput] = useState("")
+  const [maxKnownPage, setMaxKnownPage] = useState(0)
   const fromTimestamp = useMemo(() => fromDateInputValue(fromDate), [fromDate])
   const toTimestamp = useMemo(() => fromDateInputValue(toDate, true), [toDate])
 
@@ -723,21 +728,27 @@ export default function MezoActivityPage() {
     () => ALL_ACTIVITY_FILTERS,
     [],
   )
-  const {
-    rawData,
-    isLoading,
-    isError,
-    error,
-    isFetching,
-    isFetchingNextPage,
-    hasNextPage,
-    fetchNextPage,
-  } = useMezoActivity({
-    filters: allFilters,
-    fromTimestamp,
-    toTimestamp,
-    limit: 50,
-  })
+  const { rawData, isLoading, isError, error, isFetching, hasMore } =
+    useMezoActivity({
+      filters: allFilters,
+      fromTimestamp,
+      toTimestamp,
+      page,
+      limit: PAGE_SIZE,
+    })
+
+  useEffect(() => {
+    setMaxKnownPage((prev) => {
+      const confirmed = hasMore ? page + 1 : page
+      return Math.max(prev, confirmed)
+    })
+  }, [page, hasMore])
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: setters are stable
+  useEffect(() => {
+    setPage(0)
+    setMaxKnownPage(0)
+  }, [fromTimestamp, toTimestamp, tab])
 
   const toggleExpanded = (key: string) => {
     setExpanded((current) => {
@@ -1054,20 +1065,140 @@ export default function MezoActivityPage() {
         </div>
       </SpringIn>
 
-      <div>
+      <Pagination
+        page={page}
+        hasMore={hasMore}
+        isFetching={isFetching}
+        maxKnownPage={maxKnownPage}
+        jumpInput={jumpInput}
+        onJumpInputChange={setJumpInput}
+        onJump={(target) => {
+          if (!Number.isFinite(target) || target < 0) return
+          setPage(target)
+          setJumpInput("")
+        }}
+        onPrev={() => setPage((p) => Math.max(0, p - 1))}
+        onNext={() => setPage((p) => p + 1)}
+      />
+    </div>
+  )
+}
+
+function Pagination({
+  page,
+  hasMore,
+  isFetching,
+  maxKnownPage,
+  jumpInput,
+  onJumpInputChange,
+  onJump,
+  onPrev,
+  onNext,
+}: {
+  page: number
+  hasMore: boolean
+  isFetching: boolean
+  maxKnownPage: number
+  jumpInput: string
+  onJumpInputChange: (value: string) => void
+  onJump: (target: number) => void
+  onPrev: () => void
+  onNext: () => void
+}) {
+  const visiblePages = useMemo(() => {
+    const lastKnown = Math.max(maxKnownPage, page)
+    const start = Math.max(0, page - 2)
+    const end = Math.min(lastKnown, page + 2)
+    const result: number[] = []
+    for (let i = start; i <= end; i += 1) result.push(i)
+    return result
+  }, [page, maxKnownPage])
+
+  const handleJump = (event: React.FormEvent) => {
+    event.preventDefault()
+    const target = Number.parseInt(jumpInput, 10) - 1
+    onJump(target)
+  }
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm">
+      <div className="flex items-center gap-1.5">
         <button
           type="button"
-          disabled={!hasNextPage || isFetchingNextPage || isFetching}
-          onClick={() => fetchNextPage()}
-          className="rounded-lg border border-[var(--border)] px-4 py-2 text-sm text-[var(--content-secondary)] disabled:cursor-not-allowed disabled:opacity-50"
+          onClick={onPrev}
+          disabled={page === 0 || isFetching}
+          className="rounded-md border border-[var(--border)] px-2.5 py-1 font-mono text-xs text-[var(--content-secondary)] transition-colors hover:text-[#F7931A] disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {isFetchingNextPage
-            ? "Loading..."
-            : hasNextPage
-              ? "Load More"
-              : "End of history"}
+          ‹ Prev
+        </button>
+        {visiblePages[0] !== undefined && visiblePages[0] > 0 ? (
+          <>
+            <button
+              type="button"
+              onClick={() => onJump(0)}
+              className="rounded-md px-2 py-1 font-mono text-xs text-[var(--content-secondary)] hover:text-[#F7931A]"
+            >
+              1
+            </button>
+            {visiblePages[0] > 1 ? (
+              <span className="px-1 text-xs text-[var(--content-tertiary)]">
+                …
+              </span>
+            ) : null}
+          </>
+        ) : null}
+        {visiblePages.map((pageNumber) => (
+          <button
+            key={pageNumber}
+            type="button"
+            onClick={() => onJump(pageNumber)}
+            className={`rounded-md px-2 py-1 font-mono text-xs transition-colors ${
+              pageNumber === page
+                ? "border border-[#F7931A] bg-[#F7931A]/10 text-[#F7931A]"
+                : "border border-transparent text-[var(--content-secondary)] hover:text-[#F7931A]"
+            }`}
+          >
+            {pageNumber + 1}
+          </button>
+        ))}
+        {hasMore ? (
+          <span className="px-1 text-xs text-[var(--content-tertiary)]">…</span>
+        ) : null}
+        <button
+          type="button"
+          onClick={onNext}
+          disabled={!hasMore || isFetching}
+          className="rounded-md border border-[var(--border)] px-2.5 py-1 font-mono text-xs text-[var(--content-secondary)] transition-colors hover:text-[#F7931A] disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Next ›
         </button>
       </div>
+      <form
+        onSubmit={handleJump}
+        className="flex items-center gap-2 text-xs text-[var(--content-tertiary)]"
+      >
+        <span>
+          Page <span className="text-[var(--content-primary)]">{page + 1}</span>
+          {hasMore || maxKnownPage > page ? "" : " (last)"}
+        </span>
+        <label className="flex items-center gap-1">
+          Jump to
+          <input
+            type="number"
+            min={1}
+            value={jumpInput}
+            onChange={(event) => onJumpInputChange(event.target.value)}
+            className="w-16 rounded-md border border-[var(--border)] bg-[var(--surface-secondary)] px-2 py-1 font-mono text-xs text-[var(--content-primary)]"
+            placeholder="#"
+          />
+        </label>
+        <button
+          type="submit"
+          className="rounded-md border border-[var(--border)] px-2 py-1 font-mono text-xs text-[var(--content-secondary)] hover:text-[#F7931A]"
+        >
+          Go
+        </button>
+      </form>
     </div>
   )
 }

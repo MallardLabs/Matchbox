@@ -1,8 +1,8 @@
 import { useNetwork } from "@/contexts/NetworkContext"
+import { WEEK } from "@/lib/academy/epoch"
 import { deserializeActivityItem } from "@/lib/mezoActivity/normalize"
 import type {
   MezoActivityApiResponse,
-  MezoActivityCursor,
   MezoActivityItem,
 } from "@/types/mezoActivity"
 import { CHAIN_ID } from "@repo/shared/contracts"
@@ -13,7 +13,8 @@ type UseAcademyActivityParams = {
   toTimestamp: number
   enabled: boolean
   pageSize?: number
-  maxPages?: number
+  maxPagesPerChunk?: number
+  chunkWeeks?: number
 }
 
 const NETWORK_BY_CHAIN: Record<number, "mainnet" | "testnet"> = {
@@ -25,7 +26,7 @@ async function fetchPage(args: {
   network: string
   from: number
   to: number
-  cursor?: MezoActivityCursor
+  page: number
   limit: number
 }): Promise<MezoActivityApiResponse> {
   const params = new URLSearchParams()
@@ -33,7 +34,7 @@ async function fetchPage(args: {
   params.set("limit", String(args.limit))
   params.set("from", String(args.from))
   params.set("to", String(args.to))
-  if (args.cursor) params.set("cursor", JSON.stringify(args.cursor))
+  params.set("page", String(args.page))
   const res = await fetch(`/api/activity?${params.toString()}`, {
     cache: "no-store",
   })
@@ -47,8 +48,9 @@ async function fetchPage(args: {
 
 export type AcademyActivityResult = {
   events: MezoActivityItem[]
+  chunksFetched: number
   pagesFetched: number
-  truncated: boolean
+  truncatedChunks: number
 }
 
 export function useAcademyActivity({
@@ -56,7 +58,8 @@ export function useAcademyActivity({
   toTimestamp,
   enabled,
   pageSize = 1000,
-  maxPages = 10,
+  maxPagesPerChunk = 4,
+  chunkWeeks = 1,
 }: UseAcademyActivityParams) {
   const { chainId, isNetworkReady } = useNetwork()
   const network = NETWORK_BY_CHAIN[chainId]
@@ -68,7 +71,8 @@ export function useAcademyActivity({
       fromTimestamp,
       toTimestamp,
       pageSize,
-      maxPages,
+      maxPagesPerChunk,
+      chunkWeeks,
     ],
     enabled:
       enabled &&
@@ -81,29 +85,49 @@ export function useAcademyActivity({
     refetchOnWindowFocus: false,
     queryFn: async () => {
       const all: MezoActivityItem[] = []
-      let cursor: MezoActivityCursor | undefined
-      let pages = 0
-      let truncated = false
+      const seen = new Set<string>()
+      let chunksFetched = 0
+      let pagesFetched = 0
+      let truncatedChunks = 0
 
-      for (let i = 0; i < maxPages; i++) {
-        const page = await fetchPage({
-          network: network as string,
-          from: fromTimestamp,
-          to: toTimestamp,
-          ...(cursor ? { cursor } : {}),
-          limit: pageSize,
-        })
-        pages += 1
-        for (const item of page.data) all.push(deserializeActivityItem(item))
-        if (!page.nextCursor || page.data.length < pageSize) {
-          cursor = undefined
-          break
+      const chunkSize = chunkWeeks * WEEK
+      let cursor = fromTimestamp
+      while (cursor < toTimestamp) {
+        const chunkFrom = cursor
+        const chunkTo = Math.min(cursor + chunkSize, toTimestamp)
+
+        let page = 0
+        while (page < maxPagesPerChunk) {
+          // eslint-disable-next-line no-await-in-loop
+          const result = await fetchPage({
+            network: network as string,
+            from: chunkFrom,
+            to: chunkTo,
+            page,
+            limit: pageSize,
+          })
+          pagesFetched += 1
+          for (const item of result.data) {
+            if (seen.has(item.id)) continue
+            seen.add(item.id)
+            all.push(deserializeActivityItem(item))
+          }
+          if (!result.hasMore || result.data.length < pageSize) break
+          page += 1
+          if (page === maxPagesPerChunk) {
+            truncatedChunks += 1
+          }
         }
-        cursor = page.nextCursor
-        if (i === maxPages - 1) truncated = true
+        chunksFetched += 1
+        cursor = chunkTo
       }
 
-      return { events: all, pagesFetched: pages, truncated }
+      return {
+        events: all,
+        chunksFetched,
+        pagesFetched,
+        truncatedChunks,
+      }
     },
   })
 }

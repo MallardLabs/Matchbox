@@ -6,13 +6,14 @@ import type {
   MezoActivityItem,
 } from "@/types/mezoActivity"
 import { CHAIN_ID } from "@repo/shared/contracts"
-import { useInfiniteQuery } from "@tanstack/react-query"
+import { keepPreviousData, useQuery } from "@tanstack/react-query"
 import { useMemo } from "react"
 
 type UseMezoActivityParams = {
   filters: MezoActivityFilter[]
   fromTimestamp?: number
   toTimestamp?: number
+  page?: number
   limit?: number
 }
 
@@ -61,36 +62,27 @@ function filterItems(
   })
 }
 
-type ActivityPage = {
-  data: MezoActivityItem[]
-  nextCursor: { id: string; timestamp: number; logIndex: number } | null
-  meta?: MezoActivityApiResponse["meta"]
-}
-
 export function useMezoActivity({
   filters,
   fromTimestamp,
   toTimestamp,
+  page = 0,
   limit = 50,
 }: UseMezoActivityParams) {
   const { chainId, isNetworkReady } = useNetwork()
   const network = NETWORK_BY_CHAIN[chainId]
 
-  const query = useInfiniteQuery<ActivityPage, Error>({
-    queryKey: ["activity", network, fromTimestamp, toTimestamp, limit],
+  const query = useQuery({
+    queryKey: ["activity", network, fromTimestamp, toTimestamp, limit, page],
     enabled: isNetworkReady && !!network,
-    initialPageParam: undefined as string | undefined,
-    getNextPageParam: (lastPage) =>
-      lastPage.nextCursor ? JSON.stringify(lastPage.nextCursor) : undefined,
-    queryFn: async ({ pageParam }) => {
+    placeholderData: keepPreviousData,
+    queryFn: async () => {
       const params = new URLSearchParams()
       if (network) params.set("network", network)
       params.set("limit", String(limit))
+      params.set("page", String(page))
       if (fromTimestamp !== undefined) params.set("from", String(fromTimestamp))
       if (toTimestamp !== undefined) params.set("to", String(toTimestamp))
-      if (typeof pageParam === "string" && pageParam) {
-        params.set("cursor", pageParam)
-      }
       const response = await fetch(`/api/activity?${params.toString()}`, {
         cache: "no-store",
       })
@@ -101,7 +93,8 @@ export function useMezoActivity({
       if (!json.success) throw new Error("Activity API reported failure")
       return {
         data: json.data.map(deserializeActivityItem),
-        nextCursor: json.nextCursor,
+        hasMore: json.hasMore,
+        page: json.page,
         meta: json.meta,
       }
     },
@@ -109,20 +102,18 @@ export function useMezoActivity({
     refetchOnWindowFocus: false,
   })
 
-  const flatItems = useMemo(
-    () => query.data?.pages.flatMap((page) => page.data) ?? [],
-    [query.data],
-  )
-
+  const items = query.data?.data ?? []
   const filteredData = useMemo(
-    () => filterItems(flatItems, filters),
-    [flatItems, filters],
+    () => filterItems(items, filters),
+    [items, filters],
   )
 
   return {
     ...query,
     data: filteredData,
-    rawData: flatItems,
-    meta: query.data?.pages[0]?.meta,
+    rawData: items,
+    hasMore: query.data?.hasMore ?? false,
+    page: query.data?.page ?? page,
+    meta: query.data?.meta,
   }
 }

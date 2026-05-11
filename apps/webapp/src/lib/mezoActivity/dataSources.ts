@@ -4,7 +4,6 @@ import {
 } from "@/lib/mezoActivity/normalize"
 import type {
   MezoActivityActionType,
-  MezoActivityCursor,
   MezoActivityItem,
   MezoPokeMethod,
 } from "@/types/mezoActivity"
@@ -25,7 +24,7 @@ type SourceOptions = {
   fromTimestamp: number
   toTimestamp: number
   limit: number
-  cursor?: MezoActivityCursor
+  page: number
 }
 
 type ExplorerActivityEvent = {
@@ -154,15 +153,7 @@ function maybeHash(value: string | undefined): Hash | undefined {
 }
 
 function buildWhereClause(options: SourceOptions): string {
-  const parts: string[] = [
-    `timestamp_gte: "${options.fromTimestamp}"`,
-    `timestamp_lte: "${options.toTimestamp}"`,
-  ]
-  if (options.cursor) {
-    parts.push(`timestamp_lte: "${options.cursor.timestamp}"`)
-    parts.push(`id_lt: "${options.cursor.id}"`)
-  }
-  return `{ ${parts.join(", ")} }`
+  return `{ timestamp_gte: "${options.fromTimestamp}", timestamp_lte: "${options.toTimestamp}" }`
 }
 
 async function fetchExplorerActivity(
@@ -170,11 +161,13 @@ async function fetchExplorerActivity(
 ): Promise<MezoActivityItem[]> {
   const endpoint = MATCHBOX_EXPLORER_SUBGRAPH_BY_CHAIN[options.chainId]
   const fetchSize = options.limit + 1
+  const skip = Math.max(options.page, 0) * options.limit
   const where = buildWhereClause(options)
   const query = `
       query {
         activityEvents(
           first: ${fetchSize},
+          skip: ${skip},
           orderBy: timestamp,
           orderDirection: desc,
           where: ${where}
@@ -282,23 +275,17 @@ async function fetchExplorerActivity(
 
 export async function fetchMezoActivity(options: SourceOptions): Promise<{
   data: MezoActivityItem[]
-  nextCursor: MezoActivityCursor | null
+  hasMore: boolean
+  page: number
 }> {
   const explorerItems = await fetchExplorerActivity(options)
   const merged = sortActivityDesc(explorerItems)
   const hasMore = merged.length > options.limit
-  const page = merged.slice(0, options.limit)
-  const last = page[page.length - 1]
+  const data = merged.slice(0, options.limit)
 
   return {
-    data: page,
-    nextCursor:
-      hasMore && last
-        ? {
-            timestamp: last.timestamp,
-            id: last.id,
-            logIndex: last.logIndex ?? -1,
-          }
-        : null,
+    data,
+    hasMore,
+    page: options.page,
   }
 }
