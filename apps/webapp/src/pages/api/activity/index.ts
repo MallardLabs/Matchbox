@@ -88,7 +88,7 @@ export default async function handler(request: Request): Promise<Response> {
     status: 200,
     headers: {
       "Content-Type": "application/json",
-      "Cache-Control": "public, s-maxage=20, stale-while-revalidate=40",
+      "Cache-Control": "no-store, max-age=0",
       ...CORS_HEADERS,
     },
   })
