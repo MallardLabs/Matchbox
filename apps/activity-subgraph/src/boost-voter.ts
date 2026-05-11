@@ -17,6 +17,7 @@ import {
   BOOST_VOTE,
   BOOST_VOTER,
   BOOSTABLE_TOKEN_BURNED,
+  detectPokeMethod,
   getOrCreateAccount,
   getOrCreateGauge,
   getOrCreateGaugeEpoch,
@@ -95,6 +96,10 @@ export function handleBoostPoked(event: BoostPoked): void {
   )
   activity.boostableTokenId = event.params.boostableTokenId
   activity.boost = event.params.boost
+  const method = detectPokeMethod(event.transaction.input)
+  if (method != null) {
+    activity.pokeMethod = method
+  }
   saveActivity(activity)
 }
 

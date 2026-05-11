@@ -105,6 +105,23 @@ export class ActivityEvent extends Entity {
     this.set("txHash", Value.fromBytes(value));
   }
 
+  get txFrom(): Bytes | null {
+    let value = this.get("txFrom");
+    if (!value || value.kind == ValueKind.NULL) {
+      return null;
+    } else {
+      return value.toBytes();
+    }
+  }
+
+  set txFrom(value: Bytes | null) {
+    if (!value) {
+      this.unset("txFrom");
+    } else {
+      this.set("txFrom", Value.fromBytes(<Bytes>value));
+    }
+  }
+
   get logIndex(): BigInt {
     let value = this.get("logIndex");
     if (!value || value.kind == ValueKind.NULL) {
@@ -158,6 +175,23 @@ export class ActivityEvent extends Entity {
       this.unset("actor");
     } else {
       this.set("actor", Value.fromBytes(<Bytes>value));
+    }
+  }
+
+  get recipient(): Bytes | null {
+    let value = this.get("recipient");
+    if (!value || value.kind == ValueKind.NULL) {
+      return null;
+    } else {
+      return value.toBytes();
+    }
+  }
+
+  set recipient(value: Bytes | null) {
+    if (!value) {
+      this.unset("recipient");
+    } else {
+      this.set("recipient", Value.fromBytes(<Bytes>value));
     }
   }
 
@@ -297,6 +331,23 @@ export class ActivityEvent extends Entity {
     }
   }
 
+  get metadata(): string | null {
+    let value = this.get("metadata");
+    if (!value || value.kind == ValueKind.NULL) {
+      return null;
+    } else {
+      return value.toString();
+    }
+  }
+
+  set metadata(value: string | null) {
+    if (!value) {
+      this.unset("metadata");
+    } else {
+      this.set("metadata", Value.fromString(<string>value));
+    }
+  }
+
   get boostableTokenId(): BigInt | null {
     let value = this.get("boostableTokenId");
     if (!value || value.kind == ValueKind.NULL) {
@@ -362,6 +413,278 @@ export class ActivityEvent extends Entity {
       this.unset("totalWeight");
     } else {
       this.set("totalWeight", Value.fromBigInt(<BigInt>value));
+    }
+  }
+
+  get pokeMethod(): string | null {
+    let value = this.get("pokeMethod");
+    if (!value || value.kind == ValueKind.NULL) {
+      return null;
+    } else {
+      return value.toString();
+    }
+  }
+
+  set pokeMethod(value: string | null) {
+    if (!value) {
+      this.unset("pokeMethod");
+    } else {
+      this.set("pokeMethod", Value.fromString(<string>value));
+    }
+  }
+
+  get period(): BigInt | null {
+    let value = this.get("period");
+    if (!value || value.kind == ValueKind.NULL) {
+      return null;
+    } else {
+      return value.toBigInt();
+    }
+  }
+
+  set period(value: BigInt | null) {
+    if (!value) {
+      this.unset("period");
+    } else {
+      this.set("period", Value.fromBigInt(<BigInt>value));
+    }
+  }
+
+  get newPeriod(): BigInt | null {
+    let value = this.get("newPeriod");
+    if (!value || value.kind == ValueKind.NULL) {
+      return null;
+    } else {
+      return value.toBigInt();
+    }
+  }
+
+  set newPeriod(value: BigInt | null) {
+    if (!value) {
+      this.unset("newPeriod");
+    } else {
+      this.set("newPeriod", Value.fromBigInt(<BigInt>value));
+    }
+  }
+
+  get firstRecipientAmount(): BigInt | null {
+    let value = this.get("firstRecipientAmount");
+    if (!value || value.kind == ValueKind.NULL) {
+      return null;
+    } else {
+      return value.toBigInt();
+    }
+  }
+
+  set firstRecipientAmount(value: BigInt | null) {
+    if (!value) {
+      this.unset("firstRecipientAmount");
+    } else {
+      this.set("firstRecipientAmount", Value.fromBigInt(<BigInt>value));
+    }
+  }
+
+  get secondRecipientAmount(): BigInt | null {
+    let value = this.get("secondRecipientAmount");
+    if (!value || value.kind == ValueKind.NULL) {
+      return null;
+    } else {
+      return value.toBigInt();
+    }
+  }
+
+  set secondRecipientAmount(value: BigInt | null) {
+    if (!value) {
+      this.unset("secondRecipientAmount");
+    } else {
+      this.set("secondRecipientAmount", Value.fromBigInt(<BigInt>value));
+    }
+  }
+
+  get oldRate(): BigInt | null {
+    let value = this.get("oldRate");
+    if (!value || value.kind == ValueKind.NULL) {
+      return null;
+    } else {
+      return value.toBigInt();
+    }
+  }
+
+  set oldRate(value: BigInt | null) {
+    if (!value) {
+      this.unset("oldRate");
+    } else {
+      this.set("oldRate", Value.fromBigInt(<BigInt>value));
+    }
+  }
+
+  get newRate(): BigInt | null {
+    let value = this.get("newRate");
+    if (!value || value.kind == ValueKind.NULL) {
+      return null;
+    } else {
+      return value.toBigInt();
+    }
+  }
+
+  set newRate(value: BigInt | null) {
+    if (!value) {
+      this.unset("newRate");
+    } else {
+      this.set("newRate", Value.fromBigInt(<BigInt>value));
+    }
+  }
+
+  get emission(): BigInt | null {
+    let value = this.get("emission");
+    if (!value || value.kind == ValueKind.NULL) {
+      return null;
+    } else {
+      return value.toBigInt();
+    }
+  }
+
+  set emission(value: BigInt | null) {
+    if (!value) {
+      this.unset("emission");
+    } else {
+      this.set("emission", Value.fromBigInt(<BigInt>value));
+    }
+  }
+
+  get rebase(): BigInt | null {
+    let value = this.get("rebase");
+    if (!value || value.kind == ValueKind.NULL) {
+      return null;
+    } else {
+      return value.toBigInt();
+    }
+  }
+
+  set rebase(value: BigInt | null) {
+    if (!value) {
+      this.unset("rebase");
+    } else {
+      this.set("rebase", Value.fromBigInt(<BigInt>value));
+    }
+  }
+
+  get rewards(): BigInt | null {
+    let value = this.get("rewards");
+    if (!value || value.kind == ValueKind.NULL) {
+      return null;
+    } else {
+      return value.toBigInt();
+    }
+  }
+
+  set rewards(value: BigInt | null) {
+    if (!value) {
+      this.unset("rewards");
+    } else {
+      this.set("rewards", Value.fromBigInt(<BigInt>value));
+    }
+  }
+
+  get totalSupply(): BigInt | null {
+    let value = this.get("totalSupply");
+    if (!value || value.kind == ValueKind.NULL) {
+      return null;
+    } else {
+      return value.toBigInt();
+    }
+  }
+
+  set totalSupply(value: BigInt | null) {
+    if (!value) {
+      this.unset("totalSupply");
+    } else {
+      this.set("totalSupply", Value.fromBigInt(<BigInt>value));
+    }
+  }
+
+  get epochIndex(): BigInt | null {
+    let value = this.get("epochIndex");
+    if (!value || value.kind == ValueKind.NULL) {
+      return null;
+    } else {
+      return value.toBigInt();
+    }
+  }
+
+  set epochIndex(value: BigInt | null) {
+    if (!value) {
+      this.unset("epochIndex");
+    } else {
+      this.set("epochIndex", Value.fromBigInt(<BigInt>value));
+    }
+  }
+
+  get epochStart(): BigInt | null {
+    let value = this.get("epochStart");
+    if (!value || value.kind == ValueKind.NULL) {
+      return null;
+    } else {
+      return value.toBigInt();
+    }
+  }
+
+  set epochStart(value: BigInt | null) {
+    if (!value) {
+      this.unset("epochStart");
+    } else {
+      this.set("epochStart", Value.fromBigInt(<BigInt>value));
+    }
+  }
+
+  get epochEnd(): BigInt | null {
+    let value = this.get("epochEnd");
+    if (!value || value.kind == ValueKind.NULL) {
+      return null;
+    } else {
+      return value.toBigInt();
+    }
+  }
+
+  set epochEnd(value: BigInt | null) {
+    if (!value) {
+      this.unset("epochEnd");
+    } else {
+      this.set("epochEnd", Value.fromBigInt(<BigInt>value));
+    }
+  }
+
+  get distributionId(): BigInt | null {
+    let value = this.get("distributionId");
+    if (!value || value.kind == ValueKind.NULL) {
+      return null;
+    } else {
+      return value.toBigInt();
+    }
+  }
+
+  set distributionId(value: BigInt | null) {
+    if (!value) {
+      this.unset("distributionId");
+    } else {
+      this.set("distributionId", Value.fromBigInt(<BigInt>value));
+    }
+  }
+
+  get merkleRoot(): Bytes | null {
+    let value = this.get("merkleRoot");
+    if (!value || value.kind == ValueKind.NULL) {
+      return null;
+    } else {
+      return value.toBytes();
+    }
+  }
+
+  set merkleRoot(value: Bytes | null) {
+    if (!value) {
+      this.unset("merkleRoot");
+    } else {
+      this.set("merkleRoot", Value.fromBytes(<Bytes>value));
     }
   }
 
@@ -1386,6 +1709,19 @@ export class ActivityStats extends Entity {
 
   set gauges(value: BigInt) {
     this.set("gauges", Value.fromBigInt(value));
+  }
+
+  get systemEvents(): BigInt {
+    let value = this.get("systemEvents");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toBigInt();
+    }
+  }
+
+  set systemEvents(value: BigInt) {
+    this.set("systemEvents", Value.fromBigInt(value));
   }
 
   get lastUpdatedAt(): BigInt {

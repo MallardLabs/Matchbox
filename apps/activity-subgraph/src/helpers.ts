@@ -27,6 +27,24 @@ export const INCENTIVE_ADDED = "INCENTIVE_ADDED"
 export const REWARD_DISTRIBUTED = "REWARD_DISTRIBUTED"
 export const REWARD_NOTIFIED = "REWARD_NOTIFIED"
 
+export const THIRD_PARTY_GAUGE_CREATED = "THIRD_PARTY_GAUGE_CREATED"
+export const VALIDATOR_GAUGE_CREATED = "VALIDATOR_GAUGE_CREATED"
+export const VALIDATOR_LEFT = "VALIDATOR_LEFT"
+export const PERIOD_UPDATED = "PERIOD_UPDATED"
+export const EPOCH_PROCESSED = "EPOCH_PROCESSED"
+export const EMISSIONS_ENABLED = "EMISSIONS_ENABLED"
+export const REBASE_CLAIMED = "REBASE_CLAIMED"
+export const REBASE_CHECKPOINT = "REBASE_CHECKPOINT"
+export const MERKLE_CLAIMED = "MERKLE_CLAIMED"
+export const MERKLE_DISTRIBUTION_ADDED = "MERKLE_DISTRIBUTION_ADDED"
+export const SAVINGS_DEPOSIT = "SAVINGS_DEPOSIT"
+export const SAVINGS_WITHDRAW = "SAVINGS_WITHDRAW"
+export const SAVINGS_YIELD_CLAIMED = "SAVINGS_YIELD_CLAIMED"
+export const PROTOCOL_YIELD_RECEIVED = "PROTOCOL_YIELD_RECEIVED"
+export const STRATEGY_YIELD_RECEIVED = "STRATEGY_YIELD_RECEIVED"
+export const PCV_DISTRIBUTION = "PCV_DISTRIBUTION"
+export const PCV_DEBT_PAYMENT = "PCV_DEBT_PAYMENT"
+
 export const MATCHBOX_GAUGE_BOOST = "MATCHBOX_GAUGE_BOOST"
 export const MEZO_VEBTC_PAIR_BOOST = "MEZO_VEBTC_PAIR_BOOST"
 export const UNKNOWN = "UNKNOWN"
@@ -34,6 +52,16 @@ export const UNKNOWN = "UNKNOWN"
 export const VOTING_ESCROW = "VOTING_ESCROW"
 export const BOOST_VOTER = "BOOST_VOTER"
 export const POOLS_VOTER = "POOLS_VOTER"
+export const THIRD_PARTY_VOTER = "THIRD_PARTY_VOTER"
+export const VALIDATORS_VOTER = "VALIDATORS_VOTER"
+export const CHAIN_FEE_SPLITTER = "CHAIN_FEE_SPLITTER"
+export const MEZO_CHAIN_SPLITTER = "MEZO_CHAIN_SPLITTER"
+export const MEZO_ECOSYSTEM_SPLITTER = "MEZO_ECOSYSTEM_SPLITTER"
+export const MEZO_MINTER = "MEZO_MINTER"
+export const MEZO_REBASE_DISTRIBUTOR = "MEZO_REBASE_DISTRIBUTOR"
+export const MEZO_MERKLE_DISTRIBUTOR = "MEZO_MERKLE_DISTRIBUTOR"
+export const MUSD_SAVINGS_RATE = "MUSD_SAVINGS_RATE"
+export const PCV = "PCV"
 
 export const ZERO = BigInt.fromI32(0)
 export const ONE = BigInt.fromI32(1)
@@ -54,11 +82,25 @@ export function baseActivity(
   activity.boostContext = boostContext
   activity.source = source
   activity.txHash = event.transaction.hash
+  activity.txFrom = event.transaction.from
   activity.logIndex = event.logIndex
   activity.blockNumber = event.block.number
   activity.timestamp = event.block.timestamp
   activity.contractAddress = event.address
   return activity
+}
+
+export const POKE_SELECTOR = "0x32145f90"
+export const POKE_BOOST_SELECTOR = "0x673bbc86"
+export const POKE_BOOSTS_SELECTOR = "0xd3672ab2"
+
+export function detectPokeMethod(input: Bytes): string | null {
+  if (input.length < 4) return null
+  const selector = input.toHexString().slice(0, 10).toLowerCase()
+  if (selector == POKE_SELECTOR) return "poke"
+  if (selector == POKE_BOOST_SELECTOR) return "pokeBoost"
+  if (selector == POKE_BOOSTS_SELECTOR) return "pokeBoosts"
+  return null
 }
 
 export function accountId(address: Bytes): string {
@@ -169,6 +211,25 @@ export function getOrCreateGaugeEpoch(
   return gaugeEpoch
 }
 
+const SYSTEM_ACTION_TYPES: string[] = [
+  PERIOD_UPDATED,
+  EPOCH_PROCESSED,
+  EMISSIONS_ENABLED,
+  REBASE_CHECKPOINT,
+  MERKLE_DISTRIBUTION_ADDED,
+  PROTOCOL_YIELD_RECEIVED,
+  STRATEGY_YIELD_RECEIVED,
+  PCV_DISTRIBUTION,
+  PCV_DEBT_PAYMENT,
+]
+
+function isSystemActionType(actionType: string): boolean {
+  for (let i = 0; i < SYSTEM_ACTION_TYPES.length; i++) {
+    if (SYSTEM_ACTION_TYPES[i] == actionType) return true
+  }
+  return false
+}
+
 export function incrementStats(actionType: string, timestamp: BigInt): void {
   let stats = ActivityStats.load("global")
   if (stats == null) {
@@ -179,9 +240,13 @@ export function incrementStats(actionType: string, timestamp: BigInt): void {
     stats.extensions = ZERO
     stats.incentives = ZERO
     stats.gauges = ZERO
+    stats.systemEvents = ZERO
   }
 
   stats.totalEvents = stats.totalEvents.plus(ONE)
+  if (isSystemActionType(actionType)) {
+    stats.systemEvents = stats.systemEvents.plus(ONE)
+  }
   if (
     actionType == LOCK_CREATED ||
     actionType == LOCK_AMOUNT_INCREASED ||

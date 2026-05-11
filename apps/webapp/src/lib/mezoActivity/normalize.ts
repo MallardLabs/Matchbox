@@ -43,15 +43,44 @@ export function sortActivityDesc(
 export function dedupeActivity(items: MezoActivityItem[]): MezoActivityItem[] {
   const byId = new Map<string, MezoActivityItem>()
   for (const item of items) {
-    const key = item.txHash
-      ? `${item.txHash}:${item.logIndex ?? -1}:${item.actionType}`
-      : item.id
+    const key =
+      item.txHash && item.logIndex !== undefined
+        ? `${item.txHash}:${item.logIndex}`
+        : item.id
     const existing = byId.get(key)
-    if (!existing || existing.source !== "subgraph") {
+    if (
+      !existing ||
+      (existing.source !== "subgraph" && item.source === "subgraph")
+    ) {
       byId.set(key, item)
     }
   }
   return [...byId.values()]
+}
+
+export type GroupedActivity = {
+  primary: MezoActivityItem
+  siblings: MezoActivityItem[]
+}
+
+export function groupActivityByTx(
+  items: MezoActivityItem[],
+): GroupedActivity[] {
+  const groups = new Map<string, GroupedActivity>()
+  const order: string[] = []
+  for (const item of items) {
+    const key = item.txHash
+      ? `${item.txHash}:${item.actorAddress ?? "unknown"}`
+      : item.id
+    const existing = groups.get(key)
+    if (!existing) {
+      groups.set(key, { primary: item, siblings: [] })
+      order.push(key)
+    } else {
+      existing.siblings.push(item)
+    }
+  }
+  return order.map((key) => groups.get(key) as GroupedActivity)
 }
 
 export function normalizeAddress(
@@ -76,8 +105,13 @@ export function serializeActivityItem(
     boostContext: item.boostContext,
     source: item.source,
     ...(item.txHash ? { txHash: item.txHash } : {}),
+    ...(item.txFrom ? { txFrom: item.txFrom } : {}),
     ...(item.actorAddress ? { actorAddress: item.actorAddress } : {}),
+    ...(item.recipient ? { recipient: item.recipient } : {}),
     ...(item.gaugeAddress ? { gaugeAddress: item.gaugeAddress } : {}),
+    ...(item.pokeMethod ? { pokeMethod: item.pokeMethod } : {}),
+    ...(item.contract ? { contract: item.contract } : {}),
+    ...(item.metadata ? { metadata: item.metadata } : {}),
     ...(item.logIndex !== undefined ? { logIndex: item.logIndex } : {}),
     ...(item.explorerUrl ? { explorerUrl: item.explorerUrl } : {}),
     ...(item.tokenId !== undefined ? { tokenId: item.tokenId.toString() } : {}),
@@ -86,7 +120,37 @@ export function serializeActivityItem(
       ? { duration: item.duration.toString() }
       : {}),
     ...(item.weight !== undefined ? { weight: item.weight.toString() } : {}),
+    ...(item.totalWeight !== undefined
+      ? { totalWeight: item.totalWeight.toString() }
+      : {}),
     ...(item.boost !== undefined ? { boost: item.boost.toString() } : {}),
+    ...(item.period !== undefined ? { period: item.period.toString() } : {}),
+    ...(item.newPeriod !== undefined
+      ? { newPeriod: item.newPeriod.toString() }
+      : {}),
+    ...(item.firstRecipientAmount !== undefined
+      ? { firstRecipientAmount: item.firstRecipientAmount.toString() }
+      : {}),
+    ...(item.secondRecipientAmount !== undefined
+      ? { secondRecipientAmount: item.secondRecipientAmount.toString() }
+      : {}),
+    ...(item.emission !== undefined
+      ? { emission: item.emission.toString() }
+      : {}),
+    ...(item.rebase !== undefined ? { rebase: item.rebase.toString() } : {}),
+    ...(item.rewards !== undefined ? { rewards: item.rewards.toString() } : {}),
+    ...(item.epochIndex !== undefined
+      ? { epochIndex: item.epochIndex.toString() }
+      : {}),
+    ...(item.epochStart !== undefined
+      ? { epochStart: item.epochStart.toString() }
+      : {}),
+    ...(item.epochEnd !== undefined
+      ? { epochEnd: item.epochEnd.toString() }
+      : {}),
+    ...(item.distributionId !== undefined
+      ? { distributionId: item.distributionId.toString() }
+      : {}),
   }
 }
 
@@ -101,15 +165,38 @@ export function deserializeActivityItem(
     boostContext: item.boostContext,
     source: item.source,
     ...(item.txHash ? { txHash: item.txHash } : {}),
+    ...(item.txFrom ? { txFrom: item.txFrom } : {}),
     ...(item.actorAddress ? { actorAddress: item.actorAddress } : {}),
+    ...(item.recipient ? { recipient: item.recipient } : {}),
     ...(item.gaugeAddress ? { gaugeAddress: item.gaugeAddress } : {}),
+    ...(item.pokeMethod ? { pokeMethod: item.pokeMethod } : {}),
+    ...(item.contract ? { contract: item.contract } : {}),
+    ...(item.metadata ? { metadata: item.metadata } : {}),
     ...(item.logIndex !== undefined ? { logIndex: item.logIndex } : {}),
     ...(item.explorerUrl ? { explorerUrl: item.explorerUrl } : {}),
     ...(item.tokenId ? { tokenId: BigInt(item.tokenId) } : {}),
     ...(item.amount ? { amount: BigInt(item.amount) } : {}),
     ...(item.duration ? { duration: BigInt(item.duration) } : {}),
     ...(item.weight ? { weight: BigInt(item.weight) } : {}),
+    ...(item.totalWeight ? { totalWeight: BigInt(item.totalWeight) } : {}),
     ...(item.boost ? { boost: BigInt(item.boost) } : {}),
+    ...(item.period ? { period: BigInt(item.period) } : {}),
+    ...(item.newPeriod ? { newPeriod: BigInt(item.newPeriod) } : {}),
+    ...(item.firstRecipientAmount
+      ? { firstRecipientAmount: BigInt(item.firstRecipientAmount) }
+      : {}),
+    ...(item.secondRecipientAmount
+      ? { secondRecipientAmount: BigInt(item.secondRecipientAmount) }
+      : {}),
+    ...(item.emission ? { emission: BigInt(item.emission) } : {}),
+    ...(item.rebase ? { rebase: BigInt(item.rebase) } : {}),
+    ...(item.rewards ? { rewards: BigInt(item.rewards) } : {}),
+    ...(item.epochIndex ? { epochIndex: BigInt(item.epochIndex) } : {}),
+    ...(item.epochStart ? { epochStart: BigInt(item.epochStart) } : {}),
+    ...(item.epochEnd ? { epochEnd: BigInt(item.epochEnd) } : {}),
+    ...(item.distributionId
+      ? { distributionId: BigInt(item.distributionId) }
+      : {}),
   }
 }
 

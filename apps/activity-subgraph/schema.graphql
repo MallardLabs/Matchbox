@@ -16,6 +16,23 @@ enum ActivityActionType {
   INCENTIVE_ADDED
   REWARD_DISTRIBUTED
   REWARD_NOTIFIED
+  THIRD_PARTY_GAUGE_CREATED
+  VALIDATOR_GAUGE_CREATED
+  VALIDATOR_LEFT
+  PERIOD_UPDATED
+  EPOCH_PROCESSED
+  EMISSIONS_ENABLED
+  REBASE_CLAIMED
+  REBASE_CHECKPOINT
+  MERKLE_CLAIMED
+  MERKLE_DISTRIBUTION_ADDED
+  SAVINGS_DEPOSIT
+  SAVINGS_WITHDRAW
+  SAVINGS_YIELD_CLAIMED
+  PROTOCOL_YIELD_RECEIVED
+  STRATEGY_YIELD_RECEIVED
+  PCV_DISTRIBUTION
+  PCV_DEBT_PAYMENT
 }
 
 enum BoostContext {
@@ -28,6 +45,16 @@ enum ActivitySource {
   VOTING_ESCROW
   BOOST_VOTER
   POOLS_VOTER
+  THIRD_PARTY_VOTER
+  VALIDATORS_VOTER
+  CHAIN_FEE_SPLITTER
+  MEZO_CHAIN_SPLITTER
+  MEZO_ECOSYSTEM_SPLITTER
+  MEZO_MINTER
+  MEZO_REBASE_DISTRIBUTOR
+  MEZO_MERKLE_DISTRIBUTOR
+  MUSD_SAVINGS_RATE
+  PCV
 }
 
 type ActivityEvent @entity(immutable: true) {
@@ -37,11 +64,13 @@ type ActivityEvent @entity(immutable: true) {
   source: ActivitySource!
 
   txHash: Bytes!
+  txFrom: Bytes
   logIndex: BigInt!
   blockNumber: BigInt!
   timestamp: BigInt!
 
   actor: Bytes
+  recipient: Bytes
   tokenId: BigInt
   amount: BigInt
   duration: BigInt
@@ -50,10 +79,29 @@ type ActivityEvent @entity(immutable: true) {
   pool: Bytes
   rewardContract: Bytes
   rewardType: String
+  metadata: String
   boostableTokenId: BigInt
   boost: BigInt
   weight: BigInt
   totalWeight: BigInt
+  pokeMethod: String
+
+  period: BigInt
+  newPeriod: BigInt
+  firstRecipientAmount: BigInt
+  secondRecipientAmount: BigInt
+  oldRate: BigInt
+  newRate: BigInt
+  emission: BigInt
+  rebase: BigInt
+  rewards: BigInt
+  totalSupply: BigInt
+  epochIndex: BigInt
+  epochStart: BigInt
+  epochEnd: BigInt
+  distributionId: BigInt
+  merkleRoot: Bytes
+
   contractAddress: Bytes!
 }
 
@@ -133,5 +181,6 @@ type ActivityStats @entity(immutable: false) {
   extensions: BigInt!
   incentives: BigInt!
   gauges: BigInt!
+  systemEvents: BigInt!
   lastUpdatedAt: BigInt!
 }
