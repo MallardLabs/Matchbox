@@ -115,7 +115,15 @@ export function useMezoActivity({
         meta: json.meta,
       }
     },
-    staleTime: 15_000,
+    // Re-fetch on every page change. Caching across pages was the original
+    // source of the "stuck on page 2" report: a cached entry for a queryKey
+    // (or stale placeholderData) would render before the new page's data and
+    // the user could not tell the page had changed. With gcTime:0 the cache
+    // entry is evicted as soon as no observer is mounted, so navigating back
+    // to a previous page guarantees a fresh fetch and a visible loading
+    // state.
+    gcTime: 0,
+    staleTime: 0,
     refetchOnWindowFocus: false,
   })
 

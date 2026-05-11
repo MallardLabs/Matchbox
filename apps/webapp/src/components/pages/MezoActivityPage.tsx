@@ -1026,7 +1026,14 @@ export default function MezoActivityPage() {
       </SpringIn>
 
       <SpringIn delay={2} variant="card">
-        <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
+        <div
+          // Keying the rows container on the current page forces React to
+          // unmount the previous page's row instances when the user paginates.
+          // Without this, stale DOM (row drawers, etc.) could persist across
+          // page transitions and make pagination look broken.
+          key={`activity-rows-${tab}-${page}`}
+          className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]"
+        >
           <div
             className={`grid ${GRID_COLS} gap-3 border-b border-[var(--border)] px-4 py-3 text-xs uppercase tracking-wider text-[var(--content-tertiary)]`}
           >
@@ -1040,7 +1047,7 @@ export default function MezoActivityPage() {
 
           {isLoading && (
             <div className="px-4 py-8 text-sm text-[var(--content-secondary)]">
-              Loading activity feed...
+              Loading activity feed (page {page + 1})...
             </div>
           )}
           {isError && (

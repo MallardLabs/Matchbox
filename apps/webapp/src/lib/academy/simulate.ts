@@ -323,10 +323,14 @@ export function simulate(
       } else {
         activeVotes.delete(key)
       }
-      // Track boost-event count and gauge participation for the actor
-      // (independent of epoch snapshot — useful for the leaderboard).
-      const acc = get(actor)
-      acc.boostCount += 1
+      // Only count boost ACTIONS that fall inside the simulator range. The
+      // sortedVotes list spans genesis → toTs so we can replay sticky-vote
+      // state, but the "boost actions" stat the user reads in the totals box
+      // is meant to describe activity in the selected range.
+      if (ev.timestamp >= fromTs && ev.timestamp <= toTs) {
+        const acc = get(actor)
+        acc.boostCount += 1
+      }
     } else if (ev.actionType === "boostAbstain") {
       activeVotes.delete(key)
     }
@@ -408,12 +412,25 @@ export function simulate(
       ? aprValues.reduce((s, r) => s + r.apr, 0) / aprValues.length
       : 0
 
+  // Count totals across ALL actors that had in-range activity, not just rows
+  // that earned points. An actor who voted mid-range (after the epoch start
+  // snapshot) earns no boost points and gets filtered out of `rows`, but their
+  // boost ACTION still happened and the user expects to see it reflected.
+  let totalBoostCount = 0
+  let totalNewLockCount = 0
+  let totalExtensionCount = 0
+  for (const acc of allActors) {
+    totalBoostCount += acc.boostCount
+    totalNewLockCount += acc.newLockCount
+    totalExtensionCount += acc.extensionCount
+  }
+
   const totals: SimTotals = {
     pointsWad: totalPoints,
     participants: rows.length,
-    boostCount: rows.reduce((s, r) => s + r.boostCount, 0),
-    newLockCount: rows.reduce((s, r) => s + r.newLockCount, 0),
-    extensionCount: rows.reduce((s, r) => s + r.extensionCount, 0),
+    boostCount: totalBoostCount,
+    newLockCount: totalNewLockCount,
+    extensionCount: totalExtensionCount,
     avgApr,
     totalEpochs,
     fullParticipationCount: rows.filter((r) => r.fullyParticipated).length,

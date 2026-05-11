@@ -124,10 +124,16 @@ export function useAcademyActivity({
   fromTimestamp,
   toTimestamp,
   enabled,
+  // Subgraph caps `first` at 1000 — dataSources will clamp regardless. Keep
+  // the page size at the cap so we maximise per-request throughput.
   pageSize = 1000,
-  maxPagesPerChunk = 4,
+  // Vote chunks fill up fast when poke-driven Voted events dominate (each
+  // boost refresh emits one). 12 pages × 1000 = 12k events per chunk.
+  maxPagesPerChunk = 12,
+  // Smaller vote chunks reduce the chance of any single chunk exceeding the
+  // per-chunk page budget. Locks are sparse so a wider chunk is fine.
   lockChunkWeeks = 4,
-  voteChunkWeeks = 4,
+  voteChunkWeeks = 2,
   voteEmptyChunkStopAfter = 6,
   voteMaxLookbackYears = 3,
 }: UseAcademyActivityParams) {
