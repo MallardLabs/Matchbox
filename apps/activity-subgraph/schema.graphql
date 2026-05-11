@@ -173,6 +173,18 @@ type GaugeEpoch @entity(immutable: false) {
   lastUpdatedAt: BigInt!
 }
 
+type Vote @entity(immutable: false) {
+  id: ID!
+  voterContract: Bytes!
+  tokenId: BigInt!
+  gauge: Bytes!
+  owner: Bytes!
+  currentWeight: BigInt!
+  lastUpdatedEpoch: BigInt!
+  lastUpdatedAt: BigInt!
+  isActive: Boolean!
+}
+
 type ActivityStats @entity(immutable: false) {
   id: ID!
   totalEvents: BigInt!

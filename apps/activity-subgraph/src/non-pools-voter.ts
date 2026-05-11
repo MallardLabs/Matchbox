@@ -35,6 +35,8 @@ import {
   getOrCreateToken,
   resolveLockOwner,
   saveActivity,
+  upsertVote,
+  ZERO,
 } from "./helpers"
 
 function handleVoted(event: Voted, source: string): void {
@@ -65,16 +67,38 @@ function handleVoted(event: Voted, source: string): void {
   gaugeEpoch.voteCount = gaugeEpoch.voteCount.plus(ONE)
   gaugeEpoch.totalWeight = gaugeEpoch.totalWeight.plus(event.params.weight)
   gaugeEpoch.save()
+
+  upsertVote(
+    event.address,
+    event.params.tokenId,
+    event.params.gauge,
+    actor,
+    event.params.weight,
+    event.block.timestamp,
+  )
 }
 
 function handleAbstained(event: Abstained, source: string): void {
   const activity = baseActivity(event, BOOST_ABSTAIN, UNKNOWN, source)
-  activity.actor = resolveLockOwner(event.params.tokenId, event.params.voter)
+  const abstainActor = resolveLockOwner(
+    event.params.tokenId,
+    event.params.voter,
+  )
+  activity.actor = abstainActor
   activity.gauge = event.params.gauge
   activity.tokenId = event.params.tokenId
   activity.weight = event.params.weight
   activity.totalWeight = event.params.totalWeight
   saveActivity(activity)
+
+  upsertVote(
+    event.address,
+    event.params.tokenId,
+    event.params.gauge,
+    abstainActor,
+    ZERO,
+    event.block.timestamp,
+  )
 }
 
 function handleGaugeCreated(event: GaugeCreated, source: string): void {

@@ -24,6 +24,8 @@ import {
   getOrCreateGaugeEpoch,
   getOrCreateToken,
   resolveLockOwner,
+  upsertVote,
+  ZERO,
   GAUGE_KILLED,
   GAUGE_REVIVED,
   INCENTIVE_ADDED,
@@ -91,6 +93,15 @@ export function handleBoostVoted(event: Voted): void {
   gaugeEpoch.voteCount = gaugeEpoch.voteCount.plus(ONE)
   gaugeEpoch.totalWeight = gaugeEpoch.totalWeight.plus(event.params.weight)
   gaugeEpoch.save()
+
+  upsertVote(
+    event.address,
+    event.params.tokenId,
+    event.params.gauge,
+    actor,
+    event.params.weight,
+    event.block.timestamp,
+  )
 }
 
 export function handleBoostPoked(event: BoostPoked): void {
@@ -116,12 +127,25 @@ export function handleBoostAbstained(event: Abstained): void {
     MEZO_VEBTC_PAIR_BOOST,
     BOOST_VOTER,
   )
-  activity.actor = resolveLockOwner(event.params.tokenId, event.params.voter)
+  const abstainActor = resolveLockOwner(
+    event.params.tokenId,
+    event.params.voter,
+  )
+  activity.actor = abstainActor
   activity.gauge = event.params.gauge
   activity.tokenId = event.params.tokenId
   activity.weight = event.params.weight
   activity.totalWeight = event.params.totalWeight
   saveActivity(activity)
+
+  upsertVote(
+    event.address,
+    event.params.tokenId,
+    event.params.gauge,
+    abstainActor,
+    ZERO,
+    event.block.timestamp,
+  )
 }
 
 export function handleBoostableTokenBurned(event: BoostableTokenBurned): void {

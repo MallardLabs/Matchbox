@@ -7,6 +7,7 @@ import {
   GaugeEpoch,
   LockPosition,
   Token,
+  Vote,
 } from "../generated/schema"
 
 export const LOCK_CREATED = "LOCK_CREATED"
@@ -211,6 +212,47 @@ export function getOrCreateToken(address: Bytes, timestamp: BigInt): Token {
 
 export function epochStart(timestamp: BigInt): BigInt {
   return timestamp.div(WEEK).times(WEEK)
+}
+
+export function voteId(
+  contractAddress: Bytes,
+  tokenId: BigInt,
+  gauge: Bytes,
+): string {
+  return (
+    contractAddress.toHexString() +
+    "-" +
+    tokenId.toString() +
+    "-" +
+    gauge.toHexString()
+  )
+}
+
+// Upsert a Vote entity reflecting the current state of (contract, tokenId, gauge).
+// `weight = 0` represents an abstain — the vote becomes inactive. Each event
+// (Voted, Abstained) is the authoritative latest state for that triple.
+export function upsertVote(
+  contractAddress: Bytes,
+  tokenId: BigInt,
+  gauge: Bytes,
+  owner: Bytes,
+  weight: BigInt,
+  timestamp: BigInt,
+): void {
+  const id = voteId(contractAddress, tokenId, gauge)
+  let vote = Vote.load(id)
+  if (vote == null) {
+    vote = new Vote(id)
+    vote.voterContract = contractAddress
+    vote.tokenId = tokenId
+    vote.gauge = gauge
+  }
+  vote.owner = owner
+  vote.currentWeight = weight
+  vote.lastUpdatedEpoch = epochStart(timestamp)
+  vote.lastUpdatedAt = timestamp
+  vote.isActive = weight.gt(ZERO)
+  vote.save()
 }
 
 export function getOrCreateGaugeEpoch(

@@ -1,6 +1,5 @@
 import { useNetwork } from "@/contexts/NetworkContext"
 import { WEEK } from "@/lib/academy/epoch"
-import { ACADEMY_ACTION_TYPES_GRAPHQL } from "@/lib/mezoActivity/constants"
 import { deserializeActivityItem } from "@/lib/mezoActivity/normalize"
 import type {
   MezoActivityApiResponse,
@@ -9,14 +8,43 @@ import type {
 import { CHAIN_ID } from "@repo/shared/contracts"
 import { useQuery } from "@tanstack/react-query"
 
+// The simulator needs two different fetches:
+//
+//   (a) Lock / extension events strictly INSIDE [fromTs, toTs]. Those are
+//       one-shot points awarded at the moment of action.
+//
+//   (b) Vote / abstain events from the SUBGRAPH GENESIS through `toTs`.
+//       Vote points are computed via epoch-snapshot replay, which needs the
+//       full event history to determine each voter's active vote state at
+//       the start of every epoch in the range — including votes set before
+//       the range that are still active (votes are sticky on-chain until
+//       a `reset` / `abstain` call).
+//
+// Both fetches chunk by week with internal page pagination (up to 4 pages of
+// 1000 events per chunk = 4000 events/week ceiling). For (b) we walk backward
+// from `toTs` and stop after a few consecutive empty chunks to avoid hammering
+// the API past the subgraph's start block.
+
 type UseAcademyActivityParams = {
   fromTimestamp: number
   toTimestamp: number
   enabled: boolean
   pageSize?: number
   maxPagesPerChunk?: number
-  chunkWeeks?: number
+  lockChunkWeeks?: number
+  voteChunkWeeks?: number
+  voteEmptyChunkStopAfter?: number
+  voteMaxLookbackYears?: number
 }
+
+const LOCK_ACTION_TYPES = [
+  "LOCK_CREATED",
+  "LOCK_AMOUNT_INCREASED",
+  "LOCK_EXTENDED",
+  "LOCK_PERMANENT",
+] as const
+
+const VOTE_ACTION_TYPES = ["BOOST_VOTE", "BOOST_ABSTAIN"] as const
 
 const NETWORK_BY_CHAIN: Record<number, "mainnet" | "testnet"> = {
   [CHAIN_ID.mainnet]: "mainnet",
@@ -29,6 +57,7 @@ async function fetchPage(args: {
   to: number
   page: number
   limit: number
+  actionTypes: readonly string[]
 }): Promise<MezoActivityApiResponse> {
   const params = new URLSearchParams()
   params.set("network", args.network)
@@ -36,7 +65,7 @@ async function fetchPage(args: {
   params.set("from", String(args.from))
   params.set("to", String(args.to))
   params.set("page", String(args.page))
-  params.set("actionTypes", ACADEMY_ACTION_TYPES_GRAPHQL.join(","))
+  params.set("actionTypes", args.actionTypes.join(","))
   const res = await fetch(`/api/activity?${params.toString()}`, {
     cache: "no-store",
   })
@@ -48,11 +77,47 @@ async function fetchPage(args: {
   return json
 }
 
-export type AcademyActivityResult = {
-  events: MezoActivityItem[]
-  chunksFetched: number
+async function fetchChunk(args: {
+  network: string
+  from: number
+  to: number
+  pageSize: number
+  maxPages: number
+  actionTypes: readonly string[]
+}): Promise<{
+  data: MezoActivityItem[]
   pagesFetched: number
-  truncatedChunks: number
+  truncated: boolean
+}> {
+  const out: MezoActivityItem[] = []
+  let page = 0
+  while (page < args.maxPages) {
+    // eslint-disable-next-line no-await-in-loop
+    const result = await fetchPage({
+      network: args.network,
+      from: args.from,
+      to: args.to,
+      page,
+      limit: args.pageSize,
+      actionTypes: args.actionTypes,
+    })
+    for (const item of result.data) out.push(deserializeActivityItem(item))
+    if (!result.hasMore || result.data.length < args.pageSize) {
+      return { data: out, pagesFetched: page + 1, truncated: false }
+    }
+    page += 1
+  }
+  return { data: out, pagesFetched: page, truncated: true }
+}
+
+export type AcademyData = {
+  lockEvents: MezoActivityItem[]
+  voteEvents: MezoActivityItem[]
+  pagesFetched: number
+  voteChunksFetched: number
+  voteOldestTimestamp: number | null
+  truncatedLockChunks: number
+  truncatedVoteChunks: number
 }
 
 export function useAcademyActivity({
@@ -61,12 +126,15 @@ export function useAcademyActivity({
   enabled,
   pageSize = 1000,
   maxPagesPerChunk = 4,
-  chunkWeeks = 1,
+  lockChunkWeeks = 4,
+  voteChunkWeeks = 4,
+  voteEmptyChunkStopAfter = 6,
+  voteMaxLookbackYears = 3,
 }: UseAcademyActivityParams) {
   const { chainId, isNetworkReady } = useNetwork()
   const network = NETWORK_BY_CHAIN[chainId]
 
-  return useQuery<AcademyActivityResult>({
+  return useQuery<AcademyData>({
     queryKey: [
       "academy-activity",
       network,
@@ -74,7 +142,8 @@ export function useAcademyActivity({
       toTimestamp,
       pageSize,
       maxPagesPerChunk,
-      chunkWeeks,
+      lockChunkWeeks,
+      voteChunkWeeks,
     ],
     enabled:
       enabled &&
@@ -86,49 +155,85 @@ export function useAcademyActivity({
     staleTime: 60_000,
     refetchOnWindowFocus: false,
     queryFn: async () => {
-      const all: MezoActivityItem[] = []
-      const seen = new Set<string>()
-      let chunksFetched = 0
+      const lockEvents: MezoActivityItem[] = []
+      const seenLockIds = new Set<string>()
       let pagesFetched = 0
-      let truncatedChunks = 0
+      let truncatedLockChunks = 0
 
-      const chunkSize = chunkWeeks * WEEK
-      let cursor = fromTimestamp
-      while (cursor < toTimestamp) {
-        const chunkFrom = cursor
-        const chunkTo = Math.min(cursor + chunkSize, toTimestamp)
+      const lockChunkSize = lockChunkWeeks * WEEK
+      let lockCursor = fromTimestamp
+      while (lockCursor < toTimestamp) {
+        const chunkTo = Math.min(lockCursor + lockChunkSize, toTimestamp)
+        // eslint-disable-next-line no-await-in-loop
+        const chunk = await fetchChunk({
+          network: network as string,
+          from: lockCursor,
+          to: chunkTo,
+          pageSize,
+          maxPages: maxPagesPerChunk,
+          actionTypes: LOCK_ACTION_TYPES,
+        })
+        pagesFetched += chunk.pagesFetched
+        for (const item of chunk.data) {
+          if (seenLockIds.has(item.id)) continue
+          seenLockIds.add(item.id)
+          lockEvents.push(item)
+        }
+        if (chunk.truncated) truncatedLockChunks += 1
+        lockCursor = chunkTo
+      }
 
-        let page = 0
-        while (page < maxPagesPerChunk) {
-          // eslint-disable-next-line no-await-in-loop
-          const result = await fetchPage({
-            network: network as string,
-            from: chunkFrom,
-            to: chunkTo,
-            page,
-            limit: pageSize,
-          })
-          pagesFetched += 1
-          for (const item of result.data) {
-            if (seen.has(item.id)) continue
-            seen.add(item.id)
-            all.push(deserializeActivityItem(item))
-          }
-          if (!result.hasMore || result.data.length < pageSize) break
-          page += 1
-          if (page === maxPagesPerChunk) {
-            truncatedChunks += 1
+      const voteEvents: MezoActivityItem[] = []
+      const seenVoteIds = new Set<string>()
+      let voteChunksFetched = 0
+      let truncatedVoteChunks = 0
+      let consecutiveEmpty = 0
+      const voteChunkSize = voteChunkWeeks * WEEK
+      const hardFloor = Math.max(
+        toTimestamp - voteMaxLookbackYears * 365 * 86_400,
+        0,
+      )
+      let voteEnd = toTimestamp
+      let oldestSeen: number | null = null
+      while (voteEnd > hardFloor) {
+        const chunkFrom = Math.max(voteEnd - voteChunkSize, hardFloor)
+        // eslint-disable-next-line no-await-in-loop
+        const chunk = await fetchChunk({
+          network: network as string,
+          from: chunkFrom,
+          to: voteEnd,
+          pageSize,
+          maxPages: maxPagesPerChunk,
+          actionTypes: VOTE_ACTION_TYPES,
+        })
+        voteChunksFetched += 1
+        pagesFetched += chunk.pagesFetched
+        if (chunk.truncated) truncatedVoteChunks += 1
+        if (chunk.data.length === 0) {
+          consecutiveEmpty += 1
+          if (consecutiveEmpty >= voteEmptyChunkStopAfter) break
+        } else {
+          consecutiveEmpty = 0
+          for (const item of chunk.data) {
+            if (seenVoteIds.has(item.id)) continue
+            seenVoteIds.add(item.id)
+            voteEvents.push(item)
+            if (oldestSeen === null || item.timestamp < oldestSeen) {
+              oldestSeen = item.timestamp
+            }
           }
         }
-        chunksFetched += 1
-        cursor = chunkTo
+        voteEnd = chunkFrom
       }
 
       return {
-        events: all,
-        chunksFetched,
+        lockEvents,
+        voteEvents,
         pagesFetched,
-        truncatedChunks,
+        voteChunksFetched,
+        voteOldestTimestamp: oldestSeen,
+        truncatedLockChunks,
+        truncatedVoteChunks,
       }
     },
   })

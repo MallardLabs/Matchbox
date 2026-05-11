@@ -118,12 +118,16 @@ export default function AcademyLeaderboard({ rows, budgetMezoWad }: Props) {
       "actor",
       "pointsWad",
       "pointsShare%",
+      "lockPointsWad",
+      "extensionPointsWad",
+      "votePointsWad",
       "rewardMezo",
       "aprPct",
       "vePowerWad",
       "newLocks",
       "extensions",
       "boosts",
+      "activeEpochs",
       "fullyParticipated",
       "flagged",
     ]
@@ -132,12 +136,16 @@ export default function AcademyLeaderboard({ rows, budgetMezoWad }: Props) {
       row.actor,
       row.pointsWad.toString(),
       pointsShare(row, total).toFixed(4),
+      row.lockPointsWad.toString(),
+      row.extensionPointsWad.toString(),
+      row.votePointsWad.toString(),
       fmtMezo(row.rewardMezoWad),
       row.apr.toFixed(2),
       row.vePowerWad.toString(),
       row.newLockCount,
       row.extensionCount,
       row.boostCount,
+      row.activeEpochs,
       row.fullyParticipated,
       row.flagged,
     ])
@@ -234,6 +242,12 @@ export default function AcademyLeaderboard({ rows, budgetMezoWad }: Props) {
                 <th className="px-2 py-1.5 text-right">
                   <SortHeader k="boosts">Boost</SortHeader>
                 </th>
+                <th
+                  className="px-2 py-1.5 text-right text-[var(--content-secondary)]"
+                  title="Number of epochs in the range where this actor had at least one active vote"
+                >
+                  Active ep.
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -289,6 +303,9 @@ export default function AcademyLeaderboard({ rows, budgetMezoWad }: Props) {
                   </td>
                   <td className="px-2 py-1 text-right font-mono text-[11px] text-[var(--content-secondary)]">
                     {row.boostCount}
+                  </td>
+                  <td className="px-2 py-1 text-right font-mono text-[11px] text-[var(--content-secondary)]">
+                    {row.activeEpochs}
                   </td>
                 </tr>
               ))}

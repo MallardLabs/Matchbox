@@ -25,6 +25,8 @@ import {
   REWARD_NOTIFIED,
   resolveLockOwner,
   saveActivity,
+  upsertVote,
+  ZERO,
 } from "./helpers"
 
 export function handlePoolGaugeCreated(event: GaugeCreated): void {
@@ -62,6 +64,9 @@ export function handlePoolVoted(event: Voted): void {
   const actor = resolveLockOwner(event.params.tokenId, event.params.voter)
   activity.actor = actor
   activity.pool = event.params.pool
+  // Mirror pool into `gauge` so downstream consumers (simulator, UI) can read
+  // a single "what was voted for" field across voter contracts.
+  activity.gauge = event.params.pool
   activity.tokenId = event.params.tokenId
   activity.weight = event.params.weight
   activity.totalWeight = event.params.totalWeight
@@ -85,6 +90,15 @@ export function handlePoolVoted(event: Voted): void {
   gaugeEpoch.voteCount = gaugeEpoch.voteCount.plus(ONE)
   gaugeEpoch.totalWeight = gaugeEpoch.totalWeight.plus(event.params.weight)
   gaugeEpoch.save()
+
+  upsertVote(
+    event.address,
+    event.params.tokenId,
+    event.params.pool,
+    actor,
+    event.params.weight,
+    event.block.timestamp,
+  )
 }
 
 export function handlePoolAbstained(event: Abstained): void {
@@ -94,12 +108,26 @@ export function handlePoolAbstained(event: Abstained): void {
     MATCHBOX_GAUGE_BOOST,
     POOLS_VOTER,
   )
-  activity.actor = resolveLockOwner(event.params.tokenId, event.params.voter)
+  const abstainActor = resolveLockOwner(
+    event.params.tokenId,
+    event.params.voter,
+  )
+  activity.actor = abstainActor
   activity.pool = event.params.pool
+  activity.gauge = event.params.pool
   activity.tokenId = event.params.tokenId
   activity.weight = event.params.weight
   activity.totalWeight = event.params.totalWeight
   saveActivity(activity)
+
+  upsertVote(
+    event.address,
+    event.params.tokenId,
+    event.params.pool,
+    abstainActor,
+    ZERO,
+    event.block.timestamp,
+  )
 }
 
 export function handlePoolDistributeReward(event: DistributeReward): void {

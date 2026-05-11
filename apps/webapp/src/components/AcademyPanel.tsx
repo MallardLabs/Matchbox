@@ -180,16 +180,27 @@ export default function AcademyPanel() {
 
   const sim = useMemo(() => {
     if (!activity.data) return null
-    return simulate(activity.data.events, params, fromTs, toTs)
+    return simulate(
+      {
+        lockEvents: activity.data.lockEvents,
+        voteEvents: activity.data.voteEvents,
+      },
+      params,
+      fromTs,
+      toTs,
+    )
   }, [activity.data, params, fromTs, toTs])
 
-  const epochSummaries = useMemo(
-    () =>
-      activity.data
-        ? buildEpochSummaries(activity.data.events, fromTs, toTs)
-        : [],
-    [activity.data, fromTs, toTs],
-  )
+  const epochSummaries = useMemo(() => {
+    if (!activity.data) return []
+    const combined = [
+      ...activity.data.lockEvents,
+      ...activity.data.voteEvents.filter(
+        (ev) => ev.timestamp >= fromTs && ev.timestamp <= toTs,
+      ),
+    ]
+    return buildEpochSummaries(combined, fromTs, toTs)
+  }, [activity.data, fromTs, toTs])
 
   const peakEpochTotal = useMemo(
     () => epochSummaries.reduce((m, e) => Math.max(m, e.total), 0),
@@ -309,12 +320,16 @@ export default function AcademyPanel() {
                     value={String(sim.totals.fullParticipationCount)}
                   />
                   <Stat
-                    label="Total events fetched"
-                    value={(activity.data?.events.length ?? 0).toLocaleString()}
+                    label="Lock events in range"
+                    value={(
+                      activity.data?.lockEvents.length ?? 0
+                    ).toLocaleString()}
                   />
                   <Stat
-                    label="Subgraph queries"
-                    value={`${activity.data?.pagesFetched ?? 0}`}
+                    label="Vote events (history)"
+                    value={(
+                      activity.data?.voteEvents.length ?? 0
+                    ).toLocaleString()}
                   />
                   <Stat
                     label="Epochs in range"
@@ -380,7 +395,10 @@ function DataStatus({
   if (activity.isError) return null
   const data = activity.data
   if (!data) return null
-  const truncated = data.truncatedChunks > 0
+  const truncated = data.truncatedLockChunks + data.truncatedVoteChunks > 0
+  const oldestStr = data.voteOldestTimestamp
+    ? new Date(data.voteOldestTimestamp * 1000).toISOString().slice(0, 10)
+    : "—"
   return (
     <div
       className={`flex flex-wrap items-center gap-3 rounded border px-3 py-2 text-xs ${
@@ -392,12 +410,16 @@ function DataStatus({
       <span>
         Fetched{" "}
         <strong className="text-[var(--content-primary)]">
-          {data.events.length.toLocaleString()}
+          {data.lockEvents.length.toLocaleString()}
         </strong>{" "}
-        events
+        lock events
       </span>
       <span>
-        · {data.chunksFetched} week chunk{data.chunksFetched === 1 ? "" : "s"}
+        ·{" "}
+        <strong className="text-[var(--content-primary)]">
+          {data.voteEvents.length.toLocaleString()}
+        </strong>{" "}
+        vote events (history back to {oldestStr})
       </span>
       <span>
         · {data.pagesFetched} subgraph quer
@@ -405,8 +427,9 @@ function DataStatus({
       </span>
       {truncated ? (
         <span className="font-semibold">
-          ⚠ {data.truncatedChunks} chunk{data.truncatedChunks === 1 ? "" : "s"}{" "}
-          hit page cap — increase chunkWeeks or pageSize, or narrow the range
+          ⚠ {data.truncatedLockChunks + data.truncatedVoteChunks} chunk
+          {data.truncatedLockChunks + data.truncatedVoteChunks === 1 ? "" : "s"}{" "}
+          hit page cap — narrow the range or raise maxPagesPerChunk
         </span>
       ) : (
         <span className="text-[var(--content-tertiary)]">

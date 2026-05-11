@@ -1592,6 +1592,150 @@ export class GaugeEpoch extends Entity {
   }
 }
 
+export class Vote extends Entity {
+  constructor(id: string) {
+    super();
+    this.set("id", Value.fromString(id));
+  }
+
+  save(): void {
+    let id = this.get("id");
+    assert(id != null, "Cannot save Vote entity without an ID");
+    if (id) {
+      assert(
+        id.kind == ValueKind.STRING,
+        `Entities of type Vote must have an ID of type String but the id '${id.displayData()}' is of type ${id.displayKind()}`,
+      );
+      store.set("Vote", id.toString(), this);
+    }
+  }
+
+  static loadInBlock(id: string): Vote | null {
+    return changetype<Vote | null>(store.get_in_block("Vote", id));
+  }
+
+  static load(id: string): Vote | null {
+    return changetype<Vote | null>(store.get("Vote", id));
+  }
+
+  get id(): string {
+    let value = this.get("id");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toString();
+    }
+  }
+
+  set id(value: string) {
+    this.set("id", Value.fromString(value));
+  }
+
+  get voterContract(): Bytes {
+    let value = this.get("voterContract");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toBytes();
+    }
+  }
+
+  set voterContract(value: Bytes) {
+    this.set("voterContract", Value.fromBytes(value));
+  }
+
+  get tokenId(): BigInt {
+    let value = this.get("tokenId");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toBigInt();
+    }
+  }
+
+  set tokenId(value: BigInt) {
+    this.set("tokenId", Value.fromBigInt(value));
+  }
+
+  get gauge(): Bytes {
+    let value = this.get("gauge");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toBytes();
+    }
+  }
+
+  set gauge(value: Bytes) {
+    this.set("gauge", Value.fromBytes(value));
+  }
+
+  get owner(): Bytes {
+    let value = this.get("owner");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toBytes();
+    }
+  }
+
+  set owner(value: Bytes) {
+    this.set("owner", Value.fromBytes(value));
+  }
+
+  get currentWeight(): BigInt {
+    let value = this.get("currentWeight");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toBigInt();
+    }
+  }
+
+  set currentWeight(value: BigInt) {
+    this.set("currentWeight", Value.fromBigInt(value));
+  }
+
+  get lastUpdatedEpoch(): BigInt {
+    let value = this.get("lastUpdatedEpoch");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toBigInt();
+    }
+  }
+
+  set lastUpdatedEpoch(value: BigInt) {
+    this.set("lastUpdatedEpoch", Value.fromBigInt(value));
+  }
+
+  get lastUpdatedAt(): BigInt {
+    let value = this.get("lastUpdatedAt");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toBigInt();
+    }
+  }
+
+  set lastUpdatedAt(value: BigInt) {
+    this.set("lastUpdatedAt", Value.fromBigInt(value));
+  }
+
+  get isActive(): boolean {
+    let value = this.get("isActive");
+    if (!value || value.kind == ValueKind.NULL) {
+      return false;
+    } else {
+      return value.toBoolean();
+    }
+  }
+
+  set isActive(value: boolean) {
+    this.set("isActive", Value.fromBoolean(value));
+  }
+}
+
 export class ActivityStats extends Entity {
   constructor(id: string) {
     super();
