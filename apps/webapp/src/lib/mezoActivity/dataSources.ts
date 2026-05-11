@@ -14,10 +14,10 @@ import type { Hash } from "viem"
 const MATCHBOX_EXPLORER_SUBGRAPH_BY_CHAIN: Record<SupportedChainId, string> = {
   [CHAIN_ID.mainnet]:
     process.env.MATCHBOX_EXPLORER_SUBGRAPH_MEZO_URL ??
-    "https://api.goldsky.com/api/public/project_cmoiy2fc3z9sl01rk465n7poh/subgraphs/matchbox-explorer/1.0.0/gn",
+    "https://api.goldsky.com/api/public/project_cmoiy2fc3z9sl01rk465n7poh/subgraphs/matchbox-explorer/live/gn",
   [CHAIN_ID.testnet]:
     process.env.MATCHBOX_EXPLORER_SUBGRAPH_MEZO_TESTNET_URL ??
-    "https://api.goldsky.com/api/public/project_cmoiy2fc3z9sl01rk465n7poh/subgraphs/matchbox-explorer-testnet/1.0.0/gn",
+    "https://api.goldsky.com/api/public/project_cmoiy2fc3z9sl01rk465n7poh/subgraphs/matchbox-explorer-testnet/live/gn",
 }
 
 type SourceOptions = {
