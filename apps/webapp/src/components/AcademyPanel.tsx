@@ -1,7 +1,9 @@
+import AcademyBlacklist from "@/components/AcademyBlacklist"
 import AcademyKnobs from "@/components/AcademyKnobs"
 import AcademyLeaderboard from "@/components/AcademyLeaderboard"
 import { useAcademy } from "@/contexts/AcademyContext"
 import { useAcademyActivity } from "@/hooks/useAcademyActivity"
+import { useBlacklist } from "@/hooks/useBlacklist"
 import {
   WEEK,
   enumerateEpochs,
@@ -140,6 +142,7 @@ export default function AcademyPanel() {
   const [fromTs, setFromTs] = useState<number>(defaultRange().fromTs)
   const [toTs, setToTs] = useState<number>(defaultRange().toTs)
   const [params, setParams] = useState<AcademyParams>(defaultParams())
+  const blacklist = useBlacklist()
 
   useEffect(() => {
     const stored = loadStored()
@@ -176,17 +179,25 @@ export default function AcademyPanel() {
   })
 
   const sim = useMemo(() => {
-    if (!activity.data) return null
+    if (!activity.data || !blacklist.hydrated) return null
     return simulate(
       {
         lockEvents: activity.data.lockEvents,
         voteEvents: activity.data.voteEvents,
+        blacklist: blacklist.merged,
       },
       params,
       fromTs,
       toTs,
     )
-  }, [activity.data, params, fromTs, toTs])
+  }, [
+    activity.data,
+    blacklist.hydrated,
+    blacklist.merged,
+    params,
+    fromTs,
+    toTs,
+  ])
 
   const epochSummaries = useMemo(() => {
     if (!activity.data) return []
@@ -267,7 +278,7 @@ export default function AcademyPanel() {
         </div>
 
         <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-5 py-4 md:flex-row">
-          <aside className="w-full flex-none md:w-[320px]">
+          <aside className="flex w-full flex-none flex-col gap-3 md:w-[320px]">
             <AcademyKnobs
               params={params}
               onChange={setParams}
@@ -277,6 +288,9 @@ export default function AcademyPanel() {
                 setFromTs(def.fromTs)
                 setToTs(def.toTs)
               }}
+            />
+            <AcademyBlacklist
+              droppedCount={sim?.totals.droppedBlacklistEvents ?? 0}
             />
           </aside>
 
