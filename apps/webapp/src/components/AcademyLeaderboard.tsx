@@ -1,3 +1,4 @@
+import { ClickableAddress } from "@/components/ClickableAddress"
 import type { LeaderboardRow } from "@/lib/academy/simulate"
 import { useMemo, useState } from "react"
 
@@ -261,24 +262,30 @@ export default function AcademyLeaderboard({ rows, budgetMezoWad }: Props) {
                   <td className="px-2 py-1 text-left text-[11px] text-[var(--content-tertiary)]">
                     {i + 1}
                   </td>
-                  <td className="px-2 py-1 font-mono text-[11px] text-[var(--content-primary)]">
-                    {fmtAddr(row.actor)}
-                    {row.fullyParticipated ? (
-                      <span
-                        className="ml-1 rounded bg-[#F7931A]/15 px-1 text-[8px] font-bold uppercase text-[#F7931A]"
-                        title="Voted in every epoch of the range"
-                      >
-                        ★
-                      </span>
-                    ) : null}
-                    {row.flagged ? (
-                      <span
-                        className="ml-1 text-[11px] text-[var(--content-secondary)]"
-                        title="Approximated — missing weight or prior-lock data"
-                      >
-                        ~
-                      </span>
-                    ) : null}
+                  <td className="px-2 py-1 text-[var(--content-primary)]">
+                    <div className="flex items-center gap-1">
+                      <ClickableAddress
+                        address={row.actor}
+                        label={fmtAddr(row.actor)}
+                        className="text-[11px]"
+                      />
+                      {row.fullyParticipated ? (
+                        <span
+                          className="rounded bg-[#F7931A]/15 px-1 text-[8px] font-bold uppercase text-[#F7931A]"
+                          title="Voted in every epoch of the range"
+                        >
+                          ★
+                        </span>
+                      ) : null}
+                      {row.flagged ? (
+                        <span
+                          className="text-[11px] text-[var(--content-secondary)]"
+                          title="Approximated — missing weight or prior-lock data"
+                        >
+                          ~
+                        </span>
+                      ) : null}
+                    </div>
                   </td>
                   <td className="px-2 py-1 text-right font-mono text-[var(--content-primary)]">
                     {fmtPoints(row.pointsWad)}
