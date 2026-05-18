@@ -102,6 +102,7 @@ export type SimTotals = {
   totalEpochs: number
   fullParticipationCount: number
   droppedCronEvents: number
+  droppedBlacklistEvents: number
   voteSnapshots: number
   activeVoteAggregateWad: bigint
 }
@@ -114,6 +115,7 @@ export type SimResult = {
 export type SimInput = {
   lockEvents: MezoActivityItem[]
   voteEvents: MezoActivityItem[]
+  blacklist?: ReadonlySet<Address>
 }
 
 function vePowerWad(amount: bigint, duration: bigint): bigint {
@@ -132,6 +134,18 @@ function isCronActor(addr: Address | undefined): boolean {
   if (!addr) return false
   try {
     return isAddressEqual(getAddress(addr), MEZO_BOOST_POKE_CRON_ADDRESS)
+  } catch {
+    return false
+  }
+}
+
+function isBlacklisted(
+  addr: Address | undefined,
+  blacklist: ReadonlySet<Address> | undefined,
+): boolean {
+  if (!addr || !blacklist || blacklist.size === 0) return false
+  try {
+    return blacklist.has(getAddress(addr))
   } catch {
     return false
   }
@@ -208,6 +222,8 @@ export function simulate(
   }
 
   let droppedCronEvents = 0
+  let droppedBlacklistEvents = 0
+  const blacklist = input.blacklist
 
   // ───────────────────────────────
   // Lock / extension events (one-shot, IN RANGE)
@@ -219,6 +235,10 @@ export function simulate(
     if (!ev.actorAddress) continue
     if (isCronActor(ev.actorAddress)) {
       droppedCronEvents += 1
+      continue
+    }
+    if (isBlacklisted(ev.actorAddress, blacklist)) {
+      droppedBlacklistEvents += 1
       continue
     }
     if (ev.timestamp < fromTs || ev.timestamp > toTs) continue
@@ -300,6 +320,10 @@ export function simulate(
   for (const ev of sortedVotes) {
     if (isCronActor(ev.actorAddress)) {
       droppedCronEvents += 1
+      continue
+    }
+    if (isBlacklisted(ev.actorAddress, blacklist)) {
+      droppedBlacklistEvents += 1
       continue
     }
     // Only count votes that actually boost a BTC lock — i.e. BoostVoter
@@ -447,6 +471,7 @@ export function simulate(
     totalEpochs,
     fullParticipationCount: rows.filter((r) => r.fullyParticipated).length,
     droppedCronEvents,
+    droppedBlacklistEvents,
     voteSnapshots: epochs.length,
     activeVoteAggregateWad,
   }
