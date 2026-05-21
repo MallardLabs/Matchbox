@@ -1,7 +1,7 @@
 import { ClickableAddress } from "@/components/ClickableAddress"
 import { getExplorerTransactionUrl } from "@/config/explorer"
 import { useNetwork } from "@/contexts/NetworkContext"
-import type { ActorProfile } from "@/lib/academy/actorProfile"
+import type { ActorProfile, LockDelta } from "@/lib/academy/actorProfile"
 import type { LeaderboardRow } from "@/lib/academy/simulate"
 import type { MezoActivityItem } from "@/types/mezoActivity"
 import type { Address, Hash } from "viem"
@@ -11,6 +11,7 @@ type Props = {
   row: LeaderboardRow | null
   fromTs: number
   toTs: number
+  weightExt: number
   onClose: () => void
 }
 
@@ -84,6 +85,7 @@ export default function AcademyActorProfile({
   row,
   fromTs,
   toTs,
+  weightExt,
   onClose,
 }: Props) {
   const { chainId } = useNetwork()
@@ -272,7 +274,12 @@ export default function AcademyActorProfile({
             {profile.inRangeLocks.length === 0 ? (
               <Empty>No lock or extension events in this range.</Empty>
             ) : (
-              <EventTable events={profile.inRangeLocks} txUrl={txUrl} />
+              <EventTable
+                events={profile.inRangeLocks}
+                txUrl={txUrl}
+                lockDeltas={profile.lockDeltaByEventId}
+                weightExt={weightExt}
+              />
             )}
           </section>
 
@@ -353,10 +360,15 @@ function Empty({ children }: { children: React.ReactNode }) {
 function EventTable({
   events,
   txUrl,
+  lockDeltas,
+  weightExt,
 }: {
   events: MezoActivityItem[]
   txUrl: (hash: Hash | undefined) => string | null
+  lockDeltas?: Map<string, LockDelta>
+  weightExt?: number
 }) {
+  const showDelta = !!lockDeltas
   return (
     <div className="overflow-hidden rounded border border-[var(--border)]">
       <table className="w-full text-xs">
@@ -365,6 +377,22 @@ function EventTable({
             <th className="px-2 py-1.5 text-left">When</th>
             <th className="px-2 py-1.5 text-left">Action</th>
             <th className="px-2 py-1.5 text-right">Amount / weight</th>
+            {showDelta ? (
+              <>
+                <th
+                  className="px-2 py-1.5 text-right"
+                  title="ΔvePower contributed by this event. For extensions, this is (new ve-power − prior ve-power). Saturates at the 4-year cap."
+                >
+                  Δ ve
+                </th>
+                <th
+                  className="px-2 py-1.5 text-right"
+                  title="Δ-points contributed = ΔvePower × weightExt (lock-track multiplier). Permanent extensions beyond 4y earn 0."
+                >
+                  Δ pts
+                </th>
+              </>
+            ) : null}
             <th className="px-2 py-1.5 text-left">Token / gauge</th>
             <th className="px-2 py-1.5 text-right">Tx</th>
           </tr>
@@ -372,10 +400,18 @@ function EventTable({
         <tbody>
           {events.map((ev) => {
             const url = txUrl(ev.txHash)
+            const delta = lockDeltas?.get(ev.id)
             return (
               <tr
                 key={ev.id}
-                className="border-t border-[var(--border)] hover:bg-[var(--surface-tertiary)]"
+                className={`border-t border-[var(--border)] hover:bg-[var(--surface-tertiary)] ${
+                  delta?.flagged ? "bg-amber-500/5" : ""
+                }`}
+                title={
+                  delta?.flagged
+                    ? "Δ is approximated — no prior lock state for this token in the fetched events."
+                    : undefined
+                }
               >
                 <td
                   className="px-2 py-1 font-mono text-[11px] text-[var(--content-secondary)]"
@@ -391,6 +427,18 @@ function EventTable({
                 <td className="px-2 py-1 text-right font-mono text-[11px] text-[var(--content-primary)]">
                   {renderAmount(ev)}
                 </td>
+                {showDelta ? (
+                  <>
+                    <td className="px-2 py-1 text-right font-mono text-[11px] text-[var(--content-primary)]">
+                      {delta ? renderDeltaVe(delta) : "—"}
+                    </td>
+                    <td className="px-2 py-1 text-right font-mono text-[11px] text-[var(--content-secondary)]">
+                      {delta
+                        ? renderDeltaPts(delta.deltaVeWad, weightExt ?? 1)
+                        : "—"}
+                    </td>
+                  </>
+                ) : null}
                 <td className="px-2 py-1 text-left font-mono text-[10px] text-[var(--content-secondary)]">
                   {renderTokenGauge(ev)}
                 </td>
@@ -415,6 +463,33 @@ function EventTable({
       </table>
     </div>
   )
+}
+
+function renderDeltaVe(delta: LockDelta): React.ReactNode {
+  if (delta.deltaVeWad === 0n) {
+    return <span className="text-[var(--content-tertiary)]">0</span>
+  }
+  return (
+    <span>
+      {fmtWadCompact(delta.deltaVeWad)}
+      {delta.flagged ? (
+        <span
+          className="ml-1 text-[var(--content-tertiary)]"
+          title="Approximated"
+        >
+          ~
+        </span>
+      ) : null}
+    </span>
+  )
+}
+
+function renderDeltaPts(deltaVeWad: bigint, weightExt: number): string {
+  if (deltaVeWad === 0n) return "0"
+  if (!Number.isFinite(weightExt) || weightExt <= 0) return "—"
+  const scaled = Math.round(weightExt * 1_000_000)
+  const ptsWad = (deltaVeWad * BigInt(scaled)) / 1_000_000n
+  return fmtPoints(ptsWad)
 }
 
 function renderAmount(ev: MezoActivityItem): string {

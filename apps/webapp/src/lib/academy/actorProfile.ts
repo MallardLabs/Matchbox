@@ -27,6 +27,17 @@ export type ActorVoteActionInRange = {
   countedFromEpoch: number | null
 }
 
+export type LockDelta = {
+  // ΔvePower contributed by this event in WAD. For new locks / amount
+  // increases / made-permanent it equals the ve-power of the lock state
+  // assigned at the event. For extensions it's (new ve-power − prior ve-power).
+  deltaVeWad: bigint
+  // Heuristic estimate used (because we lacked prior state for the token).
+  flagged: boolean
+  // ve-power AFTER this event (snapshot of the token's current ve-power).
+  postVeWad: bigint
+}
+
 export type ActorProfile = {
   actor: Address
   totalEpochs: number
@@ -35,12 +46,23 @@ export type ActorProfile = {
   extensionCount: number
   boostActionCount: number
   inRangeLocks: MezoActivityItem[]
+  // Keyed by `event.id` → ΔvePower for that event. Includes one entry per
+  // lock-track event in range.
+  lockDeltaByEventId: Map<string, LockDelta>
   inRangeBoosts: MezoActivityItem[]
   preRangeBoosts: MezoActivityItem[]
   epochs: ActorEpochSlice[]
   diagnostics: string[]
   blacklisted: boolean
   filtered: boolean
+}
+
+const MAXTIME = BigInt(4 * 365 * 86_400)
+
+function vePowerWad(amount: bigint, duration: bigint): bigint {
+  if (duration <= 0n || amount <= 0n) return 0n
+  const cappedDuration = duration > MAXTIME ? MAXTIME : duration
+  return (amount * cappedDuration) / MAXTIME
 }
 
 function isCronActor(addr: Address | undefined): boolean {
@@ -203,9 +225,43 @@ export function computeActorProfile(args: {
     .filter((ev) => ev.timestamp >= fromTs && ev.timestamp <= toTs)
     .sort(compareActivityOrder)
 
+  // Build prior-lock state from the SAME pre-range lock events we have for
+  // this actor, so an in-range extension can compare against its real prior
+  // ve-power instead of falling back to the heuristic when we already know it.
+  const lastLockByToken = new Map<
+    string,
+    { amount: bigint; duration: bigint }
+  >()
+  const preRangeLocks = lockEvents
+    .filter((ev) => sameActor(ev.actorAddress, checksummed))
+    .filter((ev) => ev.timestamp < fromTs)
+    .sort(compareActivityOrder)
+  for (const ev of preRangeLocks) {
+    const tokenKey = ev.tokenId?.toString()
+    if (!tokenKey) continue
+    if (
+      ev.actionType === "lockCreated" ||
+      ev.actionType === "lockAmountIncreased" ||
+      ev.actionType === "lockPermanent"
+    ) {
+      lastLockByToken.set(tokenKey, {
+        amount: ev.amount ?? 0n,
+        duration: ev.duration ?? 0n,
+      })
+    } else if (ev.actionType === "lockExtended") {
+      const prev = lastLockByToken.get(tokenKey)
+      lastLockByToken.set(tokenKey, {
+        amount: ev.amount ?? prev?.amount ?? 0n,
+        duration: ev.duration ?? prev?.duration ?? 0n,
+      })
+    }
+  }
+
+  const lockDeltaByEventId = new Map<string, LockDelta>()
   let newLockCount = 0
   let extensionCount = 0
   for (const ev of inRangeLocks) {
+    const tokenKey = ev.tokenId?.toString()
     if (
       ev.actionType === "lockCreated" ||
       ev.actionType === "lockAmountIncreased" ||
@@ -218,12 +274,48 @@ export function computeActorProfile(args: {
         const slice = epochSlices[idx]
         if (slice) slice.newLocksAtEpoch += 1
       }
+      const ve = vePowerWad(ev.amount ?? 0n, ev.duration ?? 0n)
+      lockDeltaByEventId.set(ev.id, {
+        deltaVeWad: ve,
+        flagged: false,
+        postVeWad: ve,
+      })
+      if (tokenKey) {
+        lastLockByToken.set(tokenKey, {
+          amount: ev.amount ?? 0n,
+          duration: ev.duration ?? 0n,
+        })
+      }
     } else if (ev.actionType === "lockExtended") {
       extensionCount += 1
       const idx = findEpochIndex(epochs, ev.timestamp)
       if (idx >= 0) {
         const slice = epochSlices[idx]
         if (slice) slice.extensionsAtEpoch += 1
+      }
+      const prev = tokenKey ? lastLockByToken.get(tokenKey) : undefined
+      const newAmount = ev.amount ?? prev?.amount ?? 0n
+      const newDuration = ev.duration ?? 0n
+      const newPower = vePowerWad(newAmount, newDuration)
+      let deltaWad = 0n
+      let flagged = false
+      if (prev) {
+        const prevPower = vePowerWad(prev.amount, prev.duration)
+        deltaWad = newPower > prevPower ? newPower - prevPower : 0n
+      } else {
+        deltaWad = newPower / 4n
+        flagged = true
+      }
+      lockDeltaByEventId.set(ev.id, {
+        deltaVeWad: deltaWad,
+        flagged,
+        postVeWad: newPower,
+      })
+      if (tokenKey) {
+        lastLockByToken.set(tokenKey, {
+          amount: newAmount,
+          duration: newDuration,
+        })
       }
     }
   }
@@ -279,6 +371,7 @@ export function computeActorProfile(args: {
     extensionCount,
     boostActionCount,
     inRangeLocks,
+    lockDeltaByEventId,
     inRangeBoosts,
     preRangeBoosts,
     epochs: epochSlices,
