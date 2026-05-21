@@ -143,3 +143,73 @@ test("lowercase event address vs checksummed blacklist entry — still filtered"
   assert.equal(result.totals.droppedBlacklistEvents, 1)
   assert.equal(result.rows.length, 0)
 })
+
+test("vote placed mid-epoch counts for that epoch (end-of-epoch snapshot)", () => {
+  // A single vote placed inside the LAST epoch of the range should still
+  // credit that epoch — snapshot happens at epoch end, after this event has
+  // been applied to activeVotes.
+  const lastEpochStart = TO_TS - WEEK
+  const result = run({
+    voteEvents: [voteEvent(REGULAR, lastEpochStart + 60, { logIndex: 1 })],
+  })
+  assert.equal(result.rows.length, 1)
+  assert.equal(result.rows[0]?.actor, REGULAR)
+  assert.equal(result.rows[0]?.activeEpochs, 1)
+  assert.equal(result.rows[0]?.boostCount, 1)
+  assert.equal(result.rows[0]?.votePointsWad, parseUnits("50", 18))
+})
+
+test("vote then abstain in same epoch nets to zero for that epoch", () => {
+  // Boost then abstain inside epoch 0; epochs 1+ never see active weight.
+  const t0 = FROM_TS + 60
+  const gauge = getAddress("0x6666666666666666666666666666666666666666")
+  const result = run({
+    voteEvents: [
+      voteEvent(REGULAR, t0, {
+        id: "v-1",
+        logIndex: 1,
+        gaugeAddress: gauge,
+      }),
+      voteEvent(REGULAR, t0 + 30, {
+        id: "a-1",
+        actionType: "boostAbstain",
+        logIndex: 2,
+        gaugeAddress: gauge,
+      }),
+    ],
+  })
+  assert.equal(result.rows.length, 0)
+  assert.equal(result.totals.activeVoteAggregateWad, 0n)
+})
+
+test("vote replay: same-timestamp abstain then vote uses log order", () => {
+  const timestamp = FROM_TS + 100
+  const gauge = getAddress("0x5555555555555555555555555555555555555555")
+  const result = run({
+    voteEvents: [
+      voteEvent(REGULAR, timestamp, {
+        id: "vote-log-3",
+        blockNumber: 123n,
+        logIndex: 3,
+        gaugeAddress: gauge,
+        weight: parseUnits("70", 18),
+      }),
+      voteEvent(REGULAR, timestamp, {
+        id: "abstain-log-1",
+        actionType: "boostAbstain",
+        blockNumber: 123n,
+        logIndex: 1,
+        gaugeAddress: gauge,
+        weight: parseUnits("50", 18),
+      }),
+    ],
+  })
+
+  // End-of-epoch semantics: the vote at FROM_TS + 100 is active by the end of
+  // epoch 0, so all 4 epochs credit it (4 × 70 = 280).
+  assert.equal(result.rows.length, 1)
+  assert.equal(result.rows[0]?.actor, REGULAR)
+  assert.equal(result.rows[0]?.activeEpochs, 4)
+  assert.equal(result.rows[0]?.votePointsWad, parseUnits("280", 18))
+  assert.equal(result.totals.activeVoteAggregateWad, parseUnits("70", 18))
+})

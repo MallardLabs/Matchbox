@@ -1,4 +1,4 @@
-import { enumerateEpochs, epochStartFor } from "@/lib/academy/epoch"
+import { WEEK, enumerateEpochs, epochStartFor } from "@/lib/academy/epoch"
 import { isSnfActor } from "@/lib/academy/snfActors"
 import { MEZO_BOOST_POKE_CRON_ADDRESS } from "@/lib/mezoActivity/constants"
 import type { MezoActivityItem } from "@/types/mezoActivity"
@@ -25,13 +25,18 @@ import { type Address, getAddress, isAddressEqual } from "viem"
 //            the simulator's `toTs`.
 //          • Walk forward, maintaining a per-(actor, voterContract, tokenId,
 //            gauge) running weight. Voted sets it; Abstained zeros it.
-//          • At the START of every epoch in the simulator range, snapshot the
-//            current state. For each (actor, gauge) where weight > 0, award
+//          • At the END of every epoch in the simulator range, snapshot the
+//            current state — i.e. after all Voted/Abstained events inside that
+//            epoch have been applied. For each (actor, gauge) where weight > 0
+//            at that moment, award
 //                points = weight × weightBoost
+//          • This means a vote placed mid-epoch earns points for that epoch
+//            (so long as it's still active at epoch end). A user who boosts
+//            then abstains within the same epoch earns 0 for that epoch —
+//            they had no active position when the epoch closed.
 //          • Sticky votes earn points every epoch they remain active. A user
 //            who votes once at t=−6mo and never changes earns 8 weeks of vote
-//            points in an 8-week range. A user who abstains mid-range stops
-//            earning from the next epoch onward.
+//            points in an 8-week range.
 //
 // Notes:
 //
@@ -190,6 +195,18 @@ type ActiveVote = {
   weight: bigint
 }
 
+function compareActivityOrder(
+  a: MezoActivityItem,
+  b: MezoActivityItem,
+): number {
+  if (a.timestamp !== b.timestamp) return a.timestamp - b.timestamp
+  if (a.blockNumber !== b.blockNumber)
+    return a.blockNumber > b.blockNumber ? 1 : -1
+  const aIdx = a.logIndex ?? -1
+  const bIdx = b.logIndex ?? -1
+  return aIdx - bIdx
+}
+
 function voteKey(item: MezoActivityItem): VoteKey | null {
   if (item.tokenId === undefined) return null
   const target = item.gaugeAddress
@@ -228,9 +245,7 @@ export function simulate(
   // ───────────────────────────────
   // Lock / extension events (one-shot, IN RANGE)
   // ───────────────────────────────
-  const sortedLocks = [...input.lockEvents].sort(
-    (a, b) => a.timestamp - b.timestamp,
-  )
+  const sortedLocks = [...input.lockEvents].sort(compareActivityOrder)
   for (const ev of sortedLocks) {
     if (!ev.actorAddress) continue
     if (isCronActor(ev.actorAddress)) {
@@ -292,15 +307,15 @@ export function simulate(
   // ───────────────────────────────
   // Vote events (EPOCH-SNAPSHOT REPLAY)
   // ───────────────────────────────
-  const sortedVotes = [...input.voteEvents].sort(
-    (a, b) => a.timestamp - b.timestamp,
-  )
+  const sortedVotes = [...input.voteEvents].sort(compareActivityOrder)
 
   // Build per-epoch snapshots by walking forward through every Voted/Abstained
   // event ever, taking a snapshot each time we cross an epoch boundary in the
   // simulator range.
   const activeVotes = new Map<VoteKey, ActiveVote>()
-  // Index into epochs[]; we snapshot when we reach each epoch start.
+  // Index into epochs[]; we snapshot when we cross each epoch's END boundary,
+  // so the snapshot reflects the actor's state after every event inside that
+  // epoch has been applied.
   let nextEpochIdx = 0
   // For each epoch we'll store the per-actor active vote weight totals (so we
   // can credit each owner once per epoch even if they have many active votes).
@@ -333,10 +348,12 @@ export function simulate(
     // that don't carry a boostable veBTC. None of them belong on the
     // Academy boost track.
     if (ev.boostContext !== "mezoVeBtcPairBoost") continue
-    // Snapshot any epoch boundaries we've passed (or just crossed).
+    // Snapshot any epoch we've already moved PAST — i.e. epochs whose END
+    // (epochStart + WEEK) is at or before this event's timestamp. All events
+    // inside those epochs have been applied to `activeVotes` already.
     while (
       nextEpochIdx < epochs.length &&
-      (epochs[nextEpochIdx] as number) <= ev.timestamp
+      (epochs[nextEpochIdx] as number) + WEEK <= ev.timestamp
     ) {
       snapshotEpoch(epochs[nextEpochIdx] as number)
       nextEpochIdx += 1
