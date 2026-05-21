@@ -1,6 +1,7 @@
 import { ClickableAddress } from "@/components/ClickableAddress"
 import type { LeaderboardRow } from "@/lib/academy/simulate"
 import { useMemo, useState } from "react"
+import type { Address } from "viem"
 
 type SortKey =
   | "points"
@@ -14,6 +15,7 @@ type SortKey =
 type Props = {
   rows: LeaderboardRow[]
   budgetMezoWad: bigint
+  onSelectActor?: (actor: Address) => void
 }
 
 function fmtMezo(wad: bigint): string {
@@ -61,7 +63,11 @@ function downloadCsv(filename: string, content: string) {
   URL.revokeObjectURL(url)
 }
 
-export default function AcademyLeaderboard({ rows, budgetMezoWad }: Props) {
+export default function AcademyLeaderboard({
+  rows,
+  budgetMezoWad,
+  onSelectActor,
+}: Props) {
   const [sortKey, setSortKey] = useState<SortKey>("points")
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc")
   const [limit, setLimit] = useState(50)
@@ -268,6 +274,8 @@ export default function AcademyLeaderboard({ rows, budgetMezoWad }: Props) {
                         address={row.actor}
                         label={fmtAddr(row.actor)}
                         className="text-[11px]"
+                        onLabelClick={onSelectActor}
+                        labelTitle="View actor profile for this range"
                       />
                       {row.fullyParticipated ? (
                         <span

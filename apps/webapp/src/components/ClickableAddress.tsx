@@ -7,6 +7,8 @@ type ClickableAddressProps = {
   address: Address
   label?: string
   className?: string
+  onLabelClick?: ((address: Address) => void) | undefined
+  labelTitle?: string | undefined
 }
 
 function CopyIcon({ size = 14 }: { size?: number }): JSX.Element {
@@ -73,6 +75,8 @@ export function ClickableAddress({
   address,
   label,
   className,
+  onLabelClick,
+  labelTitle,
 }: ClickableAddressProps): JSX.Element {
   const { chainId } = useNetwork()
   const explorerUrl = getExplorerAddressUrl(chainId, address)
@@ -96,14 +100,29 @@ export function ClickableAddress({
       className={`inline-flex items-center gap-1.5 font-mono text-2xs ${className ?? ""}`}
       title={address}
     >
-      <a
-        href={explorerUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="text-[var(--content-secondary)] no-underline transition-colors hover:text-[#F7931A] hover:underline"
-      >
-        {short}
-      </a>
+      {onLabelClick ? (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            onLabelClick(address)
+          }}
+          title={labelTitle ?? "View profile"}
+          className="cursor-pointer bg-transparent p-0 text-left text-[var(--content-secondary)] no-underline transition-colors hover:text-[#F7931A] hover:underline"
+        >
+          {short}
+        </button>
+      ) : (
+        <a
+          href={explorerUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-[var(--content-secondary)] no-underline transition-colors hover:text-[#F7931A] hover:underline"
+        >
+          {short}
+        </a>
+      )}
       <button
         type="button"
         onClick={handleCopy}

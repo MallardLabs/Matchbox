@@ -1,9 +1,11 @@
+import AcademyActorProfile from "@/components/AcademyActorProfile"
 import AcademyBlacklist from "@/components/AcademyBlacklist"
 import AcademyKnobs from "@/components/AcademyKnobs"
 import AcademyLeaderboard from "@/components/AcademyLeaderboard"
 import { useAcademy } from "@/contexts/AcademyContext"
 import { useAcademyActivity } from "@/hooks/useAcademyActivity"
 import { useBlacklist } from "@/hooks/useBlacklist"
+import { computeActorProfile } from "@/lib/academy/actorProfile"
 import {
   WEEK,
   enumerateEpochs,
@@ -13,7 +15,7 @@ import {
 import { type AcademyParams, simulate } from "@/lib/academy/simulate"
 import type { MezoActivityItem } from "@/types/mezoActivity"
 import { useEffect, useMemo, useState } from "react"
-import { parseUnits } from "viem"
+import { type Address, parseUnits } from "viem"
 
 const STORAGE_KEY = "mezo-academy-sim-v2"
 
@@ -142,6 +144,7 @@ export default function AcademyPanel() {
   const [fromTs, setFromTs] = useState<number>(defaultRange().fromTs)
   const [toTs, setToTs] = useState<number>(defaultRange().toTs)
   const [params, setParams] = useState<AcademyParams>(defaultParams())
+  const [selectedActor, setSelectedActor] = useState<Address | null>(null)
   const blacklist = useBlacklist()
 
   useEffect(() => {
@@ -214,6 +217,41 @@ export default function AcademyPanel() {
     () => epochSummaries.reduce((m, e) => Math.max(m, e.total), 0),
     [epochSummaries],
   )
+
+  const actorProfile = useMemo(() => {
+    if (!selectedActor || !activity.data || !blacklist.hydrated) return null
+    return computeActorProfile({
+      actor: selectedActor,
+      lockEvents: activity.data.lockEvents,
+      voteEvents: activity.data.voteEvents,
+      fromTs,
+      toTs,
+      blacklist: blacklist.merged,
+    })
+  }, [
+    selectedActor,
+    activity.data,
+    blacklist.hydrated,
+    blacklist.merged,
+    fromTs,
+    toTs,
+  ])
+
+  const actorRow = useMemo(() => {
+    if (!selectedActor || !sim) return null
+    const lower = selectedActor.toLowerCase()
+    return sim.rows.find((r) => r.actor.toLowerCase() === lower) ?? null
+  }, [selectedActor, sim])
+
+  // Close profile on Escape.
+  useEffect(() => {
+    if (!selectedActor) return
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setSelectedActor(null)
+    }
+    window.addEventListener("keydown", handler)
+    return () => window.removeEventListener("keydown", handler)
+  }, [selectedActor])
 
   if (!enabled) return null
 
@@ -374,12 +412,22 @@ export default function AcademyPanel() {
                 <AcademyLeaderboard
                   rows={sim.rows}
                   budgetMezoWad={params.budgetMezoWad}
+                  onSelectActor={setSelectedActor}
                 />
               ) : null}
             </section>
           </main>
         </div>
       </div>
+      {actorProfile ? (
+        <AcademyActorProfile
+          profile={actorProfile}
+          row={actorRow}
+          fromTs={fromTs}
+          toTs={toTs}
+          onClose={() => setSelectedActor(null)}
+        />
+      ) : null}
     </div>
   )
 }
