@@ -59,12 +59,20 @@ export function handleVotingEscrowDeposit(event: Deposit): void {
   account.save()
 
   const lock = getOrCreateLock(event.address, event.params.tokenId)
-  lock.owner = event.params.provider
   if (actionType == LOCK_CREATED) {
+    // Do NOT overwrite lock.owner. The preceding ERC-721 Transfer (mint
+    // from 0x0) has already set it to the NFT recipient, which may differ
+    // from `provider` for grant/claim flows where a Safe or relayer is the
+    // depositor. Activity.actor stays as `provider` (the relayer is
+    // blacklisted, so no lock-creation credit), but lock.owner must stay
+    // accurate so downstream BoostVoter actor-resolution attributes votes
+    // to the real NFT owner.
     lock.createdAt = event.block.timestamp
-  }
-  if (actionType == LOCK_EXTENDED) {
-    lock.lastExtendedAt = event.block.timestamp
+  } else {
+    lock.owner = event.params.provider
+    if (actionType == LOCK_EXTENDED) {
+      lock.lastExtendedAt = event.block.timestamp
+    }
   }
   lock.amount = event.params.value
   lock.unlockAt = event.params.locktime
