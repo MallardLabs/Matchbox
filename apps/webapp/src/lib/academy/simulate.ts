@@ -19,16 +19,16 @@ import { type Address, getAddress, isAddressEqual } from "viem"
 //          made permanent          → weightNew × vePower(amount, MAXTIME)
 //          extended duration       → weightExt × ΔvePower
 //
-//   2. Vote track  (BOOST_VOTE + BOOST_ABSTAIN), computed via
-//        EPOCH-SNAPSHOT REPLAY:
-//          • Sort every Voted / Abstained event from subgraph genesis through
-//            the simulator's `toTs`.
+//   2. Vote track  (BOOST_VOTE + BOOST_ABSTAIN + LOCK_TRANSFERRED), computed
+//        via EPOCH-SNAPSHOT REPLAY:
+//          • Sort every Voted / Abstained / Transfer event from subgraph
+//            genesis through the simulator's `toTs`.
 //          • Walk forward, maintaining a per-(actor, voterContract, tokenId,
-//            gauge) running weight. Voted sets it; Abstained zeros it.
+//            gauge) running weight. Manual Voted sets it; Abstained zeros it.
 //          • At the END of every epoch in the simulator range, snapshot the
-//            current state — i.e. after all Voted/Abstained events inside that
-//            epoch have been applied. For each (actor, gauge) where weight > 0
-//            at that moment, award
+//            current state — i.e. after all events inside that epoch have
+//            been applied. For each (actor, gauge) where weight > 0 at that
+//            moment, award
 //                points = weight × weightBoost
 //          • This means a vote placed mid-epoch earns points for that epoch
 //            (so long as it's still active at epoch end). A user who boosts
@@ -42,6 +42,22 @@ import { type Address, getAddress, isAddressEqual } from "viem"
 //            voting on 100 gauges still counts as 1 for that epoch — points
 //            already collapse all of an NFT's gauge weights to its vePower,
 //            so the count should too.
+//          • POKE GATE: when the maintainer cron calls pokeBoost(s) the
+//            BoostVoter re-emits Voted for every active gauge on the NFT.
+//            We DETECT these by `tx.from == MEZO_BOOST_POKE_CRON_ADDRESS`
+//            and treat them as no-ops: they do not re-establish a sticky
+//            vote and do not bump boostCount. Only a manual Voted from the
+//            NFT owner mutates activeVotes.
+//          • TRANSFER DRAIN: a LockPosition transfer marks the tokenId as
+//            "pending-cleared" but does not mutate activeVotes immediately.
+//            The clearing happens AFTER the next epoch snapshot — so the
+//            seller still earns for the epoch their transfer fell inside
+//            (they were the active voter while the epoch's events were
+//            applied), but from the next epoch onwards the vote is gone
+//            and the new owner earns nothing on the boost track until they
+//            manually re-vote themselves. Combined with the poke gate, this
+//            means secondary-market buyers cannot inherit sticky-vote
+//            points from the seller without an explicit on-chain action.
 //
 // Notes:
 //
@@ -314,22 +330,42 @@ export function simulate(
   // ───────────────────────────────
   // Vote events (EPOCH-SNAPSHOT REPLAY)
   // ───────────────────────────────
+  //
+  // The voteEvents stream contains three action types: boostVote,
+  // boostAbstain, and lockTransferred. We sort them all together and walk
+  // forward, taking an epoch-end snapshot each time the next event crosses
+  // a boundary.
+  //
+  // Two non-obvious behaviours encoded here:
+  //
+  //   • POKE GATE: poke-driven boostVote events (where the maintainer cron
+  //     called pokeBoost(s)) carry the *new* NFT owner as `actor` (resolved
+  //     by the subgraph) but the cron as `txFrom`. We treat them as no-ops
+  //     for state mutation — they do NOT re-establish a sticky vote and do
+  //     NOT bump boostCount. Only a manual `Voted` (txFrom != cron) can
+  //     create or update an activeVotes entry.
+  //
+  //   • TRANSFER DRAIN: a lockTransferred event marks the tokenId as
+  //     "pending-cleared" but does NOT mutate activeVotes immediately. The
+  //     drain happens at the END of the next epoch snapshot, AFTER the
+  //     credit loop — so the seller still earns for the epoch the transfer
+  //     fell inside (they were the active voter when the epoch's events
+  //     started), but from the next epoch onwards their stale vote is gone
+  //     and the new owner earns nothing until they themselves call vote().
+  //
+  // Both behaviours rely on `ev.txFrom == MEZO_BOOST_POKE_CRON_ADDRESS`
+  // being the *only* way the cron appears. The cron's address is treated as
+  // stable; if a new cron infrastructure is deployed, update
+  // MEZO_BOOST_POKE_CRON_ADDRESS or add the new address to a list.
   const sortedVotes = [...input.voteEvents].sort(compareActivityOrder)
 
-  // Build per-epoch snapshots by walking forward through every Voted/Abstained
-  // event ever, taking a snapshot each time we cross an epoch boundary in the
-  // simulator range.
   const activeVotes = new Map<VoteKey, ActiveVote>()
-  // Index into epochs[]; we snapshot when we cross each epoch's END boundary,
-  // so the snapshot reflects the actor's state after every event inside that
-  // epoch has been applied.
+  // tokenIds whose sticky votes should be evicted at the end of the next
+  // epoch snapshot. Adding here does NOT immediately mutate activeVotes.
+  const pendingTransferredTokens = new Set<string>()
   let nextEpochIdx = 0
-  // For each epoch we'll store the per-actor active vote weight totals (so we
-  // can credit each owner once per epoch even if they have many active votes).
-  // We accumulate directly into the actor's votePoints during the snapshot.
 
   const snapshotEpoch = (epochStart: number) => {
-    if (activeVotes.size === 0) return
     for (const vote of activeVotes.values()) {
       if (vote.weight <= 0n) continue
       const acc = get(vote.owner)
@@ -337,9 +373,44 @@ export function simulate(
       acc.voteWeightEpochSumWad += vote.weight
       acc.participatedEpochs.add(epochStart)
     }
+    // Drain transfers AFTER crediting — the seller earns one last epoch.
+    if (pendingTransferredTokens.size > 0) {
+      for (const [key] of activeVotes) {
+        // VoteKey format: `${contract}|${tokenId}|${gauge}`
+        const tokenId = key.split("|")[1]
+        if (tokenId && pendingTransferredTokens.has(tokenId)) {
+          activeVotes.delete(key)
+        }
+      }
+      pendingTransferredTokens.clear()
+    }
+  }
+
+  const advanceEpochsTo = (timestamp: number) => {
+    while (
+      nextEpochIdx < epochs.length &&
+      (epochs[nextEpochIdx] as number) + WEEK <= timestamp
+    ) {
+      snapshotEpoch(epochs[nextEpochIdx] as number)
+      nextEpochIdx += 1
+    }
   }
 
   for (const ev of sortedVotes) {
+    // Advance epoch snapshots first — every event (vote OR transfer) can
+    // tick us across boundaries.
+    advanceEpochsTo(ev.timestamp)
+
+    if (ev.actionType === "lockTransferred") {
+      // Transfer queues the tokenId for eviction at the next snapshot.
+      // No blacklist / cron filter here: the seller might already be
+      // blacklisted, but their stale vote still needs to be drained.
+      if (ev.tokenId !== undefined) {
+        pendingTransferredTokens.add(ev.tokenId.toString())
+      }
+      continue
+    }
+
     if (isCronActor(ev.actorAddress)) {
       droppedCronEvents += 1
       continue
@@ -348,41 +419,28 @@ export function simulate(
       droppedBlacklistEvents += 1
       continue
     }
-    // Only count votes that actually boost a BTC lock — i.e. BoostVoter
-    // events on veBTC pair gauges (mezoVeBtcPairBoost). PoolsVoter votes
-    // (matchboxGaugeBoost) allocate emissions to Mezo Earn pool/vault gauges
-    // and ThirdPartyVoter / ValidatorsVoter votes (unknown) target gauges
-    // that don't carry a boostable veBTC. None of them belong on the
-    // Academy boost track.
+    // Only veBTC pair boost votes count for the Academy boost track.
     if (ev.boostContext !== "mezoVeBtcPairBoost") continue
-    // Snapshot any epoch we've already moved PAST — i.e. epochs whose END
-    // (epochStart + WEEK) is at or before this event's timestamp. All events
-    // inside those epochs have been applied to `activeVotes` already.
-    while (
-      nextEpochIdx < epochs.length &&
-      (epochs[nextEpochIdx] as number) + WEEK <= ev.timestamp
-    ) {
-      snapshotEpoch(epochs[nextEpochIdx] as number)
-      nextEpochIdx += 1
-    }
 
     const key = voteKey(ev)
     if (!key || !ev.actorAddress) continue
     const actor = ev.actorAddress
 
     if (ev.actionType === "boostVote") {
+      // POKE GATE: a Voted emitted because the cron called pokeBoost(s)
+      // does not re-establish the sticky vote. Only manual re-votes
+      // (txFrom != cron) can mutate activeVotes here.
+      if (isCronActor(ev.txFrom)) continue
+
       const w = ev.weight ?? 0n
       if (w > 0n) {
         activeVotes.set(key, { owner: actor, weight: w })
       } else {
         activeVotes.delete(key)
       }
-      // Only count boost ACTIONS that fall inside the simulator range. The
-      // sortedVotes list spans genesis → toTs so we can replay sticky-vote
-      // state, but the "boost actions" stat the user reads in the totals box
-      // is meant to describe activity in the selected range. Credit one per
-      // (tokenId, epoch) — voting on 5 gauges with the same NFT in the same
-      // epoch is still one boost, matching how points already collapse.
+      // Credit one boost action per (tokenId, epoch) inside the simulator
+      // range. Voting on 5 gauges with the same NFT in the same epoch is
+      // still one boost, matching how points already collapse.
       if (
         ev.timestamp >= fromTs &&
         ev.timestamp <= toTs &&
@@ -393,6 +451,7 @@ export function simulate(
         acc.boostTokenEpochs.add(`${ev.tokenId.toString()}|${epoch}`)
       }
     } else if (ev.actionType === "boostAbstain") {
+      // Abstain is always the owner's explicit cancellation.
       activeVotes.delete(key)
     }
   }

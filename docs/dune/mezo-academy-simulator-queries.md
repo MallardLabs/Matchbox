@@ -39,10 +39,10 @@ simulator currently groups `LOCK_CREATED`, `LOCK_AMOUNT_INCREASED`, and
 Duration extensions are `Deposit.depositType = 3` and are counted only in the
 extensions query below.
 
-`lock_created` rows resolve the actor to the NFT recipient (the `to`
-address on the same-tx `Transfer` mint from 0x0), not `Deposit.provider`.
-For self-`createLock` these coincide; for merkle/grant-style flows the
-recipient is the meaningful creator.
+`actor` for `lock_created` rows is `Deposit.provider`. Claim/grant
+relayers (e.g. `MerkleClaimAndLockHandler`) appear here as provider but
+are blacklisted, so the recipient of a granted lock earns no credit —
+only direct callers of `createLock` are counted.
 
 ```sql
 WITH
@@ -75,27 +75,13 @@ excluded_actors AS (
   UNION
   SELECT actor FROM runtime_blacklist
 ),
-mint_recipients AS (
-  SELECT
-    t.evt_tx_hash,
-    t.tokenId,
-    t."to" AS recipient
-  FROM mezo_mezo.vemezo_evt_transfer t
-  CROSS JOIN params p
-  WHERE t.contract_address = 0xb90fdad3dfd180458d62cc6acedc983d78e20122
-    AND t."from" = 0x0000000000000000000000000000000000000000
-    AND t.evt_block_date <= CAST(p.to_time AS date)
-),
 event_rows AS (
   SELECT
     from_unixtime(floor(to_unixtime(d.evt_block_time) / 604800) * 604800) AS epoch_start,
     d.evt_block_time,
     d.evt_tx_hash,
     d.evt_index,
-    CASE
-      WHEN d.depositType = 1 THEN coalesce(mr.recipient, d.provider)
-      ELSE d.provider
-    END AS actor,
+    d.provider AS actor,
     d.tokenId,
     d.value AS amount_raw,
     d.locktime AS locktime_raw,
@@ -105,9 +91,6 @@ event_rows AS (
     END AS event_kind
   FROM mezo_mezo.vemezo_evt_deposit d
   CROSS JOIN params p
-  LEFT JOIN mint_recipients mr
-    ON mr.evt_tx_hash = d.evt_tx_hash
-    AND mr.tokenId = d.tokenId
   WHERE d.contract_address = 0xb90fdad3dfd180458d62cc6acedc983d78e20122
     AND d.evt_block_date >= CAST(p.from_time AS date)
     AND d.evt_block_date <= CAST(p.to_time AS date)
@@ -229,26 +212,12 @@ excluded_actors AS (
   UNION
   SELECT actor FROM runtime_blacklist
 ),
-mint_recipients AS (
-  SELECT
-    t.evt_tx_hash,
-    t.tokenId,
-    t."to" AS recipient
-  FROM mezo_mezo.vemezo_evt_transfer t
-  CROSS JOIN params p
-  WHERE t.contract_address = 0xb90fdad3dfd180458d62cc6acedc983d78e20122
-    AND t."from" = 0x0000000000000000000000000000000000000000
-    AND t.evt_block_date <= CAST(p.to_time AS date)
-),
 event_rows AS (
   SELECT
     d.evt_block_time,
     d.evt_tx_hash,
     d.evt_index,
-    CASE
-      WHEN d.depositType = 1 THEN coalesce(mr.recipient, d.provider)
-      ELSE d.provider
-    END AS actor,
+    d.provider AS actor,
     d.tokenId,
     d.value AS amount_raw,
     d.locktime AS locktime_raw,
@@ -258,9 +227,6 @@ event_rows AS (
     END AS event_kind
   FROM mezo_mezo.vemezo_evt_deposit d
   CROSS JOIN params p
-  LEFT JOIN mint_recipients mr
-    ON mr.evt_tx_hash = d.evt_tx_hash
-    AND mr.tokenId = d.tokenId
   WHERE d.contract_address = 0xb90fdad3dfd180458d62cc6acedc983d78e20122
     AND d.evt_block_date >= CAST(p.from_time AS date)
     AND d.evt_block_date <= CAST(p.to_time AS date)
@@ -333,14 +299,18 @@ Column meanings:
 ## 2A. Boost Vote Actions by Epoch
 
 This mirrors the simulator's in-range `boostCount`: **distinct
-`(tokenId, epoch)` pairs** that voted on the Mezo veBTC pair boost voter
-(one NFT voting on 100 gauges in one epoch still counts as 1). To preserve
-blacklist parity with the app, it resolves the actor to the veMEZO NFT
-owner at the vote event instead of using the raw `voter` field, because
-poke-driven votes can have a maintainer as `msg.sender`. Ownership
-resolution uses veMEZO `Transfer` events plus `LockPermanent` owner
-confirmations; it intentionally does not use `Deposit.provider`, because
-that field is not reliable as NFT ownership for
+`(tokenId, epoch)` pairs** that voted manually on the Mezo veBTC pair
+boost voter (one NFT voting on 100 gauges in one epoch still counts as
+1). Cron-driven pokes are excluded — the simulator only credits manual
+re-votes, so poke-emitted `Voted` rows whose `tx.from` equals the cron
+address (`0xf8176df5b9fbcf0ed38c06970371ba89b7701bbb`) are filtered from
+`simulator_boost_count` (they remain in `boost_event_count` for
+forensics). To preserve blacklist parity with the app, the query also
+resolves the actor to the veMEZO NFT owner at the vote event instead of
+using the raw `voter` field. Ownership resolution uses veMEZO `Transfer`
+events plus `LockPermanent` owner confirmations; it intentionally does
+not use `Deposit.provider`, because that field is not reliable as NFT
+ownership for
 boost attribution.
 
 ```sql
@@ -381,12 +351,17 @@ votes AS (
     v.evt_block_number,
     v.evt_block_date,
     v.evt_tx_hash,
+    v.evt_tx_from,
     v.evt_index,
     v.voter AS raw_voter,
     v.tokenId,
     v.gauge,
     v.weight,
-    v.totalWeight
+    v.totalWeight,
+    -- The maintainer cron's tx.from is the discriminator between
+    -- poke-driven and manual Voted events. The simulator's poke gate
+    -- only credits boostCount for manual votes; mirror that here.
+    v.evt_tx_from != 0xf8176df5b9fbcf0ed38c06970371ba89b7701bbb AS is_manual
   FROM mezo_mezo.boostvoter_evt_voted v
   CROSS JOIN params p
   WHERE v.contract_address = 0x2ba614a598cffa5a19d683cdca97bac3a49313d1
@@ -451,7 +426,8 @@ event_rows AS (
     tokenId,
     gauge,
     weight,
-    totalWeight
+    totalWeight,
+    is_manual
   FROM owner_candidates
   WHERE owner_rank = 1
 ),
@@ -475,8 +451,9 @@ aggregated AS (
     END AS row_type,
     CASE WHEN grouping(epoch_start) = 1 THEN 0 ELSE 1 END AS row_sort,
     epoch_start,
-    count(DISTINCT CAST(tokenId AS varchar) || '|' || CAST(to_unixtime(epoch_start) AS varchar)) AS simulator_boost_count,
+    count(DISTINCT CASE WHEN is_manual THEN CAST(tokenId AS varchar) || '|' || CAST(to_unixtime(epoch_start) AS varchar) END) AS simulator_boost_count,
     count(*) AS boost_event_count,
+    count_if(is_manual) AS manual_boost_event_count,
     count(DISTINCT actor) AS actor_count,
     count(DISTINCT tokenId) AS token_count,
     count(DISTINCT gauge) AS gauge_count,
@@ -489,6 +466,7 @@ SELECT
   epoch_start,
   simulator_boost_count,
   boost_event_count,
+  manual_boost_event_count,
   actor_count,
   token_count,
   gauge_count,
@@ -503,8 +481,9 @@ Column meanings:
 
 - `row_type`: `total` is the single row to compare to the simulator totals; `epoch` is a Thursday 00:00 UTC epoch bucket.
 - `epoch_start`: start of the epoch. Blank on the `total` row.
-- `simulator_boost_count`: distinct `(tokenId, epoch)` pairs that boosted in that row — matches the simulator's `boostCount`.
-- `boost_event_count`: raw `BoostVoter.Voted` event count for the row (one per gauge per vote tx); kept for forensic comparison.
+- `simulator_boost_count`: distinct `(tokenId, epoch)` pairs that boosted **manually** in that row — matches the simulator's `boostCount`. Excludes poke-driven `Voted` rows.
+- `boost_event_count`: raw `BoostVoter.Voted` event count for the row (one per gauge per vote tx, includes pokes); kept for forensic comparison.
+- `manual_boost_event_count`: raw event count restricted to manual votes (poke-driven excluded); useful for sanity-checking the simulator-count.
 - `actor_count`: distinct included actors in that row.
 - `token_count`: distinct veMEZO NFT token IDs in that row.
 - `gauge_count`: distinct boost gauges voted for in that row.
@@ -514,10 +493,12 @@ Column meanings:
 
 This produces the actor list for the same boost action track. The
 headline `simulator_boost_count` is the actor's distinct in-range
-`(tokenId, epoch)` boost pairs; `boost_event_count` is the raw event
-count for comparison. Ownership resolution from `BoostVoter.Voted` to
-the veMEZO NFT owner intentionally ignores `Deposit.provider`; `Transfer`
-is the source of truth for NFT ownership.
+`(tokenId, epoch)` manual-boost pairs (poke-driven rows excluded);
+`boost_event_count` is the raw event count including pokes, and
+`manual_boost_event_count` is the raw count restricted to manual votes.
+Ownership resolution from `BoostVoter.Voted` to the veMEZO NFT owner
+intentionally ignores `Deposit.provider`; `Transfer` is the source of
+truth for NFT ownership.
 
 ```sql
 WITH
@@ -556,12 +537,14 @@ votes AS (
     v.evt_block_number,
     v.evt_block_date,
     v.evt_tx_hash,
+    v.evt_tx_from,
     v.evt_index,
     v.voter AS raw_voter,
     v.tokenId,
     v.gauge,
     v.weight,
-    v.totalWeight
+    v.totalWeight,
+    v.evt_tx_from != 0xf8176df5b9fbcf0ed38c06970371ba89b7701bbb AS is_manual
   FROM mezo_mezo.boostvoter_evt_voted v
   CROSS JOIN params p
   WHERE v.contract_address = 0x2ba614a598cffa5a19d683cdca97bac3a49313d1
@@ -625,7 +608,8 @@ event_rows AS (
     tokenId,
     gauge,
     weight,
-    totalWeight
+    totalWeight,
+    is_manual
   FROM owner_candidates
   WHERE owner_rank = 1
 ),
@@ -643,8 +627,9 @@ filtered AS (
 )
 SELECT
   actor AS actor_address,
-  count(DISTINCT CAST(tokenId AS varchar) || '|' || CAST(floor(to_unixtime(evt_block_time) / 604800) AS varchar)) AS simulator_boost_count,
+  count(DISTINCT CASE WHEN is_manual THEN CAST(tokenId AS varchar) || '|' || CAST(floor(to_unixtime(evt_block_time) / 604800) AS varchar) END) AS simulator_boost_count,
   count(*) AS boost_event_count,
+  count_if(is_manual) AS manual_boost_event_count,
   count(DISTINCT tokenId) AS token_count,
   count(DISTINCT gauge) AS gauge_count,
   min(evt_block_time) AS first_event_time,
@@ -661,8 +646,9 @@ ORDER BY
 Column meanings:
 
 - `actor_address`: included wallet address after applying seed plus optional CSV blacklist.
-- `simulator_boost_count`: actor's distinct in-range `(tokenId, epoch)` boost pairs; compare to the app `Boost` column.
-- `boost_event_count`: raw in-range `BoostVoter.Voted` event count for the actor; kept for forensic comparison.
+- `simulator_boost_count`: actor's distinct in-range `(tokenId, epoch)` manual-boost pairs; compare to the app `Boost` column. Poke-driven rows are excluded.
+- `boost_event_count`: raw in-range `BoostVoter.Voted` event count for the actor (includes pokes); kept for forensic comparison.
+- `manual_boost_event_count`: raw event count restricted to manual votes (poke-driven excluded).
 - `token_count`: distinct veMEZO NFT token IDs used by that actor.
 - `gauge_count`: distinct boost gauges voted for by that actor.
 - `first_event_time`: actor's first included boost vote in the selected period.
@@ -907,17 +893,6 @@ excluded_actors AS (
   UNION
   SELECT actor FROM runtime_blacklist
 ),
-mint_recipients AS (
-  SELECT
-    t.evt_tx_hash,
-    t.tokenId,
-    t."to" AS recipient
-  FROM mezo_mezo.vemezo_evt_transfer t
-  CROSS JOIN params p
-  WHERE t.contract_address = 0xb90fdad3dfd180458d62cc6acedc983d78e20122
-    AND t."from" = 0x0000000000000000000000000000000000000000
-    AND t.evt_block_date <= CAST(p.to_time AS date)
-),
 event_rows AS (
   SELECT
     concat(CAST(d.evt_tx_hash AS varchar), ':', CAST(d.evt_index AS varchar)) AS event_id,
@@ -928,10 +903,7 @@ event_rows AS (
     d.evt_index AS log_index,
     d.evt_tx_hash AS tx_hash,
     d.evt_tx_from AS tx_from,
-    CASE
-      WHEN d.depositType = 1 THEN coalesce(mr.recipient, d.provider)
-      ELSE d.provider
-    END AS actor_address,
+    d.provider AS actor_address,
     CASE
       WHEN d.depositType = 1 THEN 'lockCreated'
       WHEN d.depositType = 2 THEN 'lockAmountIncreased'
@@ -953,9 +925,6 @@ event_rows AS (
     false AS counts_for_simulator_boost
   FROM mezo_mezo.vemezo_evt_deposit d
   CROSS JOIN params p
-  LEFT JOIN mint_recipients mr
-    ON mr.evt_tx_hash = d.evt_tx_hash
-    AND mr.tokenId = d.tokenId
   WHERE d.contract_address = 0xb90fdad3dfd180458d62cc6acedc983d78e20122
     AND d.evt_block_date >= CAST(p.from_time AS date)
     AND d.evt_block_date <= CAST(p.to_time AS date)
@@ -1046,9 +1015,11 @@ ORDER BY
 This is the event-level comparison table for the actor profile's
 `Boost actions in range` view. It includes both `boostVote` and `boostAbstain`
 rows because abstains explain why an actor can have in-range boost activity but
-fewer active epochs or points. Only `boostVote` rows have
-`counts_for_simulator_boost = true`. Actor attribution is resolved from
-veMEZO NFT ownership (`Transfer` plus `LockPermanent`) and deliberately ignores
+fewer active epochs or points. Only **manual** `boostVote` rows have
+`counts_for_simulator_boost = true`; rows where `tx_from` equals the cron
+poke address are flagged with `action_type = 'boostPoke'` and excluded
+from the simulator count. Actor attribution is resolved from veMEZO NFT
+ownership (`Transfer` plus `LockPermanent`) and deliberately ignores
 `Deposit.provider`.
 
 ```sql
@@ -1106,8 +1077,14 @@ boost_events AS (
     v.gauge AS gauge_address,
     v.weight AS weight_raw,
     v.totalWeight AS total_weight_raw,
-    'boostVote' AS action_type,
-    true AS counts_for_simulator_boost
+    -- Poke-driven Voted events get re-classified as 'boostPoke' and lose
+    -- their simulator-boost flag, mirroring the simulator's poke gate.
+    CASE
+      WHEN v.evt_tx_from = 0xf8176df5b9fbcf0ed38c06970371ba89b7701bbb
+        THEN 'boostPoke'
+      ELSE 'boostVote'
+    END AS action_type,
+    v.evt_tx_from != 0xf8176df5b9fbcf0ed38c06970371ba89b7701bbb AS counts_for_simulator_boost
   FROM mezo_mezo.boostvoter_evt_voted v
   CROSS JOIN params p
   WHERE v.contract_address = 0x2ba614a598cffa5a19d683cdca97bac3a49313d1

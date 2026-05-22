@@ -147,6 +147,9 @@ export function computeActorProfile(args: {
   }))
 
   let nextEpochIdx = 0
+  // tokenIds queued for eviction at next epoch snapshot. Mirrors the
+  // simulator's transfer-drain semantics (see simulate.ts).
+  const pendingTransferredTokens = new Set<string>()
   const snapshot = (idx: number) => {
     const slice = epochSlices[idx]
     if (!slice) return
@@ -160,20 +163,44 @@ export function computeActorProfile(args: {
         weight: vote.weight,
       })
     }
+    // Drain transfers AFTER credit — seller earns last epoch.
+    if (pendingTransferredTokens.size > 0) {
+      for (const [key] of activeVotes) {
+        // voteKey format: `${contract}|${tokenId}|${gauge}`
+        const tokenId = key.split("|")[1]
+        if (tokenId && pendingTransferredTokens.has(tokenId)) {
+          activeVotes.delete(key)
+        }
+      }
+      pendingTransferredTokens.clear()
+    }
   }
 
-  // Sort the full vote history; we need pre-range events to replay sticky
-  // state correctly.
+  // Pull this actor's boost activity AND any transfers they participated in
+  // as either side (actor == to, recipient == from). Transfers are needed
+  // even when this actor was the seller (recipient == checksummed) so we
+  // can drain their stale sticky vote at the right epoch.
   const actorVotes = voteEvents
-    .filter((ev) => sameActor(ev.actorAddress, checksummed))
-    .filter((ev) => ev.boostContext === "mezoVeBtcPairBoost")
+    .filter((ev) => {
+      if (ev.actionType === "lockTransferred") {
+        return (
+          sameActor(ev.actorAddress, checksummed) ||
+          sameActor(ev.recipient, checksummed)
+        )
+      }
+      return (
+        sameActor(ev.actorAddress, checksummed) &&
+        ev.boostContext === "mezoVeBtcPairBoost"
+      )
+    })
     .sort(compareActivityOrder)
 
   const inRangeBoosts: MezoActivityItem[] = []
   const preRangeBoosts: MezoActivityItem[] = []
   // Distinct (tokenId, epochStart) pairs boosted in range — drives
   // `boostActionCount` and per-epoch counts so display matches the
-  // simulator's `boostCount` semantics.
+  // simulator's `boostCount` semantics. Poke-driven Voted events are
+  // excluded (cron is not a manual boost action).
   const boostTokenEpochs = new Set<string>()
   const epochTokenSets: Array<Set<string>> = epochs.map(() => new Set<string>())
 
@@ -187,10 +214,19 @@ export function computeActorProfile(args: {
       nextEpochIdx += 1
     }
 
+    if (ev.actionType === "lockTransferred") {
+      if (ev.tokenId !== undefined) {
+        pendingTransferredTokens.add(ev.tokenId.toString())
+      }
+      continue
+    }
+
     const key = voteKey(ev)
     if (!key) continue
 
     if (ev.actionType === "boostVote") {
+      // POKE GATE: ignore cron-driven Voted events for state and stats.
+      if (isCronActor(ev.txFrom)) continue
       const w = ev.weight ?? 0n
       if (w > 0n) {
         activeVotes.set(key, {

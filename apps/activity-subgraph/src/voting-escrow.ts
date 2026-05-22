@@ -1,4 +1,4 @@
-import { Bytes } from "@graphprotocol/graph-ts"
+import { Address } from "@graphprotocol/graph-ts"
 import {
   Deposit,
   LockPermanent,
@@ -16,6 +16,7 @@ import {
   LOCK_EXTENDED,
   LOCK_PERMANENT,
   LOCK_PERMANENT_UNLOCKED,
+  LOCK_TRANSFERRED,
   LOCK_WITHDRAWN,
   ONE,
   saveActivity,
@@ -40,42 +41,30 @@ export function handleVotingEscrowDeposit(event: Deposit): void {
     actionType = LOCK_AMOUNT_INCREASED
   }
 
-  // For LOCK_CREATED, the preceding ERC-721 Transfer (mint from 0x0) has
-  // already populated lock.owner with the NFT recipient. When a relayer or
-  // claim handler creates the lock on behalf of a user (e.g. the merkle
-  // ClaimAndLockHandler) the recipient differs from `provider`, and the
-  // recipient is the meaningful "creator" of the lock. Use lock.owner as
-  // the actor for LOCK_CREATED so simulator attribution lands on the user.
-  const lock = getOrCreateLock(event.address, event.params.tokenId)
-  let actor: Bytes = event.params.provider
-  if (actionType == LOCK_CREATED) {
-    const owner = lock.owner
-    if (owner) {
-      actor = owner
-    }
-  }
-
+  // actor = Deposit.provider for every depositType. Claim/grant flows have
+  // `provider = relayer proxy` (e.g. MerkleClaimAndLockHandler), which is
+  // blacklisted at the simulator level — receiving a granted lock is not
+  // "creating a lock," only direct callers of createLock earn lock points.
   const activity = baseActivity(event, actionType, UNKNOWN, VOTING_ESCROW)
-  activity.actor = actor
+  activity.actor = event.params.provider
   activity.tokenId = event.params.tokenId
   activity.amount = event.params.value
   activity.duration = event.params.locktime
   saveActivity(activity)
 
-  const account = getOrCreateAccount(actor, event.block.timestamp)
+  const account = getOrCreateAccount(event.params.provider, event.block.timestamp)
   if (actionType == LOCK_CREATED) {
     account.lockCount = account.lockCount.plus(ONE)
   }
   account.save()
 
+  const lock = getOrCreateLock(event.address, event.params.tokenId)
+  lock.owner = event.params.provider
   if (actionType == LOCK_CREATED) {
-    // Leave lock.owner as set by handleTransfer (the mint recipient).
     lock.createdAt = event.block.timestamp
-  } else {
-    lock.owner = event.params.provider
-    if (actionType == LOCK_EXTENDED) {
-      lock.lastExtendedAt = event.block.timestamp
-    }
+  }
+  if (actionType == LOCK_EXTENDED) {
+    lock.lastExtendedAt = event.block.timestamp
   }
   lock.amount = event.params.value
   lock.unlockAt = event.params.locktime
@@ -131,6 +120,26 @@ export function handleTransfer(event: Transfer): void {
   const lock = getOrCreateLock(event.address, event.params.tokenId)
   lock.owner = event.params.to
   lock.save()
+
+  // Emit LOCK_TRANSFERRED only on secondary-market moves. Mints (from=0x0)
+  // are paired with a Deposit that already attributes lock creation; burns
+  // (to=0x0) accompany Withdraw, which records its own activity. Emitting
+  // here would create noisy "phantom" transfer rows that the simulator
+  // would mis-interpret as ownership changes against zero-address actors.
+  const zero = Address.zero()
+  if (event.params.from.equals(zero) || event.params.to.equals(zero)) {
+    return
+  }
+  const activity = baseActivity(
+    event,
+    LOCK_TRANSFERRED,
+    UNKNOWN,
+    VOTING_ESCROW,
+  )
+  activity.actor = event.params.to
+  activity.recipient = event.params.from
+  activity.tokenId = event.params.tokenId
+  saveActivity(activity)
 }
 
 export function handleUpdateBoost(event: UpdateBoost): void {

@@ -44,7 +44,15 @@ const LOCK_ACTION_TYPES = [
   "LOCK_PERMANENT",
 ] as const
 
-const VOTE_ACTION_TYPES = ["BOOST_VOTE", "BOOST_ABSTAIN"] as const
+// LOCK_TRANSFERRED rides with the vote stream — the simulator's epoch
+// replay needs to interleave transfers with Voted/Abstained events so that
+// a transfer between the seller's last manual vote and the next manual
+// re-vote clears the sticky weight at the correct snapshot.
+const VOTE_ACTION_TYPES = [
+  "BOOST_VOTE",
+  "BOOST_ABSTAIN",
+  "LOCK_TRANSFERRED",
+] as const
 
 const NETWORK_BY_CHAIN: Record<number, "mainnet" | "testnet"> = {
   [CHAIN_ID.mainnet]: "mainnet",

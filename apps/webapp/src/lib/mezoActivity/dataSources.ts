@@ -92,6 +92,7 @@ const ACTION_TYPE_MAP: Record<string, MezoActivityActionType> = {
   LOCK_WITHDRAWN: "lockWithdrawn",
   LOCK_PERMANENT: "lockPermanent",
   LOCK_PERMANENT_UNLOCKED: "lockPermanentUnlocked",
+  LOCK_TRANSFERRED: "lockTransferred",
   BOOST_VOTE: "boostVote",
   BOOST_ABSTAIN: "boostAbstain",
   BOOST_POKE: "boostPoke",

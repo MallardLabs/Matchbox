@@ -7,6 +7,7 @@ export type MezoActivityActionType =
   | "lockWithdrawn"
   | "lockPermanent"
   | "lockPermanentUnlocked"
+  | "lockTransferred"
   | "boostVote"
   | "boostAbstain"
   | "boostPoke"

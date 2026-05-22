@@ -213,3 +213,145 @@ test("vote replay: same-timestamp abstain then vote uses log order", () => {
   assert.equal(result.rows[0]?.votePointsWad, parseUnits("280", 18))
   assert.equal(result.totals.activeVoteAggregateWad, parseUnits("70", 18))
 })
+
+// Helper for LOCK_TRANSFERRED events. The simulator routes these through
+// the voteEvents stream (the subgraph emits them from VotingEscrow Transfer
+// logs). `actorAddress` is the buyer (Transfer.to), `recipient` is the
+// seller (Transfer.from).
+function transferEvent(
+  buyer: Address,
+  seller: Address,
+  timestamp: number,
+  tokenId: bigint,
+  overrides: Partial<MezoActivityItem> = {},
+): MezoActivityItem {
+  return {
+    id: `transfer-${tokenId}-${timestamp}`,
+    blockNumber: 1n,
+    timestamp,
+    actionType: "lockTransferred",
+    boostContext: "unknown",
+    source: "subgraph",
+    contract: "votingEscrow",
+    actorAddress: buyer,
+    recipient: seller,
+    tokenId,
+    ...overrides,
+  } as MezoActivityItem
+}
+
+test("transfer drains sticky vote at next epoch — seller earns one last epoch only", () => {
+  // Alice votes BEFORE the range (sticky weight 50). Without a transfer
+  // she'd earn 4 × 50 = 200 across the 4-epoch window. She sells the NFT
+  // mid epoch 1; she should still earn epoch 0 + epoch 1 (100 total),
+  // nothing after, and the buyer earns 0 because they never re-voted.
+  const result = run({
+    voteEvents: [
+      voteEvent(REGULAR, FROM_TS - WEEK, {
+        id: "alice-vote",
+        logIndex: 1,
+      }),
+      transferEvent(ANOTHER, REGULAR, FROM_TS + WEEK + 60, 7n, {
+        logIndex: 2,
+      }),
+    ],
+  })
+
+  assert.equal(result.rows.length, 1)
+  assert.equal(result.rows[0]?.actor, REGULAR)
+  assert.equal(result.rows[0]?.activeEpochs, 2)
+  assert.equal(result.rows[0]?.votePointsWad, parseUnits("100", 18))
+  assert.equal(result.rows[0]?.boostCount, 0)
+  assert.equal(result.totals.activeVoteAggregateWad, 0n)
+})
+
+test("cron poke after transfer does not resurrect the vote", () => {
+  // Same as above, plus a cron-driven Voted event mid epoch 2 (txFrom=cron).
+  // The poke gate must skip it, so the result is identical to the
+  // transfer-drain-only case.
+  const result = run({
+    voteEvents: [
+      voteEvent(REGULAR, FROM_TS - WEEK, {
+        id: "alice-vote",
+        logIndex: 1,
+      }),
+      transferEvent(ANOTHER, REGULAR, FROM_TS + WEEK + 60, 7n, {
+        logIndex: 2,
+      }),
+      voteEvent(ANOTHER, FROM_TS + 2 * WEEK + 60, {
+        id: "cron-poke",
+        logIndex: 3,
+        txFrom: MEZO_BOOST_POKE_CRON_ADDRESS,
+      }),
+    ],
+  })
+
+  assert.equal(result.rows.length, 1)
+  assert.equal(result.rows[0]?.actor, REGULAR)
+  assert.equal(result.rows[0]?.votePointsWad, parseUnits("100", 18))
+  assert.equal(result.rows[0]?.activeEpochs, 2)
+  assert.equal(result.rows[0]?.boostCount, 0)
+})
+
+test("buyer manually re-voting after transfer earns from re-vote epoch onwards", () => {
+  // Alice pre-range vote (50) → transfer mid epoch 1 → Bob manually
+  // re-votes (weight 80) mid epoch 2. Expected:
+  //   • Alice: epoch 0 + epoch 1 credit = 100, then drained.
+  //   • Bob: epoch 2 + epoch 3 credit = 160, boostCount = 1.
+  const result = run({
+    voteEvents: [
+      voteEvent(REGULAR, FROM_TS - WEEK, {
+        id: "alice-vote",
+        logIndex: 1,
+      }),
+      transferEvent(ANOTHER, REGULAR, FROM_TS + WEEK + 60, 7n, {
+        logIndex: 2,
+      }),
+      voteEvent(ANOTHER, FROM_TS + 2 * WEEK + 60, {
+        id: "bob-revote",
+        logIndex: 3,
+        weight: parseUnits("80", 18),
+      }),
+    ],
+  })
+
+  assert.equal(result.rows.length, 2)
+  const alice = result.rows.find((r) => r.actor === REGULAR)
+  const bob = result.rows.find((r) => r.actor === ANOTHER)
+  assert.ok(alice)
+  assert.ok(bob)
+  assert.equal(alice?.votePointsWad, parseUnits("100", 18))
+  assert.equal(alice?.activeEpochs, 2)
+  assert.equal(alice?.boostCount, 0)
+  assert.equal(bob?.votePointsWad, parseUnits("160", 18))
+  assert.equal(bob?.activeEpochs, 2)
+  assert.equal(bob?.boostCount, 1)
+})
+
+test("cron poke without transfer leaves sticky vote intact and does not bump boostCount", () => {
+  // Alice votes mid-range (so a poke would have a different timestamp than
+  // her manual vote). Verify the cron poke is a no-op for both state and
+  // boostCount, and Alice's sticky vote continues to credit her each epoch.
+  const result = run({
+    voteEvents: [
+      voteEvent(REGULAR, FROM_TS + 60, {
+        id: "alice-manual",
+        logIndex: 1,
+      }),
+      voteEvent(REGULAR, FROM_TS + 2 * WEEK + 60, {
+        id: "cron-poke",
+        logIndex: 2,
+        txFrom: MEZO_BOOST_POKE_CRON_ADDRESS,
+      }),
+    ],
+  })
+
+  assert.equal(result.rows.length, 1)
+  assert.equal(result.rows[0]?.actor, REGULAR)
+  // Alice's manual vote at FROM_TS+60 is active through end of every
+  // remaining epoch — credits all 4 epochs.
+  assert.equal(result.rows[0]?.activeEpochs, 4)
+  assert.equal(result.rows[0]?.votePointsWad, parseUnits("200", 18))
+  // Only the manual vote counts toward boostCount; the poke is excluded.
+  assert.equal(result.rows[0]?.boostCount, 1)
+})
