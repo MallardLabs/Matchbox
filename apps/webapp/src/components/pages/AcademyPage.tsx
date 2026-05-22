@@ -297,9 +297,9 @@ function EasyView({
             hint="Total MEZO modeled as the Academy emission for this window."
           />
           <Stat
-            label="Avg APR"
-            value={fmtPct(simResult.totals.avgApr)}
-            hint="Annualised return on ve-power across all earning participants."
+            label="Median APR"
+            value={fmtPct(simResult.totals.medianApr)}
+            hint="Median annualised return on ve-power across earning participants — robust to a few outsized whales."
             tone="positive"
           />
           <Stat
@@ -336,8 +336,8 @@ function EasyView({
           <strong>{fmtDate(toTs)}</strong>, the Academy budget of{" "}
           <strong>{fmtMezoCompact(budgetMezoWad)} MEZO</strong> would distribute
           to <strong>{simResult.totals.participants}</strong> earning
-          participants, with an average APR of{" "}
-          <strong>{fmtPct(simResult.totals.avgApr)}</strong>. The top earner
+          participants, with a median APR of{" "}
+          <strong>{fmtPct(simResult.totals.medianApr)}</strong>. The top earner
           would receive <strong>{top1Share.toFixed(1)}%</strong> of the budget
           and the top ten would receive{" "}
           <strong>{top10Share.toFixed(1)}%</strong>. There were{" "}
@@ -345,8 +345,8 @@ function EasyView({
           locks,{" "}
           <strong>{simResult.totals.extensionCount.toLocaleString()}</strong>{" "}
           extensions, and{" "}
-          <strong>{simResult.totals.boostCount.toLocaleString()}</strong> raw
-          boost-vote events recorded.
+          <strong>{simResult.totals.boostCount.toLocaleString()}</strong>{" "}
+          distinct (NFT, epoch) boost actions recorded.
         </p>
       </section>
 
@@ -511,7 +511,10 @@ function ProView({
                 label="Participants"
                 value={String(simResult.totals.participants)}
               />
-              <Stat label="Avg APR" value={fmtPct(simResult.totals.avgApr)} />
+              <Stat
+                label="Median APR"
+                value={fmtPct(simResult.totals.medianApr)}
+              />
               <Stat
                 label="Boost actions"
                 value={simResult.totals.boostCount.toLocaleString()}

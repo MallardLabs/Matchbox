@@ -18,6 +18,9 @@ export type ActorEpochSlice = {
   }>
   newLocksAtEpoch: number
   extensionsAtEpoch: number
+  // Distinct tokenIds the actor boosted within this epoch. One NFT voting
+  // five gauges in one epoch counts once — matches how points already
+  // collapse all of an NFT's gauge weights into its vePower.
   boostActionsAtEpoch: number
 }
 
@@ -168,7 +171,11 @@ export function computeActorProfile(args: {
 
   const inRangeBoosts: MezoActivityItem[] = []
   const preRangeBoosts: MezoActivityItem[] = []
-  let boostActionCount = 0
+  // Distinct (tokenId, epochStart) pairs boosted in range — drives
+  // `boostActionCount` and per-epoch counts so display matches the
+  // simulator's `boostCount` semantics.
+  const boostTokenEpochs = new Set<string>()
+  const epochTokenSets: Array<Set<string>> = epochs.map(() => new Set<string>())
 
   for (const ev of actorVotes) {
     // Snapshot epochs we've moved PAST — epoch end is at (start + WEEK).
@@ -196,11 +203,13 @@ export function computeActorProfile(args: {
       }
       if (ev.timestamp >= fromTs && ev.timestamp <= toTs) {
         inRangeBoosts.push(ev)
-        boostActionCount += 1
         const epochIdx = findEpochIndex(epochs, ev.timestamp)
-        if (epochIdx >= 0) {
-          const slice = epochSlices[epochIdx]
-          if (slice) slice.boostActionsAtEpoch += 1
+        if (epochIdx >= 0 && ev.tokenId !== undefined) {
+          const epochStart = epochs[epochIdx] as number
+          const tokenKey = ev.tokenId.toString()
+          boostTokenEpochs.add(`${tokenKey}|${epochStart}`)
+          const epochSet = epochTokenSets[epochIdx]
+          if (epochSet) epochSet.add(tokenKey)
         }
       } else if (ev.timestamp < fromTs) {
         preRangeBoosts.push(ev)
@@ -218,6 +227,13 @@ export function computeActorProfile(args: {
     snapshot(nextEpochIdx)
     nextEpochIdx += 1
   }
+
+  for (let i = 0; i < epochSlices.length; i += 1) {
+    const slice = epochSlices[i]
+    const tokens = epochTokenSets[i]
+    if (slice && tokens) slice.boostActionsAtEpoch = tokens.size
+  }
+  const boostActionCount = boostTokenEpochs.size
 
   // Lock track — in-range only, this actor only.
   const inRangeLocks = lockEvents

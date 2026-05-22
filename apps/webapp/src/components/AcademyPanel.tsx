@@ -149,8 +149,8 @@ export default function AcademyPanel() {
                     value={String(simResult.totals.participants)}
                   />
                   <Stat
-                    label="Avg APR"
-                    value={fmtPct(simResult.totals.avgApr)}
+                    label="Median APR"
+                    value={fmtPct(simResult.totals.medianApr)}
                   />
                   <Stat
                     label="Boost actions"

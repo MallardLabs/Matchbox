@@ -1,3 +1,4 @@
+import { Bytes } from "@graphprotocol/graph-ts"
 import {
   Deposit,
   LockPermanent,
@@ -39,26 +40,42 @@ export function handleVotingEscrowDeposit(event: Deposit): void {
     actionType = LOCK_AMOUNT_INCREASED
   }
 
+  // For LOCK_CREATED, the preceding ERC-721 Transfer (mint from 0x0) has
+  // already populated lock.owner with the NFT recipient. When a relayer or
+  // claim handler creates the lock on behalf of a user (e.g. the merkle
+  // ClaimAndLockHandler) the recipient differs from `provider`, and the
+  // recipient is the meaningful "creator" of the lock. Use lock.owner as
+  // the actor for LOCK_CREATED so simulator attribution lands on the user.
+  const lock = getOrCreateLock(event.address, event.params.tokenId)
+  let actor: Bytes = event.params.provider
+  if (actionType == LOCK_CREATED) {
+    const owner = lock.owner
+    if (owner) {
+      actor = owner
+    }
+  }
+
   const activity = baseActivity(event, actionType, UNKNOWN, VOTING_ESCROW)
-  activity.actor = event.params.provider
+  activity.actor = actor
   activity.tokenId = event.params.tokenId
   activity.amount = event.params.value
   activity.duration = event.params.locktime
   saveActivity(activity)
 
-  const account = getOrCreateAccount(event.params.provider, event.block.timestamp)
+  const account = getOrCreateAccount(actor, event.block.timestamp)
   if (actionType == LOCK_CREATED) {
     account.lockCount = account.lockCount.plus(ONE)
   }
   account.save()
 
-  const lock = getOrCreateLock(event.address, event.params.tokenId)
-  lock.owner = event.params.provider
   if (actionType == LOCK_CREATED) {
+    // Leave lock.owner as set by handleTransfer (the mint recipient).
     lock.createdAt = event.block.timestamp
-  }
-  if (actionType == LOCK_EXTENDED) {
-    lock.lastExtendedAt = event.block.timestamp
+  } else {
+    lock.owner = event.params.provider
+    if (actionType == LOCK_EXTENDED) {
+      lock.lastExtendedAt = event.block.timestamp
+    }
   }
   lock.amount = event.params.value
   lock.unlockAt = event.params.locktime

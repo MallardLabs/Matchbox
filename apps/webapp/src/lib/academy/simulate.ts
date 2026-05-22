@@ -37,6 +37,11 @@ import { type Address, getAddress, isAddressEqual } from "viem"
 //          • Sticky votes earn points every epoch they remain active. A user
 //            who votes once at t=−6mo and never changes earns 8 weeks of vote
 //            points in an 8-week range.
+//          • boostCount on the leaderboard is the number of distinct
+//            (tokenId, epoch) pairs the actor boosted in-range. One NFT
+//            voting on 100 gauges still counts as 1 for that epoch — points
+//            already collapse all of an NFT's gauge weights to its vePower,
+//            so the count should too.
 //
 // Notes:
 //
@@ -103,7 +108,7 @@ export type SimTotals = {
   boostCount: number
   newLockCount: number
   extensionCount: number
-  avgApr: number
+  medianApr: number
   totalEpochs: number
   fullParticipationCount: number
   droppedCronEvents: number
@@ -165,7 +170,9 @@ type ActorAccumulator = {
   voteWeightEpochSumWad: bigint
   newLockCount: number
   extensionCount: number
-  boostCount: number
+  // Distinct (tokenId, epochStart) pairs the actor boosted in-range. The
+  // simulator displays its size as `boostCount`.
+  boostTokenEpochs: Set<string>
   flagged: boolean
   participatedEpochs: Set<number>
   lastLockByToken: Map<string, { amount: bigint; duration: bigint }>
@@ -181,7 +188,7 @@ function emptyActor(actor: Address): ActorAccumulator {
     voteWeightEpochSumWad: 0n,
     newLockCount: 0,
     extensionCount: 0,
-    boostCount: 0,
+    boostTokenEpochs: new Set(),
     flagged: false,
     participatedEpochs: new Set(),
     lastLockByToken: new Map(),
@@ -373,10 +380,17 @@ export function simulate(
       // Only count boost ACTIONS that fall inside the simulator range. The
       // sortedVotes list spans genesis → toTs so we can replay sticky-vote
       // state, but the "boost actions" stat the user reads in the totals box
-      // is meant to describe activity in the selected range.
-      if (ev.timestamp >= fromTs && ev.timestamp <= toTs) {
+      // is meant to describe activity in the selected range. Credit one per
+      // (tokenId, epoch) — voting on 5 gauges with the same NFT in the same
+      // epoch is still one boost, matching how points already collapse.
+      if (
+        ev.timestamp >= fromTs &&
+        ev.timestamp <= toTs &&
+        ev.tokenId !== undefined
+      ) {
         const acc = get(actor)
-        acc.boostCount += 1
+        const epoch = epochStartFor(ev.timestamp)
+        acc.boostTokenEpochs.add(`${ev.tokenId.toString()}|${epoch}`)
       }
     } else if (ev.actionType === "boostAbstain") {
       activeVotes.delete(key)
@@ -451,7 +465,7 @@ export function simulate(
         aprBasisWad,
         newLockCount: acc.newLockCount,
         extensionCount: acc.extensionCount,
-        boostCount: acc.boostCount,
+        boostCount: acc.boostTokenEpochs.size,
         activeEpochs: acc.participatedEpochs.size,
         fullyParticipated,
         flagged: acc.flagged,
@@ -459,11 +473,20 @@ export function simulate(
     })
     .sort((a, b) => (b.pointsWad > a.pointsWad ? 1 : -1))
 
-  const aprValues = rows.filter((r) => Number.isFinite(r.apr) && r.apr > 0)
-  const avgApr =
-    aprValues.length > 0
-      ? aprValues.reduce((s, r) => s + r.apr, 0) / aprValues.length
-      : 0
+  // Median APR — robust to the heavy right tail caused by a few outsized
+  // vePower holders. Empty pool → 0.
+  const aprValues = rows
+    .map((r) => r.apr)
+    .filter((v) => Number.isFinite(v) && v > 0)
+    .sort((a, b) => a - b)
+  let medianApr = 0
+  if (aprValues.length > 0) {
+    const mid = Math.floor(aprValues.length / 2)
+    medianApr =
+      aprValues.length % 2 === 1
+        ? (aprValues[mid] as number)
+        : ((aprValues[mid - 1] as number) + (aprValues[mid] as number)) / 2
+  }
 
   // Count totals across ALL actors that had in-range activity, not just rows
   // that earned points. An actor who voted mid-range (after the epoch start
@@ -473,7 +496,7 @@ export function simulate(
   let totalNewLockCount = 0
   let totalExtensionCount = 0
   for (const acc of allActors) {
-    totalBoostCount += acc.boostCount
+    totalBoostCount += acc.boostTokenEpochs.size
     totalNewLockCount += acc.newLockCount
     totalExtensionCount += acc.extensionCount
   }
@@ -484,7 +507,7 @@ export function simulate(
     boostCount: totalBoostCount,
     newLockCount: totalNewLockCount,
     extensionCount: totalExtensionCount,
-    avgApr,
+    medianApr,
     totalEpochs,
     fullParticipationCount: rows.filter((r) => r.fullyParticipated).length,
     droppedCronEvents,
