@@ -13,7 +13,7 @@ export default function Academy() {
   const pageUrl = getAppUrl("/academy")
   const title = "Academy | Matchbox"
   const description =
-    "Mezo Academy reward simulator. Model what veMEZO lockers and veBTC voters would earn over a chosen window, in easy or pro mode."
+    "Mezo Academy reward simulator. Model what veMEZO lockers and veBTC voters would earn over a chosen window, with tunable scoring weights."
 
   return (
     <>
