@@ -71,8 +71,11 @@ import { type Address, getAddress, isAddressEqual } from "viem"
 //   gauge with different weights earn proportionally different points.
 //
 //   Full-participation bonus: if an actor had at least one active vote in
-//   EVERY epoch of the range, their lock+extension points are multiplied by
-//   (participationMultiplier − 1) and added as a bonus.
+//   EVERY epoch of the range, their TOTAL earned points (lock + extension +
+//   vote) are multiplied by (participationMultiplier − 1) and added as a
+//   bonus. The bonus is bucketed into lockPointsWad for accounting, but the
+//   eligible base spans every track — otherwise a pure voter who satisfies
+//   the participation condition would get nothing for it.
 //
 //   The CRON address `0xf8176Df5…` (Tigris maintainer) is hard-filtered out
 //   client-side as defense-in-depth. The subgraph already re-attributes
@@ -489,14 +492,18 @@ export function simulate(
 
   const allActors = [...accs.values()]
 
-  // Full-participation bonus on lock + extension points only.
+  // Full-participation bonus across every earned track. The bonus is
+  // bucketed into lockPointsWad for display continuity, but the eligible
+  // base sums lock + extension + vote so a pure voter who participated
+  // in every epoch actually gets rewarded for it.
   for (const acc of allActors) {
     if (
       totalEpochs > 0 &&
       acc.participatedEpochs.size >= totalEpochs &&
       params.participationMultiplier > 1
     ) {
-      const eligible = acc.lockPointsWad + acc.extensionPointsWad
+      const eligible =
+        acc.lockPointsWad + acc.extensionPointsWad + acc.votePointsWad
       const bonus = scaleWad(eligible, params.participationMultiplier - 1)
       acc.lockPointsWad += bonus
     }

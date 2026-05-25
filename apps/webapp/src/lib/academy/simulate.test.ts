@@ -371,6 +371,39 @@ test("cron poke abstain+vote pair refreshes weight without dropping the vote", (
   assert.equal(result.rows[0]?.boostCount, 1)
 })
 
+test("participation bonus rewards a pure voter with no lock activity", () => {
+  // A voter who voted in every epoch but never opened/extended a lock
+  // should still see a participation bonus. Before the fix, `eligible`
+  // only spanned lock+ext points, so a vote-only actor got bonus = 0
+  // and the multiplier knob had no effect on their pointsWad / reward.
+  const baseline = simulate(
+    { lockEvents: [], voteEvents: [voteEvent(REGULAR, FROM_TS + 60)] },
+    PARAMS,
+    FROM_TS,
+    TO_TS,
+  )
+
+  const boosted = simulate(
+    { lockEvents: [], voteEvents: [voteEvent(REGULAR, FROM_TS + 60)] },
+    { ...PARAMS, participationMultiplier: 2 },
+    FROM_TS,
+    TO_TS,
+  )
+
+  assert.equal(baseline.rows[0]?.fullyParticipated, true)
+  assert.equal(boosted.rows[0]?.fullyParticipated, true)
+  // 4 epochs × 50 = 200 vote points baseline. With a 2× full-epoch
+  // multiplier the bonus equals the eligible base, so points should
+  // double to 400. The bucket is lockPointsWad for accounting.
+  assert.equal(baseline.rows[0]?.pointsWad, parseUnits("200", 18))
+  assert.equal(boosted.rows[0]?.pointsWad, parseUnits("400", 18))
+  // With a single actor the reward equals the whole budget regardless
+  // of the bonus, but pointsWad must reflect the boosted total so the
+  // leaderboard "Points" column actually moves.
+  assert.equal(boosted.rows[0]?.lockPointsWad, parseUnits("200", 18))
+  assert.equal(boosted.rows[0]?.votePointsWad, parseUnits("200", 18))
+})
+
 test("cron poke without transfer leaves sticky vote intact and does not bump boostCount", () => {
   // Alice votes mid-range (so a poke would have a different timestamp than
   // her manual vote). Verify the cron poke is a no-op for both state and
