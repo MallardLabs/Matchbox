@@ -225,9 +225,22 @@ export function computeActorProfile(args: {
     if (!key) continue
 
     if (ev.actionType === "boostVote") {
-      // POKE GATE: ignore cron-driven Voted events for state and stats.
-      if (isCronActor(ev.txFrom)) continue
       const w = ev.weight ?? 0n
+      const isPoke = isCronActor(ev.txFrom)
+
+      if (isPoke) {
+        // POKE GATE — cron-driven Voted only refreshes weight on the
+        // existing entry; the per-actor view's activeVotes doesn't track
+        // owner (the filter already restricts to this actor), so a
+        // refresh just updates the stored weight in place.
+        const existing = activeVotes.get(key)
+        if (existing) {
+          if (w > 0n) existing.weight = w
+          else activeVotes.delete(key)
+        }
+        continue
+      }
+
       if (w > 0n) {
         activeVotes.set(key, {
           gauge: ev.gaugeAddress as Address,
@@ -251,6 +264,10 @@ export function computeActorProfile(args: {
         preRangeBoosts.push(ev)
       }
     } else if (ev.actionType === "boostAbstain") {
+      // POKE GATE — cron abstain is the first half of a poke pair; the
+      // paired cron Voted refreshes the weight. Manual abstain still
+      // clears the active vote.
+      if (isCronActor(ev.txFrom)) continue
       activeVotes.delete(key)
       if (ev.timestamp >= fromTs && ev.timestamp <= toTs) {
         inRangeBoosts.push(ev)

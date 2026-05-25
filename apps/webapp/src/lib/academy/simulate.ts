@@ -165,6 +165,14 @@ function isCronActor(addr: Address | undefined): boolean {
   }
 }
 
+function sameAddress(a: Address, b: Address): boolean {
+  try {
+    return isAddressEqual(getAddress(a), getAddress(b))
+  } catch {
+    return false
+  }
+}
+
 function isBlacklisted(
   addr: Address | undefined,
   blacklist: ReadonlySet<Address> | undefined,
@@ -427,12 +435,26 @@ export function simulate(
     const actor = ev.actorAddress
 
     if (ev.actionType === "boostVote") {
-      // POKE GATE: a Voted emitted because the cron called pokeBoost(s)
-      // does not re-establish the sticky vote. Only manual re-votes
-      // (txFrom != cron) can mutate activeVotes here.
-      if (isCronActor(ev.txFrom)) continue
-
       const w = ev.weight ?? 0n
+      const isPoke = isCronActor(ev.txFrom)
+
+      if (isPoke) {
+        // POKE GATE — cron-driven Voted (the second half of an
+        // abstain→vote poke pair). Only refresh weight on an existing
+        // entry whose owner matches the resolved actor; never create new
+        // entries or shift attribution. This keeps decay-aware accounting
+        // for active stickies, while preventing the cron from resurrecting
+        // a vote after a transfer drain or moving credit to a new owner
+        // who hasn't manually re-voted.
+        const existing = activeVotes.get(key)
+        if (existing && sameAddress(existing.owner, actor)) {
+          if (w > 0n) existing.weight = w
+          else activeVotes.delete(key)
+        }
+        // Pokes do not bump boostCount.
+        continue
+      }
+
       if (w > 0n) {
         activeVotes.set(key, { owner: actor, weight: w })
       } else {
@@ -451,7 +473,11 @@ export function simulate(
         acc.boostTokenEpochs.add(`${ev.tokenId.toString()}|${epoch}`)
       }
     } else if (ev.actionType === "boostAbstain") {
-      // Abstain is always the owner's explicit cancellation.
+      // POKE GATE — cron-driven abstain is the first half of a poke pair;
+      // the accompanying cron Voted will refresh weight. Treat as no-op.
+      // A manual abstain is still an explicit cancellation and must
+      // delete the active vote.
+      if (isCronActor(ev.txFrom)) continue
       activeVotes.delete(key)
     }
   }

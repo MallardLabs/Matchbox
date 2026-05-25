@@ -328,6 +328,49 @@ test("buyer manually re-voting after transfer earns from re-vote epoch onwards",
   assert.equal(bob?.boostCount, 1)
 })
 
+test("cron poke abstain+vote pair refreshes weight without dropping the vote", () => {
+  // On-chain pattern: cron emits Abstained then Voted in the same tx to
+  // refresh decayed vePower. Without gating both halves, the cron abstain
+  // would wipe the user's sticky weight and the gated cron vote would
+  // no-op — leaving the user with zero credit for the rest of the range.
+  // With both halves gated correctly, the cron vote refreshes weight on
+  // the existing entry and the user keeps earning.
+  const weight1 = parseUnits("100", 18)
+  const weight2 = parseUnits("80", 18)
+  const result = run({
+    voteEvents: [
+      voteEvent(REGULAR, FROM_TS + 60, {
+        id: "manual-vote",
+        logIndex: 1,
+        weight: weight1,
+      }),
+      voteEvent(REGULAR, FROM_TS + 2 * WEEK + 60, {
+        id: "cron-abstain",
+        actionType: "boostAbstain",
+        logIndex: 2,
+        txFrom: MEZO_BOOST_POKE_CRON_ADDRESS,
+        weight: weight1,
+      }),
+      voteEvent(REGULAR, FROM_TS + 2 * WEEK + 60, {
+        id: "cron-vote",
+        logIndex: 3,
+        txFrom: MEZO_BOOST_POKE_CRON_ADDRESS,
+        weight: weight2,
+      }),
+    ],
+  })
+
+  assert.equal(result.rows.length, 1)
+  assert.equal(result.rows[0]?.actor, REGULAR)
+  // Snapshots: epoch 0 + epoch 1 happen before the cron poke (weight 100
+  // each) — that's 200. Epoch 2 + epoch 3 happen after the refresh
+  // (weight 80 each) — that's 160. Total 360.
+  assert.equal(result.rows[0]?.votePointsWad, parseUnits("360", 18))
+  assert.equal(result.rows[0]?.activeEpochs, 4)
+  // Manual vote contributes 1; the cron pair contributes 0.
+  assert.equal(result.rows[0]?.boostCount, 1)
+})
+
 test("cron poke without transfer leaves sticky vote intact and does not bump boostCount", () => {
   // Alice votes mid-range (so a poke would have a different timestamp than
   // her manual vote). Verify the cron poke is a no-op for both state and
