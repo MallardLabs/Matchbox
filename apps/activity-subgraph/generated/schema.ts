@@ -246,6 +246,181 @@ export class ActivityEvent extends Entity {
     }
   }
 
+  get prevAmount(): BigInt | null {
+    let value = this.get("prevAmount");
+    if (!value || value.kind == ValueKind.NULL) {
+      return null;
+    } else {
+      return value.toBigInt();
+    }
+  }
+
+  set prevAmount(value: BigInt | null) {
+    if (!value) {
+      this.unset("prevAmount");
+    } else {
+      this.set("prevAmount", Value.fromBigInt(<BigInt>value));
+    }
+  }
+
+  get prevDuration(): BigInt | null {
+    let value = this.get("prevDuration");
+    if (!value || value.kind == ValueKind.NULL) {
+      return null;
+    } else {
+      return value.toBigInt();
+    }
+  }
+
+  set prevDuration(value: BigInt | null) {
+    if (!value) {
+      this.unset("prevDuration");
+    } else {
+      this.set("prevDuration", Value.fromBigInt(<BigInt>value));
+    }
+  }
+
+  get prevIsPermanent(): boolean {
+    let value = this.get("prevIsPermanent");
+    if (!value || value.kind == ValueKind.NULL) {
+      return false;
+    } else {
+      return value.toBoolean();
+    }
+  }
+
+  set prevIsPermanent(value: boolean) {
+    this.set("prevIsPermanent", Value.fromBoolean(value));
+  }
+
+  get postAmount(): BigInt | null {
+    let value = this.get("postAmount");
+    if (!value || value.kind == ValueKind.NULL) {
+      return null;
+    } else {
+      return value.toBigInt();
+    }
+  }
+
+  set postAmount(value: BigInt | null) {
+    if (!value) {
+      this.unset("postAmount");
+    } else {
+      this.set("postAmount", Value.fromBigInt(<BigInt>value));
+    }
+  }
+
+  get postDuration(): BigInt | null {
+    let value = this.get("postDuration");
+    if (!value || value.kind == ValueKind.NULL) {
+      return null;
+    } else {
+      return value.toBigInt();
+    }
+  }
+
+  set postDuration(value: BigInt | null) {
+    if (!value) {
+      this.unset("postDuration");
+    } else {
+      this.set("postDuration", Value.fromBigInt(<BigInt>value));
+    }
+  }
+
+  get postIsPermanent(): boolean {
+    let value = this.get("postIsPermanent");
+    if (!value || value.kind == ValueKind.NULL) {
+      return false;
+    } else {
+      return value.toBoolean();
+    }
+  }
+
+  set postIsPermanent(value: boolean) {
+    this.set("postIsPermanent", Value.fromBoolean(value));
+  }
+
+  get mergeSourceTokenId(): BigInt | null {
+    let value = this.get("mergeSourceTokenId");
+    if (!value || value.kind == ValueKind.NULL) {
+      return null;
+    } else {
+      return value.toBigInt();
+    }
+  }
+
+  set mergeSourceTokenId(value: BigInt | null) {
+    if (!value) {
+      this.unset("mergeSourceTokenId");
+    } else {
+      this.set("mergeSourceTokenId", Value.fromBigInt(<BigInt>value));
+    }
+  }
+
+  get mergeDestTokenId(): BigInt | null {
+    let value = this.get("mergeDestTokenId");
+    if (!value || value.kind == ValueKind.NULL) {
+      return null;
+    } else {
+      return value.toBigInt();
+    }
+  }
+
+  set mergeDestTokenId(value: BigInt | null) {
+    if (!value) {
+      this.unset("mergeDestTokenId");
+    } else {
+      this.set("mergeDestTokenId", Value.fromBigInt(<BigInt>value));
+    }
+  }
+
+  get mergeDestPrevAmount(): BigInt | null {
+    let value = this.get("mergeDestPrevAmount");
+    if (!value || value.kind == ValueKind.NULL) {
+      return null;
+    } else {
+      return value.toBigInt();
+    }
+  }
+
+  set mergeDestPrevAmount(value: BigInt | null) {
+    if (!value) {
+      this.unset("mergeDestPrevAmount");
+    } else {
+      this.set("mergeDestPrevAmount", Value.fromBigInt(<BigInt>value));
+    }
+  }
+
+  get mergeDestPrevDuration(): BigInt | null {
+    let value = this.get("mergeDestPrevDuration");
+    if (!value || value.kind == ValueKind.NULL) {
+      return null;
+    } else {
+      return value.toBigInt();
+    }
+  }
+
+  set mergeDestPrevDuration(value: BigInt | null) {
+    if (!value) {
+      this.unset("mergeDestPrevDuration");
+    } else {
+      this.set("mergeDestPrevDuration", Value.fromBigInt(<BigInt>value));
+    }
+  }
+
+  get mergeDestPrevIsPermanent(): boolean {
+    let value = this.get("mergeDestPrevIsPermanent");
+    if (!value || value.kind == ValueKind.NULL) {
+      return false;
+    } else {
+      return value.toBoolean();
+    }
+  }
+
+  set mergeDestPrevIsPermanent(value: boolean) {
+    this.set("mergeDestPrevIsPermanent", Value.fromBoolean(value));
+  }
+
   get token(): Bytes | null {
     let value = this.get("token");
     if (!value || value.kind == ValueKind.NULL) {
@@ -1022,6 +1197,53 @@ export class LockPosition extends Entity {
 
   set isWithdrawn(value: boolean) {
     this.set("isWithdrawn", Value.fromBoolean(value));
+  }
+
+  get isMerged(): boolean {
+    let value = this.get("isMerged");
+    if (!value || value.kind == ValueKind.NULL) {
+      return false;
+    } else {
+      return value.toBoolean();
+    }
+  }
+
+  set isMerged(value: boolean) {
+    this.set("isMerged", Value.fromBoolean(value));
+  }
+
+  get mergedIntoTokenId(): BigInt | null {
+    let value = this.get("mergedIntoTokenId");
+    if (!value || value.kind == ValueKind.NULL) {
+      return null;
+    } else {
+      return value.toBigInt();
+    }
+  }
+
+  set mergedIntoTokenId(value: BigInt | null) {
+    if (!value) {
+      this.unset("mergedIntoTokenId");
+    } else {
+      this.set("mergedIntoTokenId", Value.fromBigInt(<BigInt>value));
+    }
+  }
+
+  get mergedAt(): BigInt | null {
+    let value = this.get("mergedAt");
+    if (!value || value.kind == ValueKind.NULL) {
+      return null;
+    } else {
+      return value.toBigInt();
+    }
+  }
+
+  set mergedAt(value: BigInt | null) {
+    if (!value) {
+      this.unset("mergedAt");
+    } else {
+      this.set("mergedAt", Value.fromBigInt(<BigInt>value));
+    }
   }
 
   get boost(): BigInt | null {

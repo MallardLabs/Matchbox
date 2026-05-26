@@ -1,4 +1,3 @@
-import { Bytes } from "@graphprotocol/graph-ts"
 import {
   Abstained,
   BoostableTokenBurned,
@@ -23,7 +22,7 @@ import {
   getOrCreateGauge,
   getOrCreateGaugeEpoch,
   getOrCreateToken,
-  resolveLockOwner,
+  resolveVoteActor,
   upsertVote,
   ZERO,
   GAUGE_KILLED,
@@ -64,10 +63,11 @@ export function handleBoostVoted(event: Voted): void {
     MEZO_VEBTC_PAIR_BOOST,
     BOOST_VOTER,
   )
-  // The Voted event's `voter` is `msg.sender`. When the Tigris maintainer calls
-  // poke(tokenId) to refresh a user's votes, that's the maintainer — NOT the
-  // lock owner. Resolve to the real veMEZO owner via the LockPosition entity.
-  const actor = resolveLockOwner(event.params.tokenId, event.params.voter)
+  const actor = resolveVoteActor(
+    event.params.tokenId,
+    event.params.voter,
+    event.transaction.input,
+  )
   activity.actor = actor
   activity.gauge = event.params.gauge
   activity.tokenId = event.params.tokenId
@@ -127,9 +127,10 @@ export function handleBoostAbstained(event: Abstained): void {
     MEZO_VEBTC_PAIR_BOOST,
     BOOST_VOTER,
   )
-  const abstainActor = resolveLockOwner(
+  const abstainActor = resolveVoteActor(
     event.params.tokenId,
     event.params.voter,
+    event.transaction.input,
   )
   activity.actor = abstainActor
   activity.gauge = event.params.gauge

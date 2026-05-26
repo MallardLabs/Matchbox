@@ -405,6 +405,36 @@ export function formatActivity(
       }
     }
 
+    case "lockMerged": {
+      const sourceLabel =
+        item.mergeSourceTokenId !== undefined
+          ? `#${item.mergeSourceTokenId.toString()}`
+          : "source"
+      const destLabel = item.tokenId
+        ? `#${item.tokenId.toString()}`
+        : "destination"
+      drawer.unshift(
+        { label: "Owner", value: actor, mono: true },
+        { label: "Source veMEZO", value: sourceLabel, mono: true },
+        { label: "Destination veMEZO", value: destLabel, mono: true },
+        ...(item.postAmount
+          ? [
+              {
+                label: "Destination amount after merge",
+                value: `${formatTokenAmount(item.postAmount) ?? "—"} MEZO`,
+              },
+            ]
+          : []),
+      )
+      return {
+        category: "lock",
+        emoji: "🔀",
+        title: `Merged veMEZO ${sourceLabel} into ${destLabel}`,
+        subtitle: actor,
+        drawer,
+      }
+    }
+
     case "boostVote": {
       const where = gaugeWhere(ctx, item.gaugeAddress)
       const pct = votePercent(item.weight, item.totalWeight)

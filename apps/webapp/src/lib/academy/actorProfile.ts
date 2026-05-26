@@ -1,4 +1,9 @@
 import { WEEK, enumerateEpochs } from "@/lib/academy/epoch"
+import {
+  type LockSnapshot,
+  computeLockTrackDelta,
+  snapshotAfter,
+} from "@/lib/academy/lockDelta"
 import { isSnfActor } from "@/lib/academy/snfActors"
 import { MEZO_BOOST_POKE_CRON_ADDRESS } from "@/lib/mezoActivity/constants"
 import type { MezoActivityItem } from "@/types/mezoActivity"
@@ -31,10 +36,20 @@ export type ActorVoteActionInRange = {
 }
 
 export type LockDelta = {
-  // ΔvePower contributed by this event in WAD. For new locks / amount
-  // increases / made-permanent it equals the ve-power of the lock state
-  // assigned at the event. For extensions it's (new ve-power − prior ve-power).
+  // ΔvePower contributed by this event in WAD = amountAddedVeWad +
+  // durationExtendedVeWad. For new locks / amount increases this is the
+  // amount-added piece. For extensions / made-permanent / merges it's the
+  // duration-extended piece (NOT the full ve of the token).
   deltaVeWad: bigint
+  // Sub-components in WAD. Exposed so the UI can show the explicit math.
+  amountAddedVeWad: bigint
+  durationExtendedVeWad: bigint
+  // Inputs used to compute the duration-extended piece. Both in seconds.
+  // null when this event didn't have a duration-extension component
+  // (e.g., a fresh lockCreated).
+  extensionPrevAmountWad: bigint | null
+  extensionPrevDurationSec: bigint | null
+  extensionPostDurationSec: bigint | null
   // Heuristic estimate used (because we lacked prior state for the token).
   flagged: boolean
   // ve-power AFTER this event (snapshot of the token's current ve-power).
@@ -58,14 +73,6 @@ export type ActorProfile = {
   diagnostics: string[]
   blacklisted: boolean
   filtered: boolean
-}
-
-const MAXTIME = BigInt(4 * 365 * 86_400)
-
-function vePowerWad(amount: bigint, duration: bigint): bigint {
-  if (duration <= 0n || amount <= 0n) return 0n
-  const cappedDuration = duration > MAXTIME ? MAXTIME : duration
-  return (amount * cappedDuration) / MAXTIME
 }
 
 function isCronActor(addr: Address | undefined): boolean {
@@ -295,12 +302,11 @@ export function computeActorProfile(args: {
     .sort(compareActivityOrder)
 
   // Build prior-lock state from the SAME pre-range lock events we have for
-  // this actor, so an in-range extension can compare against its real prior
-  // ve-power instead of falling back to the heuristic when we already know it.
-  const lastLockByToken = new Map<
-    string,
-    { amount: bigint; duration: bigint }
-  >()
+  // this actor, so an in-range extension/merge can compare against its real
+  // prior ve-power instead of falling back to the heuristic. With the schema
+  // migration that adds prev*/post* fields to the subgraph, this fallback
+  // only matters for legacy events.
+  const lastLockByToken = new Map<string, LockSnapshot>()
   const preRangeLocks = lockEvents
     .filter((ev) => sameActor(ev.actorAddress, checksummed))
     .filter((ev) => ev.timestamp < fromTs)
@@ -308,84 +314,118 @@ export function computeActorProfile(args: {
   for (const ev of preRangeLocks) {
     const tokenKey = ev.tokenId?.toString()
     if (!tokenKey) continue
-    if (
-      ev.actionType === "lockCreated" ||
-      ev.actionType === "lockAmountIncreased" ||
-      ev.actionType === "lockPermanent"
-    ) {
-      lastLockByToken.set(tokenKey, {
-        amount: ev.amount ?? 0n,
-        duration: ev.duration ?? 0n,
-      })
-    } else if (ev.actionType === "lockExtended") {
-      const prev = lastLockByToken.get(tokenKey)
-      lastLockByToken.set(tokenKey, {
-        amount: ev.amount ?? prev?.amount ?? 0n,
-        duration: ev.duration ?? prev?.duration ?? 0n,
-      })
-    }
+    const prior = lastLockByToken.get(tokenKey) ?? null
+    const next = snapshotAfter(ev, prior)
+    if (next) lastLockByToken.set(tokenKey, next)
   }
 
   const lockDeltaByEventId = new Map<string, LockDelta>()
   let newLockCount = 0
   let extensionCount = 0
   for (const ev of inRangeLocks) {
-    const tokenKey = ev.tokenId?.toString()
-    if (
+    const isNewLockLike =
       ev.actionType === "lockCreated" ||
       ev.actionType === "lockAmountIncreased" ||
       ev.actionType === "lockPermanent"
-    ) {
-      if (isSnf) continue
+    const isExtensionLike =
+      ev.actionType === "lockExtended" ||
+      ev.actionType === "lockPermanent" ||
+      ev.actionType === "lockMerged"
+    if (!isNewLockLike && !isExtensionLike) continue
+    if (isNewLockLike && isSnf) continue
+
+    const tokenKey = ev.tokenId?.toString()
+    const fallbackPrev = tokenKey
+      ? (lastLockByToken.get(tokenKey) ?? null)
+      : null
+    const delta = computeLockTrackDelta(ev, fallbackPrev)
+    const deltaVe = delta.amountAddedVeWad + delta.durationExtendedVeWad
+    // postVeWad mirrors prior behaviour — used for stat tooltips. Derive it
+    // from the event's post-state when present, else fall back to ve of the
+    // amountAdded piece (close enough for legacy display).
+    const postVe =
+      ev.postAmount !== undefined
+        ? (() => {
+            const dur = ev.postIsPermanent
+              ? BigInt(4 * 365 * 86_400)
+              : (ev.postDuration ?? 0n)
+            const cap = BigInt(4 * 365 * 86_400)
+            const capped = dur > cap ? cap : dur
+            return ((ev.postAmount ?? 0n) * capped) / cap
+          })()
+        : deltaVe
+    // Expose the extension piece's inputs for the UI's math tooltip — only
+    // populated when this event has a single-source extension that maps
+    // cleanly to `prevAmount × (postDur − prevDur) / MAXTIME`. For merges
+    // the extension blends source + destination so we leave these null and
+    // let the renderer show a simpler description.
+    const isSingleSourceExtension =
+      delta.durationExtendedVeWad > 0n &&
+      (ev.actionType === "lockExtended" || ev.actionType === "lockPermanent")
+    let extensionPrevAmountWad: bigint | null = null
+    let extensionPrevDurationSec: bigint | null = null
+    let extensionPostDurationSec: bigint | null = null
+    if (isSingleSourceExtension) {
+      const MAXTIME = BigInt(4 * 365 * 86_400)
+      const prevSnap =
+        ev.prevAmount !== undefined && ev.prevDuration !== undefined
+          ? {
+              amount: ev.prevAmount,
+              durationEff: ev.prevIsPermanent
+                ? MAXTIME
+                : (ev.prevDuration ?? 0n),
+            }
+          : fallbackPrev
+            ? {
+                amount: fallbackPrev.amount,
+                durationEff: fallbackPrev.durationEff,
+              }
+            : null
+      const postDurEff = ev.postIsPermanent
+        ? MAXTIME
+        : (ev.postDuration ?? null)
+      if (prevSnap && postDurEff !== null) {
+        extensionPrevAmountWad = prevSnap.amount
+        extensionPrevDurationSec = prevSnap.durationEff
+        extensionPostDurationSec = postDurEff
+      }
+    }
+    lockDeltaByEventId.set(ev.id, {
+      deltaVeWad: deltaVe,
+      amountAddedVeWad: delta.amountAddedVeWad,
+      durationExtendedVeWad: delta.durationExtendedVeWad,
+      extensionPrevAmountWad,
+      extensionPrevDurationSec,
+      extensionPostDurationSec,
+      flagged: delta.flagged,
+      postVeWad: postVe,
+    })
+
+    // Count categories: amount-additions count as "new lock"; pure duration
+    // changes (extends, made-permanent, merges) count as extensions. A merge
+    // that adds amount from the source is still an extension event because
+    // the user isn't locking new capital — the source MEZO was already
+    // locked, just being relocated and re-timed.
+    const isAmountAdd =
+      ev.actionType === "lockCreated" || ev.actionType === "lockAmountIncreased"
+    const epochIdx = findEpochIndex(epochs, ev.timestamp)
+    if (isAmountAdd) {
       newLockCount += 1
-      const idx = findEpochIndex(epochs, ev.timestamp)
-      if (idx >= 0) {
-        const slice = epochSlices[idx]
+      if (epochIdx >= 0) {
+        const slice = epochSlices[epochIdx]
         if (slice) slice.newLocksAtEpoch += 1
       }
-      const ve = vePowerWad(ev.amount ?? 0n, ev.duration ?? 0n)
-      lockDeltaByEventId.set(ev.id, {
-        deltaVeWad: ve,
-        flagged: false,
-        postVeWad: ve,
-      })
-      if (tokenKey) {
-        lastLockByToken.set(tokenKey, {
-          amount: ev.amount ?? 0n,
-          duration: ev.duration ?? 0n,
-        })
-      }
-    } else if (ev.actionType === "lockExtended") {
+    } else {
       extensionCount += 1
-      const idx = findEpochIndex(epochs, ev.timestamp)
-      if (idx >= 0) {
-        const slice = epochSlices[idx]
+      if (epochIdx >= 0) {
+        const slice = epochSlices[epochIdx]
         if (slice) slice.extensionsAtEpoch += 1
       }
-      const prev = tokenKey ? lastLockByToken.get(tokenKey) : undefined
-      const newAmount = ev.amount ?? prev?.amount ?? 0n
-      const newDuration = ev.duration ?? 0n
-      const newPower = vePowerWad(newAmount, newDuration)
-      let deltaWad = 0n
-      let flagged = false
-      if (prev) {
-        const prevPower = vePowerWad(prev.amount, prev.duration)
-        deltaWad = newPower > prevPower ? newPower - prevPower : 0n
-      } else {
-        deltaWad = newPower / 4n
-        flagged = true
-      }
-      lockDeltaByEventId.set(ev.id, {
-        deltaVeWad: deltaWad,
-        flagged,
-        postVeWad: newPower,
-      })
-      if (tokenKey) {
-        lastLockByToken.set(tokenKey, {
-          amount: newAmount,
-          duration: newDuration,
-        })
-      }
+    }
+
+    if (tokenKey) {
+      const next = snapshotAfter(ev, fallbackPrev)
+      if (next) lastLockByToken.set(tokenKey, next)
     }
   }
 

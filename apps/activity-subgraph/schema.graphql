@@ -6,6 +6,7 @@ enum ActivityActionType {
   LOCK_PERMANENT
   LOCK_PERMANENT_UNLOCKED
   LOCK_TRANSFERRED
+  LOCK_MERGED
   BOOST_VOTE
   BOOST_ABSTAIN
   BOOST_POKE
@@ -75,6 +76,27 @@ type ActivityEvent @entity(immutable: true) {
   tokenId: BigInt
   amount: BigInt
   duration: BigInt
+  # Pre/post state snapshots, populated for lock-track events (created,
+  # amountIncreased, extended, permanent, permanentUnlocked, merged) so the
+  # frontend can compute Δve exactly without replaying the full token history.
+  # Durations are stored as REMAINING SECONDS at event time (capped at MAXTIME
+  # = 4y); permanent locks set duration = MAXTIME and isPermanent = true. For
+  # LOCK_MERGED these describe the SOURCE NFT's pre-merge state; the merge
+  # destination's pre-state is the LockPosition's prior state and its
+  # post-state is captured by the activity's own amount/duration fields.
+  prevAmount: BigInt
+  prevDuration: BigInt
+  prevIsPermanent: Boolean
+  postAmount: BigInt
+  postDuration: BigInt
+  postIsPermanent: Boolean
+  # For LOCK_MERGED only — the destination NFT pre-merge state and the
+  # source tokenId being burned into the destination.
+  mergeSourceTokenId: BigInt
+  mergeDestTokenId: BigInt
+  mergeDestPrevAmount: BigInt
+  mergeDestPrevDuration: BigInt
+  mergeDestPrevIsPermanent: Boolean
   token: Bytes
   gauge: Bytes
   pool: Bytes
@@ -129,6 +151,13 @@ type LockPosition @entity(immutable: false) {
   withdrawnAt: BigInt
   isPermanent: Boolean!
   isWithdrawn: Boolean!
+  # Set on the SOURCE NFT of a merge(from, to) call. The NFT is burned by
+  # the contract, but we preserve its pre-merge state on the entity so that
+  # the destination's Deposit handler in the same tx can populate the
+  # LOCK_MERGED activity's source-side pre-state fields.
+  isMerged: Boolean!
+  mergedIntoTokenId: BigInt
+  mergedAt: BigInt
   boost: BigInt
   activityCount: BigInt!
 }

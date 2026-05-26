@@ -16,6 +16,7 @@ export const BLACKLISTED_SYSTEM_ACTORS: ReadonlyArray<Address> = [
   "0x35cf1381f056559299B6A4dC08f83833fab07946",
   "0x57DE1ae5933CA6e5C672f6a9E8967D5e2fbF21Cf",
   "0x075108F275Ed81c9CFc01065E6e50CEea81D6363",
+  "0xbe6Fdc9DA59cadc157f959B5B28A7e3ea74BdCd4",
 ]
 
 export function isBlacklistedSystemActor(addr: Address | undefined): boolean {

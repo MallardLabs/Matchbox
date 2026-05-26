@@ -1,4 +1,9 @@
 import { WEEK, enumerateEpochs, epochStartFor } from "@/lib/academy/epoch"
+import {
+  type LockSnapshot,
+  computeLockTrackDelta,
+  snapshotAfter,
+} from "@/lib/academy/lockDelta"
 import { isSnfActor } from "@/lib/academy/snfActors"
 import { MEZO_BOOST_POKE_CRON_ADDRESS } from "@/lib/mezoActivity/constants"
 import type { MezoActivityItem } from "@/types/mezoActivity"
@@ -12,12 +17,23 @@ import { type Address, getAddress, isAddressEqual } from "viem"
 // people doing the locking / extending / voting earn points):
 //
 //   1. Lock track  (LOCK_CREATED + LOCK_AMOUNT_INCREASED + LOCK_PERMANENT
-//                   + LOCK_EXTENDED)
-//        one-shot points at the action's timestamp, in the range:
-//          new lock                → weightNew × vePower(amount, duration)
-//          amount increase         → weightNew × vePower(addedAmount, duration)
-//          made permanent          → weightNew × vePower(amount, MAXTIME)
-//          extended duration       → weightExt × ΔvePower
+//                   + LOCK_EXTENDED + LOCK_MERGED)
+//        one-shot points at the action's timestamp, in the range. Every
+//        event is decomposed into two pieces by computeLockTrackDelta:
+//          amount-added piece      → weightNew × vePower(Δamount, postDuration)
+//          duration-extended piece → weightExt × Δ(vePower) on prevAmount
+//
+//        Per action this comes out to:
+//          new lock                → weightNew × vePower(amount, postDur)
+//          amount increase         → weightNew × vePower(addedAmount, postDur)
+//          extended duration       → weightExt × prevAmount × (postDur − prevDur) / MAXTIME
+//          made permanent          → weightExt × prevAmount × (MAXTIME − prevDur) / MAXTIME
+//                                      (NOT the full vePower(amount, MAXTIME) — a
+//                                       lock already at ~4y earns ~0 from this event;
+//                                       the user is only locking in the remaining decay)
+//          merged                  → weightExt × extension on source + dest portions
+//                                      (no amount-added piece — source MEZO was
+//                                       already locked, the user is not adding capital)
 //
 //   2. Vote track  (BOOST_VOTE + BOOST_ABSTAIN + LOCK_TRANSFERRED), computed
 //        via EPOCH-SNAPSHOT REPLAY:
@@ -91,7 +107,6 @@ import { type Address, getAddress, isAddressEqual } from "viem"
 //
 // ──────────────────────────────────────────────────────────────────────────
 
-const MAXTIME = BigInt(4 * 365 * 86_400)
 const WAD = 10n ** 18n
 
 export type AcademyParams = {
@@ -147,12 +162,6 @@ export type SimInput = {
   blacklist?: ReadonlySet<Address>
 }
 
-function vePowerWad(amount: bigint, duration: bigint): bigint {
-  if (duration <= 0n || amount <= 0n) return 0n
-  const cappedDuration = duration > MAXTIME ? MAXTIME : duration
-  return (amount * cappedDuration) / MAXTIME
-}
-
 function scaleWad(value: bigint, factor: number): bigint {
   if (!Number.isFinite(factor) || factor <= 0) return 0n
   const scaled = Math.round(factor * 1_000_000)
@@ -202,7 +211,7 @@ type ActorAccumulator = {
   boostTokenEpochs: Set<string>
   flagged: boolean
   participatedEpochs: Set<number>
-  lastLockByToken: Map<string, { amount: bigint; duration: bigint }>
+  lastLockByToken: Map<string, LockSnapshot>
 }
 
 function emptyActor(actor: Address): ActorAccumulator {
@@ -294,47 +303,51 @@ export function simulate(
     const acc = get(ev.actorAddress)
     const actionType = ev.actionType
 
-    if (
+    const isLockTrack =
+      actionType === "lockCreated" ||
+      actionType === "lockAmountIncreased" ||
+      actionType === "lockPermanent" ||
+      actionType === "lockExtended" ||
+      actionType === "lockMerged"
+    if (!isLockTrack) continue
+
+    // SNF / system addresses are excluded from lock-creation credit. Other
+    // lock-track actions (extends, merges, permanent conversions) we still
+    // pass through — they're rare from SNF wallets anyway, and excluding
+    // them would silently zero a real Δve. The original code only filtered
+    // SNF for new-lock-like events so we preserve that scope.
+    const isNewLockLike =
       actionType === "lockCreated" ||
       actionType === "lockAmountIncreased" ||
       actionType === "lockPermanent"
-    ) {
-      if (isSnfActor(ev.actorAddress)) continue
-      const ve = vePowerWad(ev.amount ?? 0n, ev.duration ?? 0n)
-      const pts = scaleWad(ve, params.weightNew)
-      acc.lockPointsWad += pts
-      acc.vePowerWad += ve
+    if (isNewLockLike && isSnfActor(ev.actorAddress)) continue
+
+    const tokenKey = ev.tokenId?.toString()
+    const fallbackPrev = tokenKey
+      ? (acc.lastLockByToken.get(tokenKey) ?? null)
+      : null
+    const delta = computeLockTrackDelta(ev, fallbackPrev)
+    if (delta.flagged) acc.flagged = true
+
+    const newPts = scaleWad(delta.amountAddedVeWad, params.weightNew)
+    const extPts = scaleWad(delta.durationExtendedVeWad, params.weightExt)
+    acc.lockPointsWad += newPts
+    acc.extensionPointsWad += extPts
+    acc.vePowerWad += delta.amountAddedVeWad + delta.durationExtendedVeWad
+
+    if (actionType === "lockCreated" || actionType === "lockAmountIncreased") {
       acc.newLockCount += 1
-      if (ev.tokenId !== undefined) {
-        acc.lastLockByToken.set(ev.tokenId.toString(), {
-          amount: ev.amount ?? 0n,
-          duration: ev.duration ?? 0n,
-        })
-      }
-    } else if (actionType === "lockExtended") {
-      const tokenKey = ev.tokenId?.toString()
-      const prev = tokenKey ? acc.lastLockByToken.get(tokenKey) : undefined
-      const newAmount = ev.amount ?? prev?.amount ?? 0n
-      const newDuration = ev.duration ?? 0n
-      let deltaWad: bigint
-      if (prev) {
-        const prevPower = vePowerWad(prev.amount, prev.duration)
-        const newPower = vePowerWad(newAmount, newDuration)
-        deltaWad = newPower > prevPower ? newPower - prevPower : 0n
-      } else {
-        deltaWad = vePowerWad(newAmount, newDuration) / 4n
-        acc.flagged = true
-      }
-      const pts = scaleWad(deltaWad, params.weightExt)
-      acc.extensionPointsWad += pts
-      acc.vePowerWad += deltaWad
+    } else if (
+      actionType === "lockExtended" ||
+      actionType === "lockPermanent" ||
+      actionType === "lockMerged"
+    ) {
       acc.extensionCount += 1
-      if (tokenKey) {
-        acc.lastLockByToken.set(tokenKey, {
-          amount: newAmount,
-          duration: newDuration,
-        })
-      }
+    }
+
+    if (tokenKey) {
+      const next = snapshotAfter(ev, fallbackPrev)
+      if (next) acc.lastLockByToken.set(tokenKey, next)
     }
   }
 

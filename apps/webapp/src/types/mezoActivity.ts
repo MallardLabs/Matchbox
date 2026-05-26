@@ -8,6 +8,7 @@ export type MezoActivityActionType =
   | "lockPermanent"
   | "lockPermanentUnlocked"
   | "lockTransferred"
+  | "lockMerged"
   | "boostVote"
   | "boostAbstain"
   | "boostPoke"
@@ -88,6 +89,23 @@ export type MezoActivityItem = {
   tokenId?: bigint
   amount?: bigint
   duration?: bigint
+  // Pre/post state snapshots populated for lock-track events. Effective
+  // remaining seconds at event time (MAXTIME for permanent). Lets the
+  // simulator compute Δve exactly without replaying token history.
+  prevAmount?: bigint
+  prevDuration?: bigint
+  prevIsPermanent?: boolean
+  postAmount?: bigint
+  postDuration?: bigint
+  postIsPermanent?: boolean
+  // For lockMerged only — describes the destination NFT's pre-merge state
+  // and the source tokenId being burned into it. The activity's prev*
+  // fields describe the SOURCE NFT's pre-merge state.
+  mergeSourceTokenId?: bigint
+  mergeDestTokenId?: bigint
+  mergeDestPrevAmount?: bigint
+  mergeDestPrevDuration?: bigint
+  mergeDestPrevIsPermanent?: boolean
   weight?: bigint
   totalWeight?: bigint
   boost?: bigint
@@ -162,6 +180,14 @@ export type MezoActivityApiItem = Omit<
   | "tokenId"
   | "amount"
   | "duration"
+  | "prevAmount"
+  | "prevDuration"
+  | "postAmount"
+  | "postDuration"
+  | "mergeSourceTokenId"
+  | "mergeDestTokenId"
+  | "mergeDestPrevAmount"
+  | "mergeDestPrevDuration"
   | "weight"
   | "totalWeight"
   | "boost"
@@ -182,6 +208,14 @@ export type MezoActivityApiItem = Omit<
   tokenId?: string
   amount?: string
   duration?: string
+  prevAmount?: string
+  prevDuration?: string
+  postAmount?: string
+  postDuration?: string
+  mergeSourceTokenId?: string
+  mergeDestTokenId?: string
+  mergeDestPrevAmount?: string
+  mergeDestPrevDuration?: string
   weight?: string
   totalWeight?: string
   boost?: string

@@ -122,6 +122,39 @@ export function serializeActivityItem(
     ...(item.duration !== undefined
       ? { duration: item.duration.toString() }
       : {}),
+    ...(item.prevAmount !== undefined
+      ? { prevAmount: item.prevAmount.toString() }
+      : {}),
+    ...(item.prevDuration !== undefined
+      ? { prevDuration: item.prevDuration.toString() }
+      : {}),
+    ...(item.prevIsPermanent !== undefined
+      ? { prevIsPermanent: item.prevIsPermanent }
+      : {}),
+    ...(item.postAmount !== undefined
+      ? { postAmount: item.postAmount.toString() }
+      : {}),
+    ...(item.postDuration !== undefined
+      ? { postDuration: item.postDuration.toString() }
+      : {}),
+    ...(item.postIsPermanent !== undefined
+      ? { postIsPermanent: item.postIsPermanent }
+      : {}),
+    ...(item.mergeSourceTokenId !== undefined
+      ? { mergeSourceTokenId: item.mergeSourceTokenId.toString() }
+      : {}),
+    ...(item.mergeDestTokenId !== undefined
+      ? { mergeDestTokenId: item.mergeDestTokenId.toString() }
+      : {}),
+    ...(item.mergeDestPrevAmount !== undefined
+      ? { mergeDestPrevAmount: item.mergeDestPrevAmount.toString() }
+      : {}),
+    ...(item.mergeDestPrevDuration !== undefined
+      ? { mergeDestPrevDuration: item.mergeDestPrevDuration.toString() }
+      : {}),
+    ...(item.mergeDestPrevIsPermanent !== undefined
+      ? { mergeDestPrevIsPermanent: item.mergeDestPrevIsPermanent }
+      : {}),
     ...(item.weight !== undefined ? { weight: item.weight.toString() } : {}),
     ...(item.totalWeight !== undefined
       ? { totalWeight: item.totalWeight.toString() }
@@ -183,6 +216,31 @@ export function deserializeActivityItem(
     ...(item.tokenId ? { tokenId: BigInt(item.tokenId) } : {}),
     ...(item.amount ? { amount: BigInt(item.amount) } : {}),
     ...(item.duration ? { duration: BigInt(item.duration) } : {}),
+    ...(item.prevAmount ? { prevAmount: BigInt(item.prevAmount) } : {}),
+    ...(item.prevDuration ? { prevDuration: BigInt(item.prevDuration) } : {}),
+    ...(item.prevIsPermanent !== undefined
+      ? { prevIsPermanent: item.prevIsPermanent }
+      : {}),
+    ...(item.postAmount ? { postAmount: BigInt(item.postAmount) } : {}),
+    ...(item.postDuration ? { postDuration: BigInt(item.postDuration) } : {}),
+    ...(item.postIsPermanent !== undefined
+      ? { postIsPermanent: item.postIsPermanent }
+      : {}),
+    ...(item.mergeSourceTokenId
+      ? { mergeSourceTokenId: BigInt(item.mergeSourceTokenId) }
+      : {}),
+    ...(item.mergeDestTokenId
+      ? { mergeDestTokenId: BigInt(item.mergeDestTokenId) }
+      : {}),
+    ...(item.mergeDestPrevAmount
+      ? { mergeDestPrevAmount: BigInt(item.mergeDestPrevAmount) }
+      : {}),
+    ...(item.mergeDestPrevDuration
+      ? { mergeDestPrevDuration: BigInt(item.mergeDestPrevDuration) }
+      : {}),
+    ...(item.mergeDestPrevIsPermanent !== undefined
+      ? { mergeDestPrevIsPermanent: item.mergeDestPrevIsPermanent }
+      : {}),
     ...(item.weight ? { weight: BigInt(item.weight) } : {}),
     ...(item.totalWeight ? { totalWeight: BigInt(item.totalWeight) } : {}),
     ...(item.boost ? { boost: BigInt(item.boost) } : {}),

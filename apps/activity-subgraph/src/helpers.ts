@@ -17,6 +17,7 @@ export const LOCK_WITHDRAWN = "LOCK_WITHDRAWN"
 export const LOCK_PERMANENT = "LOCK_PERMANENT"
 export const LOCK_PERMANENT_UNLOCKED = "LOCK_PERMANENT_UNLOCKED"
 export const LOCK_TRANSFERRED = "LOCK_TRANSFERRED"
+export const LOCK_MERGED = "LOCK_MERGED"
 export const BOOST_VOTE = "BOOST_VOTE"
 export const BOOST_ABSTAIN = "BOOST_ABSTAIN"
 export const BOOST_POKE = "BOOST_POKE"
@@ -68,6 +69,9 @@ export const PCV = "PCV"
 export const ZERO = BigInt.fromI32(0)
 export const ONE = BigInt.fromI32(1)
 const WEEK = BigInt.fromI32(604800)
+// 4 years in seconds — the ve-power saturation cap. Permanent locks are
+// modelled as MAXTIME for the duration field.
+export const MAXTIME = BigInt.fromI32(4 * 365 * 86400)
 
 export function eventId(event: ethereum.Event, suffix: string): string {
   return event.transaction.hash.toHexString() + "-" + event.logIndex.toString() + "-" + suffix
@@ -95,6 +99,13 @@ export function baseActivity(
 export const POKE_SELECTOR = "0x32145f90"
 export const POKE_BOOST_SELECTOR = "0x673bbc86"
 export const POKE_BOOSTS_SELECTOR = "0xd3672ab2"
+// Selector for IVotingEscrow.merge(uint256 _from, uint256 _to). Curve/Velo
+// veNFT contracts burn `_from` and add its amount + extended duration to `_to`
+// in a single tx, emitting Withdraw + Transfer(→0x0) + Deposit. We detect the
+// merge by tx.input selector so we can attribute the destination's Deposit as
+// LOCK_MERGED rather than a fresh LOCK_AMOUNT_INCREASED, which would double-
+// count points the user already earned when they first created `_from`.
+export const MERGE_SELECTOR = "0xd1c2babb"
 
 export function detectPokeMethod(input: Bytes): string | null {
   if (input.length < 4) return null
@@ -103,6 +114,37 @@ export function detectPokeMethod(input: Bytes): string | null {
   if (selector == POKE_BOOST_SELECTOR) return "pokeBoost"
   if (selector == POKE_BOOSTS_SELECTOR) return "pokeBoosts"
   return null
+}
+
+export function isMergeTx(input: Bytes): boolean {
+  if (input.length < 4) return false
+  const selector = input.toHexString().slice(0, 10).toLowerCase()
+  return selector == MERGE_SELECTOR
+}
+
+// Decode the two uint256 args of merge(_from, _to). Returns [from, to] or
+// null if the input doesn't match a merge call.
+export function parseMergeArgs(input: Bytes): BigInt[] | null {
+  if (!isMergeTx(input)) return null
+  if (input.length < 68) return null
+  // Strip the 4-byte selector, decode the remaining 64 bytes as (uint256,uint256).
+  const payload = Bytes.fromUint8Array(input.subarray(4))
+  const decoded = ethereum.decode("(uint256,uint256)", payload)
+  if (decoded == null) return null
+  const tuple = decoded.toTuple()
+  const out: BigInt[] = [tuple[0].toBigInt(), tuple[1].toBigInt()]
+  return out
+}
+
+// Convert an absolute lock end timestamp into REMAINING seconds at the given
+// block time, capped at MAXTIME. Permanent locks should pass MAXTIME directly.
+export function remainingDuration(
+  unlockAt: BigInt,
+  blockTimestamp: BigInt,
+): BigInt {
+  if (unlockAt.le(blockTimestamp)) return ZERO
+  const remaining = unlockAt.minus(blockTimestamp)
+  return remaining.gt(MAXTIME) ? MAXTIME : remaining
 }
 
 // veMEZO VotingEscrow addresses across supported networks. Voted events on
@@ -129,6 +171,20 @@ export function resolveLockOwner(tokenId: BigInt, fallback: Bytes): Bytes {
     if (owner) return owner
   }
   return fallback
+}
+
+// Manual Voted/Abstained events carry `voter = msg.sender`, which is already
+// the actor who took the action. Poke calls also emit Voted/Abstained rows, but
+// in those transactions msg.sender is the maintainer, so resolve those back to
+// the current lock owner.
+export function resolveVoteActor(
+  tokenId: BigInt,
+  voter: Bytes,
+  input: Bytes,
+): Bytes {
+  return detectPokeMethod(input) != null
+    ? resolveLockOwner(tokenId, voter)
+    : voter
 }
 
 export function accountId(address: Bytes): string {
@@ -172,6 +228,7 @@ export function getOrCreateLock(
     lock.amount = ZERO
     lock.isPermanent = false
     lock.isWithdrawn = false
+    lock.isMerged = false
     lock.activityCount = ZERO
   }
   return lock

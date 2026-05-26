@@ -1,4 +1,3 @@
-import { Bytes } from "@graphprotocol/graph-ts"
 import {
   Abstained,
   BribesAdded,
@@ -33,7 +32,7 @@ import {
   getOrCreateGauge,
   getOrCreateGaugeEpoch,
   getOrCreateToken,
-  resolveLockOwner,
+  resolveVoteActor,
   saveActivity,
   upsertVote,
   ZERO,
@@ -41,7 +40,11 @@ import {
 
 function handleVoted(event: Voted, source: string): void {
   const activity = baseActivity(event, BOOST_VOTE, UNKNOWN, source)
-  const actor = resolveLockOwner(event.params.tokenId, event.params.voter)
+  const actor = resolveVoteActor(
+    event.params.tokenId,
+    event.params.voter,
+    event.transaction.input,
+  )
   activity.actor = actor
   activity.gauge = event.params.gauge
   activity.tokenId = event.params.tokenId
@@ -80,9 +83,10 @@ function handleVoted(event: Voted, source: string): void {
 
 function handleAbstained(event: Abstained, source: string): void {
   const activity = baseActivity(event, BOOST_ABSTAIN, UNKNOWN, source)
-  const abstainActor = resolveLockOwner(
+  const abstainActor = resolveVoteActor(
     event.params.tokenId,
     event.params.voter,
+    event.transaction.input,
   )
   activity.actor = abstainActor
   activity.gauge = event.params.gauge

@@ -42,6 +42,7 @@ const LOCK_ACTION_TYPES = [
   "LOCK_AMOUNT_INCREASED",
   "LOCK_EXTENDED",
   "LOCK_PERMANENT",
+  "LOCK_MERGED",
 ] as const
 
 // LOCK_TRANSFERRED rides with the vote stream — the simulator's epoch

@@ -43,6 +43,17 @@ type ExplorerActivityEvent = {
   tokenId?: string | null
   amount?: string | null
   duration?: string | null
+  prevAmount?: string | null
+  prevDuration?: string | null
+  prevIsPermanent?: boolean | null
+  postAmount?: string | null
+  postDuration?: string | null
+  postIsPermanent?: boolean | null
+  mergeSourceTokenId?: string | null
+  mergeDestTokenId?: string | null
+  mergeDestPrevAmount?: string | null
+  mergeDestPrevDuration?: string | null
+  mergeDestPrevIsPermanent?: boolean | null
   gauge?: string | null
   boostableTokenId?: string | null
   boost?: string | null
@@ -93,6 +104,7 @@ const ACTION_TYPE_MAP: Record<string, MezoActivityActionType> = {
   LOCK_PERMANENT: "lockPermanent",
   LOCK_PERMANENT_UNLOCKED: "lockPermanentUnlocked",
   LOCK_TRANSFERRED: "lockTransferred",
+  LOCK_MERGED: "lockMerged",
   BOOST_VOTE: "boostVote",
   BOOST_ABSTAIN: "boostAbstain",
   BOOST_POKE: "boostPoke",
@@ -200,6 +212,17 @@ async function fetchExplorerActivity(
           tokenId
           amount
           duration
+          prevAmount
+          prevDuration
+          prevIsPermanent
+          postAmount
+          postDuration
+          postIsPermanent
+          mergeSourceTokenId
+          mergeDestTokenId
+          mergeDestPrevAmount
+          mergeDestPrevDuration
+          mergeDestPrevIsPermanent
           gauge
           boostableTokenId
           boost
@@ -253,6 +276,38 @@ async function fetchExplorerActivity(
         ...(event.tokenId ? { tokenId: BigInt(event.tokenId) } : {}),
         ...(event.amount ? { amount: BigInt(event.amount) } : {}),
         ...(event.duration ? { duration: BigInt(event.duration) } : {}),
+        ...(event.prevAmount ? { prevAmount: BigInt(event.prevAmount) } : {}),
+        ...(event.prevDuration
+          ? { prevDuration: BigInt(event.prevDuration) }
+          : {}),
+        ...(event.prevIsPermanent !== null &&
+        event.prevIsPermanent !== undefined
+          ? { prevIsPermanent: event.prevIsPermanent }
+          : {}),
+        ...(event.postAmount ? { postAmount: BigInt(event.postAmount) } : {}),
+        ...(event.postDuration
+          ? { postDuration: BigInt(event.postDuration) }
+          : {}),
+        ...(event.postIsPermanent !== null &&
+        event.postIsPermanent !== undefined
+          ? { postIsPermanent: event.postIsPermanent }
+          : {}),
+        ...(event.mergeSourceTokenId
+          ? { mergeSourceTokenId: BigInt(event.mergeSourceTokenId) }
+          : {}),
+        ...(event.mergeDestTokenId
+          ? { mergeDestTokenId: BigInt(event.mergeDestTokenId) }
+          : {}),
+        ...(event.mergeDestPrevAmount
+          ? { mergeDestPrevAmount: BigInt(event.mergeDestPrevAmount) }
+          : {}),
+        ...(event.mergeDestPrevDuration
+          ? { mergeDestPrevDuration: BigInt(event.mergeDestPrevDuration) }
+          : {}),
+        ...(event.mergeDestPrevIsPermanent !== null &&
+        event.mergeDestPrevIsPermanent !== undefined
+          ? { mergeDestPrevIsPermanent: event.mergeDestPrevIsPermanent }
+          : {}),
         ...(event.weight ? { weight: BigInt(event.weight) } : {}),
         ...(event.totalWeight
           ? { totalWeight: BigInt(event.totalWeight) }

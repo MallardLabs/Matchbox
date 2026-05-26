@@ -62,6 +62,8 @@ function actionLabel(t: string): string {
       return "Made permanent"
     case "lockPermanentUnlocked":
       return "Permanent unlocked"
+    case "lockMerged":
+      return "Merged"
     case "lockWithdrawn":
       return "Withdrawn"
     case "boostVote":
@@ -76,7 +78,9 @@ function actionLabel(t: string): string {
 function actionColor(t: string): string {
   if (t === "boostVote") return "text-[#F7931A]"
   if (t === "boostAbstain") return "text-[var(--content-tertiary)]"
-  if (t === "lockExtended") return "text-[var(--positive)]"
+  if (t === "lockExtended" || t === "lockMerged") {
+    return "text-[var(--positive)]"
+  }
   return "text-[var(--content-primary)]"
 }
 
@@ -381,7 +385,13 @@ function EventTable({
               <>
                 <th
                   className="px-2 py-1.5 text-right"
-                  title="ΔvePower contributed by this event. For extensions, this is (new ve-power − prior ve-power). Saturates at the 4-year cap."
+                  title={
+                    "ΔvePower credited for this event. Two pieces, summed:\n" +
+                    "  • amount-added: addedAmount × postDuration / 4y\n" +
+                    "  • duration-extended: prevAmount × (postDuration − prevDuration) / 4y\n\n" +
+                    "Made permanent = duration-extended only. A lock already at the 4y cap earns ≈0 from a permanent flip — the user is just locking in the remaining decay (no current ve-power change).\n\n" +
+                    "Hover any row for the exact numbers."
+                  }
                 >
                   Δ ve
                 </th>
@@ -429,7 +439,10 @@ function EventTable({
                 </td>
                 {showDelta ? (
                   <>
-                    <td className="px-2 py-1 text-right font-mono text-[11px] text-[var(--content-primary)]">
+                    <td
+                      className="px-2 py-1 text-right font-mono text-[11px] text-[var(--content-primary)]"
+                      title={delta ? deltaVeMathTooltip(ev, delta) : undefined}
+                    >
                       {delta ? renderDeltaVe(delta) : "—"}
                     </td>
                     <td className="px-2 py-1 text-right font-mono text-[11px] text-[var(--content-secondary)]">
@@ -484,6 +497,77 @@ function renderDeltaVe(delta: LockDelta): React.ReactNode {
   )
 }
 
+const MAXTIME_SEC = BigInt(4 * 365 * 86_400)
+
+// Human-readable formula explaining how Δve was computed for this event.
+// Surfaced via `title` attribute so users can hover any row to see the math.
+function deltaVeMathTooltip(
+  ev: MezoActivityItem,
+  delta: LockDelta,
+): string | undefined {
+  if (delta.deltaVeWad === 0n) {
+    if (
+      ev.actionType === "lockPermanent" &&
+      ev.prevDuration !== undefined &&
+      ev.prevDuration >= MAXTIME_SEC
+    ) {
+      return "Lock was already at the 4-year cap before this event — flipping to permanent doesn't change the current ve-power, so Δve = 0."
+    }
+    return undefined
+  }
+  const fmtVe = (wad: bigint) => fmtWadCompact(wad)
+  const fmtAmt = (wad: bigint) => fmtWadCompact(wad)
+  const fmtYears = (sec: bigint) =>
+    `${(Number(sec) / (365 * 86_400)).toFixed(3)}y`
+
+  // Pure amount-added (fresh lock or amount increase).
+  if (delta.amountAddedVeWad > 0n && delta.durationExtendedVeWad === 0n) {
+    const postDur =
+      ev.postIsPermanent && ev.postDuration === undefined
+        ? MAXTIME_SEC
+        : (ev.postDuration ?? MAXTIME_SEC)
+    const cappedDur = postDur > MAXTIME_SEC ? MAXTIME_SEC : postDur
+    const amount = ev.amount ?? 0n
+    return `Amount-added piece:\n  ${fmtAmt(amount)} MEZO × ${fmtYears(cappedDur)} / 4.000y\n  = ${fmtVe(delta.amountAddedVeWad)} veMEZO`
+  }
+
+  // Pure extension (lockExtended / lockPermanent).
+  if (
+    delta.durationExtendedVeWad > 0n &&
+    delta.amountAddedVeWad === 0n &&
+    delta.extensionPrevAmountWad !== null &&
+    delta.extensionPrevDurationSec !== null &&
+    delta.extensionPostDurationSec !== null
+  ) {
+    const prevAmt = delta.extensionPrevAmountWad
+    const prevDur = delta.extensionPrevDurationSec
+    const postDur = delta.extensionPostDurationSec
+    const deltaDur = postDur > prevDur ? postDur - prevDur : 0n
+    const label =
+      ev.actionType === "lockPermanent"
+        ? "Made permanent — credits the remaining decay only:"
+        : "Duration-extended piece:"
+    return `${label}\n  ${fmtAmt(prevAmt)} MEZO × (${fmtYears(postDur)} − ${fmtYears(prevDur)}) / 4.000y\n  = ${fmtAmt(prevAmt)} MEZO × ${fmtYears(deltaDur)} / 4.000y\n  = ${fmtVe(delta.durationExtendedVeWad)} veMEZO`
+  }
+
+  // Merge (blended source + dest extensions) — describe rather than show formula.
+  if (ev.actionType === "lockMerged") {
+    return `Merge — credits the duration extension only (source MEZO was already locked, so no amount-added piece). Δve sums (source amount × Δduration) and (destination amount × Δduration if the source's end pushes the destination further out).\nTotal = ${fmtVe(delta.deltaVeWad)} veMEZO`
+  }
+
+  // Fallback (mixed buckets, e.g. legacy events).
+  const parts: string[] = []
+  if (delta.amountAddedVeWad > 0n) {
+    parts.push(`  amount-added: ${fmtVe(delta.amountAddedVeWad)} veMEZO`)
+  }
+  if (delta.durationExtendedVeWad > 0n) {
+    parts.push(
+      `  duration-extended: ${fmtVe(delta.durationExtendedVeWad)} veMEZO`,
+    )
+  }
+  return `Δve breakdown:\n${parts.join("\n")}\nTotal = ${fmtVe(delta.deltaVeWad)} veMEZO`
+}
+
 function renderDeltaPts(deltaVeWad: bigint, weightExt: number): string {
   if (deltaVeWad === 0n) return "0"
   if (!Number.isFinite(weightExt) || weightExt <= 0) return "—"
@@ -492,10 +576,34 @@ function renderDeltaPts(deltaVeWad: bigint, weightExt: number): string {
   return fmtPoints(ptsWad)
 }
 
+function fmtDuration(
+  seconds: bigint | undefined,
+  isPermanent?: boolean,
+): string {
+  if (isPermanent) return "perm"
+  if (seconds === undefined || seconds <= 0n) return "—"
+  const days = Number(seconds) / 86_400
+  if (days >= 365) return `${(days / 365).toFixed(2)}y`
+  if (days >= 30) return `${(days / 30).toFixed(1)}mo`
+  return `${days.toFixed(0)}d`
+}
+
 function renderAmount(ev: MezoActivityItem): string {
   if (ev.actionType === "boostVote" || ev.actionType === "boostAbstain") {
     if (ev.weight === undefined) return "—"
     return fmtWadCompact(ev.weight)
+  }
+  // For events that change duration (extend, made-permanent, merge), show
+  // the prev→new duration jump when we have it from the subgraph. Falls
+  // back to the legacy "post-state amount" display when prev data is absent.
+  const showDurationJump =
+    ev.actionType === "lockExtended" ||
+    ev.actionType === "lockPermanent" ||
+    ev.actionType === "lockMerged"
+  if (showDurationJump && ev.prevDuration !== undefined) {
+    const before = fmtDuration(ev.prevDuration, ev.prevIsPermanent)
+    const after = fmtDuration(ev.postDuration, ev.postIsPermanent)
+    return `${before} → ${after}`
   }
   if (
     ev.actionType === "lockCreated" ||
@@ -511,6 +619,12 @@ function renderAmount(ev: MezoActivityItem): string {
     if (days >= 365) return `${(days / 365).toFixed(2)}y`
     if (days >= 30) return `${(days / 30).toFixed(1)}mo`
     return `${days.toFixed(0)}d`
+  }
+  if (ev.actionType === "lockMerged") {
+    if (ev.mergeSourceTokenId !== undefined) {
+      return `from #${ev.mergeSourceTokenId.toString()}`
+    }
+    return "—"
   }
   return "—"
 }

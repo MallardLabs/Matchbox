@@ -1,4 +1,3 @@
-import { Bytes } from "@graphprotocol/graph-ts"
 import {
   Abstained,
   DistributeReward,
@@ -23,7 +22,7 @@ import {
   POOLS_VOTER,
   REWARD_DISTRIBUTED,
   REWARD_NOTIFIED,
-  resolveLockOwner,
+  resolveVoteActor,
   saveActivity,
   upsertVote,
   ZERO,
@@ -60,8 +59,11 @@ export function handlePoolVoted(event: Voted): void {
     MATCHBOX_GAUGE_BOOST,
     POOLS_VOTER,
   )
-  // Resolve actor via the underlying veMEZO lock — see boost-voter.ts for why.
-  const actor = resolveLockOwner(event.params.tokenId, event.params.voter)
+  const actor = resolveVoteActor(
+    event.params.tokenId,
+    event.params.voter,
+    event.transaction.input,
+  )
   activity.actor = actor
   activity.pool = event.params.pool
   // Mirror pool into `gauge` so downstream consumers (simulator, UI) can read
@@ -108,9 +110,10 @@ export function handlePoolAbstained(event: Abstained): void {
     MATCHBOX_GAUGE_BOOST,
     POOLS_VOTER,
   )
-  const abstainActor = resolveLockOwner(
+  const abstainActor = resolveVoteActor(
     event.params.tokenId,
     event.params.voter,
+    event.transaction.input,
   )
   activity.actor = abstainActor
   activity.pool = event.params.pool
