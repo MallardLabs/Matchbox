@@ -140,8 +140,7 @@ export function useAcademySim(opts: { enabled: boolean }) {
   useEffect(() => {
     if (!hydrated || typeof window === "undefined") return
     const budgetMezo = Number(params.budgetMezoWad / 10n ** 12n) / 1e6
-    const rewardFloorMezo =
-      Number(params.rewardFloorMezoWad / 10n ** 12n) / 1e6
+    const rewardFloorMezo = Number(params.rewardFloorMezoWad / 10n ** 12n) / 1e6
     const toStore: StoredState = {
       fromTs,
       toTs,

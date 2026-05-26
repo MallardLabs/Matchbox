@@ -34,9 +34,7 @@ const PARAMS: AcademyParams = {
   rewardFloorMezoWad: 0n,
 }
 
-const THIRD: Address = getAddress(
-  "0x5555555555555555555555555555555555555555",
-)
+const THIRD: Address = getAddress("0x5555555555555555555555555555555555555555")
 
 function lockEvent(
   actor: Address | undefined,

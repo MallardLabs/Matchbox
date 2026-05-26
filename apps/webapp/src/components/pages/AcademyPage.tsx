@@ -5,6 +5,7 @@ import AcademyLeaderboard from "@/components/AcademyLeaderboard"
 import {
   DataStatus,
   EpochChart,
+  RewardHistogram,
   Stat,
   dateInputToTs,
   fmtDate,
@@ -18,6 +19,7 @@ import {
   useAcademySim,
 } from "@/hooks/useAcademySim"
 import type { SimResult } from "@/lib/academy/simulate"
+import { useState } from "react"
 import type { Address } from "viem"
 
 const RANGE_PRESETS: Array<{ label: string; weeks: number }> = [
@@ -279,21 +281,11 @@ function ProView({
           </section>
         ) : null}
 
-        <section>
-          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-[var(--content-primary)]">
-            Activity per epoch
-          </h3>
-          {epochSummaries.length === 0 ? (
-            <div className="rounded border border-[var(--border)] bg-[var(--surface-tertiary)] px-3 py-4 text-center text-xs text-[var(--content-secondary)]">
-              No epochs in this range.
-            </div>
-          ) : (
-            <EpochChart
-              rows={epochSummaries}
-              peak={Math.max(peakEpochTotal, 1)}
-            />
-          )}
-        </section>
+        <ChartsSection
+          epochSummaries={epochSummaries}
+          peakEpochTotal={peakEpochTotal}
+          simResult={simResult}
+        />
 
         <section>
           <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-[var(--content-primary)]">
@@ -309,6 +301,92 @@ function ProView({
         </section>
       </main>
     </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Charts section — tabbed switcher between the per-epoch activity chart and
+// the reward-distribution histogram. Tab state is local to this component
+// because nothing else on the page needs to know which chart is showing.
+// ─────────────────────────────────────────────────────────────────────────────
+
+type ChartTab = "activity" | "rewardDistribution"
+
+function ChartsSection({
+  epochSummaries,
+  peakEpochTotal,
+  simResult,
+}: {
+  epochSummaries: ReturnType<typeof useAcademySim>["epochSummaries"]
+  peakEpochTotal: ReturnType<typeof useAcademySim>["peakEpochTotal"]
+  simResult: SimResult | null
+}) {
+  const [tab, setTab] = useState<ChartTab>("activity")
+
+  return (
+    <section>
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--content-primary)]">
+          {tab === "activity" ? "Activity per epoch" : "Reward distribution"}
+        </h3>
+        <div className="flex gap-1 rounded border border-[var(--border)] bg-[var(--surface-tertiary)] p-0.5 text-[10px] font-semibold uppercase tracking-wider">
+          <ChartTabButton
+            active={tab === "activity"}
+            onClick={() => setTab("activity")}
+          >
+            Activity
+          </ChartTabButton>
+          <ChartTabButton
+            active={tab === "rewardDistribution"}
+            onClick={() => setTab("rewardDistribution")}
+          >
+            Reward dist.
+          </ChartTabButton>
+        </div>
+      </div>
+      {tab === "activity" ? (
+        epochSummaries.length === 0 ? (
+          <div className="rounded border border-[var(--border)] bg-[var(--surface-tertiary)] px-3 py-4 text-center text-xs text-[var(--content-secondary)]">
+            No epochs in this range.
+          </div>
+        ) : (
+          <EpochChart
+            rows={epochSummaries}
+            peak={Math.max(peakEpochTotal, 1)}
+          />
+        )
+      ) : simResult && simResult.rows.length > 0 ? (
+        <RewardHistogram rows={simResult.rows} />
+      ) : (
+        <div className="rounded border border-[var(--border)] bg-[var(--surface-tertiary)] px-3 py-4 text-center text-xs text-[var(--content-secondary)]">
+          No actors to bucket yet.
+        </div>
+      )}
+    </section>
+  )
+}
+
+function ChartTabButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean
+  onClick: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded px-2 py-0.5 transition-colors ${
+        active
+          ? "bg-[#F7931A]/15 text-[#F7931A]"
+          : "text-[var(--content-secondary)] hover:text-[var(--content-primary)]"
+      }`}
+    >
+      {children}
+    </button>
   )
 }
 
