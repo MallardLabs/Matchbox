@@ -116,6 +116,11 @@ export type AcademyParams = {
   weightBoost: number
   participationMultiplier: number
   mezoUsd: number
+  // Reward cutoff: actors whose initial pro-rata reward is strictly below
+  // this MEZO amount are culled (reward → 0, apr → 0) and the forfeited
+  // pool is redistributed proportionally (by points) to actors at or above
+  // the floor. Set to 0n to disable.
+  rewardFloorMezoWad: bigint
 }
 
 export type LeaderboardRow = {
@@ -134,6 +139,10 @@ export type LeaderboardRow = {
   activeEpochs: number
   fullyParticipated: boolean
   flagged: boolean
+  // True if the actor's initial pro-rata reward fell below `rewardFloorMezoWad`
+  // and was forfeited. The actor keeps their `pointsWad` for transparency but
+  // `rewardMezoWad` and `apr` are zeroed.
+  culledBelowFloor: boolean
 }
 
 export type SimTotals = {
@@ -149,6 +158,9 @@ export type SimTotals = {
   droppedBlacklistEvents: number
   voteSnapshots: number
   activeVoteAggregateWad: bigint
+  // Reward-floor pass diagnostics.
+  culledBelowFloorCount: number
+  redistributedMezoWad: bigint
 }
 
 export type SimResult = {
@@ -574,9 +586,69 @@ export function simulate(
         activeEpochs: acc.participatedEpochs.size,
         fullyParticipated,
         flagged: acc.flagged,
+        culledBelowFloor: false,
       }
     })
     .sort((a, b) => (b.pointsWad > a.pointsWad ? 1 : -1))
+
+  // ──────────────────────────────────────────────────────────────────────
+  // Reward-floor pass
+  // ──────────────────────────────────────────────────────────────────────
+  // Actors whose INITIAL pro-rata reward is strictly below the floor are
+  // dropped from the payout and their share is redistributed to the kept
+  // actors in proportion to points. Algebraically this is equivalent to
+  // recomputing each kept actor's reward as
+  //     budgetMezo × pts_kept / Σ pts_kept_actors
+  // (the forfeited share cancels nicely). We do it that way to avoid a
+  // two-step compounded rounding error.
+  let culledBelowFloorCount = 0
+  let redistributedMezoWad = 0n
+  if (params.rewardFloorMezoWad > 0n && rows.length > 0) {
+    const culledIdx = new Set<number>()
+    let keptPointsWad = 0n
+    for (let i = 0; i < rows.length; i += 1) {
+      const row = rows[i] as LeaderboardRow
+      if (row.rewardMezoWad < params.rewardFloorMezoWad) {
+        culledIdx.add(i)
+        redistributedMezoWad += row.rewardMezoWad
+      } else {
+        keptPointsWad += row.pointsWad
+      }
+    }
+    culledBelowFloorCount = culledIdx.size
+    if (culledIdx.size > 0) {
+      for (let i = 0; i < rows.length; i += 1) {
+        const row = rows[i] as LeaderboardRow
+        if (culledIdx.has(i)) {
+          rows[i] = {
+            ...row,
+            rewardMezoWad: 0n,
+            apr: 0,
+            culledBelowFloor: true,
+          }
+          continue
+        }
+        // Kept row: redistribute. If keptPointsWad is 0 (everyone was below
+        // floor) this branch isn't reached because every row would be in
+        // culledIdx, so no division-by-zero.
+        const newReward =
+          keptPointsWad > 0n
+            ? (params.budgetMezoWad * row.pointsWad) / keptPointsWad
+            : 0n
+        const newApr = computeAprPct({
+          rewardMezoWad: newReward,
+          vePowerWad: row.aprBasisWad,
+          mezoUsd: params.mezoUsd,
+          totalEpochs,
+        })
+        rows[i] = {
+          ...row,
+          rewardMezoWad: newReward,
+          apr: newApr,
+        }
+      }
+    }
+  }
 
   // Median APR — robust to the heavy right tail caused by a few outsized
   // vePower holders. Empty pool → 0.
@@ -619,6 +691,8 @@ export function simulate(
     droppedBlacklistEvents,
     voteSnapshots: epochs.length,
     activeVoteAggregateWad,
+    culledBelowFloorCount,
+    redistributedMezoWad,
   }
 
   return { rows, totals }

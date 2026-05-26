@@ -267,6 +267,14 @@ function ProView({
                 label="Epochs in range"
                 value={String(simResult.totals.totalEpochs)}
               />
+              {simResult.totals.culledBelowFloorCount > 0 ? (
+                <Stat
+                  label="Culled / redistributed"
+                  value={`${simResult.totals.culledBelowFloorCount} actor${
+                    simResult.totals.culledBelowFloorCount === 1 ? "" : "s"
+                  }`}
+                />
+              ) : null}
             </div>
           </section>
         ) : null}

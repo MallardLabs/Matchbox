@@ -30,7 +30,13 @@ const PARAMS: AcademyParams = {
   weightBoost: 1,
   participationMultiplier: 1,
   mezoUsd: 0.05,
+  // Default to disabled so the existing tests behave as written.
+  rewardFloorMezoWad: 0n,
 }
+
+const THIRD: Address = getAddress(
+  "0x5555555555555555555555555555555555555555",
+)
 
 function lockEvent(
   actor: Address | undefined,
@@ -430,4 +436,119 @@ test("cron poke without transfer leaves sticky vote intact and does not bump boo
   assert.equal(result.rows[0]?.votePointsWad, parseUnits("200", 18))
   // Only the manual vote counts toward boostCount; the poke is excluded.
   assert.equal(result.rows[0]?.boostCount, 1)
+})
+
+test("reward floor: actors below floor are culled and their share redistributes", () => {
+  // Three actors all locking 4-year locks. REGULAR and ANOTHER each lock
+  // 100 MEZO (200 points each). THIRD locks 1 MEZO (2 points). With a
+  // 50 MEZO budget and 20 MEZO floor, THIRD's initial 0.25 MEZO falls
+  // below the floor → culled. REGULAR and ANOTHER each end up with 25 MEZO
+  // (the whole budget split evenly across the two kept actors).
+  const params: AcademyParams = {
+    ...PARAMS,
+    budgetMezoWad: parseUnits("50", 18),
+    rewardFloorMezoWad: parseUnits("20", 18),
+  }
+  const result = simulate(
+    {
+      lockEvents: [
+        lockEvent(REGULAR, FROM_TS + 100, {
+          amount: parseUnits("100", 18),
+        }),
+        lockEvent(ANOTHER, FROM_TS + 200, {
+          amount: parseUnits("100", 18),
+          tokenId: 2n,
+          id: "lock-another-1",
+        }),
+        lockEvent(THIRD, FROM_TS + 300, {
+          amount: parseUnits("1", 18),
+          tokenId: 3n,
+          id: "lock-third-1",
+        }),
+      ],
+      voteEvents: [],
+    },
+    params,
+    FROM_TS,
+    TO_TS,
+  )
+
+  assert.equal(result.rows.length, 3)
+  assert.equal(result.totals.culledBelowFloorCount, 1)
+
+  const byActor = new Map(result.rows.map((r) => [r.actor, r]))
+  const regular = byActor.get(REGULAR)
+  const another = byActor.get(ANOTHER)
+  const third = byActor.get(THIRD)
+
+  assert.ok(regular && another && third)
+  assert.equal(regular.culledBelowFloor, false)
+  assert.equal(another.culledBelowFloor, false)
+  assert.equal(third.culledBelowFloor, true)
+  assert.equal(third.rewardMezoWad, 0n)
+  assert.equal(third.apr, 0)
+
+  // Kept actors split the full 50 MEZO budget evenly.
+  assert.equal(regular.rewardMezoWad, parseUnits("25", 18))
+  assert.equal(another.rewardMezoWad, parseUnits("25", 18))
+
+  // Sum of all paid rewards equals the budget (modulo the small forfeited
+  // remainder absorbed into redistribution rounding).
+  const paid = regular.rewardMezoWad + another.rewardMezoWad
+  assert.equal(paid, params.budgetMezoWad)
+})
+
+test("reward floor: disabled (=0) leaves all rewards untouched", () => {
+  const params: AcademyParams = {
+    ...PARAMS,
+    budgetMezoWad: parseUnits("50", 18),
+    rewardFloorMezoWad: 0n,
+  }
+  const result = simulate(
+    {
+      lockEvents: [
+        lockEvent(REGULAR, FROM_TS + 100, { amount: parseUnits("100", 18) }),
+        lockEvent(THIRD, FROM_TS + 200, {
+          amount: parseUnits("1", 18),
+          tokenId: 3n,
+          id: "lock-third-1",
+        }),
+      ],
+      voteEvents: [],
+    },
+    params,
+    FROM_TS,
+    TO_TS,
+  )
+  assert.equal(result.totals.culledBelowFloorCount, 0)
+  assert.ok(result.rows.every((r) => !r.culledBelowFloor))
+  assert.ok(result.rows.every((r) => r.rewardMezoWad > 0n))
+})
+
+test("reward floor: everyone below floor → no rewards distributed", () => {
+  // 1 MEZO budget, 20 MEZO floor → both actors' initial rewards are far
+  // below the floor. Both culled; no kept actor exists; total payout is 0.
+  const params: AcademyParams = {
+    ...PARAMS,
+    budgetMezoWad: parseUnits("1", 18),
+    rewardFloorMezoWad: parseUnits("20", 18),
+  }
+  const result = simulate(
+    {
+      lockEvents: [
+        lockEvent(REGULAR, FROM_TS + 100),
+        lockEvent(ANOTHER, FROM_TS + 200, {
+          tokenId: 2n,
+          id: "lock-another-1",
+        }),
+      ],
+      voteEvents: [],
+    },
+    params,
+    FROM_TS,
+    TO_TS,
+  )
+  assert.equal(result.totals.culledBelowFloorCount, 2)
+  assert.ok(result.rows.every((r) => r.culledBelowFloor))
+  assert.ok(result.rows.every((r) => r.rewardMezoWad === 0n))
 })

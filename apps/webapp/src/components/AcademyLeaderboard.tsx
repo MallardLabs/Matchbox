@@ -263,7 +263,16 @@ export default function AcademyLeaderboard({
               {sorted.slice(0, limit).map((row, i) => (
                 <tr
                   key={row.actor}
-                  className="border-t border-[var(--border)] hover:bg-[var(--surface-tertiary)]"
+                  className={`border-t border-[var(--border)] hover:bg-[var(--surface-tertiary)] ${
+                    row.culledBelowFloor
+                      ? "text-[var(--content-tertiary)] line-through decoration-[var(--content-tertiary)]/40"
+                      : ""
+                  }`}
+                  title={
+                    row.culledBelowFloor
+                      ? "Below the reward floor — their pro-rata share was redistributed to actors above the floor."
+                      : undefined
+                  }
                 >
                   <td className="px-2 py-1 text-left text-[11px] text-[var(--content-tertiary)]">
                     {i + 1}
@@ -291,6 +300,14 @@ export default function AcademyLeaderboard({
                           title="Approximated — missing weight or prior-lock data"
                         >
                           ~
+                        </span>
+                      ) : null}
+                      {row.culledBelowFloor ? (
+                        <span
+                          className="rounded bg-[var(--surface-tertiary)] px-1 text-[8px] font-bold uppercase tracking-wider text-[var(--content-tertiary)]"
+                          title="Below the reward floor — share redistributed"
+                        >
+                          culled
                         </span>
                       ) : null}
                     </div>

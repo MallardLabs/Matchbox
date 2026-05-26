@@ -17,10 +17,14 @@ const STORAGE_KEY = "mezo-academy-sim-v2"
 type StoredState = {
   fromTs: number
   toTs: number
-  params: Omit<AcademyParams, "budgetMezoWad"> & { budgetMezo: number }
+  params: Omit<AcademyParams, "budgetMezoWad" | "rewardFloorMezoWad"> & {
+    budgetMezo: number
+    rewardFloorMezo: number
+  }
 }
 
 const DEFAULT_BUDGET_MEZO = 4_000_000
+const DEFAULT_REWARD_FLOOR_MEZO = 20
 
 export function defaultRange(): { fromTs: number; toTs: number } {
   const now = Math.floor(Date.now() / 1000)
@@ -37,6 +41,7 @@ export function defaultParams(): AcademyParams {
     weightBoost: 1,
     participationMultiplier: 2,
     mezoUsd: 0.05,
+    rewardFloorMezoWad: parseUnits(String(DEFAULT_REWARD_FLOOR_MEZO), 18),
   }
 }
 
@@ -65,6 +70,10 @@ function loadStored(): {
         weightBoost: parsed.params?.weightBoost ?? 1,
         participationMultiplier: parsed.params?.participationMultiplier ?? 2,
         mezoUsd: parsed.params?.mezoUsd ?? 0.05,
+        rewardFloorMezoWad: parseUnits(
+          String(parsed.params?.rewardFloorMezo ?? DEFAULT_REWARD_FLOOR_MEZO),
+          18,
+        ),
       },
     }
   } catch {
@@ -131,6 +140,8 @@ export function useAcademySim(opts: { enabled: boolean }) {
   useEffect(() => {
     if (!hydrated || typeof window === "undefined") return
     const budgetMezo = Number(params.budgetMezoWad / 10n ** 12n) / 1e6
+    const rewardFloorMezo =
+      Number(params.rewardFloorMezoWad / 10n ** 12n) / 1e6
     const toStore: StoredState = {
       fromTs,
       toTs,
@@ -141,6 +152,7 @@ export function useAcademySim(opts: { enabled: boolean }) {
         weightBoost: params.weightBoost,
         participationMultiplier: params.participationMultiplier,
         mezoUsd: params.mezoUsd,
+        rewardFloorMezo,
       },
     }
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(toStore))

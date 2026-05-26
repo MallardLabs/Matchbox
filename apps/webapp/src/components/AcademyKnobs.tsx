@@ -176,6 +176,20 @@ export default function AcademyKnobs({ params, onChange, onReset }: Props) {
       </Section>
 
       <Section
+        title="Reward Floor"
+        hint="Actors whose initial pro-rata reward falls below this MEZO amount are culled (reward → 0) and the forfeited share is redistributed to the remaining actors in proportion to points. Set to 0 to disable."
+      >
+        <NumberField
+          label="Floor (MEZO)"
+          value={Math.round(wadToMezo(params.rewardFloorMezoWad))}
+          step={1}
+          min={0}
+          onChange={(n) => update({ rewardFloorMezoWad: mezoToWad(n) })}
+          hint="Default 20 — keeps the pool from being smeared too thin."
+        />
+      </Section>
+
+      <Section
         title="APR Conversion"
         hint="Only used to render the APR column on the leaderboard. Does not affect rewards."
       >
