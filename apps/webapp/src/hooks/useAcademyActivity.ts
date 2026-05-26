@@ -68,6 +68,7 @@ async function fetchPage(args: {
   page: number
   limit: number
   actionTypes: readonly string[]
+  order?: "asc" | "desc"
 }): Promise<MezoActivityApiResponse> {
   const params = new URLSearchParams()
   params.set("network", args.network)
@@ -76,6 +77,7 @@ async function fetchPage(args: {
   params.set("to", String(args.to))
   params.set("page", String(args.page))
   params.set("actionTypes", args.actionTypes.join(","))
+  if (args.order === "asc") params.set("order", "asc")
   const res = await fetch(`/api/activity?${params.toString()}`, {
     cache: "no-store",
   })
@@ -85,6 +87,35 @@ async function fetchPage(args: {
   const json = (await res.json()) as MezoActivityApiResponse
   if (!json.success) throw new Error("Activity API reported failure")
   return json
+}
+
+// Pre-flight: ask the subgraph for the SINGLE oldest event in the vote-track
+// action set anywhere in the supported lookback window. Used to tighten the
+// expected-vote-chunks estimate so the progress bar's denominator isn't the
+// pessimistic 3-year max. Returns null when no event exists (very fresh
+// subgraph or wrong network), and the caller falls back to the max bound.
+async function fetchOldestVoteEventTimestamp(args: {
+  network: string
+  from: number
+  to: number
+}): Promise<number | null> {
+  try {
+    const res = await fetchPage({
+      network: args.network,
+      from: args.from,
+      to: args.to,
+      page: 0,
+      limit: 1,
+      actionTypes: VOTE_ACTION_TYPES,
+      order: "asc",
+    })
+    const first = res.data[0]
+    if (!first?.timestamp) return null
+    const n = Number(first.timestamp)
+    return Number.isFinite(n) ? n : null
+  } catch {
+    return null
+  }
 }
 
 async function fetchChunk(args: {
@@ -143,6 +174,12 @@ export type FetchProgress = {
   lockChunksDone: number
   voteChunksDone: number
   totalLockChunks: number
+  // Upper bound + refined estimate for the vote-chunk denominator.
+  // `expectedVoteChunks` starts as the 3-year max and tightens after the
+  // pre-flight oldest-event query resolves. The vote loop can still exit
+  // early via the consecutive-empty heuristic; when that happens the bar
+  // animates from wherever it is to 100% via the phase flip to "done".
+  expectedVoteChunks: number
 }
 
 const INITIAL_PROGRESS: FetchProgress = {
@@ -152,6 +189,7 @@ const INITIAL_PROGRESS: FetchProgress = {
   lockChunksDone: 0,
   voteChunksDone: 0,
   totalLockChunks: 0,
+  expectedVoteChunks: 0,
 }
 
 export function useAcademyActivity({
@@ -223,6 +261,19 @@ export function useAcademyActivity({
         1,
         Math.ceil((toTimestamp - fromTimestamp) / lockChunkSize),
       )
+      const voteChunkSize = voteChunkWeeks * WEEK
+      const hardFloor = Math.max(
+        toTimestamp - voteMaxLookbackYears * 365 * 86_400,
+        0,
+      )
+      // Initial pessimistic upper bound — the most chunks we'd scan if the
+      // subgraph had a vote event all the way back at the 3-year hardFloor.
+      // Refined below by the pre-flight oldest-event query.
+      const maxVoteChunks = Math.max(
+        1,
+        Math.ceil((toTimestamp - hardFloor) / voteChunkSize),
+      )
+
       // Reset counters at the start of every fresh fetch so a re-run (range
       // change, network swap) starts from zero rather than continuing the
       // previous run's totals.
@@ -233,6 +284,28 @@ export function useAcademyActivity({
         lockChunksDone: 0,
         voteChunksDone: 0,
         totalLockChunks,
+        expectedVoteChunks: maxVoteChunks,
+      })
+
+      // Pre-flight (fire and forget — don't block the lock loop on this).
+      // Tightens expectedVoteChunks once the subgraph reports the oldest
+      // vote-track event timestamp it has indexed. If the call fails we keep
+      // the maxVoteChunks pessimistic bound.
+      void fetchOldestVoteEventTimestamp({
+        network: network as string,
+        from: hardFloor,
+        to: toTimestamp,
+      }).then((oldest) => {
+        if (oldest === null) return
+        const span = Math.max(0, toTimestamp - oldest)
+        const refined = Math.min(
+          maxVoteChunks,
+          Math.max(1, Math.ceil(span / voteChunkSize)),
+        )
+        progressRef.current((prev) => ({
+          ...prev,
+          expectedVoteChunks: refined,
+        }))
       })
 
       let lockCursor = fromTimestamp
@@ -267,11 +340,7 @@ export function useAcademyActivity({
       let voteChunksFetched = 0
       let truncatedVoteChunks = 0
       let consecutiveEmpty = 0
-      const voteChunkSize = voteChunkWeeks * WEEK
-      const hardFloor = Math.max(
-        toTimestamp - voteMaxLookbackYears * 365 * 86_400,
-        0,
-      )
+      // voteChunkSize / hardFloor are defined above next to maxVoteChunks.
       let voteEnd = toTimestamp
       let oldestSeen: number | null = null
       progressRef.current({ phase: "votes" })

@@ -50,6 +50,8 @@ export default async function handler(request: Request): Promise<Response> {
         .map((t) => t.trim())
         .filter((t) => /^[A-Z_]+$/.test(t))
     : undefined
+  const rawOrder = url.searchParams.get("order")
+  const orderDirection: "asc" | "desc" = rawOrder === "asc" ? "asc" : "desc"
 
   const result = await fetchMezoActivity({
     chainId,
@@ -57,6 +59,7 @@ export default async function handler(request: Request): Promise<Response> {
     toTimestamp,
     limit,
     page,
+    orderDirection,
     ...(actionTypes && actionTypes.length > 0 ? { actionTypes } : {}),
   })
 

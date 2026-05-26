@@ -26,6 +26,9 @@ type SourceOptions = {
   limit: number
   page: number
   actionTypes?: string[]
+  // Most callers want the newest events first; pre-flight count helpers want
+  // the oldest to estimate the historical span. Defaults to "desc".
+  orderDirection?: "asc" | "desc"
 }
 
 type ExplorerActivityEvent = {
@@ -189,13 +192,14 @@ async function fetchExplorerActivity(
   const fetchSize = Math.min(options.limit + 1, SUBGRAPH_FIRST_MAX)
   const skip = Math.max(options.page, 0) * options.limit
   const where = buildWhereClause(options)
+  const orderDirection = options.orderDirection === "asc" ? "asc" : "desc"
   const query = `
       query {
         activityEvents(
           first: ${fetchSize},
           skip: ${skip},
           orderBy: timestamp,
-          orderDirection: desc,
+          orderDirection: ${orderDirection},
           where: ${where}
         ) {
           id

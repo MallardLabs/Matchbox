@@ -13,6 +13,7 @@ import {
   presetRange,
   tsToDateInput,
 } from "@/components/AcademyShared"
+import { SpringIn } from "@/components/SpringIn"
 import {
   defaultParams,
   defaultRange,
@@ -89,17 +90,22 @@ export default function AcademyPage() {
       ) : activity.isError ? (
         <ErrorCard error={activity.error as Error | null} />
       ) : (
-        <ProView
-          simResult={simResult}
-          params={params}
-          setParams={setParams}
-          setFromTs={setFromTs}
-          setToTs={setToTs}
-          activity={activity}
-          epochSummaries={epochSummaries}
-          peakEpochTotal={peakEpochTotal}
-          onSelectActor={setSelectedActor}
-        />
+        // Spring-in once the fetch resolves. Keyed on the data identity so
+        // a new range / network swap re-triggers the slide; staying on the
+        // same dataset (param tweaks) doesn't re-animate.
+        <SpringIn key={String(activity.dataUpdatedAt ?? 0)} variant="card">
+          <ProView
+            simResult={simResult}
+            params={params}
+            setParams={setParams}
+            setFromTs={setFromTs}
+            setToTs={setToTs}
+            activity={activity}
+            epochSummaries={epochSummaries}
+            peakEpochTotal={peakEpochTotal}
+            onSelectActor={setSelectedActor}
+          />
+        </SpringIn>
       )}
 
       {actorProfile && selectedActor ? (
@@ -409,20 +415,20 @@ function LoadingCard({
   })()
 
   const totalEvents = progress.lockEventsFetched + progress.voteEventsFetched
-  // Lock progress is exact (we know totalLockChunks up front). Vote progress
-  // is open-ended (we stop only when we hit consecutive empties), so the bar
-  // shows lock-phase as a real percentage and falls back to indeterminate
-  // shine during the vote phase.
-  const lockPct =
-    progress.totalLockChunks > 0
-      ? Math.min(
-          100,
-          (progress.lockChunksDone / progress.totalLockChunks) * 100,
-        )
-      : 0
+  // Both phases now have known denominators: totalLockChunks is exact;
+  // expectedVoteChunks starts as the 3-year max bound and tightens once the
+  // pre-flight oldest-event query resolves. The vote loop can still exit
+  // early on consecutive empties — phase flips to "done" and we snap to 100%.
+  const totalChunks = progress.totalLockChunks + progress.expectedVoteChunks
+  const chunksDone = progress.lockChunksDone + progress.voteChunksDone
   const isLocksPhase = progress.phase === "locks"
   const isVotesPhase = progress.phase === "votes"
-  const fillPct = isLocksPhase ? lockPct : 100
+  const fillPct =
+    progress.phase === "done"
+      ? 100
+      : totalChunks > 0
+        ? Math.min(100, (chunksDone / totalChunks) * 100)
+        : 0
 
   return (
     <div className="rounded border border-[var(--border)] bg-[var(--surface-tertiary)] px-4 py-5">
@@ -463,7 +469,8 @@ function LoadingCard({
           <span className="font-mono text-[var(--content-secondary)]">
             {progress.voteEventsFetched.toLocaleString()}
           </span>{" "}
-          ({progress.voteChunksDone} chunks)
+          ({progress.voteChunksDone}/{progress.expectedVoteChunks || "?"} chunks
+          {progress.expectedVoteChunks > 0 ? " est." : ""})
         </span>
       </div>
     </div>
