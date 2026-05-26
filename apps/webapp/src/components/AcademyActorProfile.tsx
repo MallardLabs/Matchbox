@@ -178,6 +178,19 @@ export default function AcademyActorProfile({
                 />
                 <Stat label="ve-power" value={fmtWadCompact(row.vePowerWad)} />
                 <Stat
+                  label="Pts / ve"
+                  value={(() => {
+                    if (row.aprBasisWad <= 0n) return "—"
+                    const scaled =
+                      (row.pointsWad * 1_000_000n) / row.aprBasisWad
+                    const value = Number(scaled) / 1_000_000
+                    if (!Number.isFinite(value) || value <= 0) return "—"
+                    if (value >= 100) return value.toFixed(0)
+                    if (value >= 10) return value.toFixed(1)
+                    return value.toFixed(2)
+                  })()}
+                />
+                <Stat
                   label="Full participation"
                   value={row.fullyParticipated ? "★ yes" : "no"}
                 />
