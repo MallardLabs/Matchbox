@@ -400,14 +400,14 @@ test("participation bonus rewards a pure voter with no lock activity", () => {
   assert.equal(boosted.rows[0]?.fullyParticipated, true)
   // 4 epochs × 50 = 200 vote points baseline. With a 2× full-epoch
   // multiplier the bonus equals the eligible base, so points should
-  // double to 400. The bucket is lockPointsWad for accounting.
+  // double to 400. The bonus lives in its own bucket so a pure voter
+  // with zero lock activity doesn't appear to have phantom lock points.
   assert.equal(baseline.rows[0]?.pointsWad, parseUnits("200", 18))
   assert.equal(boosted.rows[0]?.pointsWad, parseUnits("400", 18))
-  // With a single actor the reward equals the whole budget regardless
-  // of the bonus, but pointsWad must reflect the boosted total so the
-  // leaderboard "Points" column actually moves.
-  assert.equal(boosted.rows[0]?.lockPointsWad, parseUnits("200", 18))
+  assert.equal(boosted.rows[0]?.lockPointsWad, 0n)
   assert.equal(boosted.rows[0]?.votePointsWad, parseUnits("200", 18))
+  assert.equal(boosted.rows[0]?.participationBonusWad, parseUnits("200", 18))
+  assert.equal(baseline.rows[0]?.participationBonusWad, 0n)
 })
 
 test("cron poke without transfer leaves sticky vote intact and does not bump boostCount", () => {

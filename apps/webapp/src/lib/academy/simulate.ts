@@ -89,9 +89,10 @@ import { type Address, getAddress, isAddressEqual } from "viem"
 //   Full-participation bonus: if an actor had at least one active vote in
 //   EVERY epoch of the range, their TOTAL earned points (lock + extension +
 //   vote) are multiplied by (participationMultiplier − 1) and added as a
-//   bonus. The bonus is bucketed into lockPointsWad for accounting, but the
-//   eligible base spans every track — otherwise a pure voter who satisfies
-//   the participation condition would get nothing for it.
+//   bonus. The bonus is stored in its own `participationBonusWad` bucket so
+//   the UI never confuses it for real lock activity. The eligible base
+//   spans every track — otherwise a pure voter who satisfies the
+//   participation condition would get nothing for it.
 //
 //   The CRON address `0xf8176Df5…` (Tigris maintainer) is hard-filtered out
 //   client-side as defense-in-depth. The subgraph already re-attributes
@@ -129,6 +130,10 @@ export type LeaderboardRow = {
   lockPointsWad: bigint
   extensionPointsWad: bigint
   votePointsWad: bigint
+  // Full-epoch participation bonus, kept in its own bucket so the display
+  // can't mistake it for actual lock activity. `pointsWad` already includes
+  // this — don't double-add when re-summing.
+  participationBonusWad: bigint
   rewardMezoWad: bigint
   apr: number
   vePowerWad: bigint
@@ -214,6 +219,7 @@ type ActorAccumulator = {
   lockPointsWad: bigint
   extensionPointsWad: bigint
   votePointsWad: bigint
+  participationBonusWad: bigint
   vePowerWad: bigint
   voteWeightEpochSumWad: bigint
   newLockCount: number
@@ -232,6 +238,7 @@ function emptyActor(actor: Address): ActorAccumulator {
     lockPointsWad: 0n,
     extensionPointsWad: 0n,
     votePointsWad: 0n,
+    participationBonusWad: 0n,
     vePowerWad: 0n,
     voteWeightEpochSumWad: 0n,
     newLockCount: 0,
@@ -517,10 +524,11 @@ export function simulate(
 
   const allActors = [...accs.values()]
 
-  // Full-participation bonus across every earned track. The bonus is
-  // bucketed into lockPointsWad for display continuity, but the eligible
-  // base sums lock + extension + vote so a pure voter who participated
-  // in every epoch actually gets rewarded for it.
+  // Full-participation bonus across every earned track. Stored in its own
+  // bucket so the UI doesn't have to disambiguate it from real lock points
+  // (a pure voter would otherwise appear to have phantom lock activity).
+  // The eligible base sums lock + extension + vote so a pure voter who
+  // participated in every epoch actually gets rewarded for it.
   for (const acc of allActors) {
     if (
       totalEpochs > 0 &&
@@ -529,8 +537,10 @@ export function simulate(
     ) {
       const eligible =
         acc.lockPointsWad + acc.extensionPointsWad + acc.votePointsWad
-      const bonus = scaleWad(eligible, params.participationMultiplier - 1)
-      acc.lockPointsWad += bonus
+      acc.participationBonusWad = scaleWad(
+        eligible,
+        params.participationMultiplier - 1,
+      )
     }
   }
 
@@ -538,7 +548,10 @@ export function simulate(
   let activeVoteAggregateWad = 0n
   for (const acc of allActors) {
     totalPoints +=
-      acc.lockPointsWad + acc.extensionPointsWad + acc.votePointsWad
+      acc.lockPointsWad +
+      acc.extensionPointsWad +
+      acc.votePointsWad +
+      acc.participationBonusWad
   }
   for (const vote of activeVotes.values()) {
     if (vote.weight > 0n) activeVoteAggregateWad += vote.weight
@@ -547,7 +560,10 @@ export function simulate(
   const rows: LeaderboardRow[] = allActors
     .map((acc) => {
       const pointsWad =
-        acc.lockPointsWad + acc.extensionPointsWad + acc.votePointsWad
+        acc.lockPointsWad +
+        acc.extensionPointsWad +
+        acc.votePointsWad +
+        acc.participationBonusWad
       return { acc, pointsWad }
     })
     .filter((entry) => entry.pointsWad > 0n)
@@ -576,6 +592,7 @@ export function simulate(
         lockPointsWad: acc.lockPointsWad,
         extensionPointsWad: acc.extensionPointsWad,
         votePointsWad: acc.votePointsWad,
+        participationBonusWad: acc.participationBonusWad,
         rewardMezoWad,
         apr,
         vePowerWad: acc.vePowerWad,

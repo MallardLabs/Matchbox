@@ -157,6 +157,13 @@ export default function AcademyActorProfile({
                   value={fmtPoints(row.extensionPointsWad)}
                 />
                 <Stat label="Vote pts" value={fmtPoints(row.votePointsWad)} />
+                {row.participationBonusWad > 0n ? (
+                  <Stat
+                    label="Bonus pts ★"
+                    value={fmtPoints(row.participationBonusWad)}
+                    tone="warn"
+                  />
+                ) : null}
                 <Stat
                   label="Reward (MEZO)"
                   value={fmtMezo(row.rewardMezoWad)}
