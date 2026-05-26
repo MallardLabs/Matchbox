@@ -272,7 +272,7 @@
       rgba(255, 255, 255, 0.06) 72%,
       transparent 100%
     );
-    animation: optimal-vemezo-shine 6s ease-in-out infinite;
+    animation: optimal-vemezo-shine 3s ease-in-out infinite;
     transform: translateX(-160%) skewX(-18deg);
   }
   @media (prefers-reduced-motion: reduce) {
