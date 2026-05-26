@@ -11,7 +11,6 @@ type SortKey =
   | "extensions"
   | "boosts"
   | "vePower"
-  | "ptsPerVe"
 
 type Props = {
   rows: LeaderboardRow[]
@@ -45,24 +44,6 @@ function fmtAddr(addr: string): string {
 function pointsShare(row: LeaderboardRow, total: bigint): number {
   if (total <= 0n) return 0
   return Number((row.pointsWad * 10_000n) / total) / 100
-}
-
-// Efficiency: points per unit of stake basis (vePower if the actor built
-// it in-window, else the avg vote weight fallback). Useful for spotting
-// outliers — e.g. high-points / low-stake actors who are over-extracting
-// relative to their lock size.
-function pointsPerVe(row: LeaderboardRow): number {
-  if (row.aprBasisWad <= 0n) return 0
-  // Scale up by 1e6 before the integer divide so we keep 6 decimals.
-  const scaled = (row.pointsWad * 1_000_000n) / row.aprBasisWad
-  return Number(scaled) / 1_000_000
-}
-
-function fmtPtsPerVe(value: number): string {
-  if (!Number.isFinite(value) || value <= 0) return "—"
-  if (value >= 100) return value.toFixed(0)
-  if (value >= 10) return value.toFixed(1)
-  return value.toFixed(2)
 }
 
 function csvEscape(value: string | number | boolean): string {
@@ -123,9 +104,6 @@ export default function AcademyLeaderboard({
         case "boosts":
           diff = cmpNumber(a.boostCount, b.boostCount)
           break
-        case "ptsPerVe":
-          diff = cmpNumber(pointsPerVe(a), pointsPerVe(b))
-          break
       }
       return sortDir === "desc" ? -diff : diff
     })
@@ -155,7 +133,6 @@ export default function AcademyLeaderboard({
       "aprPct",
       "vePowerWad",
       "aprBasisWad",
-      "ptsPerVe",
       "newLocks",
       "extensions",
       "boosts",
@@ -176,7 +153,6 @@ export default function AcademyLeaderboard({
       row.apr.toFixed(2),
       row.vePowerWad.toString(),
       row.aprBasisWad.toString(),
-      pointsPerVe(row).toFixed(6),
       row.newLockCount,
       row.extensionCount,
       row.boostCount,
@@ -267,16 +243,6 @@ export default function AcademyLeaderboard({
                 </th>
                 <th className="px-2 py-1.5 text-right">
                   <SortHeader k="vePower">APR basis</SortHeader>
-                </th>
-                <th
-                  className="px-2 py-1.5 text-right"
-                  title={
-                    "Points earned per unit of stake (APR basis). " +
-                    "High values can indicate over-extraction relative to lock size; " +
-                    "low values are heavy lockers earning modestly."
-                  }
-                >
-                  <SortHeader k="ptsPerVe">Pts / ve</SortHeader>
                 </th>
                 <th className="px-2 py-1.5 text-right">
                   <SortHeader k="newLocks">New</SortHeader>
@@ -372,9 +338,6 @@ export default function AcademyLeaderboard({
                         avg vote
                       </span>
                     ) : null}
-                  </td>
-                  <td className="px-2 py-1 text-right font-mono text-[11px] text-[var(--content-secondary)]">
-                    {fmtPtsPerVe(pointsPerVe(row))}
                   </td>
                   <td className="px-2 py-1 text-right font-mono text-[11px] text-[var(--content-secondary)]">
                     {row.newLockCount}
