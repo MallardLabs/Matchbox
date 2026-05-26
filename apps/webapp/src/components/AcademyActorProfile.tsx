@@ -414,7 +414,7 @@ function EventTable({
             return (
               <tr
                 key={ev.id}
-                className={`border-t border-[var(--border)] hover:bg-[var(--surface-tertiary)] ${
+                className={`group border-t border-[var(--border)] hover:bg-[var(--surface-tertiary)] ${
                   delta?.flagged ? "bg-amber-500/5" : ""
                 }`}
                 title={
@@ -588,7 +588,46 @@ function fmtDuration(
   return `${days.toFixed(0)}d`
 }
 
-function renderAmount(ev: MezoActivityItem): string {
+function vePowerAt(
+  amountWad: bigint,
+  durationSec: bigint | undefined,
+  isPermanent: boolean | undefined,
+): bigint {
+  if (amountWad <= 0n) return 0n
+  const dur = isPermanent ? MAXTIME_SEC : (durationSec ?? 0n)
+  const capped = dur > MAXTIME_SEC ? MAXTIME_SEC : dur
+  if (capped <= 0n) return 0n
+  return (amountWad * capped) / MAXTIME_SEC
+}
+
+// Two-line cell where the duration jump (top) slides up on row-hover to
+// reveal the ve-power jump (bottom). Relies on the parent <tr> carrying
+// the `group` class so the swap fires on row hover, not just on the cell.
+function HoverSwap({
+  front,
+  back,
+  title,
+}: {
+  front: string
+  back: string
+  title?: string
+}) {
+  return (
+    <span
+      className="relative inline-block h-4 overflow-hidden align-middle"
+      title={title}
+    >
+      <span className="block transition-transform duration-150 ease-out group-hover:-translate-y-4">
+        <span className="block h-4 leading-4">{front}</span>
+        <span className="block h-4 leading-4 text-[var(--content-secondary)]">
+          {back}
+        </span>
+      </span>
+    </span>
+  )
+}
+
+function renderAmount(ev: MezoActivityItem): React.ReactNode {
   if (ev.actionType === "boostVote" || ev.actionType === "boostAbstain") {
     if (ev.weight === undefined) return "—"
     return fmtWadCompact(ev.weight)
@@ -603,7 +642,25 @@ function renderAmount(ev: MezoActivityItem): string {
   if (showDurationJump && ev.prevDuration !== undefined) {
     const before = fmtDuration(ev.prevDuration, ev.prevIsPermanent)
     const after = fmtDuration(ev.postDuration, ev.postIsPermanent)
-    return `${before} → ${after}`
+    const durationLabel = `${before} → ${after}`
+    // Show the source amount's ve-power before/after. For merges this
+    // captures the source-extension piece only (dest-side extension is
+    // shown in the Δve column). For pure extensions / made-permanent the
+    // amount is unchanged so this is the full ve-power jump.
+    const veAmount = ev.prevAmount ?? 0n
+    if (veAmount > 0n && ev.postDuration !== undefined) {
+      const preVe = vePowerAt(veAmount, ev.prevDuration, ev.prevIsPermanent)
+      const postVe = vePowerAt(veAmount, ev.postDuration, ev.postIsPermanent)
+      const veLabel = `${fmtWadCompact(preVe)} → ${fmtWadCompact(postVe)}`
+      return (
+        <HoverSwap
+          front={durationLabel}
+          back={veLabel}
+          title={`Duration: ${durationLabel}\nve-power on ${fmtWadCompact(veAmount)} MEZO: ${veLabel}`}
+        />
+      )
+    }
+    return durationLabel
   }
   if (
     ev.actionType === "lockCreated" ||
