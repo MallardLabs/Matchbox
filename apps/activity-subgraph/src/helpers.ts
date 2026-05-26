@@ -68,7 +68,7 @@ export const PCV = "PCV"
 
 export const ZERO = BigInt.fromI32(0)
 export const ONE = BigInt.fromI32(1)
-const WEEK = BigInt.fromI32(604800)
+export const WEEK = BigInt.fromI32(604800)
 // 4 years in seconds — the ve-power saturation cap. Permanent locks are
 // modelled as MAXTIME for the duration field.
 export const MAXTIME = BigInt.fromI32(4 * 365 * 86400)

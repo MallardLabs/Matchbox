@@ -27,6 +27,7 @@ import {
   parseMergeArgs,
   remainingDuration,
   saveActivity,
+  WEEK,
   ZERO,
   UNKNOWN,
   VOTING_ESCROW,
@@ -216,6 +217,14 @@ export function handleUnlockPermanent(event: UnlockPermanent): void {
 
   lock.owner = event.params._owner
   lock.isPermanent = false
+  // Velodrome-style veNFTs reset `locked.end = ((blockTs + MAXTIME) / WEEK) *
+  // WEEK` when a permanent lock is unlocked — i.e. the NFT immediately has
+  // ~4 years remaining again. The UnlockPermanent event doesn't include the
+  // new end timestamp, so we reconstruct it here. Without this, lock.unlockAt
+  // keeps its stale "permanent sentinel" (0) and any subsequent event sees
+  // prevDuration = 0, which makes a quick `unlockPermanent → lockPermanent`
+  // round-trip earn the lock's full ve-power as if it were a fresh extension.
+  lock.unlockAt = blockTs.plus(MAXTIME).div(WEEK).times(WEEK)
   lock.activityCount = lock.activityCount.plus(ONE)
   lock.save()
 
