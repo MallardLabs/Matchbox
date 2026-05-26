@@ -71,16 +71,23 @@ export default function AcademyLeaderboard({
   const [sortKey, setSortKey] = useState<SortKey>("points")
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc")
   const [limit, setLimit] = useState(50)
+  const [search, setSearch] = useState("")
 
   const total = useMemo(
     () => rows.reduce((acc, r) => acc + r.pointsWad, 0n),
     [rows],
   )
 
+  const filteredRows = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    if (!q) return rows
+    return rows.filter((r) => r.actor.toLowerCase().includes(q))
+  }, [rows, search])
+
   const sorted = useMemo(() => {
     const cmpBigint = (a: bigint, b: bigint) => (a === b ? 0 : a > b ? 1 : -1)
     const cmpNumber = (a: number, b: number) => a - b
-    const arr = [...rows].sort((a, b) => {
+    const arr = [...filteredRows].sort((a, b) => {
       let diff = 0
       switch (sortKey) {
         case "points":
@@ -108,7 +115,7 @@ export default function AcademyLeaderboard({
       return sortDir === "desc" ? -diff : diff
     })
     return arr
-  }, [rows, sortKey, sortDir])
+  }, [filteredRows, sortKey, sortDir])
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -196,10 +203,37 @@ export default function AcademyLeaderboard({
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-[var(--content-secondary)]">
         <span>
-          {rows.length.toLocaleString()} actor{rows.length === 1 ? "" : "s"} · Σ
-          budget {fmtMezo(budgetMezoWad)} MEZO
+          {search.trim()
+            ? `${filteredRows.length.toLocaleString()} / ${rows.length.toLocaleString()} actor${
+                rows.length === 1 ? "" : "s"
+              } (filtered)`
+            : `${rows.length.toLocaleString()} actor${
+                rows.length === 1 ? "" : "s"
+              }`}{" "}
+          · Σ budget {fmtMezo(budgetMezoWad)} MEZO
         </span>
         <div className="flex items-center gap-2">
+          <div className="relative">
+            <input
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search address 0x…"
+              spellCheck={false}
+              autoComplete="off"
+              className="w-56 rounded border border-[var(--border)] bg-[var(--surface-tertiary)] px-2 py-0.5 font-mono text-[11px] text-[var(--content-primary)] placeholder:text-[var(--content-tertiary)] focus:border-[#F7931A] focus:outline-none"
+            />
+            {search ? (
+              <button
+                type="button"
+                onClick={() => setSearch("")}
+                aria-label="Clear search"
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[var(--content-tertiary)] hover:text-[#F7931A]"
+              >
+                ×
+              </button>
+            ) : null}
+          </div>
           <label className="flex items-center gap-1">
             Show
             <select
@@ -217,6 +251,11 @@ export default function AcademyLeaderboard({
             type="button"
             onClick={exportCsv}
             className="rounded border border-[var(--border)] px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-[var(--content-secondary)] hover:text-[#F7931A]"
+            title={
+              search.trim()
+                ? "Exports only the filtered rows"
+                : "Exports all rows in the current sort order"
+            }
           >
             Export CSV
           </button>
@@ -262,6 +301,20 @@ export default function AcademyLeaderboard({
               </tr>
             </thead>
             <tbody>
+              {sorted.length === 0 && search.trim() ? (
+                <tr>
+                  <td
+                    colSpan={11}
+                    className="px-3 py-4 text-center text-[11px] text-[var(--content-tertiary)]"
+                  >
+                    No actors match{" "}
+                    <span className="font-mono text-[var(--content-secondary)]">
+                      {search}
+                    </span>
+                    .
+                  </td>
+                </tr>
+              ) : null}
               {sorted.slice(0, limit).map((row, i) => (
                 <tr
                   key={row.actor}

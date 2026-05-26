@@ -7,6 +7,7 @@ import type {
 } from "@/types/mezoActivity"
 import { CHAIN_ID } from "@repo/shared/contracts"
 import { useQuery } from "@tanstack/react-query"
+import { useCallback, useRef, useState } from "react"
 
 // The simulator needs two different fetches:
 //
@@ -129,6 +130,30 @@ export type AcademyData = {
   truncatedVoteChunks: number
 }
 
+// Live counters surfaced to the UI while the queryFn is running. `phase`
+// drives the progress bar's label: `idle` before kickoff, `locks` during the
+// lock-chunk loop, `votes` during the vote-chunk loop, `done` when finished.
+// `totalLockChunks` is exact; `voteChunksDone` is unbounded (we stop the
+// vote loop only when we hit consecutive empties) so we render an
+// indeterminate bar during the vote phase.
+export type FetchProgress = {
+  phase: "idle" | "locks" | "votes" | "done"
+  lockEventsFetched: number
+  voteEventsFetched: number
+  lockChunksDone: number
+  voteChunksDone: number
+  totalLockChunks: number
+}
+
+const INITIAL_PROGRESS: FetchProgress = {
+  phase: "idle",
+  lockEventsFetched: 0,
+  voteEventsFetched: 0,
+  lockChunksDone: 0,
+  voteChunksDone: 0,
+  totalLockChunks: 0,
+}
+
 export function useAcademyActivity({
   fromTimestamp,
   toTimestamp,
@@ -149,7 +174,25 @@ export function useAcademyActivity({
   const { chainId, isNetworkReady } = useNetwork()
   const network = NETWORK_BY_CHAIN[chainId]
 
-  return useQuery<AcademyData>({
+  // Live progress is held in React state so the UI can re-render between
+  // chunk fetches. We funnel the setter through a ref so the queryFn closure
+  // can call the latest setter without becoming a useQuery dep (which would
+  // re-trigger the query on every progress tick).
+  const [progress, setProgress] = useState<FetchProgress>(INITIAL_PROGRESS)
+  const updateProgress = useCallback(
+    (
+      patch: Partial<FetchProgress> | ((prev: FetchProgress) => FetchProgress),
+    ) => {
+      setProgress((prev) =>
+        typeof patch === "function" ? patch(prev) : { ...prev, ...patch },
+      )
+    },
+    [],
+  )
+  const progressRef = useRef(updateProgress)
+  progressRef.current = updateProgress
+
+  const query = useQuery<AcademyData>({
     queryKey: [
       "academy-activity",
       network,
@@ -176,6 +219,22 @@ export function useAcademyActivity({
       let truncatedLockChunks = 0
 
       const lockChunkSize = lockChunkWeeks * WEEK
+      const totalLockChunks = Math.max(
+        1,
+        Math.ceil((toTimestamp - fromTimestamp) / lockChunkSize),
+      )
+      // Reset counters at the start of every fresh fetch so a re-run (range
+      // change, network swap) starts from zero rather than continuing the
+      // previous run's totals.
+      progressRef.current({
+        phase: "locks",
+        lockEventsFetched: 0,
+        voteEventsFetched: 0,
+        lockChunksDone: 0,
+        voteChunksDone: 0,
+        totalLockChunks,
+      })
+
       let lockCursor = fromTimestamp
       while (lockCursor < toTimestamp) {
         const chunkTo = Math.min(lockCursor + lockChunkSize, toTimestamp)
@@ -196,6 +255,11 @@ export function useAcademyActivity({
         }
         if (chunk.truncated) truncatedLockChunks += 1
         lockCursor = chunkTo
+        progressRef.current((prev) => ({
+          ...prev,
+          lockEventsFetched: lockEvents.length,
+          lockChunksDone: prev.lockChunksDone + 1,
+        }))
       }
 
       const voteEvents: MezoActivityItem[] = []
@@ -210,6 +274,7 @@ export function useAcademyActivity({
       )
       let voteEnd = toTimestamp
       let oldestSeen: number | null = null
+      progressRef.current({ phase: "votes" })
       while (voteEnd > hardFloor) {
         const chunkFrom = Math.max(voteEnd - voteChunkSize, hardFloor)
         // eslint-disable-next-line no-await-in-loop
@@ -239,8 +304,14 @@ export function useAcademyActivity({
           }
         }
         voteEnd = chunkFrom
+        progressRef.current((prev) => ({
+          ...prev,
+          voteEventsFetched: voteEvents.length,
+          voteChunksDone: prev.voteChunksDone + 1,
+        }))
       }
 
+      progressRef.current({ phase: "done" })
       return {
         lockEvents,
         voteEvents,
@@ -252,4 +323,6 @@ export function useAcademyActivity({
       }
     },
   })
+
+  return { ...query, progress }
 }

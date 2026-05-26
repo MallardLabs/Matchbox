@@ -85,7 +85,7 @@ export default function AcademyPage() {
       />
 
       {activity.isLoading ? (
-        <LoadingCard epochs={epochs.length} />
+        <LoadingCard epochs={epochs.length} progress={activity.progress} />
       ) : activity.isError ? (
         <ErrorCard error={activity.error as Error | null} />
       ) : (
@@ -394,10 +394,78 @@ function ChartTabButton({
 // Loading / error states
 // ─────────────────────────────────────────────────────────────────────────────
 
-function LoadingCard({ epochs }: { epochs: number }) {
+function LoadingCard({
+  epochs,
+  progress,
+}: {
+  epochs: number
+  progress: ReturnType<typeof useAcademySim>["activity"]["progress"]
+}) {
+  const phaseLabel = (() => {
+    if (progress.phase === "locks") return "Fetching lock-track events…"
+    if (progress.phase === "votes") return "Fetching vote-track events…"
+    if (progress.phase === "done") return "Indexing complete · finalising…"
+    return `Fetching events across ${epochs} epoch${epochs === 1 ? "" : "s"}…`
+  })()
+
+  const totalEvents = progress.lockEventsFetched + progress.voteEventsFetched
+  // Lock progress is exact (we know totalLockChunks up front). Vote progress
+  // is open-ended (we stop only when we hit consecutive empties), so the bar
+  // shows lock-phase as a real percentage and falls back to indeterminate
+  // shine during the vote phase.
+  const lockPct =
+    progress.totalLockChunks > 0
+      ? Math.min(
+          100,
+          (progress.lockChunksDone / progress.totalLockChunks) * 100,
+        )
+      : 0
+  const isLocksPhase = progress.phase === "locks"
+  const isVotesPhase = progress.phase === "votes"
+  const fillPct = isLocksPhase ? lockPct : 100
+
   return (
-    <div className="rounded border border-[var(--border)] bg-[var(--surface-tertiary)] px-3 py-12 text-center text-sm text-[var(--content-secondary)]">
-      Fetching events across {epochs} epoch{epochs === 1 ? "" : "s"}…
+    <div className="rounded border border-[var(--border)] bg-[var(--surface-tertiary)] px-4 py-5">
+      <div className="mb-2 flex items-baseline justify-between gap-3">
+        <div className="text-sm text-[var(--content-secondary)]">
+          {phaseLabel}
+        </div>
+        <div className="font-mono text-xs text-[var(--content-primary)]">
+          <span className="text-[#F7931A]">{totalEvents.toLocaleString()}</span>{" "}
+          event{totalEvents === 1 ? "" : "s"}
+        </div>
+      </div>
+
+      {/* Track */}
+      <div className="relative h-2.5 w-full overflow-hidden rounded-full bg-[var(--surface-primary)] ring-1 ring-inset ring-[var(--border)]">
+        {/* Fill: deterministic % during the lock phase, full-width with
+            indeterminate shine during the vote phase. */}
+        <div
+          className="relative h-full rounded-full bg-[#F7931A] transition-[width] duration-300 ease-out"
+          style={{ width: `${fillPct}%` }}
+        >
+          {(isLocksPhase || isVotesPhase) && (
+            <div className="academy-fetch-shine absolute inset-0 rounded-full" />
+          )}
+        </div>
+      </div>
+
+      <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-[var(--content-tertiary)]">
+        <span>
+          Locks:{" "}
+          <span className="font-mono text-[var(--content-secondary)]">
+            {progress.lockEventsFetched.toLocaleString()}
+          </span>{" "}
+          ({progress.lockChunksDone}/{progress.totalLockChunks || "?"} chunks)
+        </span>
+        <span>
+          Votes:{" "}
+          <span className="font-mono text-[var(--content-secondary)]">
+            {progress.voteEventsFetched.toLocaleString()}
+          </span>{" "}
+          ({progress.voteChunksDone} chunks)
+        </span>
+      </div>
     </div>
   )
 }

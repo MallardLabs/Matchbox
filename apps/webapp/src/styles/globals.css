@@ -250,6 +250,38 @@
     }
   }
 
+  /* Indeterminate progress bar variant for the Academy fetch loader. Reuses
+     the same moving-shine animation as .optimal-vemezo-shine, but tuned for
+     a wider/flatter pill (no inner brightness gradient on top) so it reads
+     as an in-progress state rather than a "you hit the cap" celebration. */
+  .academy-fetch-shine {
+    overflow: hidden;
+  }
+  .academy-fetch-shine::after {
+    content: "";
+    position: absolute;
+    pointer-events: none;
+    border-radius: inherit;
+    inset: 0;
+    width: 42%;
+    background: linear-gradient(
+      100deg,
+      transparent 0%,
+      rgba(255, 255, 255, 0.06) 38%,
+      rgba(255, 255, 255, 0.55) 50%,
+      rgba(255, 255, 255, 0.06) 62%,
+      transparent 100%
+    );
+    animation: optimal-vemezo-shine 2.2s ease-in-out infinite;
+    transform: translateX(-160%) skewX(-18deg);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .academy-fetch-shine::after {
+      animation: none;
+      opacity: 0;
+    }
+  }
+
   /* Status indicators */
   .status-dot {
     @apply w-2 h-2 rounded-full;
