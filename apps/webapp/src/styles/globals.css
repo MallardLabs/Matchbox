@@ -263,16 +263,16 @@
     pointer-events: none;
     border-radius: inherit;
     inset: 0;
-    width: 60%;
+    width: 80%;
     background: linear-gradient(
       100deg,
       transparent 0%,
-      rgba(255, 255, 255, 0.06) 32%,
-      rgba(255, 255, 255, 0.58) 50%,
-      rgba(255, 255, 255, 0.06) 68%,
+      rgba(255, 255, 255, 0.06) 28%,
+      rgba(255, 255, 255, 0.6) 50%,
+      rgba(255, 255, 255, 0.06) 72%,
       transparent 100%
     );
-    animation: optimal-vemezo-shine 3.6s ease-in-out infinite;
+    animation: optimal-vemezo-shine 6s ease-in-out infinite;
     transform: translateX(-160%) skewX(-18deg);
   }
   @media (prefers-reduced-motion: reduce) {

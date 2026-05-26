@@ -268,7 +268,10 @@ export function useAcademyActivity({
       )
       // Initial pessimistic upper bound — the most chunks we'd scan if the
       // subgraph had a vote event all the way back at the 3-year hardFloor.
-      // Refined below by the pre-flight oldest-event query.
+      // We add `voteEmptyChunkStopAfter` to account for the trailing empty
+      // chunks the loop scans BEFORE deciding to stop (otherwise the bar
+      // hits 100% while the loop is still doing its empty-chunk grace
+      // window and the events counter keeps ticking).
       const maxVoteChunks = Math.max(
         1,
         Math.ceil((toTimestamp - hardFloor) / voteChunkSize),
@@ -298,9 +301,14 @@ export function useAcademyActivity({
       }).then((oldest) => {
         if (oldest === null) return
         const span = Math.max(0, toTimestamp - oldest)
+        // Real chunks executed ≈ chunks-with-data + the empty-stop grace
+        // window the loop scans before deciding nothing's left. Without the
+        // +empty term the bar hits 100% while the loop is still scanning
+        // those trailing empty chunks and the events counter keeps ticking.
+        const chunksWithData = Math.max(1, Math.ceil(span / voteChunkSize))
         const refined = Math.min(
           maxVoteChunks,
-          Math.max(1, Math.ceil(span / voteChunkSize)),
+          chunksWithData + voteEmptyChunkStopAfter,
         )
         progressRef.current((prev) => ({
           ...prev,
