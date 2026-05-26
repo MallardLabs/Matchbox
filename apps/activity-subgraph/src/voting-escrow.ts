@@ -3,6 +3,7 @@ import { LockPosition } from "../generated/schema"
 import {
   Deposit,
   LockPermanent,
+  Merge,
   Transfer,
   UnlockPermanent,
   UpdateBoost,
@@ -12,8 +13,6 @@ import {
   baseActivity,
   getOrCreateAccount,
   getOrCreateLock,
-  isMergeTx,
-  lockId,
   LOCK_AMOUNT_INCREASED,
   LOCK_CREATED,
   LOCK_EXTENDED,
@@ -24,7 +23,6 @@ import {
   LOCK_WITHDRAWN,
   MAXTIME,
   ONE,
-  parseMergeArgs,
   remainingDuration,
   saveActivity,
   WEEK,
@@ -86,43 +84,17 @@ export function handleVotingEscrowDeposit(event: Deposit): void {
 
   // Snapshot the destination's pre-event state for the activity's prev*
   // fields. For LOCK_CREATED the prev state is zero (token didn't exist).
-  let prev: LockSnapshot =
+  const prev: LockSnapshot =
     actionType == LOCK_CREATED ? zeroSnapshot() : snapshotLock(lock, blockTs)
 
-  let isMergeDest = false
-  let mergeSourceId: BigInt = ZERO
-  let mergeDestPrev: LockSnapshot = zeroSnapshot()
-  const merge = parseMergeArgs(event.transaction.input)
-  if (
-    merge !== null &&
-    actionType != LOCK_CREATED &&
-    actionType != LOCK_EXTENDED
-  ) {
-    const destArg = merge[1]
-    if (destArg.equals(event.params.tokenId)) {
-      // Re-attribute to LOCK_MERGED. The source NFT's pre-merge state
-      // becomes the activity's prev* (this is the amount/duration whose
-      // ve-power the user is effectively extending). The destination's
-      // pre-state moves to mergeDestPrev* so the simulator can also credit
-      // any duration delta on the dest's existing amount when the source's
-      // end is later than the dest's.
-      isMergeDest = true
-      actionType = LOCK_MERGED
-      mergeSourceId = merge[0]
-      mergeDestPrev = prev
-      const sourceLock = LockPosition.load(
-        lockId(event.address, mergeSourceId),
-      )
-      prev = sourceLock !== null ? snapshotLock(sourceLock, blockTs) : zeroSnapshot()
-    }
-  }
+  // Mezo's veMEZO does NOT route merges through Deposit — merge() emits a
+  // dedicated `Merge` event handled by handleMerge below. So unlike
+  // Velodrome v2, we don't need to sniff merge() calldata here.
 
   // Apply mutations to the destination lock so its post-state reflects this
   // event. `event.params.value` is the AMOUNT BEING ADDED (delta) in Curve-
-  // style escrows: full create amount for CREATE_LOCK, source.amount for
-  // MERGE_TYPE, added delta for INCREASE_LOCK_AMOUNT, and 0 for
-  // INCREASE_UNLOCK_TIME. We accumulate it into lock.amount instead of
-  // overwriting so the entity tracks the true running total.
+  // style escrows: full create amount for CREATE_LOCK, added delta for
+  // INCREASE_LOCK_AMOUNT, and 0 for INCREASE_UNLOCK_TIME.
   if (actionType == LOCK_CREATED) {
     lock.amount = event.params.value
     lock.createdAt = blockTs
@@ -167,13 +139,6 @@ export function handleVotingEscrowDeposit(event: Deposit): void {
   activity.postAmount = post.amount
   activity.postDuration = post.duration
   activity.postIsPermanent = post.isPermanent
-  if (isMergeDest) {
-    activity.mergeSourceTokenId = mergeSourceId
-    activity.mergeDestTokenId = event.params.tokenId
-    activity.mergeDestPrevAmount = mergeDestPrev.amount
-    activity.mergeDestPrevDuration = mergeDestPrev.duration
-    activity.mergeDestPrevIsPermanent = mergeDestPrev.isPermanent
-  }
   saveActivity(activity)
 
   const account = getOrCreateAccount(event.params.provider, blockTs)
@@ -181,6 +146,79 @@ export function handleVotingEscrowDeposit(event: Deposit): void {
     account.lockCount = account.lockCount.plus(ONE)
   }
   account.save()
+}
+
+export function handleMerge(event: Merge): void {
+  // Mezo's veMEZO emits a dedicated Merge event (rather than Velodrome's
+  // Deposit + Withdraw pattern). Params describe the full transition:
+  //   _sender      = msg.sender (the NFT owner doing the merge)
+  //   _from / _to  = source / destination tokenIds
+  //   _amountFrom  = source's pre-merge amount
+  //   _amountTo    = destination's pre-merge amount
+  //   _amountFinal = destination's post-merge amount (== from + to)
+  //   _locktime    = destination's new unlockAt (0 when dest is permanent)
+  //   _ts          = block.timestamp
+  //
+  // We do NOT receive a separate Deposit or Withdraw for this tx, so all
+  // entity mutations must happen here.
+
+  const blockTs = event.block.timestamp
+  const fromTokenId = event.params._from
+  const toTokenId = event.params._to
+
+  // Snapshot source pre-burn.
+  const sourceLock = getOrCreateLock(event.address, fromTokenId)
+  const sourcePrev = snapshotLock(sourceLock, blockTs)
+
+  // Snapshot destination pre-merge.
+  const destLock = getOrCreateLock(event.address, toTokenId)
+  const destPrev = snapshotLock(destLock, blockTs)
+
+  // Update destination with the merged state. The contract preserves the
+  // destination's isPermanent flag (you can't merge into a non-permanent
+  // and have it become permanent via merge alone). For non-permanent
+  // destinations the new unlockAt is max(source.end, dest.end), which the
+  // contract surfaces directly as _locktime.
+  destLock.amount = event.params._amountFinal
+  destLock.unlockAt = event.params._locktime
+  destLock.activityCount = destLock.activityCount.plus(ONE)
+  destLock.save()
+
+  const destPost = snapshotLock(destLock, blockTs)
+
+  // Mark source as merged. The contract burns the source NFT (Transfer to
+  // 0x0) but does NOT emit Withdraw, so the source's amount/unlockAt are
+  // already stale; we just flag them. Preserve the historical amount so
+  // downstream analytics can still attribute the absorbed value.
+  sourceLock.isMerged = true
+  sourceLock.mergedIntoTokenId = toTokenId
+  sourceLock.mergedAt = blockTs
+  sourceLock.activityCount = sourceLock.activityCount.plus(ONE)
+  sourceLock.save()
+
+  // Emit the LOCK_MERGED activity on the destination tokenId. prev*/post*
+  // describe the SOURCE NFT's transition (its amount × prevDur → postDur),
+  // which is the half of the merge that the simulator's source-extension
+  // credit reads. mergeDestPrev* captures the destination's pre-merge
+  // state so the simulator can also credit dest-side extension when the
+  // source's end pushes the destination further out.
+  const activity = baseActivity(event, LOCK_MERGED, UNKNOWN, VOTING_ESCROW)
+  activity.actor = event.params._sender
+  activity.tokenId = toTokenId
+  activity.amount = event.params._amountFrom
+  activity.duration = destPost.duration
+  activity.prevAmount = sourcePrev.amount
+  activity.prevDuration = sourcePrev.duration
+  activity.prevIsPermanent = sourcePrev.isPermanent
+  activity.postAmount = destPost.amount
+  activity.postDuration = destPost.duration
+  activity.postIsPermanent = destPost.isPermanent
+  activity.mergeSourceTokenId = fromTokenId
+  activity.mergeDestTokenId = toTokenId
+  activity.mergeDestPrevAmount = destPrev.amount
+  activity.mergeDestPrevDuration = destPrev.duration
+  activity.mergeDestPrevIsPermanent = destPrev.isPermanent
+  saveActivity(activity)
 }
 
 export function handleLockPermanent(event: LockPermanent): void {
@@ -252,24 +290,10 @@ export function handleWithdraw(event: Withdraw): void {
   const lock = getOrCreateLock(event.address, event.params.tokenId)
   const blockTs = event.block.timestamp
 
-  // Mezo's merge(from, to) burns the source NFT — depending on the contract
-  // version this may or may not emit Withdraw. If we see a Withdraw inside a
-  // merge tx, treat it as the bookkeeping side of the merge: mark the lock
-  // as merged but preserve its pre-merge amount/unlockAt/isPermanent so the
-  // destination's Deposit handler (firing later in the same tx) can read
-  // them via LockPosition.load. We also skip emitting LOCK_WITHDRAWN so it
-  // doesn't appear in the user's activity stream as a real exit.
-  if (isMergeTx(event.transaction.input)) {
-    const merge = parseMergeArgs(event.transaction.input)
-    lock.isMerged = true
-    if (merge !== null) {
-      lock.mergedIntoTokenId = merge[1]
-    }
-    lock.mergedAt = blockTs
-    lock.activityCount = lock.activityCount.plus(ONE)
-    lock.save()
-    return
-  }
+  // Mezo's veMEZO does not emit Withdraw during merge() — the source NFT is
+  // burned via _burn (Transfer to 0x0) and the merge bookkeeping happens in
+  // the dedicated Merge event (see handleMerge). So any Withdraw we see here
+  // is a real user-initiated exit.
 
   const prev = snapshotLock(lock, blockTs)
 

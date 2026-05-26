@@ -99,13 +99,6 @@ export function baseActivity(
 export const POKE_SELECTOR = "0x32145f90"
 export const POKE_BOOST_SELECTOR = "0x673bbc86"
 export const POKE_BOOSTS_SELECTOR = "0xd3672ab2"
-// Selector for IVotingEscrow.merge(uint256 _from, uint256 _to). Curve/Velo
-// veNFT contracts burn `_from` and add its amount + extended duration to `_to`
-// in a single tx, emitting Withdraw + Transfer(→0x0) + Deposit. We detect the
-// merge by tx.input selector so we can attribute the destination's Deposit as
-// LOCK_MERGED rather than a fresh LOCK_AMOUNT_INCREASED, which would double-
-// count points the user already earned when they first created `_from`.
-export const MERGE_SELECTOR = "0xd1c2babb"
 
 export function detectPokeMethod(input: Bytes): string | null {
   if (input.length < 4) return null
@@ -114,26 +107,6 @@ export function detectPokeMethod(input: Bytes): string | null {
   if (selector == POKE_BOOST_SELECTOR) return "pokeBoost"
   if (selector == POKE_BOOSTS_SELECTOR) return "pokeBoosts"
   return null
-}
-
-export function isMergeTx(input: Bytes): boolean {
-  if (input.length < 4) return false
-  const selector = input.toHexString().slice(0, 10).toLowerCase()
-  return selector == MERGE_SELECTOR
-}
-
-// Decode the two uint256 args of merge(_from, _to). Returns [from, to] or
-// null if the input doesn't match a merge call.
-export function parseMergeArgs(input: Bytes): BigInt[] | null {
-  if (!isMergeTx(input)) return null
-  if (input.length < 68) return null
-  // Strip the 4-byte selector, decode the remaining 64 bytes as (uint256,uint256).
-  const payload = Bytes.fromUint8Array(input.subarray(4))
-  const decoded = ethereum.decode("(uint256,uint256)", payload)
-  if (decoded == null) return null
-  const tuple = decoded.toTuple()
-  const out: BigInt[] = [tuple[0].toBigInt(), tuple[1].toBigInt()]
-  return out
 }
 
 // Convert an absolute lock end timestamp into REMAINING seconds at the given

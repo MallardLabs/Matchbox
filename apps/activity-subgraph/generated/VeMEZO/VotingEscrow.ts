@@ -78,6 +78,52 @@ export class LockPermanent__Params {
   }
 }
 
+export class Merge extends ethereum.Event {
+  get params(): Merge__Params {
+    return new Merge__Params(this);
+  }
+}
+
+export class Merge__Params {
+  _event: Merge;
+
+  constructor(event: Merge) {
+    this._event = event;
+  }
+
+  get _sender(): Address {
+    return this._event.parameters[0].value.toAddress();
+  }
+
+  get _from(): BigInt {
+    return this._event.parameters[1].value.toBigInt();
+  }
+
+  get _to(): BigInt {
+    return this._event.parameters[2].value.toBigInt();
+  }
+
+  get _amountFrom(): BigInt {
+    return this._event.parameters[3].value.toBigInt();
+  }
+
+  get _amountTo(): BigInt {
+    return this._event.parameters[4].value.toBigInt();
+  }
+
+  get _amountFinal(): BigInt {
+    return this._event.parameters[5].value.toBigInt();
+  }
+
+  get _locktime(): BigInt {
+    return this._event.parameters[6].value.toBigInt();
+  }
+
+  get _ts(): BigInt {
+    return this._event.parameters[7].value.toBigInt();
+  }
+}
+
 export class UnlockPermanent extends ethereum.Event {
   get params(): UnlockPermanent__Params {
     return new UnlockPermanent__Params(this);
