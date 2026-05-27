@@ -111,6 +111,14 @@ const DEFAULT_TOKENS: Record<number, Token[]> = {
       decimals: 6,
       logoURI: "/token icons/mUSDT.svg",
     },
+    {
+      chainId: CHAIN_ID.mainnet,
+      address: getAddress("0x9d36F8f62347538440a212e9162f534f797542df"),
+      name: "Satoshi",
+      symbol: "SATS",
+      decimals: 18,
+      logoURI: "/token icons/Satoshi.svg",
+    },
   ],
 }
 
