@@ -105,7 +105,6 @@ export default function AcademyLeaderboard({
     }
   }, [walletAddress, rows])
 
-
   const total = useMemo(
     () => rows.reduce((acc, r) => acc + r.pointsWad, 0n),
     [rows],
@@ -341,7 +340,9 @@ export default function AcademyLeaderboard({
                     onClick={() => onSelectActor?.(userRowAndRank.row.actor)}
                   >
                     <td className="px-2 py-1 text-left font-mono text-[11px] text-brand font-bold">
-                      {userRowAndRank.isUnranked ? "—" : `#${userRowAndRank.rank}`}
+                      {userRowAndRank.isUnranked
+                        ? "—"
+                        : `#${userRowAndRank.rank}`}
                     </td>
                     <td className="px-2 py-1">
                       <div className="flex items-center gap-1">
@@ -394,7 +395,10 @@ export default function AcademyLeaderboard({
                   </tr>
                   {/* Visual separator row */}
                   <tr className="bg-[var(--surface-tertiary)] h-1 pointer-events-none">
-                    <td colSpan={11} className="p-0 border-y border-[var(--border)]" />
+                    <td
+                      colSpan={11}
+                      className="p-0 border-y border-[var(--border)]"
+                    />
                   </tr>
                 </>
               )}
@@ -413,7 +417,9 @@ export default function AcademyLeaderboard({
                 </tr>
               ) : null}
               {sorted.slice(0, limit).map((row, i) => {
-                const isMe = walletAddress && row.actor.toLowerCase() === walletAddress.toLowerCase()
+                const isMe =
+                  walletAddress &&
+                  row.actor.toLowerCase() === walletAddress.toLowerCase()
                 return (
                   <tr
                     key={row.actor}
@@ -433,84 +439,84 @@ export default function AcademyLeaderboard({
                     }
                     onClick={() => onSelectActor?.(row.actor)}
                   >
-                  <td className="px-2 py-1 text-left text-[11px] text-[var(--content-tertiary)]">
-                    {i + 1}
-                  </td>
-                  <td className="px-2 py-1 text-[var(--content-primary)]">
-                    <div className="flex items-center gap-1">
-                      <ClickableAddress
-                        address={row.actor}
-                        label={fmtAddr(row.actor)}
-                        className="text-[11px]"
-                        onLabelClick={onSelectActor}
-                        labelTitle="View actor profile for this range"
-                      />
-                      {row.fullyParticipated ? (
+                    <td className="px-2 py-1 text-left text-[11px] text-[var(--content-tertiary)]">
+                      {i + 1}
+                    </td>
+                    <td className="px-2 py-1 text-[var(--content-primary)]">
+                      <div className="flex items-center gap-1">
+                        <ClickableAddress
+                          address={row.actor}
+                          label={fmtAddr(row.actor)}
+                          className="text-[11px]"
+                          onLabelClick={onSelectActor}
+                          labelTitle="View actor profile for this range"
+                        />
+                        {row.fullyParticipated ? (
+                          <span
+                            className="rounded bg-[#F7931A]/15 px-1 text-[8px] font-bold uppercase text-[#F7931A]"
+                            title="Voted in every epoch of the range"
+                          >
+                            ★
+                          </span>
+                        ) : null}
+                        {row.flagged ? (
+                          <span
+                            className="text-[11px] text-[var(--content-secondary)]"
+                            title="Approximated — missing weight or prior-lock data"
+                          >
+                            ~
+                          </span>
+                        ) : null}
+                        {row.culledBelowFloor ? (
+                          <span
+                            className="rounded bg-[var(--surface-tertiary)] px-1 text-[8px] font-bold uppercase tracking-wider text-[var(--content-tertiary)]"
+                            title="Below the reward floor — share redistributed"
+                          >
+                            culled
+                          </span>
+                        ) : null}
+                      </div>
+                    </td>
+                    <td className="px-2 py-1 text-right font-mono text-[var(--content-primary)]">
+                      {fmtPoints(row.pointsWad)}
+                    </td>
+                    <td className="px-2 py-1 text-right font-mono text-[11px] text-[var(--content-secondary)]">
+                      {pointsShare(row, total).toFixed(2)}%
+                    </td>
+                    <td className="px-2 py-1 text-right font-mono text-[var(--content-primary)]">
+                      {fmtMezo(row.rewardMezoWad)}
+                    </td>
+                    <td className="px-2 py-1 text-right font-mono text-[var(--content-primary)]">
+                      {row.apr > 0
+                        ? `${row.apr.toLocaleString(undefined, { maximumFractionDigits: 1 })}%`
+                        : "—"}
+                    </td>
+                    <td className="px-2 py-1 text-right font-mono text-[11px] text-[var(--content-secondary)]">
+                      {fmtVePower(row.aprBasisWad)}
+                      {row.vePowerWad === 0n && row.aprBasisWad > 0n ? (
                         <span
-                          className="rounded bg-[#F7931A]/15 px-1 text-[8px] font-bold uppercase text-[#F7931A]"
-                          title="Voted in every epoch of the range"
+                          className="ml-1 text-[var(--content-tertiary)]"
+                          title="Average active vote weight across the selected epochs"
                         >
-                          ★
+                          avg vote
                         </span>
                       ) : null}
-                      {row.flagged ? (
-                        <span
-                          className="text-[11px] text-[var(--content-secondary)]"
-                          title="Approximated — missing weight or prior-lock data"
-                        >
-                          ~
-                        </span>
-                      ) : null}
-                      {row.culledBelowFloor ? (
-                        <span
-                          className="rounded bg-[var(--surface-tertiary)] px-1 text-[8px] font-bold uppercase tracking-wider text-[var(--content-tertiary)]"
-                          title="Below the reward floor — share redistributed"
-                        >
-                          culled
-                        </span>
-                      ) : null}
-                    </div>
-                  </td>
-                  <td className="px-2 py-1 text-right font-mono text-[var(--content-primary)]">
-                    {fmtPoints(row.pointsWad)}
-                  </td>
-                  <td className="px-2 py-1 text-right font-mono text-[11px] text-[var(--content-secondary)]">
-                    {pointsShare(row, total).toFixed(2)}%
-                  </td>
-                  <td className="px-2 py-1 text-right font-mono text-[var(--content-primary)]">
-                    {fmtMezo(row.rewardMezoWad)}
-                  </td>
-                  <td className="px-2 py-1 text-right font-mono text-[var(--content-primary)]">
-                    {row.apr > 0
-                      ? `${row.apr.toLocaleString(undefined, { maximumFractionDigits: 1 })}%`
-                      : "—"}
-                  </td>
-                  <td className="px-2 py-1 text-right font-mono text-[11px] text-[var(--content-secondary)]">
-                    {fmtVePower(row.aprBasisWad)}
-                    {row.vePowerWad === 0n && row.aprBasisWad > 0n ? (
-                      <span
-                        className="ml-1 text-[var(--content-tertiary)]"
-                        title="Average active vote weight across the selected epochs"
-                      >
-                        avg vote
-                      </span>
-                    ) : null}
-                  </td>
-                  <td className="px-2 py-1 text-right font-mono text-[11px] text-[var(--content-secondary)]">
-                    {row.newLockCount}
-                  </td>
-                  <td className="px-2 py-1 text-right font-mono text-[11px] text-[var(--content-secondary)]">
-                    {row.extensionCount}
-                  </td>
-                  <td className="px-2 py-1 text-right font-mono text-[11px] text-[var(--content-secondary)]">
-                    {row.boostCount}
-                  </td>
-                  <td className="px-2 py-1 text-right font-mono text-[11px] text-[var(--content-secondary)]">
-                    {row.activeEpochs}
-                  </td>
-                </tr>
-              )
-            })}
+                    </td>
+                    <td className="px-2 py-1 text-right font-mono text-[11px] text-[var(--content-secondary)]">
+                      {row.newLockCount}
+                    </td>
+                    <td className="px-2 py-1 text-right font-mono text-[11px] text-[var(--content-secondary)]">
+                      {row.extensionCount}
+                    </td>
+                    <td className="px-2 py-1 text-right font-mono text-[11px] text-[var(--content-secondary)]">
+                      {row.boostCount}
+                    </td>
+                    <td className="px-2 py-1 text-right font-mono text-[11px] text-[var(--content-secondary)]">
+                      {row.activeEpochs}
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>

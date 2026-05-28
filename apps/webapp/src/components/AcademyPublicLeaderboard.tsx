@@ -61,7 +61,6 @@ export default function AcademyPublicLeaderboard({
     }
   }, [walletAddress, rows])
 
-
   const total = useMemo(
     () => rows.reduce((acc, r) => acc + r.pointsWad, 0n),
     [rows],
@@ -234,7 +233,9 @@ export default function AcademyPublicLeaderboard({
                     onClick={() => onSelectActor?.(userRowAndRank.row.actor)}
                   >
                     <td className="px-4 py-3 text-left font-mono text-xs text-brand font-bold">
-                      {userRowAndRank.isUnranked ? "—" : `#${userRowAndRank.rank}`}
+                      {userRowAndRank.isUnranked
+                        ? "—"
+                        : `#${userRowAndRank.rank}`}
                     </td>
                     <td
                       className="px-4 py-3"
@@ -279,7 +280,10 @@ export default function AcademyPublicLeaderboard({
                   </tr>
                   {/* Visual separator row */}
                   <tr className="bg-[var(--surface-tertiary)] h-1.5 pointer-events-none">
-                    <td colSpan={8} className="p-0 border-y border-[var(--border)]" />
+                    <td
+                      colSpan={8}
+                      className="p-0 border-y border-[var(--border)]"
+                    />
                   </tr>
                 </>
               )}
@@ -298,7 +302,9 @@ export default function AcademyPublicLeaderboard({
                 </tr>
               ) : null}
               {sorted.slice(0, limit).map((row, i) => {
-                const isMe = walletAddress && row.actor.toLowerCase() === walletAddress.toLowerCase()
+                const isMe =
+                  walletAddress &&
+                  row.actor.toLowerCase() === walletAddress.toLowerCase()
                 return (
                   // biome-ignore lint/a11y/useKeyWithClickEvents: click row to select actor
                   <tr
@@ -313,58 +319,58 @@ export default function AcademyPublicLeaderboard({
                     <td className="px-4 py-3 text-left font-mono text-xs text-[var(--content-tertiary)]">
                       {i + 1}
                     </td>
-                  {/* biome-ignore lint/a11y/useKeyWithClickEvents: stop propagation of address clicks */}
-                  <td
-                    className="px-4 py-3"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <div className="flex items-center gap-1.5">
-                      <ClickableAddress
-                        address={row.actor}
-                        label={fmtAddr(row.actor)}
-                        className="font-semibold text-[var(--content-primary)] hover:text-[#F7931A] transition-colors"
-                        onLabelClick={onSelectActor}
-                        labelTitle="View actor profile"
-                      />
-                      {row.fullyParticipated ? (
-                        <span
-                          className="rounded bg-[#F7931A]/15 px-1.5 py-0.5 text-[9px] font-bold text-[#F7931A]"
-                          title="Fully participated: voted in every epoch"
-                        >
-                          ★
-                        </span>
-                      ) : null}
-                      {row.flagged ? (
-                        <span
-                          className="text-xs text-[var(--content-secondary)]"
-                          title="Approximated — missing weight or prior-lock data"
-                        >
-                          ~
-                        </span>
-                      ) : null}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-right font-mono font-semibold text-[var(--content-primary)]">
-                    {fmtPoints(row.pointsWad)}
-                  </td>
-                  <td className="px-4 py-3 text-right font-mono text-xs text-[var(--content-secondary)]">
-                    {pointsShare(row, total).toFixed(2)}%
-                  </td>
-                  <td className="px-4 py-3 text-right font-mono text-xs text-[var(--content-secondary)]">
-                    {row.newLockCount || "—"}
-                  </td>
-                  <td className="px-4 py-3 text-right font-mono text-xs text-[var(--content-secondary)]">
-                    {row.extensionCount || "—"}
-                  </td>
-                  <td className="px-4 py-3 text-right font-mono text-xs text-[var(--content-secondary)]">
-                    {row.boostCount || "—"}
-                  </td>
-                  <td className="px-4 py-3 text-right font-mono text-xs text-[var(--content-secondary)]">
-                    {row.activeEpochs}
-                  </td>
-                </tr>
-              )
-            })}
+                    {/* biome-ignore lint/a11y/useKeyWithClickEvents: stop propagation of address clicks */}
+                    <td
+                      className="px-4 py-3"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <ClickableAddress
+                          address={row.actor}
+                          label={fmtAddr(row.actor)}
+                          className="font-semibold text-[var(--content-primary)] hover:text-[#F7931A] transition-colors"
+                          onLabelClick={onSelectActor}
+                          labelTitle="View actor profile"
+                        />
+                        {row.fullyParticipated ? (
+                          <span
+                            className="rounded bg-[#F7931A]/15 px-1.5 py-0.5 text-[9px] font-bold text-[#F7931A]"
+                            title="Fully participated: voted in every epoch"
+                          >
+                            ★
+                          </span>
+                        ) : null}
+                        {row.flagged ? (
+                          <span
+                            className="text-xs text-[var(--content-secondary)]"
+                            title="Approximated — missing weight or prior-lock data"
+                          >
+                            ~
+                          </span>
+                        ) : null}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono font-semibold text-[var(--content-primary)]">
+                      {fmtPoints(row.pointsWad)}
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono text-xs text-[var(--content-secondary)]">
+                      {pointsShare(row, total).toFixed(2)}%
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono text-xs text-[var(--content-secondary)]">
+                      {row.newLockCount || "—"}
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono text-xs text-[var(--content-secondary)]">
+                      {row.extensionCount || "—"}
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono text-xs text-[var(--content-secondary)]">
+                      {row.boostCount || "—"}
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono text-xs text-[var(--content-secondary)]">
+                      {row.activeEpochs}
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>

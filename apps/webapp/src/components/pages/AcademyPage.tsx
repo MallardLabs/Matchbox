@@ -24,8 +24,6 @@ import type { SimResult } from "@/lib/academy/simulate"
 import { useState } from "react"
 import type { Address } from "viem"
 
-
-
 const RANGE_PRESETS: Array<{ label: string; weeks: number }> = [
   { label: "4 weeks", weeks: 4 },
   { label: "8 weeks", weeks: 8 },
@@ -174,16 +172,24 @@ function RangeBar({
           />
         </label>
         <div className="flex items-center gap-1">
-          {RANGE_PRESETS.map((p) => (
-            <button
-              key={p.weeks}
-              type="button"
-              onClick={() => onPreset(p.weeks)}
-              className="rounded border border-[var(--border)] px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-[var(--content-secondary)] hover:border-[#F7931A] hover:text-[#F7931A]"
-            >
-              {p.label}
-            </button>
-          ))}
+          {RANGE_PRESETS.map((p) => {
+            const isSelected =
+              Math.round((toTs - fromTs) / (7 * 24 * 60 * 60)) === p.weeks
+            return (
+              <button
+                key={p.weeks}
+                type="button"
+                onClick={() => onPreset(p.weeks)}
+                className={`rounded border px-2 py-1 font-mono text-[10px] uppercase tracking-wider transition-colors ${
+                  isSelected
+                    ? "border-[#F7931A] bg-[#F7931A]/15 text-[#F7931A]"
+                    : "border-[var(--border)] text-[var(--content-secondary)] hover:border-[#F7931A] hover:text-[#F7931A]"
+                }`}
+              >
+                {p.label}
+              </button>
+            )
+          })}
         </div>
       </div>
       <span className="text-[11px] text-[var(--content-secondary)]">

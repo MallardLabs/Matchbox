@@ -364,7 +364,11 @@ async function fetchExplorerActivity(
   if (options.actor) {
     const [actorItems, recipientItems] = await Promise.all([
       fetchExplorerActivityRaw({ ...options, recipient: undefined }),
-      fetchExplorerActivityRaw({ ...options, actor: undefined, recipient: options.actor }),
+      fetchExplorerActivityRaw({
+        ...options,
+        actor: undefined,
+        recipient: options.actor,
+      }),
     ])
 
     const merged = [...actorItems]

@@ -1,4 +1,5 @@
 import type { AcademyParams } from "@/lib/academy/simulate"
+import { useState } from "react"
 import { parseUnits } from "viem"
 
 type Props = {
@@ -94,8 +95,31 @@ function NumberField({
 }
 
 export default function AcademyKnobs({ params, onChange, onReset }: Props) {
-  const update = (patch: Partial<AcademyParams>) =>
+  const currentBudgetMezo = Math.round(wadToMezo(params.budgetMezoWad))
+  const [lastClickedPresetLabel, setLastClickedPresetLabel] = useState<
+    string | null
+  >(null)
+
+  const activePreset = SEMESTER_PRESETS.find(
+    (p) => p.label === lastClickedPresetLabel,
+  )
+  const isClickedPresetStillValid =
+    activePreset && activePreset.mezo === currentBudgetMezo
+
+  const activeLabel = isClickedPresetStillValid
+    ? lastClickedPresetLabel
+    : (SEMESTER_PRESETS.find((p) => p.mezo === currentBudgetMezo)?.label ??
+      null)
+
+  const update = (patch: Partial<AcademyParams>) => {
+    if (patch.budgetMezoWad !== undefined) {
+      const nextMezo = Math.round(wadToMezo(patch.budgetMezoWad))
+      if (activePreset && activePreset.mezo !== nextMezo) {
+        setLastClickedPresetLabel(null)
+      }
+    }
     onChange({ ...params, ...patch })
+  }
 
   return (
     <div className="flex flex-col gap-3">
@@ -104,21 +128,31 @@ export default function AcademyKnobs({ params, onChange, onReset }: Props) {
         hint="Total MEZO distributed across all participants this period. Allocation is proportional to each actor's points share."
       >
         <div className="flex flex-wrap gap-1.5">
-          {SEMESTER_PRESETS.map((preset) => (
-            <button
-              type="button"
-              key={preset.label}
-              onClick={() => update({ budgetMezoWad: mezoToWad(preset.mezo) })}
-              className="rounded bg-[var(--surface-tertiary)] px-2 py-1 text-xs font-semibold uppercase tracking-wider text-[var(--content-primary)] hover:bg-[var(--surface-secondary)]"
-            >
-              {preset.label}
-            </button>
-          ))}
+          {SEMESTER_PRESETS.map((preset) => {
+            const isActive = activeLabel === preset.label
+            return (
+              <button
+                type="button"
+                key={preset.label}
+                onClick={() => {
+                  setLastClickedPresetLabel(preset.label)
+                  update({ budgetMezoWad: mezoToWad(preset.mezo) })
+                }}
+                className={`rounded px-2 py-1 text-xs font-semibold uppercase tracking-wider transition-colors ${
+                  isActive
+                    ? "bg-[#F7931A]/15 text-[#F7931A] ring-1 ring-inset ring-[#F7931A]/30"
+                    : "bg-[var(--surface-tertiary)] text-[var(--content-primary)] hover:bg-[var(--surface-secondary)]"
+                }`}
+              >
+                {preset.label}
+              </button>
+            )
+          })}
         </div>
         <div className="mt-2">
           <NumberField
             label="Budget (MEZO)"
-            value={Math.round(wadToMezo(params.budgetMezoWad))}
+            value={currentBudgetMezo}
             step={100_000}
             min={0}
             onChange={(n) => update({ budgetMezoWad: mezoToWad(n) })}
@@ -204,7 +238,10 @@ export default function AcademyKnobs({ params, onChange, onReset }: Props) {
 
       <button
         type="button"
-        onClick={onReset}
+        onClick={() => {
+          setLastClickedPresetLabel(null)
+          onReset()
+        }}
         className="self-start rounded border border-[var(--border)] bg-[var(--surface-tertiary)] px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-[var(--content-secondary)] hover:bg-[var(--surface-secondary)] hover:text-[var(--content-primary)]"
       >
         Reset to defaults

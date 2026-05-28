@@ -1,8 +1,11 @@
 import { useNetwork } from "@/contexts/NetworkContext"
-import { type ActorProfile, computeActorProfile } from "@/lib/academy/actorProfile"
-import type { LeaderboardRow } from "@/lib/academy/simulate"
-import { BLACKLISTED_SYSTEM_ACTORS } from "@/lib/academy/blacklistedActors"
 import { useAcademyLeaderboard } from "@/hooks/useAcademyLeaderboard"
+import {
+  type ActorProfile,
+  computeActorProfile,
+} from "@/lib/academy/actorProfile"
+import { BLACKLISTED_SYSTEM_ACTORS } from "@/lib/academy/blacklistedActors"
+import type { LeaderboardRow } from "@/lib/academy/simulate"
 import { deserializeActivityItem } from "@/lib/mezoActivity/normalize"
 import { CHAIN_ID } from "@repo/shared/contracts"
 import { useQuery } from "@tanstack/react-query"
@@ -61,7 +64,9 @@ export function useAcademyActorProfile(actor: Address | null) {
       })
 
       const lower = actor.toLowerCase()
-      const row = leaderboardData?.rows.find((r) => r.actor.toLowerCase() === lower) ?? {
+      const row = leaderboardData?.rows.find(
+        (r) => r.actor.toLowerCase() === lower,
+      ) ?? {
         actor: actor,
         pointsWad: 0n,
         lockPointsWad: 0n,

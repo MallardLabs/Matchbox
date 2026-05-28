@@ -17,7 +17,6 @@ type Props = {
   onClose: () => void
 }
 
-
 function fmtPoints(wad: bigint): string {
   const value = Number(wad / 10n ** 12n) / 1e6
   return value.toLocaleString(undefined, { maximumFractionDigits: 2 })
@@ -140,188 +139,207 @@ export default function AcademyPublicActorProfile({
             <>
               {/* Counts */}
               <section className="grid grid-cols-2 gap-2 md:grid-cols-4">
-            <Stat label="New locks" value={String(profile.newLockCount)} />
-            <Stat label="Extensions" value={String(profile.extensionCount)} />
-            <Stat
-              label="Boost actions"
-              value={String(profile.boostActionCount)}
-            />
-            <Stat
-              label="Active epochs"
-              value={`${profile.activeEpochs} / ${profile.totalEpochs}`}
-              tone={
-                profile.boostActionCount > 0 && profile.activeEpochs === 0
-                  ? "warn"
-                  : "default"
-              }
-            />
-            {row ? (
-              <>
-                <Stat label="Points" value={fmtPoints(row.pointsWad)} />
-                <Stat label="Lock pts" value={fmtPoints(row.lockPointsWad)} />
+                <Stat label="New locks" value={String(profile.newLockCount)} />
                 <Stat
-                  label="Ext pts"
-                  value={fmtPoints(row.extensionPointsWad)}
+                  label="Extensions"
+                  value={String(profile.extensionCount)}
                 />
-                <Stat label="Vote pts" value={fmtPoints(row.votePointsWad)} />
-                {row.participationBonusWad > 0n ? (
-                  <Stat
-                    label="Bonus pts ★"
-                    value={fmtPoints(row.participationBonusWad)}
-                    tone="warn"
-                  />
-                ) : null}
-                <Stat label="ve-power" value={fmtWadCompact(row.vePowerWad)} />
                 <Stat
-                  label="Full participation"
-                  value={row.fullyParticipated ? "★ yes" : "no"}
+                  label="Boost actions"
+                  value={String(profile.boostActionCount)}
                 />
-              </>
-            ) : (
-              <div className="col-span-2 rounded border border-[var(--border)] bg-[var(--surface-tertiary)] px-2.5 py-2 text-[11px] text-[var(--content-secondary)] md:col-span-4">
-                Not on the leaderboard — this actor earned 0 points in the
-                selected window. The breakdown below explains why.
-              </div>
-            )}
-          </section>
+                <Stat
+                  label="Active epochs"
+                  value={`${profile.activeEpochs} / ${profile.totalEpochs}`}
+                  tone={
+                    profile.boostActionCount > 0 && profile.activeEpochs === 0
+                      ? "warn"
+                      : "default"
+                  }
+                />
+                {row ? (
+                  <>
+                    <Stat label="Points" value={fmtPoints(row.pointsWad)} />
+                    <Stat
+                      label="Lock pts"
+                      value={fmtPoints(row.lockPointsWad)}
+                    />
+                    <Stat
+                      label="Ext pts"
+                      value={fmtPoints(row.extensionPointsWad)}
+                    />
+                    <Stat
+                      label="Vote pts"
+                      value={fmtPoints(row.votePointsWad)}
+                    />
+                    {row.participationBonusWad > 0n ? (
+                      <Stat
+                        label="Bonus pts ★"
+                        value={fmtPoints(row.participationBonusWad)}
+                        tone="warn"
+                      />
+                    ) : null}
+                    <Stat
+                      label="ve-power"
+                      value={fmtWadCompact(row.vePowerWad)}
+                    />
+                    <Stat
+                      label="Full participation"
+                      value={row.fullyParticipated ? "★ yes" : "no"}
+                    />
+                  </>
+                ) : (
+                  <div className="col-span-2 rounded border border-[var(--border)] bg-[var(--surface-tertiary)] px-2.5 py-2 text-[11px] text-[var(--content-secondary)] md:col-span-4">
+                    Not on the leaderboard — this actor earned 0 points in the
+                    selected window. The breakdown below explains why.
+                  </div>
+                )}
+              </section>
 
-          {/* Diagnostics */}
-          {profile.diagnostics.length > 0 ? (
-            <section>
-              <h3 className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-[var(--content-primary)]">
-                Why these numbers
-              </h3>
-              <ul className="space-y-1 rounded border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-[11px] leading-snug text-amber-200">
-                {profile.diagnostics.map((d) => (
-                  <li key={d}>• {d}</li>
-                ))}
-              </ul>
-            </section>
-          ) : null}
-
-          {/* Per-epoch breakdown */}
-          <section>
-            <h3 className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-[var(--content-primary)]">
-              Epoch participation
-            </h3>
-            {profile.epochs.length === 0 ? (
-              <Empty>No epochs in this range.</Empty>
-            ) : (
-              <div className="overflow-hidden rounded border border-[var(--border)]">
-                <table className="w-full text-xs">
-                  <thead className="bg-[var(--surface-tertiary)] text-[10px] uppercase tracking-wider text-[var(--content-secondary)]">
-                    <tr>
-                      <th className="px-2 py-1.5 text-left">#</th>
-                      <th className="px-2 py-1.5 text-left">Epoch start</th>
-                      <th className="px-2 py-1.5 text-right">Active weight</th>
-                      <th className="px-2 py-1.5 text-right">Votes</th>
-                      <th className="px-2 py-1.5 text-right">New</th>
-                      <th className="px-2 py-1.5 text-right">Ext</th>
-                      <th className="px-2 py-1.5 text-right">Boosts (in-ep)</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {profile.epochs.map((slice, i) => {
-                      const active = slice.activeWeightWad > 0n
-                      const mismatch = slice.boostActionsAtEpoch > 0 && !active
-                      return (
-                        <tr
-                          key={slice.epochStart}
-                          className={`border-t border-[var(--border)] ${mismatch ? "bg-amber-500/5" : ""}`}
-                          title={
-                            mismatch
-                              ? "Boosted this epoch but no active weight at epoch end — boost was abstained or cleared before the epoch closed."
-                              : undefined
-                          }
-                        >
-                          <td className="px-2 py-1 text-left font-mono text-[10px] text-[var(--content-tertiary)]">
-                            {i + 1}
-                          </td>
-                          <td className="px-2 py-1 font-mono text-[11px] text-[var(--content-secondary)]">
-                            {fmtDate(slice.epochStart)}
-                          </td>
-                          <td className="px-2 py-1 text-right font-mono">
-                            {active ? (
-                              <span className="text-[var(--content-primary)]">
-                                {fmtWadCompact(slice.activeWeightWad)}
-                              </span>
-                            ) : (
-                              <span className="text-[var(--content-tertiary)]">
-                                —
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-2 py-1 text-right font-mono text-[11px] text-[var(--content-secondary)]">
-                            {slice.activeVotes.length}
-                          </td>
-                          <td className="px-2 py-1 text-right font-mono text-[11px] text-[var(--content-secondary)]">
-                            {slice.newLocksAtEpoch || ""}
-                          </td>
-                          <td className="px-2 py-1 text-right font-mono text-[11px] text-[var(--content-secondary)]">
-                            {slice.extensionsAtEpoch || ""}
-                          </td>
-                          <td className="px-2 py-1 text-right font-mono text-[11px] text-[var(--content-secondary)]">
-                            {slice.boostActionsAtEpoch || ""}
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </section>
-
-          {/* Lock events in range */}
-          <section>
-            <h3 className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-[var(--content-primary)]">
-              Lock / extension events in range ({profile.inRangeLocks.length})
-            </h3>
-            {profile.inRangeLocks.length === 0 ? (
-              <Empty>No lock or extension events in this range.</Empty>
-            ) : (
-              <EventTable
-                events={profile.inRangeLocks}
-                txUrl={txUrl}
-                lockDeltas={profile.lockDeltaByEventId}
-                weightExt={weightExt}
-              />
-            )}
-          </section>
-
-          {/* Boost events in range */}
-          <section>
-            <h3 className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-[var(--content-primary)]">
-              Boost actions in range ({profile.inRangeBoosts.length})
-            </h3>
-            {profile.inRangeBoosts.length === 0 ? (
-              <Empty>No boost or abstain events in this range.</Empty>
-            ) : (
-              <EventTable events={profile.inRangeBoosts} txUrl={txUrl} />
-            )}
-          </section>
-
-          {/* Pre-range sticky votes */}
-          {profile.preRangeBoosts.length > 0 ? (
-            <section>
-              <h3 className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-[var(--content-primary)]">
-                Pre-range votes ({profile.preRangeBoosts.length})
-              </h3>
-              <p className="mb-1 text-[11px] text-[var(--content-tertiary)]">
-                Votes placed before the window. Any still-active when the window
-                opens earn sticky points every epoch they remain active.
-              </p>
-              <EventTable
-                events={profile.preRangeBoosts.slice(-20)}
-                txUrl={txUrl}
-              />
-              {profile.preRangeBoosts.length > 20 ? (
-                <p className="mt-1 text-[10px] text-[var(--content-tertiary)]">
-                  showing latest 20 of {profile.preRangeBoosts.length}
-                </p>
+              {/* Diagnostics */}
+              {profile.diagnostics.length > 0 ? (
+                <section>
+                  <h3 className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-[var(--content-primary)]">
+                    Why these numbers
+                  </h3>
+                  <ul className="space-y-1 rounded border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-[11px] leading-snug text-amber-200">
+                    {profile.diagnostics.map((d) => (
+                      <li key={d}>• {d}</li>
+                    ))}
+                  </ul>
+                </section>
               ) : null}
-            </section>
-          ) : null}
+
+              {/* Per-epoch breakdown */}
+              <section>
+                <h3 className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-[var(--content-primary)]">
+                  Epoch participation
+                </h3>
+                {profile.epochs.length === 0 ? (
+                  <Empty>No epochs in this range.</Empty>
+                ) : (
+                  <div className="overflow-hidden rounded border border-[var(--border)]">
+                    <table className="w-full text-xs">
+                      <thead className="bg-[var(--surface-tertiary)] text-[10px] uppercase tracking-wider text-[var(--content-secondary)]">
+                        <tr>
+                          <th className="px-2 py-1.5 text-left">#</th>
+                          <th className="px-2 py-1.5 text-left">Epoch start</th>
+                          <th className="px-2 py-1.5 text-right">
+                            Active weight
+                          </th>
+                          <th className="px-2 py-1.5 text-right">Votes</th>
+                          <th className="px-2 py-1.5 text-right">New</th>
+                          <th className="px-2 py-1.5 text-right">Ext</th>
+                          <th className="px-2 py-1.5 text-right">
+                            Boosts (in-ep)
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {profile.epochs.map((slice, i) => {
+                          const active = slice.activeWeightWad > 0n
+                          const mismatch =
+                            slice.boostActionsAtEpoch > 0 && !active
+                          return (
+                            <tr
+                              key={slice.epochStart}
+                              className={`border-t border-[var(--border)] ${mismatch ? "bg-amber-500/5" : ""}`}
+                              title={
+                                mismatch
+                                  ? "Boosted this epoch but no active weight at epoch end — boost was abstained or cleared before the epoch closed."
+                                  : undefined
+                              }
+                            >
+                              <td className="px-2 py-1 text-left font-mono text-[10px] text-[var(--content-tertiary)]">
+                                {i + 1}
+                              </td>
+                              <td className="px-2 py-1 font-mono text-[11px] text-[var(--content-secondary)]">
+                                {fmtDate(slice.epochStart)}
+                              </td>
+                              <td className="px-2 py-1 text-right font-mono">
+                                {active ? (
+                                  <span className="text-[var(--content-primary)]">
+                                    {fmtWadCompact(slice.activeWeightWad)}
+                                  </span>
+                                ) : (
+                                  <span className="text-[var(--content-tertiary)]">
+                                    —
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-2 py-1 text-right font-mono text-[11px] text-[var(--content-secondary)]">
+                                {slice.activeVotes.length}
+                              </td>
+                              <td className="px-2 py-1 text-right font-mono text-[11px] text-[var(--content-secondary)]">
+                                {slice.newLocksAtEpoch || ""}
+                              </td>
+                              <td className="px-2 py-1 text-right font-mono text-[11px] text-[var(--content-secondary)]">
+                                {slice.extensionsAtEpoch || ""}
+                              </td>
+                              <td className="px-2 py-1 text-right font-mono text-[11px] text-[var(--content-secondary)]">
+                                {slice.boostActionsAtEpoch || ""}
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </section>
+
+              {/* Lock events in range */}
+              <section>
+                <h3 className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-[var(--content-primary)]">
+                  Lock / extension events in range (
+                  {profile.inRangeLocks.length})
+                </h3>
+                {profile.inRangeLocks.length === 0 ? (
+                  <Empty>No lock or extension events in this range.</Empty>
+                ) : (
+                  <EventTable
+                    events={profile.inRangeLocks}
+                    txUrl={txUrl}
+                    lockDeltas={profile.lockDeltaByEventId}
+                    weightExt={weightExt}
+                  />
+                )}
+              </section>
+
+              {/* Boost events in range */}
+              <section>
+                <h3 className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-[var(--content-primary)]">
+                  Boost actions in range ({profile.inRangeBoosts.length})
+                </h3>
+                {profile.inRangeBoosts.length === 0 ? (
+                  <Empty>No boost or abstain events in this range.</Empty>
+                ) : (
+                  <EventTable events={profile.inRangeBoosts} txUrl={txUrl} />
+                )}
+              </section>
+
+              {/* Pre-range sticky votes */}
+              {profile.preRangeBoosts.length > 0 ? (
+                <section>
+                  <h3 className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-[var(--content-primary)]">
+                    Pre-range votes ({profile.preRangeBoosts.length})
+                  </h3>
+                  <p className="mb-1 text-[11px] text-[var(--content-tertiary)]">
+                    Votes placed before the window. Any still-active when the
+                    window opens earn sticky points every epoch they remain
+                    active.
+                  </p>
+                  <EventTable
+                    events={profile.preRangeBoosts.slice(-20)}
+                    txUrl={txUrl}
+                  />
+                  {profile.preRangeBoosts.length > 20 ? (
+                    <p className="mt-1 text-[10px] text-[var(--content-tertiary)]">
+                      showing latest 20 of {profile.preRangeBoosts.length}
+                    </p>
+                  ) : null}
+                </section>
+              ) : null}
             </>
           )}
         </div>
