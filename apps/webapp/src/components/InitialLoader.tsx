@@ -122,11 +122,11 @@ export function InitialLoader(): JSX.Element {
   )
 }
 
-export function TerminalLoader({ className = "" }: { className?: string }): JSX.Element {
+export function TerminalLoader({ className = "", text = "loading" }: { className?: string; text?: string }): JSX.Element {
   return (
     <div className={`flex items-center gap-2 font-mono text-sm text-[var(--content-secondary)] ${className}`}>
       <span className="text-[#F7931A]">$</span>
-      <span>loading</span>
+      <span>{text}</span>
       <span className="inline-block h-4 w-2 bg-[#F7931A] animate-cursor-blink" />
     </div>
   )

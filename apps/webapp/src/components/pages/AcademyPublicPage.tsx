@@ -152,8 +152,7 @@ export default function AcademyPublicPage() {
       {isConnected && walletAddress && userStats && (
         <SpringIn variant="card">
           <div className="rounded-xl border border-brand/30 bg-brand/5 p-5 shadow-sm">
-            <h2 className="text-sm font-semibold uppercase tracking-wider text-brand mb-3 flex items-center gap-2">
-              <span className="h-2 w-2 rounded-full bg-brand animate-pulse" />
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-brand mb-3">
               Your Academy Stats ({walletAddress.slice(0, 6)}…{walletAddress.slice(-4)})
             </h2>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">

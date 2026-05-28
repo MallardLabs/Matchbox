@@ -60,6 +60,7 @@ export default async function handler(request: Request): Promise<Response> {
     limit,
     page,
     orderDirection,
+    actor: url.searchParams.get("actor") ?? undefined,
     ...(actionTypes && actionTypes.length > 0 ? { actionTypes } : {}),
   })
 

@@ -29,6 +29,8 @@ type SourceOptions = {
   // Most callers want the newest events first; pre-flight count helpers want
   // the oldest to estimate the historical span. Defaults to "desc".
   orderDirection?: "asc" | "desc"
+  actor?: string | undefined
+  recipient?: string | undefined
 }
 
 type ExplorerActivityEvent = {
@@ -178,6 +180,12 @@ function buildWhereClause(options: SourceOptions): string {
     const list = options.actionTypes.map((t) => t).join(", ")
     parts.push(`actionType_in: [${list}]`)
   }
+  if (options.actor) {
+    parts.push(`actor: "${options.actor.toLowerCase()}"`)
+  }
+  if (options.recipient) {
+    parts.push(`recipient: "${options.recipient.toLowerCase()}"`)
+  }
   return `{ ${parts.join(", ")} }`
 }
 
@@ -185,7 +193,7 @@ function buildWhereClause(options: SourceOptions): string {
 // peek ahead for hasMore) silently errors out and returns []. Clamp here.
 const SUBGRAPH_FIRST_MAX = 1000
 
-async function fetchExplorerActivity(
+async function fetchExplorerActivityRaw(
   options: SourceOptions,
 ): Promise<MezoActivityItem[]> {
   const endpoint = MATCHBOX_EXPLORER_SUBGRAPH_BY_CHAIN[options.chainId]
@@ -348,6 +356,28 @@ async function fetchExplorerActivity(
       } satisfies MezoActivityItem,
     ]
   })
+}
+
+async function fetchExplorerActivity(
+  options: SourceOptions,
+): Promise<MezoActivityItem[]> {
+  if (options.actor) {
+    const [actorItems, recipientItems] = await Promise.all([
+      fetchExplorerActivityRaw({ ...options, recipient: undefined }),
+      fetchExplorerActivityRaw({ ...options, actor: undefined, recipient: options.actor }),
+    ])
+
+    const merged = [...actorItems]
+    const seen = new Set(merged.map((x) => x.id))
+    for (const item of recipientItems) {
+      if (!seen.has(item.id)) {
+        merged.push(item)
+      }
+    }
+    return merged
+  }
+
+  return fetchExplorerActivityRaw(options)
 }
 
 export async function fetchMezoActivity(options: SourceOptions): Promise<{

@@ -130,7 +130,7 @@ export default function AcademyPublicActorProfile({
         <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
           {isLoading ? (
             <div className="flex h-64 items-center justify-center">
-              <TerminalLoader />
+              <TerminalLoader text="fetching activity logs..." />
             </div>
           ) : !profile ? (
             <div className="rounded border border-[var(--border)] bg-[var(--surface-tertiary)] px-3 py-3 text-center text-[11px] text-[var(--content-secondary)]">

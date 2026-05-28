@@ -1,6 +1,8 @@
 import { useNetwork } from "@/contexts/NetworkContext"
-import type { ActorProfile, LockDelta } from "@/lib/academy/actorProfile"
+import { type ActorProfile, computeActorProfile } from "@/lib/academy/actorProfile"
 import type { LeaderboardRow } from "@/lib/academy/simulate"
+import { BLACKLISTED_SYSTEM_ACTORS } from "@/lib/academy/blacklistedActors"
+import { useAcademyLeaderboard } from "@/hooks/useAcademyLeaderboard"
 import { deserializeActivityItem } from "@/lib/mezoActivity/normalize"
 import { CHAIN_ID } from "@repo/shared/contracts"
 import { useQuery } from "@tanstack/react-query"
@@ -16,167 +18,72 @@ export type AcademyActorProfileData = {
   row: LeaderboardRow | null
 }
 
-import type { MezoActivityApiItem } from "@/types/mezoActivity"
-
-interface SerializedRow {
-  actor: string
-  pointsWad: string
-  lockPointsWad: string
-  extensionPointsWad: string
-  votePointsWad: string
-  participationBonusWad: string
-  vePowerWad: string
-  newLockCount: number
-  extensionCount: number
-  boostCount: number
-  activeEpochs: number
-  fullyParticipated: boolean
-  flagged: boolean
-}
-
-interface SerializedLockDelta {
-  deltaVeWad: string
-  amountAddedVeWad: string
-  durationExtendedVeWad: string
-  extensionPrevAmountWad: string | null
-  extensionPrevDurationSec: string | null
-  extensionPostDurationSec: string | null
-  flagged: boolean
-  postVeWad: string
-}
-
-interface SerializedEpochSlice {
-  epochStart: number
-  activeWeightWad: string
-  newLocksAtEpoch: number
-  extensionsAtEpoch: number
-  boostActionsAtEpoch: number
-  activeVotes: Array<{
-    key: string
-    gauge: string
-    tokenId?: string
-    weight: string
-  }>
-}
-
-interface SerializedActorProfile {
-  actor: string
-  totalEpochs: number
-  activeEpochs: number
-  newLockCount: number
-  extensionCount: number
-  boostActionCount: number
-  inRangeLocks: MezoActivityApiItem[]
-  lockDeltaByEventId: Record<string, SerializedLockDelta>
-  inRangeBoosts: MezoActivityApiItem[]
-  preRangeBoosts: MezoActivityApiItem[]
-  epochs: SerializedEpochSlice[]
-  diagnostics: string[]
-  blacklisted: boolean
-  filtered: boolean
-}
-
-function deserializeRow(row: SerializedRow): LeaderboardRow {
-  return {
-    actor: row.actor as `0x${string}`,
-    pointsWad: BigInt(row.pointsWad),
-    lockPointsWad: BigInt(row.lockPointsWad),
-    extensionPointsWad: BigInt(row.extensionPointsWad),
-    votePointsWad: BigInt(row.votePointsWad),
-    participationBonusWad: BigInt(row.participationBonusWad),
-    vePowerWad: BigInt(row.vePowerWad),
-    newLockCount: row.newLockCount,
-    extensionCount: row.extensionCount,
-    boostCount: row.boostCount,
-    activeEpochs: row.activeEpochs,
-    fullyParticipated: row.fullyParticipated,
-    flagged: row.flagged,
-    rewardMezoWad: 0n,
-    apr: 0,
-    aprBasisWad: 0n,
-    culledBelowFloor: false,
-  }
-}
-
-function deserializeProfile(p: SerializedActorProfile): ActorProfile {
-  const lockDeltaByEventId = new Map<string, LockDelta>()
-  if (p.lockDeltaByEventId) {
-    for (const [eventId, delta] of Object.entries(p.lockDeltaByEventId)) {
-      lockDeltaByEventId.set(eventId, {
-        deltaVeWad: BigInt(delta.deltaVeWad),
-        amountAddedVeWad: BigInt(delta.amountAddedVeWad),
-        durationExtendedVeWad: BigInt(delta.durationExtendedVeWad),
-        extensionPrevAmountWad: delta.extensionPrevAmountWad
-          ? BigInt(delta.extensionPrevAmountWad)
-          : null,
-        extensionPrevDurationSec: delta.extensionPrevDurationSec
-          ? BigInt(delta.extensionPrevDurationSec)
-          : null,
-        extensionPostDurationSec: delta.extensionPostDurationSec
-          ? BigInt(delta.extensionPostDurationSec)
-          : null,
-        flagged: delta.flagged,
-        postVeWad: BigInt(delta.postVeWad),
-      })
-    }
-  }
-
-  const epochs = p.epochs.map((epoch) => ({
-    epochStart: epoch.epochStart,
-    activeWeightWad: BigInt(epoch.activeWeightWad),
-    newLocksAtEpoch: epoch.newLocksAtEpoch,
-    extensionsAtEpoch: epoch.extensionsAtEpoch,
-    boostActionsAtEpoch: epoch.boostActionsAtEpoch,
-    activeVotes: epoch.activeVotes.map((v) => ({
-      key: v.key,
-      gauge: v.gauge as Address,
-      tokenId: v.tokenId ? BigInt(v.tokenId) : undefined,
-      weight: BigInt(v.weight),
-    })),
-  }))
-
-  return {
-    actor: p.actor as Address,
-    totalEpochs: p.totalEpochs,
-    activeEpochs: p.activeEpochs,
-    newLockCount: p.newLockCount,
-    extensionCount: p.extensionCount,
-    boostActionCount: p.boostActionCount,
-    inRangeLocks: p.inRangeLocks.map(deserializeActivityItem),
-    lockDeltaByEventId,
-    inRangeBoosts: p.inRangeBoosts.map(deserializeActivityItem),
-    preRangeBoosts: p.preRangeBoosts.map(deserializeActivityItem),
-    epochs,
-    diagnostics: p.diagnostics,
-    blacklisted: p.blacklisted,
-    filtered: p.filtered,
-  }
-}
-
 export function useAcademyActorProfile(actor: Address | null) {
   const { chainId, isNetworkReady } = useNetwork()
   const network = NETWORK_BY_CHAIN[chainId]
+  const { data: leaderboardData } = useAcademyLeaderboard()
+
+  const fromTs = leaderboardData?.meta.fromTs
+  const toTs = leaderboardData?.meta.toTs
 
   return useQuery<AcademyActorProfileData>({
-    queryKey: ["academy-actor-profile", network, actor],
-    enabled: isNetworkReady && !!network && !!actor,
+    queryKey: ["academy-actor-profile", network, actor, fromTs, toTs],
+    enabled: isNetworkReady && !!network && !!actor && !!fromTs && !!toTs,
     staleTime: 5 * 60 * 1000,
     queryFn: async () => {
-      if (!actor) throw new Error("Missing actor address")
-      const res = await fetch(
-        `/api/academy/actor?actor=${actor}&network=${network}`,
-      )
-      if (!res.ok) {
-        throw new Error(`Failed to fetch actor profile: ${res.statusText}`)
+      if (!actor || !fromTs || !toTs) throw new Error("Missing parameters")
+
+      const hardFloor = Math.max(toTs - 3 * 365 * 86_400, 0)
+
+      // Fetch lock events and vote events in parallel for this single actor
+      const lockUrl = `/api/activity?network=${network}&actor=${actor}&from=${fromTs}&to=${toTs}&actionTypes=LOCK_CREATED,LOCK_AMOUNT_INCREASED,LOCK_EXTENDED,LOCK_PERMANENT,LOCK_MERGED&limit=1000`
+      const voteUrl = `/api/activity?network=${network}&actor=${actor}&from=${hardFloor}&to=${toTs}&actionTypes=BOOST_VOTE,BOOST_ABSTAIN,LOCK_TRANSFERRED&limit=1000`
+
+      const [locksRes, votesRes] = await Promise.all([
+        fetch(lockUrl).then((r) => r.json()),
+        fetch(voteUrl).then((r) => r.json()),
+      ])
+
+      if (!locksRes.success || !votesRes.success) {
+        throw new Error("Failed to fetch actor activity from API")
       }
-      const data = await res.json()
-      if (!data.success) {
-        throw new Error(data.error || "Failed to fetch actor profile")
+
+      const lockEvents = (locksRes.data || []).map(deserializeActivityItem)
+      const voteEvents = (votesRes.data || []).map(deserializeActivityItem)
+
+      const profile = computeActorProfile({
+        actor,
+        lockEvents,
+        voteEvents,
+        fromTs,
+        toTs,
+        blacklist: new Set(BLACKLISTED_SYSTEM_ACTORS),
+      })
+
+      const lower = actor.toLowerCase()
+      const row = leaderboardData?.rows.find((r) => r.actor.toLowerCase() === lower) ?? {
+        actor: actor,
+        pointsWad: 0n,
+        lockPointsWad: 0n,
+        extensionPointsWad: 0n,
+        votePointsWad: 0n,
+        participationBonusWad: 0n,
+        vePowerWad: 0n,
+        newLockCount: 0,
+        extensionCount: 0,
+        boostCount: 0,
+        activeEpochs: 0,
+        fullyParticipated: false,
+        flagged: false,
+        rewardMezoWad: 0n,
+        apr: 0,
+        aprBasisWad: 0n,
+        culledBelowFloor: false,
       }
 
       return {
-        profile: deserializeProfile(data.profile),
-        row: data.row ? deserializeRow(data.row) : null,
+        profile,
+        row,
       }
     },
   })
