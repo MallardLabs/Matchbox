@@ -2,6 +2,7 @@ import AcademyActorProfile from "@/components/AcademyActorProfile"
 import AcademyBlacklist from "@/components/AcademyBlacklist"
 import AcademyKnobs from "@/components/AcademyKnobs"
 import AcademyLeaderboard from "@/components/AcademyLeaderboard"
+import { useAccount } from "wagmi"
 import {
   DataStatus,
   EpochChart,
@@ -19,9 +20,21 @@ import {
   defaultRange,
   useAcademySim,
 } from "@/hooks/useAcademySim"
-import type { SimResult } from "@/lib/academy/simulate"
-import { useState } from "react"
+import type { LeaderboardRow, SimResult } from "@/lib/academy/simulate"
+import { useMemo, useState } from "react"
 import type { Address } from "viem"
+
+function fmtMezo(wad: bigint): string {
+  const whole = Number(wad / 10n ** 18n)
+  const frac = Number((wad % 10n ** 18n) / 10n ** 14n) / 10_000
+  const value = whole + frac
+  return value.toLocaleString(undefined, { maximumFractionDigits: 2 })
+}
+
+function fmtPoints(wad: bigint): string {
+  const value = Number(wad / 10n ** 12n) / 1e6
+  return value.toLocaleString(undefined, { maximumFractionDigits: 2 })
+}
 
 const RANGE_PRESETS: Array<{ label: string; weeks: number }> = [
   { label: "4 weeks", weeks: 4 },
@@ -31,6 +44,7 @@ const RANGE_PRESETS: Array<{ label: string; weeks: number }> = [
 ]
 
 export default function AcademyPage() {
+  const { address: walletAddress, isConnected } = useAccount()
   const sim = useAcademySim({ enabled: true })
   const {
     fromTs,
@@ -49,6 +63,42 @@ export default function AcademyPage() {
     actorProfile,
     actorRow,
   } = sim
+
+  const userStats = useMemo(() => {
+    if (!walletAddress || !simResult) return null
+    const lower = walletAddress.toLowerCase()
+    const index = simResult.rows.findIndex(
+      (r) => r.actor.toLowerCase() === lower,
+    )
+    if (index === -1) {
+      return {
+        rank: "Unranked",
+        row: {
+          actor: walletAddress,
+          pointsWad: 0n,
+          newLockCount: 0,
+          extensionCount: 0,
+          boostCount: 0,
+          activeEpochs: 0,
+          fullyParticipated: false,
+          rewardMezoWad: 0n,
+          apr: 0,
+          aprBasisWad: 0n,
+          vePowerWad: 0n,
+        } as LeaderboardRow,
+        share: 0,
+      }
+    }
+    const row = simResult.rows[index]
+    if (!row) return null
+    const total = simResult.rows.reduce((acc, r) => acc + r.pointsWad, 0n)
+    const share = total > 0n ? Number((row.pointsWad * 10_000n) / total) / 100 : 0
+    return {
+      rank: `#${index + 1}`,
+      row,
+      share,
+    }
+  }, [walletAddress, simResult])
 
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-8 md:py-12">
@@ -104,6 +154,10 @@ export default function AcademyPage() {
             epochSummaries={epochSummaries}
             peakEpochTotal={peakEpochTotal}
             onSelectActor={setSelectedActor}
+            walletAddress={walletAddress}
+            isConnected={isConnected}
+            userStats={userStats}
+            epochsCount={epochs.length}
           />
         </SpringIn>
       )}
@@ -205,6 +259,10 @@ function ProView({
   epochSummaries,
   peakEpochTotal,
   onSelectActor,
+  walletAddress,
+  isConnected,
+  userStats,
+  epochsCount,
 }: {
   simResult: SimResult | null
   params: ReturnType<typeof useAcademySim>["params"]
@@ -215,6 +273,14 @@ function ProView({
   epochSummaries: ReturnType<typeof useAcademySim>["epochSummaries"]
   peakEpochTotal: ReturnType<typeof useAcademySim>["peakEpochTotal"]
   onSelectActor: (actor: Address) => void
+  walletAddress: Address | undefined
+  isConnected: boolean
+  userStats: {
+    rank: string
+    row: LeaderboardRow
+    share: number
+  } | null
+  epochsCount: number
 }) {
   return (
     <div className="flex flex-col gap-4 md:flex-row">
@@ -297,11 +363,58 @@ function ProView({
           <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-[var(--content-primary)]">
             Leaderboard
           </h3>
+          {isConnected && walletAddress && userStats && (
+            <div className="rounded-xl border border-brand/30 bg-brand/5 p-5 shadow-sm mb-4">
+              <h2 className="text-sm font-semibold uppercase tracking-wider text-brand mb-3 flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-brand animate-pulse" />
+                Your Simulated Stats ({walletAddress.slice(0, 6)}…{walletAddress.slice(-4)})
+              </h2>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+                <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-primary)] px-3.5 py-2.5">
+                  <div className="text-[10px] uppercase tracking-wider text-[var(--content-secondary)]">Simulated Rank</div>
+                  <div className="mt-1 font-mono text-lg font-bold text-[var(--content-primary)]">
+                    {userStats.rank}
+                  </div>
+                </div>
+                <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-primary)] px-3.5 py-2.5">
+                  <div className="text-[10px] uppercase tracking-wider text-[var(--content-secondary)]">Simulated Points</div>
+                  <div className="mt-1 font-mono text-lg font-bold text-[var(--content-primary)]">
+                    {fmtPoints(userStats.row.pointsWad)}
+                  </div>
+                </div>
+                <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-primary)] px-3.5 py-2.5">
+                  <div className="text-[10px] uppercase tracking-wider text-[var(--content-secondary)]">Simulated Reward</div>
+                  <div className="mt-1 font-mono text-lg font-bold text-[var(--content-primary)]">
+                    {fmtMezo(userStats.row.rewardMezoWad)} MEZO
+                  </div>
+                </div>
+                <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-primary)] px-3.5 py-2.5">
+                  <div className="text-[10px] uppercase tracking-wider text-[var(--content-secondary)]">Simulated APR</div>
+                  <div className="mt-1 font-mono text-lg font-bold text-[var(--content-primary)]">
+                    {userStats.row.apr > 0
+                      ? `${userStats.row.apr.toLocaleString(undefined, { maximumFractionDigits: 1 })}%`
+                      : "—"}
+                  </div>
+                </div>
+                <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-primary)] px-3.5 py-2.5 col-span-2 sm:col-span-1">
+                  <div className="text-[10px] uppercase tracking-wider text-[var(--content-secondary)]">Participation</div>
+                  <div className="mt-1 font-mono text-base font-bold text-[var(--content-primary)] truncate">
+                    {userStats.row.fullyParticipated ? (
+                      <span className="text-[#F7931A]" title="Fully participated: voted in every epoch">★ Full (2x bonus)</span>
+                    ) : (
+                      <span>{userStats.row.activeEpochs} / {epochsCount} epochs</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
           {simResult ? (
             <AcademyLeaderboard
               rows={simResult.rows}
               budgetMezoWad={params.budgetMezoWad}
               onSelectActor={onSelectActor}
+              walletAddress={walletAddress ?? null}
             />
           ) : null}
         </section>

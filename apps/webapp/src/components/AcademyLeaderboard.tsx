@@ -16,6 +16,7 @@ type Props = {
   rows: LeaderboardRow[]
   budgetMezoWad: bigint
   onSelectActor?: (actor: Address) => void
+  walletAddress?: Address | null
 }
 
 function fmtMezo(wad: bigint): string {
@@ -67,11 +68,43 @@ export default function AcademyLeaderboard({
   rows,
   budgetMezoWad,
   onSelectActor,
+  walletAddress,
 }: Props) {
   const [sortKey, setSortKey] = useState<SortKey>("points")
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc")
   const [limit, setLimit] = useState(50)
   const [search, setSearch] = useState("")
+
+  const userRowAndRank = useMemo(() => {
+    if (!walletAddress) return null
+    const lower = walletAddress.toLowerCase()
+    const idx = rows.findIndex((r) => r.actor.toLowerCase() === lower)
+    if (idx === -1) {
+      return {
+        row: {
+          actor: walletAddress,
+          pointsWad: 0n,
+          newLockCount: 0,
+          extensionCount: 0,
+          boostCount: 0,
+          activeEpochs: 0,
+          fullyParticipated: false,
+          rewardMezoWad: 0n,
+          apr: 0,
+          aprBasisWad: 0n,
+          vePowerWad: 0n,
+        } as LeaderboardRow,
+        rank: "—",
+        isUnranked: true,
+      }
+    }
+    return {
+      row: rows[idx]!,
+      rank: String(idx + 1),
+      isUnranked: false,
+    }
+  }, [walletAddress, rows])
+
 
   const total = useMemo(
     () => rows.reduce((acc, r) => acc + r.pointsWad, 0n),
@@ -301,6 +334,70 @@ export default function AcademyLeaderboard({
               </tr>
             </thead>
             <tbody>
+              {userRowAndRank && (
+                <>
+                  <tr
+                    className="cursor-pointer bg-brand/10 hover:bg-brand/15 border-l-4 border-brand transition-colors font-semibold"
+                    onClick={() => onSelectActor?.(userRowAndRank.row.actor)}
+                  >
+                    <td className="px-2 py-1 text-left font-mono text-[11px] text-brand font-bold">
+                      {userRowAndRank.isUnranked ? "—" : `#${userRowAndRank.rank}`}
+                    </td>
+                    <td className="px-2 py-1">
+                      <div className="flex items-center gap-1">
+                        <ClickableAddress
+                          address={userRowAndRank.row.actor}
+                          label={`${fmtAddr(userRowAndRank.row.actor)} (You)`}
+                          className="text-[11px] font-semibold text-brand hover:underline"
+                          onLabelClick={onSelectActor}
+                          labelTitle="View your profile for this range"
+                        />
+                        {userRowAndRank.row.fullyParticipated ? (
+                          <span
+                            className="rounded bg-[#F7931A]/20 px-1 text-[8px] font-bold uppercase text-[#F7931A]"
+                            title="Voted in every epoch of the range"
+                          >
+                            ★
+                          </span>
+                        ) : null}
+                      </div>
+                    </td>
+                    <td className="px-2 py-1 text-right font-mono font-bold text-brand">
+                      {fmtPoints(userRowAndRank.row.pointsWad)}
+                    </td>
+                    <td className="px-2 py-1 text-right font-mono text-[11px] text-brand">
+                      {pointsShare(userRowAndRank.row, total).toFixed(2)}%
+                    </td>
+                    <td className="px-2 py-1 text-right font-mono text-brand font-bold">
+                      {fmtMezo(userRowAndRank.row.rewardMezoWad)}
+                    </td>
+                    <td className="px-2 py-1 text-right font-mono text-brand">
+                      {userRowAndRank.row.apr > 0
+                        ? `${userRowAndRank.row.apr.toLocaleString(undefined, { maximumFractionDigits: 1 })}%`
+                        : "—"}
+                    </td>
+                    <td className="px-2 py-1 text-right font-mono text-[11px] text-brand">
+                      {fmtVePower(userRowAndRank.row.aprBasisWad)}
+                    </td>
+                    <td className="px-2 py-1 text-right font-mono text-[11px] text-brand">
+                      {userRowAndRank.row.newLockCount}
+                    </td>
+                    <td className="px-2 py-1 text-right font-mono text-[11px] text-brand">
+                      {userRowAndRank.row.extensionCount}
+                    </td>
+                    <td className="px-2 py-1 text-right font-mono text-[11px] text-brand">
+                      {userRowAndRank.row.boostCount}
+                    </td>
+                    <td className="px-2 py-1 text-right font-mono text-[11px] text-brand">
+                      {userRowAndRank.row.activeEpochs}
+                    </td>
+                  </tr>
+                  {/* Visual separator row */}
+                  <tr className="bg-[var(--surface-tertiary)] h-1 pointer-events-none">
+                    <td colSpan={11} className="p-0 border-y border-[var(--border)]" />
+                  </tr>
+                </>
+              )}
               {sorted.length === 0 && search.trim() ? (
                 <tr>
                   <td
@@ -315,20 +412,27 @@ export default function AcademyLeaderboard({
                   </td>
                 </tr>
               ) : null}
-              {sorted.slice(0, limit).map((row, i) => (
-                <tr
-                  key={row.actor}
-                  className={`border-t border-[var(--border)] hover:bg-[var(--surface-tertiary)] ${
-                    row.culledBelowFloor
-                      ? "text-[var(--content-tertiary)] line-through decoration-[var(--content-tertiary)]/40"
-                      : ""
-                  }`}
-                  title={
-                    row.culledBelowFloor
-                      ? "Below the reward floor — their pro-rata share was redistributed to actors above the floor."
-                      : undefined
-                  }
-                >
+              {sorted.slice(0, limit).map((row, i) => {
+                const isMe = walletAddress && row.actor.toLowerCase() === walletAddress.toLowerCase()
+                return (
+                  <tr
+                    key={row.actor}
+                    className={`border-t border-[var(--border)] hover:bg-[var(--surface-tertiary)] ${
+                      isMe
+                        ? "bg-brand/5 border-l-2 border-brand font-semibold"
+                        : "bg-[var(--surface-primary)]"
+                    } ${
+                      row.culledBelowFloor
+                        ? "text-[var(--content-tertiary)] line-through decoration-[var(--content-tertiary)]/40"
+                        : ""
+                    }`}
+                    title={
+                      row.culledBelowFloor
+                        ? "Below the reward floor — their pro-rata share was redistributed to actors above the floor."
+                        : undefined
+                    }
+                    onClick={() => onSelectActor?.(row.actor)}
+                  >
                   <td className="px-2 py-1 text-left text-[11px] text-[var(--content-tertiary)]">
                     {i + 1}
                   </td>
@@ -405,7 +509,8 @@ export default function AcademyLeaderboard({
                     {row.activeEpochs}
                   </td>
                 </tr>
-              ))}
+              )
+            })}
             </tbody>
           </table>
         </div>
