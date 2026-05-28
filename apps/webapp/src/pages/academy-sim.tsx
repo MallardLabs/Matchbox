@@ -3,20 +3,17 @@ import { getAppUrl, getOgImageUrl } from "@/utils/seo"
 import dynamic from "next/dynamic"
 import Head from "next/head"
 
-const AcademyPublicPage = dynamic(
-  () => import("@/components/pages/AcademyPublicPage"),
-  {
-    ssr: false,
-    loading: () => <InitialLoader />,
-  },
-)
+const AcademyPage = dynamic(() => import("@/components/pages/AcademyPage"), {
+  ssr: false,
+  loading: () => <InitialLoader />,
+})
 
-export default function Academy() {
+export default function AcademySim() {
   const ogImageUrl = getOgImageUrl()
-  const pageUrl = getAppUrl("/academy")
-  const title = "Academy Leaderboard | Matchbox"
+  const pageUrl = getAppUrl("/academy-sim")
+  const title = "Academy Simulator | Matchbox"
   const description =
-    "Mezo Academy points leaderboard. View protocol participation and points distribution for veMEZO lockers and veBTC voters."
+    "Mezo Academy reward simulator. Model what veMEZO lockers and veBTC voters would earn over a chosen window, with tunable scoring weights."
 
   return (
     <>
@@ -38,7 +35,7 @@ export default function Academy() {
         <meta name="twitter:description" content={description} />
         <meta name="twitter:image" content={ogImageUrl} />
       </Head>
-      <AcademyPublicPage />
+      <AcademyPage />
     </>
   )
 }

@@ -194,6 +194,7 @@ export function Header(): JSX.Element {
     return addr
   }
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: close menu on route change
   useEffect(() => {
     setMobileMenuOpen(false)
   }, [router.pathname])

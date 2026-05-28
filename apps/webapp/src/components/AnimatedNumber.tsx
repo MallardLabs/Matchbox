@@ -23,13 +23,13 @@ function TickerDigit({ char, index }: { char: string; index: number }) {
   const duration = 700 + index * 20
 
   return (
-    <span className="relative inline-flex h-[1em] w-[0.62em] items-center justify-center overflow-hidden align-middle leading-none [mask-image:linear-gradient(to_bottom,transparent,black_15%,black_85%,transparent)]">
+    <span className="relative inline-flex h-[1em] w-[0.62em] items-center justify-center overflow-hidden leading-none [mask-image:linear-gradient(to_bottom,transparent,black_15%,black_85%,transparent)]">
       {/* Invisible placeholder to maintain width */}
       <span className="pointer-events-none invisible tabular-nums leading-none">
         0
       </span>
       <span
-        className="absolute left-0 top-0 flex w-full flex-col items-center will-change-transform"
+        className="absolute left-0 top-0 flex h-[1000%] w-full flex-col items-center will-change-transform"
         style={{
           transform: `translateY(-${digit * 10}%)`,
           transition: `transform ${duration}ms cubic-bezier(0.16, 1, 0.3, 1) ${delay}ms`,
@@ -38,7 +38,7 @@ function TickerDigit({ char, index }: { char: string; index: number }) {
         {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((i) => (
           <span
             key={i}
-            className="flex h-[1em] w-full items-center justify-center tabular-nums leading-none"
+            className="flex h-[10%] w-full items-center justify-center tabular-nums leading-none"
           >
             {i}
           </span>
