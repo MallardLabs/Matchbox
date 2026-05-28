@@ -33,7 +33,7 @@ export function WalletSetupView({
   // Animate the dots
   useEffect(() => {
     const interval = setInterval(() => {
-      setDots((prev) => (prev.length >= 3 ? "" : prev + "."))
+      setDots((prev) => (prev.length >= 3 ? "" : `${prev}.`))
     }, 500)
     return () => clearInterval(interval)
   }, [])
@@ -88,6 +88,7 @@ export function WalletSetupView({
         <div className="flex items-center gap-3 rounded-xl bg-[var(--surface-secondary)] p-3">
           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-green-500">
             <svg
+              aria-hidden="true"
               width="16"
               height="16"
               viewBox="0 0 24 24"
@@ -109,6 +110,7 @@ export function WalletSetupView({
           {isDeployed ? (
             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-green-500">
               <svg
+                aria-hidden="true"
                 width="16"
                 height="16"
                 viewBox="0 0 24 24"

@@ -1,0 +1,228 @@
+enum ActivityActionType {
+  LOCK_CREATED
+  LOCK_AMOUNT_INCREASED
+  LOCK_EXTENDED
+  LOCK_WITHDRAWN
+  LOCK_PERMANENT
+  LOCK_PERMANENT_UNLOCKED
+  LOCK_TRANSFERRED
+  LOCK_MERGED
+  BOOST_VOTE
+  BOOST_ABSTAIN
+  BOOST_POKE
+  PAIR_CREATED
+  GAUGE_CREATED
+  GAUGE_KILLED
+  GAUGE_REVIVED
+  BOOSTABLE_TOKEN_BURNED
+  INCENTIVE_ADDED
+  REWARD_DISTRIBUTED
+  REWARD_NOTIFIED
+  THIRD_PARTY_GAUGE_CREATED
+  VALIDATOR_GAUGE_CREATED
+  VALIDATOR_LEFT
+  PERIOD_UPDATED
+  EPOCH_PROCESSED
+  EMISSIONS_ENABLED
+  REBASE_CLAIMED
+  REBASE_CHECKPOINT
+  MERKLE_CLAIMED
+  MERKLE_DISTRIBUTION_ADDED
+  SAVINGS_DEPOSIT
+  SAVINGS_WITHDRAW
+  SAVINGS_YIELD_CLAIMED
+  PROTOCOL_YIELD_RECEIVED
+  STRATEGY_YIELD_RECEIVED
+  PCV_DISTRIBUTION
+  PCV_DEBT_PAYMENT
+}
+
+enum BoostContext {
+  MATCHBOX_GAUGE_BOOST
+  MEZO_VEBTC_PAIR_BOOST
+  UNKNOWN
+}
+
+enum ActivitySource {
+  VOTING_ESCROW
+  BOOST_VOTER
+  POOLS_VOTER
+  THIRD_PARTY_VOTER
+  VALIDATORS_VOTER
+  CHAIN_FEE_SPLITTER
+  MEZO_CHAIN_SPLITTER
+  MEZO_ECOSYSTEM_SPLITTER
+  MEZO_MINTER
+  MEZO_REBASE_DISTRIBUTOR
+  MEZO_MERKLE_DISTRIBUTOR
+  MUSD_SAVINGS_RATE
+  PCV
+}
+
+type ActivityEvent @entity(immutable: true) {
+  id: ID!
+  actionType: ActivityActionType!
+  boostContext: BoostContext!
+  source: ActivitySource!
+
+  txHash: Bytes!
+  txFrom: Bytes
+  logIndex: BigInt!
+  blockNumber: BigInt!
+  timestamp: BigInt!
+
+  actor: Bytes
+  recipient: Bytes
+  tokenId: BigInt
+  amount: BigInt
+  duration: BigInt
+  # Pre/post state snapshots, populated for lock-track events (created,
+  # amountIncreased, extended, permanent, permanentUnlocked, merged) so the
+  # frontend can compute Δve exactly without replaying the full token history.
+  # Durations are stored as REMAINING SECONDS at event time (capped at MAXTIME
+  # = 4y); permanent locks set duration = MAXTIME and isPermanent = true. For
+  # LOCK_MERGED these describe the SOURCE NFT's pre-merge state; the merge
+  # destination's pre-state is the LockPosition's prior state and its
+  # post-state is captured by the activity's own amount/duration fields.
+  prevAmount: BigInt
+  prevDuration: BigInt
+  prevIsPermanent: Boolean
+  postAmount: BigInt
+  postDuration: BigInt
+  postIsPermanent: Boolean
+  # For LOCK_MERGED only — the destination NFT pre-merge state and the
+  # source tokenId being burned into the destination.
+  mergeSourceTokenId: BigInt
+  mergeDestTokenId: BigInt
+  mergeDestPrevAmount: BigInt
+  mergeDestPrevDuration: BigInt
+  mergeDestPrevIsPermanent: Boolean
+  token: Bytes
+  gauge: Bytes
+  pool: Bytes
+  rewardContract: Bytes
+  rewardType: String
+  metadata: String
+  boostableTokenId: BigInt
+  boost: BigInt
+  weight: BigInt
+  totalWeight: BigInt
+  pokeMethod: String
+
+  period: BigInt
+  newPeriod: BigInt
+  firstRecipientAmount: BigInt
+  secondRecipientAmount: BigInt
+  oldRate: BigInt
+  newRate: BigInt
+  emission: BigInt
+  rebase: BigInt
+  rewards: BigInt
+  totalSupply: BigInt
+  epochIndex: BigInt
+  epochStart: BigInt
+  epochEnd: BigInt
+  distributionId: BigInt
+  merkleRoot: Bytes
+
+  contractAddress: Bytes!
+}
+
+type Account @entity(immutable: false) {
+  id: ID!
+  address: Bytes!
+  lockCount: BigInt!
+  voteCount: BigInt!
+  incentiveCount: BigInt!
+  totalIncentiveAmount: BigInt!
+  firstSeenAt: BigInt!
+  lastSeenAt: BigInt!
+}
+
+type LockPosition @entity(immutable: false) {
+  id: ID!
+  tokenId: BigInt!
+  contractAddress: Bytes!
+  owner: Bytes
+  amount: BigInt!
+  unlockAt: BigInt
+  createdAt: BigInt
+  lastExtendedAt: BigInt
+  withdrawnAt: BigInt
+  isPermanent: Boolean!
+  isWithdrawn: Boolean!
+  # Set on the SOURCE NFT of a merge(from, to) call. The NFT is burned by
+  # the contract, but we preserve its pre-merge state on the entity so that
+  # the destination's Deposit handler in the same tx can populate the
+  # LOCK_MERGED activity's source-side pre-state fields.
+  isMerged: Boolean!
+  mergedIntoTokenId: BigInt
+  mergedAt: BigInt
+  boost: BigInt
+  activityCount: BigInt!
+}
+
+type Gauge @entity(immutable: false) {
+  id: ID!
+  address: Bytes!
+  boostContext: BoostContext!
+  source: ActivitySource!
+  creator: Bytes
+  pool: Bytes
+  rewardContract: Bytes
+  feeRewardContract: Bytes
+  boostableTokenId: BigInt
+  isAlive: Boolean!
+  createdAt: BigInt
+  killedAt: BigInt
+  revivedAt: BigInt
+  voteCount: BigInt!
+  incentiveCount: BigInt!
+  totalIncentiveAmount: BigInt!
+  lastVoteAt: BigInt
+  lastIncentiveAt: BigInt
+}
+
+type Token @entity(immutable: false) {
+  id: ID!
+  address: Bytes!
+  incentiveCount: BigInt!
+  totalIncentiveAmount: BigInt!
+  firstSeenAt: BigInt!
+  lastSeenAt: BigInt!
+}
+
+type GaugeEpoch @entity(immutable: false) {
+  id: ID!
+  gauge: Gauge!
+  epochStart: BigInt!
+  voteCount: BigInt!
+  incentiveCount: BigInt!
+  totalWeight: BigInt!
+  totalIncentiveAmount: BigInt!
+  lastUpdatedAt: BigInt!
+}
+
+type Vote @entity(immutable: false) {
+  id: ID!
+  voterContract: Bytes!
+  tokenId: BigInt!
+  gauge: Bytes!
+  owner: Bytes!
+  currentWeight: BigInt!
+  lastUpdatedEpoch: BigInt!
+  lastUpdatedAt: BigInt!
+  isActive: Boolean!
+}
+
+type ActivityStats @entity(immutable: false) {
+  id: ID!
+  totalEvents: BigInt!
+  locks: BigInt!
+  boosts: BigInt!
+  extensions: BigInt!
+  incentives: BigInt!
+  gauges: BigInt!
+  systemEvents: BigInt!
+  lastUpdatedAt: BigInt!
+}

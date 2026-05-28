@@ -1,0 +1,69 @@
+import { type Address, getAddress } from "viem"
+
+export const MEZO_BOOST_POKE_CRON_ADDRESS: Address = getAddress(
+  "0xf8176Df5B9FbCf0Ed38c06970371ba89B7701bBb",
+)
+
+export const USER_ACTION_TYPES_GRAPHQL = [
+  "LOCK_CREATED",
+  "LOCK_AMOUNT_INCREASED",
+  "LOCK_EXTENDED",
+  "LOCK_WITHDRAWN",
+  "LOCK_PERMANENT",
+  "LOCK_PERMANENT_UNLOCKED",
+  "LOCK_MERGED",
+  "BOOST_VOTE",
+  "BOOST_ABSTAIN",
+  "INCENTIVE_ADDED",
+  "REBASE_CLAIMED",
+  "MERKLE_CLAIMED",
+  "SAVINGS_DEPOSIT",
+  "SAVINGS_WITHDRAW",
+  "SAVINGS_YIELD_CLAIMED",
+] as const
+
+export const SYSTEM_ACTION_TYPES_GRAPHQL = [
+  "BOOST_POKE",
+  "REWARD_DISTRIBUTED",
+  "REWARD_NOTIFIED",
+  "GAUGE_CREATED",
+  "GAUGE_KILLED",
+  "GAUGE_REVIVED",
+  "PAIR_CREATED",
+  "BOOSTABLE_TOKEN_BURNED",
+  "THIRD_PARTY_GAUGE_CREATED",
+  "VALIDATOR_GAUGE_CREATED",
+  "VALIDATOR_LEFT",
+  "PERIOD_UPDATED",
+  "EPOCH_PROCESSED",
+  "EMISSIONS_ENABLED",
+  "REBASE_CHECKPOINT",
+  "MERKLE_DISTRIBUTION_ADDED",
+  "PROTOCOL_YIELD_RECEIVED",
+  "STRATEGY_YIELD_RECEIVED",
+  "PCV_DISTRIBUTION",
+  "PCV_DEBT_PAYMENT",
+] as const
+
+export const ACADEMY_ACTION_TYPES_GRAPHQL = [
+  "LOCK_CREATED",
+  "LOCK_AMOUNT_INCREASED",
+  "LOCK_EXTENDED",
+  "LOCK_PERMANENT",
+  "LOCK_MERGED",
+  "BOOST_VOTE",
+  "BOOST_ABSTAIN",
+] as const
+
+export const KNOWN_AUTOMATED_ADDRESSES: ReadonlySet<Address> = new Set([
+  MEZO_BOOST_POKE_CRON_ADDRESS,
+])
+
+export function isAutomatedAddress(value: Address | undefined): boolean {
+  if (!value) return false
+  try {
+    return KNOWN_AUTOMATED_ADDRESSES.has(getAddress(value))
+  } catch {
+    return false
+  }
+}

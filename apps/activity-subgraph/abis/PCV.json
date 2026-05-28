@@ -1,0 +1,31 @@
+[
+  {
+    "type": "event",
+    "name": "PCVDistribution",
+    "inputs": [
+      {
+        "type": "address",
+        "name": "_recipient",
+        "indexed": false
+      },
+      {
+        "type": "uint256",
+        "name": "_amount",
+        "indexed": false
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "PCVDebtPayment",
+    "inputs": [
+      {
+        "type": "uint256",
+        "name": "_paidDebt",
+        "indexed": false
+      }
+    ],
+    "anonymous": false
+  }
+]

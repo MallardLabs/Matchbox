@@ -77,6 +77,7 @@ export default function Document() {
 
         {/* Prevent flash of wrong theme */}
         <script
+          // biome-ignore lint/security/noDangerouslySetInnerHtml: Static theme bootstrap script does not include user input.
           dangerouslySetInnerHTML={{
             __html: `
               (function() {

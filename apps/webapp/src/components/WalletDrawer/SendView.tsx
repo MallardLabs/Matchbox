@@ -284,6 +284,7 @@ export function SendView({ onBack, onClose }: SendViewProps): JSX.Element {
       <div className="flex flex-1 flex-col items-center justify-center px-6 text-center">
         <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-green-500">
           <svg
+            aria-hidden="true"
             width="40"
             height="40"
             viewBox="0 0 24 24"
@@ -338,6 +339,7 @@ export function SendView({ onBack, onClose }: SendViewProps): JSX.Element {
       <div className="flex flex-1 flex-col items-center justify-center px-6 text-center">
         <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-red-500">
           <svg
+            aria-hidden="true"
             width="40"
             height="40"
             viewBox="0 0 24 24"
@@ -466,11 +468,15 @@ export function SendView({ onBack, onClose }: SendViewProps): JSX.Element {
 
       {/* Recipient Section */}
       <div className="mb-6">
-        <label className="mb-2 block text-sm font-medium text-[var(--content-secondary)]">
+        <label
+          htmlFor="wallet-recipient-address"
+          className="mb-2 block text-sm font-medium text-[var(--content-secondary)]"
+        >
           To
         </label>
         <div className="relative">
           <input
+            id="wallet-recipient-address"
             type="text"
             value={recipientAddress}
             onChange={(e) => setRecipientAddress(e.target.value)}

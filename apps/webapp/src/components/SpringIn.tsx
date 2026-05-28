@@ -1,4 +1,4 @@
-import type { ReactNode } from "react"
+import { Children, type ReactNode, isValidElement } from "react"
 
 interface SpringInProps {
   children: ReactNode
@@ -58,11 +58,13 @@ export function SpringInGrid({
   variant = "card",
   className = "",
 }: SpringInGridProps) {
+  const keyedChildren = Children.toArray(children)
+
   return (
     <>
-      {children.map((child, index) => (
+      {keyedChildren.map((child, index) => (
         <SpringIn
-          key={index}
+          key={isValidElement(child) ? child.key : String(child)}
           delay={startDelay + index}
           variant={variant}
           className={className}

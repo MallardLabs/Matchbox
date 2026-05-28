@@ -1,0 +1,373 @@
+specVersion: 0.0.5
+schema:
+  file: ./schema.graphql
+dataSources:
+  - kind: ethereum
+    name: VeMEZO
+    network: mezo-testnet
+    source:
+      address: "0xaCE816CA2bcc9b12C59799dcC5A959Fb9b98111b"
+      abi: VotingEscrow
+      startBlock: 0
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - ActivityEvent
+        - ActivityStats
+      abis:
+        - name: VotingEscrow
+          file: ./abis/VotingEscrow.json
+      eventHandlers:
+        - event: Deposit(indexed address,indexed uint256,indexed uint8,uint256,uint256,uint256)
+          handler: handleVotingEscrowDeposit
+        - event: LockPermanent(indexed address,indexed uint256,uint256,uint256)
+          handler: handleLockPermanent
+        - event: UnlockPermanent(indexed address,indexed uint256,uint256,uint256)
+          handler: handleUnlockPermanent
+        - event: Withdraw(indexed address,indexed uint256,uint256,uint256)
+          handler: handleWithdraw
+        - event: Transfer(indexed address,indexed address,indexed uint256)
+          handler: handleTransfer
+        - event: UpdateBoost(indexed uint256,uint256)
+          handler: handleUpdateBoost
+      file: ./src/voting-escrow.ts
+  - kind: ethereum
+    name: BoostVoter
+    network: mezo-testnet
+    source:
+      address: "0x21d7bDF5a5929AD179F8cA0c9014A0B62ae6Bfd1"
+      abi: BoostVoter
+      startBlock: 0
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - ActivityEvent
+        - ActivityStats
+      abis:
+        - name: BoostVoter
+          file: ./abis/BoostVoter.json
+      eventHandlers:
+        - event: Abstained(indexed address,indexed address,indexed uint256,uint256,uint256,uint256)
+          handler: handleBoostAbstained
+        - event: GaugeCreated(indexed address,indexed address,indexed address)
+          handler: handleBoostGaugeCreated
+        - event: Voted(indexed address,indexed address,indexed uint256,uint256,uint256,uint256)
+          handler: handleBoostVoted
+        - event: BoostPoked(indexed uint256,uint256)
+          handler: handleBoostPoked
+        - event: BoostableTokenBurned(indexed uint256,indexed address)
+          handler: handleBoostableTokenBurned
+        - event: BribesAdded(indexed address,indexed address,uint256,address)
+          handler: handleBoostBribesAdded
+        - event: DistributeReward(indexed address,indexed address,uint256)
+          handler: handleBoostDistributeReward
+        - event: GaugeKilled(indexed address)
+          handler: handleBoostGaugeKilled
+        - event: GaugeRevived(indexed address)
+          handler: handleBoostGaugeRevived
+        - event: NotifyReward(indexed address,indexed address,uint256)
+          handler: handleBoostNotifyReward
+      file: ./src/boost-voter.ts
+  - kind: ethereum
+    name: PoolsVoter
+    network: mezo-testnet
+    source:
+      address: "0x263F1Fd5fB7F866881e1B6cD7d5d6c40Fd985F0D"
+      abi: PoolsVoter
+      startBlock: 0
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - ActivityEvent
+        - ActivityStats
+      abis:
+        - name: PoolsVoter
+          file: ./abis/PoolsVoter.json
+      eventHandlers:
+        - event: Abstained(indexed address,indexed address,indexed uint256,uint256,uint256,uint256)
+          handler: handlePoolAbstained
+        - event: GaugeCreated(indexed address,indexed address,indexed address,address,address,address,address,address)
+          handler: handlePoolGaugeCreated
+        - event: Voted(indexed address,indexed address,indexed uint256,uint256,uint256,uint256)
+          handler: handlePoolVoted
+        - event: DistributeReward(indexed address,indexed address,uint256)
+          handler: handlePoolDistributeReward
+        - event: GaugeKilled(indexed address)
+          handler: handlePoolGaugeKilled
+        - event: GaugeRevived(indexed address)
+          handler: handlePoolGaugeRevived
+        - event: NotifyReward(indexed address,indexed address,uint256)
+          handler: handlePoolNotifyReward
+      file: ./src/pools-voter.ts
+  - kind: ethereum
+    name: ThirdPartyVoter
+    network: mezo-testnet
+    source:
+      address: "0x62FE6d71BE2Ac2806Da046bf93b02C279246251D"
+      abi: NonPoolsVoter
+      startBlock: 0
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - ActivityEvent
+        - ActivityStats
+      abis:
+        - name: NonPoolsVoter
+          file: ./abis/NonPoolsVoter.json
+      eventHandlers:
+        - event: Abstained(indexed address,indexed address,indexed uint256,uint256,uint256,uint256)
+          handler: handleThirdPartyAbstained
+        - event: Voted(indexed address,indexed address,indexed uint256,uint256,uint256,uint256)
+          handler: handleThirdPartyVoted
+        - event: GaugeCreated(indexed address,indexed address,indexed address)
+          handler: handleThirdPartyGaugeCreated
+        - event: GaugeKilled(indexed address)
+          handler: handleThirdPartyGaugeKilled
+        - event: GaugeRevived(indexed address)
+          handler: handleThirdPartyGaugeRevived
+        - event: BribesAdded(indexed address,indexed address,uint256,address)
+          handler: handleThirdPartyBribesAdded
+        - event: DistributeReward(indexed address,indexed address,uint256)
+          handler: handleThirdPartyDistributeReward
+        - event: NotifyReward(indexed address,indexed address,uint256)
+          handler: handleThirdPartyNotifyReward
+        - event: ThirdPartyGaugeCreated(indexed address,indexed address,string)
+          handler: handleThirdPartyGaugeRegistered
+      file: ./src/non-pools-voter.ts
+  - kind: ethereum
+    name: ValidatorsVoter
+    network: mezo-testnet
+    source:
+      address: "0xac1bA4627d2Ec488bEdd562bB857275C45003844"
+      abi: NonPoolsVoter
+      startBlock: 0
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - ActivityEvent
+        - ActivityStats
+      abis:
+        - name: NonPoolsVoter
+          file: ./abis/NonPoolsVoter.json
+      eventHandlers:
+        - event: Abstained(indexed address,indexed address,indexed uint256,uint256,uint256,uint256)
+          handler: handleValidatorsAbstained
+        - event: Voted(indexed address,indexed address,indexed uint256,uint256,uint256,uint256)
+          handler: handleValidatorsVoted
+        - event: GaugeCreated(indexed address,indexed address,indexed address)
+          handler: handleValidatorsGaugeCreated
+        - event: GaugeKilled(indexed address)
+          handler: handleValidatorsGaugeKilled
+        - event: GaugeRevived(indexed address)
+          handler: handleValidatorsGaugeRevived
+        - event: BribesAdded(indexed address,indexed address,uint256,address)
+          handler: handleValidatorsBribesAdded
+        - event: DistributeReward(indexed address,indexed address,uint256)
+          handler: handleValidatorsDistributeReward
+        - event: NotifyReward(indexed address,indexed address,uint256)
+          handler: handleValidatorsNotifyReward
+        - event: ValidatorGaugeCreated(indexed address,indexed address,indexed address)
+          handler: handleValidatorGaugeCreated
+        - event: ValidatorLeft(indexed address,indexed address)
+          handler: handleValidatorLeft
+      file: ./src/non-pools-voter.ts
+  - kind: ethereum
+    name: ChainFeeSplitter
+    network: mezo-testnet
+    source:
+      address: "0x814b08D5293689F5F57f8B31E40A7903C0A4E191"
+      abi: Splitter
+      startBlock: 0
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - ActivityEvent
+        - ActivityStats
+      abis:
+        - name: Splitter
+          file: ./abis/Splitter.json
+      eventHandlers:
+        - event: PeriodUpdated(uint256,uint256,uint256,uint256)
+          handler: handleChainFeePeriodUpdated
+        - event: Nudge(indexed uint256,uint256,uint256)
+          handler: handleChainFeeNudge
+      file: ./src/splitters.ts
+  - kind: ethereum
+    name: MezoChainSplitter
+    network: mezo-testnet
+    source:
+      address: "0xCa8895934FF0A5d61Ee36A5A2Cdc683A2180d22A"
+      abi: Splitter
+      startBlock: 0
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - ActivityEvent
+        - ActivityStats
+      abis:
+        - name: Splitter
+          file: ./abis/Splitter.json
+      eventHandlers:
+        - event: PeriodUpdated(uint256,uint256,uint256,uint256)
+          handler: handleMezoChainPeriodUpdated
+        - event: Nudge(indexed uint256,uint256,uint256)
+          handler: handleMezoChainNudge
+      file: ./src/splitters.ts
+  - kind: ethereum
+    name: MezoEcosystemSplitter
+    network: mezo-testnet
+    source:
+      address: "0x47FbB2e6d3f6EF14AF3553d139e8af6cc92ed51F"
+      abi: Splitter
+      startBlock: 0
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - ActivityEvent
+        - ActivityStats
+      abis:
+        - name: Splitter
+          file: ./abis/Splitter.json
+      eventHandlers:
+        - event: PeriodUpdated(uint256,uint256,uint256,uint256)
+          handler: handleMezoEcosystemPeriodUpdated
+        - event: Nudge(indexed uint256,uint256,uint256)
+          handler: handleMezoEcosystemNudge
+      file: ./src/splitters.ts
+  - kind: ethereum
+    name: MezoMinter
+    network: mezo-testnet
+    source:
+      address: "0xe1952b3E980E43d3910d42088029341f436C1B74"
+      abi: MezoMinter
+      startBlock: 0
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - ActivityEvent
+        - ActivityStats
+      abis:
+        - name: MezoMinter
+          file: ./abis/MezoMinter.json
+      eventHandlers:
+        - event: EpochProcessed(indexed uint256,indexed uint256,uint256,uint256,uint256,uint256,address)
+          handler: handleEpochProcessed
+        - event: EmissionsEnabled(uint256)
+          handler: handleEmissionsEnabled
+      file: ./src/mezo-minter.ts
+  - kind: ethereum
+    name: MezoRebaseDistributor
+    network: mezo-testnet
+    source:
+      address: "0x2962E8817ae716019F759d098e2caE658bDcAd04"
+      abi: RebaseDistributor
+      startBlock: 0
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - ActivityEvent
+        - ActivityStats
+      abis:
+        - name: RebaseDistributor
+          file: ./abis/RebaseDistributor.json
+      eventHandlers:
+        - event: Claimed(indexed uint256,indexed uint256,indexed uint256,uint256)
+          handler: handleRebaseClaimed
+        - event: CheckpointToken(uint256,uint256)
+          handler: handleCheckpointToken
+      file: ./src/rebase-distributor.ts
+  - kind: ethereum
+    name: MezoMerkleDistributor
+    network: mezo-testnet
+    source:
+      address: "0x6f297C2D3e20aF9FCAB69f7dEb531d177BB05230"
+      abi: MerkleDistributor
+      startBlock: 0
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - ActivityEvent
+        - ActivityStats
+      abis:
+        - name: MerkleDistributor
+          file: ./abis/MerkleDistributor.json
+      eventHandlers:
+        - event: Claimed(indexed uint256,uint256,indexed address,uint256)
+          handler: handleMerkleClaimed
+        - event: DistributionAdded(indexed uint256,bytes32,uint256,address,bytes)
+          handler: handleDistributionAdded
+      file: ./src/merkle-distributor.ts
+  - kind: ethereum
+    name: MUSDSavingsRate
+    network: mezo-testnet
+    source:
+      address: "0x6f461c68B2c5492C0F5CCEc5a264d692aA7A8e16"
+      abi: MUSDSavingsRate
+      startBlock: 0
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - ActivityEvent
+        - ActivityStats
+      abis:
+        - name: MUSDSavingsRate
+          file: ./abis/MUSDSavingsRate.json
+      eventHandlers:
+        - event: Deposit(indexed address,uint256)
+          handler: handleSavingsDeposit
+        - event: Withdraw(indexed address,uint256)
+          handler: handleSavingsWithdraw
+        - event: YieldClaimed(indexed address,uint256)
+          handler: handleSavingsYieldClaimed
+        - event: ProtocolYieldReceived(uint256)
+          handler: handleProtocolYieldReceived
+        - event: StrategyYieldReceived(uint256)
+          handler: handleStrategyYieldReceived
+      file: ./src/musd-savings-rate.ts
+  - kind: ethereum
+    name: PCV
+    network: mezo-testnet
+    source:
+      address: "0x4dDD70f4C603b6089c07875Be02fEdFD626b80Af"
+      abi: PCV
+      startBlock: 0
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - ActivityEvent
+        - ActivityStats
+      abis:
+        - name: PCV
+          file: ./abis/PCV.json
+      eventHandlers:
+        - event: PCVDistribution(address,uint256)
+          handler: handlePcvDistribution
+        - event: PCVDebtPayment(uint256)
+          handler: handlePcvDebtPayment
+      file: ./src/pcv.ts

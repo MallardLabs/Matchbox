@@ -95,7 +95,7 @@ export function useGaugeAPY(
     return gauge.rewardTokens
       .map((token) => {
         const amount = BigInt(token.epochAmount)
-        const tokenAmount = Number(amount) / Math.pow(10, token.decimals)
+        const tokenAmount = Number(amount) / 10 ** token.decimals
         const price = getTokenUsdPrice(
           token.tokenAddress,
           token.symbol,
@@ -162,7 +162,7 @@ export function useGaugesAPY(
   const apyMap = useMemo(() => {
     const map = new Map<string, GaugeAPYData>()
 
-    gauges.forEach((gauge) => {
+    for (const gauge of gauges) {
       const topologyGauge = topologyMap.get(gauge.address.toLowerCase())
       const incentivesByToken: TokenIncentive[] = []
       let totalIncentivesUSD = 0
@@ -171,7 +171,7 @@ export function useGaugesAPY(
         const amount = BigInt(rewardToken.epochAmount)
         if (amount <= 0n) continue
 
-        const tokenAmount = Number(amount) / Math.pow(10, rewardToken.decimals)
+        const tokenAmount = Number(amount) / 10 ** rewardToken.decimals
         const price = getTokenUsdPrice(
           rewardToken.tokenAddress,
           rewardToken.symbol,
@@ -202,7 +202,7 @@ export function useGaugesAPY(
         isLoading: false,
         incentivesByToken,
       })
-    })
+    }
 
     return map
   }, [gauges, topologyMap, btcPrice, mezoPrice])

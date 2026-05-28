@@ -1,9 +1,6 @@
 import { getContractConfig } from "@/config/contracts"
 import { useNetwork } from "@/contexts/NetworkContext"
-import {
-  type AtomicBatchSupport,
-  getAtomicBatchSupport,
-} from "@/utils/eip5792"
+import { type AtomicBatchSupport, getAtomicBatchSupport } from "@/utils/eip5792"
 import { useCallback, useState } from "react"
 import type { Address, Hex } from "viem"
 import { sendCalls, waitForCallsStatus } from "viem/actions"

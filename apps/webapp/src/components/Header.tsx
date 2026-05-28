@@ -157,7 +157,11 @@ const navItems: NavItem[] = [
   { href: "/pools", label: "pools" },
   {
     label: "more",
-    children: [{ href: "/how-to", label: "how2" }],
+    children: [
+      { href: "/how-to", label: "how2" },
+      { href: "/activity", label: "activity" },
+      { href: "/academy", label: "academy" },
+    ],
   },
 ]
 
@@ -498,10 +502,10 @@ export function Header(): JSX.Element {
 
       {/* Mobile Menu Overlay */}
       {mobileMenuOpen && (
-        <div
+        <dialog
+          open
           id="mobile-menu"
-          className="fixed inset-0 top-14 z-40 flex flex-col bg-[var(--surface)] md:hidden"
-          role="dialog"
+          className="fixed inset-0 top-14 z-40 m-0 flex max-h-none max-w-none flex-col border-0 bg-[var(--surface)] p-0 md:hidden"
           aria-modal="true"
           aria-label="Mobile navigation menu"
         >
@@ -670,7 +674,7 @@ export function Header(): JSX.Element {
               </Button>
             )}
           </div>
-        </div>
+        </dialog>
       )}
     </>
   )

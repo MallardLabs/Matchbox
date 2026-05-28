@@ -254,7 +254,7 @@ type GaugeData = {
   optimal_vemezo_weight: string | null
   subscription_ratio: number | null
   subscription_delta_vemezo: string | null
-  subscription_status: "under" | "perfect" | "over" | "unknown"
+  subscription_status: "under" | "perfect" | "over" | null
   apy_at_optimal: number | null
   oversubscription_dilution: number | null
   unique_voters: number | null
@@ -317,11 +317,15 @@ function calculateSubscriptionRatio(
   )
 }
 
+// Returns null when optimal weight is unavailable so the row can be picked up
+// by backfill-gauge-history-prices?refreshSubscription=true on a later pass.
+// The backfill uses "unknown" as its terminal "historical recovery failed"
+// marker; we don't want to collide with that here.
 function getSubscriptionStatus(
   actualWeight: bigint,
   optimalWeight: bigint | null,
-): "under" | "perfect" | "over" | "unknown" {
-  if (!optimalWeight || optimalWeight <= 0n) return "unknown"
+): "under" | "perfect" | "over" | null {
+  if (!optimalWeight || optimalWeight <= 0n) return null
 
   const lowerBound =
     (optimalWeight * (10_000n - PERFECT_SUBSCRIPTION_TOLERANCE_BPS)) / 10_000n

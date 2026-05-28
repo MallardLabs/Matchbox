@@ -11,7 +11,7 @@ function isTextInputFocused(): boolean {
 }
 
 /**
- * Binds Shift+P to toggle preview mode. Ignored while the user is typing in
+ * Binds Shift+M to toggle preview mode. Ignored while the user is typing in
  * an input / textarea / contenteditable.
  */
 export function usePreviewModeHotkey() {
@@ -19,7 +19,7 @@ export function usePreviewModeHotkey() {
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.key !== "P") return
+      if (e.key !== "M") return
       if (!e.shiftKey) return
       if (e.ctrlKey || e.metaKey || e.altKey) return
       if (isTextInputFocused()) return
