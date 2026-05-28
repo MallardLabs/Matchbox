@@ -1,7 +1,5 @@
-import AcademyPanel from "@/components/AcademyPanel"
 import PreviewModePanel from "@/components/PreviewModePanel"
 import { mezoTestnet, wagmiConfig } from "@/config/wagmi"
-import { AcademyProvider } from "@/contexts/AcademyContext"
 import { GaugeProfilesProvider } from "@/contexts/GaugeProfilesContext"
 import { NetworkProvider } from "@/contexts/NetworkContext"
 import { PreviewModeProvider } from "@/contexts/PreviewModeContext"
@@ -10,7 +8,6 @@ import {
   getThemeObject,
   useTheme,
 } from "@/contexts/ThemeContext"
-import { useAcademyHotkey } from "@/hooks/useAcademyHotkey"
 import { usePreviewModeHotkey } from "@/hooks/usePreviewModeHotkey"
 import { ClayProvider } from "@mezo-org/mezo-clay"
 import { PassportProvider } from "@mezo-org/passport"
@@ -34,7 +31,6 @@ function ThemedApp({ Component, pageProps }: ClientAppProps) {
   const { theme } = useTheme()
   const themeObject = getThemeObject(theme)
   usePreviewModeHotkey()
-  useAcademyHotkey()
 
   const rainbowTheme =
     theme === "dark"
@@ -58,7 +54,6 @@ function ThemedApp({ Component, pageProps }: ClientAppProps) {
             <Component {...pageProps} />
           </Layout>
           <PreviewModePanel />
-          <AcademyPanel />
         </ClayProvider>
       </PassportProvider>
     </RainbowKitProvider>
@@ -72,11 +67,9 @@ export function ClientApp({ Component, pageProps }: ClientAppProps) {
         <ThemeProvider>
           <NetworkProvider>
             <PreviewModeProvider>
-              <AcademyProvider>
-                <GaugeProfilesProvider>
-                  <ThemedApp Component={Component} pageProps={pageProps} />
-                </GaugeProfilesProvider>
-              </AcademyProvider>
+              <GaugeProfilesProvider>
+                <ThemedApp Component={Component} pageProps={pageProps} />
+              </GaugeProfilesProvider>
             </PreviewModeProvider>
           </NetworkProvider>
         </ThemeProvider>
