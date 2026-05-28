@@ -43,12 +43,9 @@ export default function AcademyPublicPage() {
   }, [selectedActor])
 
   if (leaderboardLoading) {
-    return (
-      <div className="flex min-h-[50vh] items-center justify-center">
-        <InitialLoader />
-      </div>
-    )
+    return <InitialLoader />
   }
+
 
   if (leaderboardError || !leaderboardData) {
     return (
@@ -126,21 +123,17 @@ export default function AcademyPublicPage() {
       </SpringIn>
 
       {/* Actor Profile Drawer */}
-      {selectedActor && actorProfileData ? (
+      {selectedActor && (
         <AcademyPublicActorProfile
-          profile={actorProfileData.profile}
-          row={actorProfileData.row}
+          actor={selectedActor}
+          profile={actorProfileData?.profile ?? null}
+          row={actorProfileData?.row ?? null}
+          isLoading={actorProfileLoading}
           fromTs={meta.fromTs}
           toTs={meta.toTs}
           onClose={() => setSelectedActor(null)}
         />
-      ) : selectedActor && actorProfileLoading ? (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="rounded-xl bg-[var(--surface-primary)] p-8 shadow-xl">
-            <InitialLoader />
-          </div>
-        </div>
-      ) : null}
+      )}
     </div>
   )
 }

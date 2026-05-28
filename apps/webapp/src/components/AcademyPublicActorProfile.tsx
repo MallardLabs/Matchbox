@@ -1,4 +1,5 @@
 import { ClickableAddress } from "@/components/ClickableAddress"
+import { TerminalLoader } from "@/components/InitialLoader"
 import { getExplorerTransactionUrl } from "@/config/explorer"
 import { useNetwork } from "@/contexts/NetworkContext"
 import type { ActorProfile, LockDelta } from "@/lib/academy/actorProfile"
@@ -7,12 +8,15 @@ import type { MezoActivityItem } from "@/types/mezoActivity"
 import type { Address, Hash } from "viem"
 
 type Props = {
-  profile: ActorProfile
+  actor: Address
+  profile: ActorProfile | null
   row: LeaderboardRow | null
+  isLoading: boolean
   fromTs: number
   toTs: number
   onClose: () => void
 }
+
 
 function fmtPoints(wad: bigint): string {
   const value = Number(wad / 10n ** 12n) / 1e6
@@ -75,8 +79,10 @@ function actionColor(t: string): string {
 }
 
 export default function AcademyPublicActorProfile({
+  actor,
   profile,
   row,
+  isLoading,
   fromTs,
   toTs,
   onClose,
@@ -106,8 +112,8 @@ export default function AcademyPublicActorProfile({
             </div>
             <div className="mt-1">
               <ClickableAddress
-                address={profile.actor}
-                label={fmtAddrShort(profile.actor)}
+                address={actor}
+                label={fmtAddrShort(actor)}
                 className="text-sm"
               />
             </div>
@@ -122,8 +128,18 @@ export default function AcademyPublicActorProfile({
         </header>
 
         <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
-          {/* Counts */}
-          <section className="grid grid-cols-2 gap-2 md:grid-cols-4">
+          {isLoading ? (
+            <div className="flex h-64 items-center justify-center">
+              <TerminalLoader />
+            </div>
+          ) : !profile ? (
+            <div className="rounded border border-[var(--border)] bg-[var(--surface-tertiary)] px-3 py-3 text-center text-[11px] text-[var(--content-secondary)]">
+              Failed to load profile.
+            </div>
+          ) : (
+            <>
+              {/* Counts */}
+              <section className="grid grid-cols-2 gap-2 md:grid-cols-4">
             <Stat label="New locks" value={String(profile.newLockCount)} />
             <Stat label="Extensions" value={String(profile.extensionCount)} />
             <Stat
@@ -306,6 +322,8 @@ export default function AcademyPublicActorProfile({
               ) : null}
             </section>
           ) : null}
+            </>
+          )}
         </div>
       </div>
     </div>
