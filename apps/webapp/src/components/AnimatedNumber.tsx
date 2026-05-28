@@ -3,8 +3,16 @@ import { useEffect, useState } from "react"
 function TickerDigit({ char, index }: { char: string; index: number }) {
   const isNumber = /^[0-9]$/.test(char)
 
+  if (char === " ") {
+    return <span className="inline-flex w-[0.35em]" aria-hidden="true" />
+  }
+
   if (!isNumber) {
-    return <span className="inline-block">{char}</span>
+    return (
+      <span className="inline-flex h-[1em] items-center leading-none">
+        {char}
+      </span>
+    )
   }
 
   const digit = Number.parseInt(char, 10)
@@ -15,11 +23,13 @@ function TickerDigit({ char, index }: { char: string; index: number }) {
   const duration = 700 + index * 20
 
   return (
-    <span className="relative inline-block h-[1.1em] overflow-hidden leading-none [mask-image:linear-gradient(to_bottom,transparent,black_15%,black_85%,transparent)]">
+    <span className="relative inline-flex h-[1em] w-[0.62em] items-center justify-center overflow-hidden align-middle leading-none [mask-image:linear-gradient(to_bottom,transparent,black_15%,black_85%,transparent)]">
       {/* Invisible placeholder to maintain width */}
-      <span className="invisible pointer-events-none tabular-nums">0</span>
+      <span className="pointer-events-none invisible tabular-nums leading-none">
+        0
+      </span>
       <span
-        className="absolute left-0 top-0 flex flex-col will-change-transform"
+        className="absolute left-0 top-0 flex w-full flex-col items-center will-change-transform"
         style={{
           transform: `translateY(-${digit * 10}%)`,
           transition: `transform ${duration}ms cubic-bezier(0.16, 1, 0.3, 1) ${delay}ms`,
@@ -28,7 +38,7 @@ function TickerDigit({ char, index }: { char: string; index: number }) {
         {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((i) => (
           <span
             key={i}
-            className="flex h-[1.1em] items-center justify-center tabular-nums"
+            className="flex h-[1em] w-full items-center justify-center tabular-nums leading-none"
           >
             {i}
           </span>
@@ -105,9 +115,9 @@ export function AnimatedTickerText({
   const chars = displayString.split("")
 
   return (
-    <span className="inline-flex items-baseline">
-      {prefix && <span className="mr-[0.1em]">{prefix}</span>}
-      <span className="inline-flex items-baseline">
+    <span className="inline-flex items-center leading-none">
+      {prefix && <span className="mr-[0.1em] leading-none">{prefix}</span>}
+      <span className="inline-flex items-center leading-none">
         {chars.map((char, index) => (
           <TickerDigit
             key={`${index}-${char === "." || char === "," ? char : "num"}`}
@@ -116,7 +126,7 @@ export function AnimatedTickerText({
           />
         ))}
       </span>
-      {suffix && <span className="ml-[0.1em]">{suffix}</span>}
+      {suffix && <span className="ml-[0.1em] leading-none">{suffix}</span>}
     </span>
   )
 }

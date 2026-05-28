@@ -497,7 +497,7 @@ export function WalletDrawer({
         aria-modal="true"
         aria-label="Wallet details"
         tabIndex={-1}
-        className={`fixed right-0 top-0 z-[70] m-0 flex h-full max-h-none w-full max-w-[420px] flex-col border-0 bg-[var(--surface)] p-0 shadow-2xl transition-transform duration-300 ease-out ${
+        className={`fixed left-auto right-0 top-0 z-[70] m-0 flex h-full max-h-none w-full max-w-[420px] flex-col border-0 bg-[var(--surface)] p-0 shadow-2xl transition-transform duration-300 ease-out ${
           isVisible ? "translate-x-0" : "translate-x-full"
         }`}
       >
