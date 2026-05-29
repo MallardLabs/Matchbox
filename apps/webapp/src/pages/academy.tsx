@@ -1,15 +1,6 @@
-import { InitialLoader } from "@/components/InitialLoader"
+import AcademyPublicPage from "@/components/pages/AcademyPublicPage"
 import { getAppUrl, getOgImageUrl } from "@/utils/seo"
-import dynamic from "next/dynamic"
 import Head from "next/head"
-
-const AcademyPublicPage = dynamic(
-  () => import("@/components/pages/AcademyPublicPage"),
-  {
-    ssr: false,
-    loading: () => <InitialLoader />,
-  },
-)
 
 export default function Academy() {
   const ogImageUrl = getOgImageUrl()
@@ -37,6 +28,13 @@ export default function Academy() {
         <meta name="twitter:title" content={title} />
         <meta name="twitter:description" content={description} />
         <meta name="twitter:image" content={ogImageUrl} />
+
+        <link
+          rel="preload"
+          href="/api/academy/leaderboard?network=mainnet"
+          as="fetch"
+          crossOrigin="anonymous"
+        />
       </Head>
       <AcademyPublicPage />
     </>

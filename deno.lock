@@ -1,0 +1,23 @@
+{
+  "version": "5",
+  "redirects": {
+    "https://esm.sh/@supabase/supabase-js@2": "https://esm.sh/@supabase/supabase-js@2.103.0",
+    "https://esm.sh/viem@2": "https://esm.sh/viem@2.47.17",
+    "https://esm.sh/zod@3": "https://esm.sh/zod@3.25.76"
+  },
+  "remote": {
+    "https://esm.sh/@supabase/supabase-js@2.103.0": "513f5e7364668df19963929fd207a721e659e5c69875d8f1c1fe44b0a95d534d",
+    "https://esm.sh/viem@2.47.17": "2ec69bbf65d452f12b5c44e840fb5f1ab9c9b755d9812358bbbe1709d62078b6",
+    "https://esm.sh/zod@3.25.76": "3fb2d6fc9ba6facc140a9875710339f90e89befb26fd9b39da83644d4dd6a701"
+  },
+  "workspace": {
+    "packageJson": {
+      "dependencies": [
+        "npm:@react-native-async-storage/async-storage@^2.2.0",
+        "npm:canvas@^3.2.1",
+        "npm:prettier@^3.4.1",
+        "npm:turbo@^2.3.1"
+      ]
+    }
+  }
+}

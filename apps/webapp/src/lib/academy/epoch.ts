@@ -27,3 +27,25 @@ export function enumerateEpochs(fromTs: number, toTs: number): number[] {
 export function epochStartFor(ts: number): number {
   return snapToThursdayUTC(ts, "down")
 }
+
+/**
+ * Resolve the points window for an API request. `from`/`to` are optional unix
+ * seconds (used for fixed per-semester windows); both are snapped to epoch
+ * boundaries. When absent, defaults to the rolling last-8-epoch window ending at
+ * the most recent epoch boundary.
+ */
+export function resolveWindow(
+  fromParam: string | null,
+  toParam: string | null,
+  now: number,
+): { fromTs: number; toTs: number } {
+  const toNum = toParam === null ? Number.NaN : Number(toParam)
+  const fromNum = fromParam === null ? Number.NaN : Number(fromParam)
+  const toTs = Number.isFinite(toNum)
+    ? snapToThursdayUTC(toNum, "down")
+    : snapToThursdayUTC(now, "down")
+  const fromTs = Number.isFinite(fromNum)
+    ? snapToThursdayUTC(fromNum, "down")
+    : toTs - 8 * WEEK
+  return { fromTs, toTs }
+}

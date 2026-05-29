@@ -3,7 +3,7 @@ import {
   computeActorProfile,
 } from "@/lib/academy/actorProfile"
 import { BLACKLISTED_SYSTEM_ACTORS } from "@/lib/academy/blacklistedActors"
-import { WEEK, snapToThursdayUTC } from "@/lib/academy/epoch"
+import { WEEK, resolveWindow } from "@/lib/academy/epoch"
 import { simulate } from "@/lib/academy/simulate"
 import { fetchMezoActivity } from "@/lib/mezoActivity/dataSources"
 import { serializeActivityItem } from "@/lib/mezoActivity/normalize"
@@ -177,8 +177,13 @@ export default async function handler(request: Request): Promise<Response> {
 
   try {
     const now = Math.floor(Date.now() / 1000)
-    const toTs = snapToThursdayUTC(now, "down")
-    const fromTs = toTs - 8 * WEEK
+    // Optional fixed window (unix seconds), used for per-semester point lookups.
+    // Defaults to the rolling last-8-epoch window. Snapped to epoch boundaries.
+    const { fromTs, toTs } = resolveWindow(
+      url.searchParams.get("from"),
+      url.searchParams.get("to"),
+      now,
+    )
 
     // Fetch Lock track events strictly in range
     const lockEvents: MezoActivityItem[] = []
@@ -297,7 +302,8 @@ export default async function handler(request: Request): Promise<Response> {
       status: 200,
       headers: {
         "Content-Type": "application/json",
-        "Cache-Control": "public, s-maxage=14400, stale-while-revalidate=3600",
+        "Cache-Control":
+          "public, max-age=300, s-maxage=14400, stale-while-revalidate=3600",
         ...CORS_HEADERS,
       },
     })

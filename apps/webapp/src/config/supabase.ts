@@ -109,3 +109,40 @@ export type ProfileReset = {
   reset_reason: "nft_transfer" | "nft_burned"
   reset_at: string
 }
+
+export type DiscordWalletLink = {
+  discord_user_id: string
+  wallet_address: string
+  discord_username: string | null
+  discord_global_name: string | null
+  discord_avatar: string | null
+  guild_id: string | null
+  granted_roles: string[]
+  verified_at: string
+  created_at: string
+  updated_at: string
+}
+
+export type DiscordSemester = {
+  semester_id: string
+  label: string
+  from_ts: number
+  to_ts: number
+  role_id: string | null
+  active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export type DiscordLinkToken = {
+  token: string
+  discord_user_id: string
+  discord_username: string | null
+  discord_global_name: string | null
+  discord_avatar: string | null
+  guild_id: string | null
+  nonce: string
+  status: "pending" | "completed"
+  expires_at: string
+  created_at: string
+}

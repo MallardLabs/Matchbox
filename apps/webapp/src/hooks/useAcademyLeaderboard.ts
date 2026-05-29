@@ -8,6 +8,9 @@ const NETWORK_BY_CHAIN: Record<number, "mainnet" | "testnet"> = {
   [CHAIN_ID.testnet]: "testnet",
 }
 
+const STORAGE_PREFIX = "mezo-academy-leaderboard-v1"
+const STORAGE_MAX_AGE_MS = 24 * 60 * 60 * 1000
+
 export type AcademyLeaderboardData = {
   rows: LeaderboardRow[]
   totals: SimTotals
@@ -43,6 +46,14 @@ interface SerializedTotals {
   totalEpochs: number
   fullParticipationCount: number
   activeVoteAggregateWad: string
+}
+
+interface ApiLeaderboardResponse {
+  success: boolean
+  error?: string
+  rows: SerializedRow[]
+  totals: SerializedTotals
+  meta: AcademyLeaderboardData["meta"]
 }
 
 function deserializeRow(row: SerializedRow): LeaderboardRow {
@@ -86,6 +97,61 @@ function deserializeTotals(totals: SerializedTotals): SimTotals {
   }
 }
 
+function deserializeLeaderboard(
+  data: ApiLeaderboardResponse,
+): AcademyLeaderboardData {
+  return {
+    rows: data.rows.map(deserializeRow),
+    totals: deserializeTotals(data.totals),
+    meta: data.meta,
+  }
+}
+
+function storageKey(network: "mainnet" | "testnet") {
+  return `${STORAGE_PREFIX}:${network}`
+}
+
+function readStoredLeaderboard(
+  network: "mainnet" | "testnet" | undefined,
+): AcademyLeaderboardData | undefined {
+  if (!network || typeof window === "undefined") return undefined
+
+  try {
+    const raw = window.localStorage.getItem(storageKey(network))
+    if (!raw) return undefined
+    const parsed = JSON.parse(raw) as {
+      savedAt: number
+      payload: ApiLeaderboardResponse
+    }
+    if (
+      !parsed.savedAt ||
+      Date.now() - parsed.savedAt > STORAGE_MAX_AGE_MS ||
+      !parsed.payload?.success
+    ) {
+      return undefined
+    }
+    return deserializeLeaderboard(parsed.payload)
+  } catch {
+    return undefined
+  }
+}
+
+function writeStoredLeaderboard(
+  network: "mainnet" | "testnet",
+  payload: ApiLeaderboardResponse,
+) {
+  if (typeof window === "undefined") return
+
+  try {
+    window.localStorage.setItem(
+      storageKey(network),
+      JSON.stringify({ savedAt: Date.now(), payload }),
+    )
+  } catch {
+    // Ignore quota/private-mode failures; HTTP and React Query caches still work.
+  }
+}
+
 export function useAcademyLeaderboard() {
   const { chainId, isNetworkReady } = useNetwork()
   const network = NETWORK_BY_CHAIN[chainId]
@@ -94,21 +160,25 @@ export function useAcademyLeaderboard() {
     queryKey: ["academy-leaderboard", network],
     enabled: isNetworkReady && !!network,
     staleTime: 5 * 60 * 1000, // 5 min client-side staleTime
+    initialData: () => readStoredLeaderboard(network),
+    initialDataUpdatedAt: () => {
+      const stored = readStoredLeaderboard(network)
+      return stored?.meta.generatedAt ? stored.meta.generatedAt * 1000 : 0
+    },
     queryFn: async () => {
+      if (!network) throw new Error("Unsupported network")
+
       const res = await fetch(`/api/academy/leaderboard?network=${network}`)
       if (!res.ok) {
         throw new Error(`Failed to fetch leaderboard: ${res.statusText}`)
       }
-      const data = await res.json()
+      const data = (await res.json()) as ApiLeaderboardResponse
       if (!data.success) {
         throw new Error(data.error || "Failed to fetch leaderboard")
       }
 
-      return {
-        rows: data.rows.map(deserializeRow),
-        totals: deserializeTotals(data.totals),
-        meta: data.meta,
-      }
+      writeStoredLeaderboard(network, data)
+      return deserializeLeaderboard(data)
     },
   })
 }

@@ -63,7 +63,6 @@ runtime_blacklist AS (
 seed_blacklist(actor) AS (
   VALUES
     (0x965c18b6ac7d233c00c93c7c0039bef6a6035d26),
-    (0x4859c4fad2bb8a93ec4ad8c232dd280b80d84ea8),
     (0x2bc442310e6684c678e7b8498efa8aa3cbd7c44b),
     (0x35cf1381f056559299b6a4dc08f83833fab07946),
     (0x57de1ae5933ca6e5c672f6a9e8967d5e2fbf21cf),
