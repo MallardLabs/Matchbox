@@ -1,4 +1,5 @@
 import { BLACKLISTED_SYSTEM_ACTORS } from "@/lib/academy/blacklistedActors"
+import { defaultAcademyParams } from "@/lib/academy/constants"
 import { WEEK, resolveWindow } from "@/lib/academy/epoch"
 import { simulate } from "@/lib/academy/simulate"
 import { fetchMezoActivity } from "@/lib/mezoActivity/dataSources"
@@ -138,15 +139,7 @@ export default async function handler(request: Request): Promise<Response> {
 
     const blacklist = new Set(BLACKLISTED_SYSTEM_ACTORS)
 
-    const params = {
-      budgetMezoWad: 1_000_000n * 10n ** 18n, // 1M default S0 budget
-      weightNew: 2,
-      weightExt: 1,
-      weightBoost: 1,
-      participationMultiplier: 2,
-      mezoUsd: 0.05,
-      rewardFloorMezoWad: 20n * 10n ** 18n,
-    }
+    const params = defaultAcademyParams()
 
     const simResult = simulate(
       {

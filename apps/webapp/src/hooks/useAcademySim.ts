@@ -1,6 +1,7 @@
 import { useAcademyActivity } from "@/hooks/useAcademyActivity"
 import { useBlacklist } from "@/hooks/useBlacklist"
 import { computeActorProfile } from "@/lib/academy/actorProfile"
+import { defaultAcademyParams as defaultParams } from "@/lib/academy/constants"
 import {
   WEEK,
   enumerateEpochs,
@@ -8,6 +9,16 @@ import {
   snapToThursdayUTC,
 } from "@/lib/academy/epoch"
 import { type AcademyParams, simulate } from "@/lib/academy/simulate"
+export { defaultParams }
+import {
+  DEFAULT_BUDGET_MEZO,
+  DEFAULT_MEZO_USD,
+  DEFAULT_PARTICIPATION_MULTIPLIER,
+  DEFAULT_REWARD_FLOOR_MEZO,
+  DEFAULT_WEIGHT_BOOST,
+  DEFAULT_WEIGHT_EXT,
+  DEFAULT_WEIGHT_NEW,
+} from "@/lib/academy/constants"
 import type { MezoActivityItem } from "@/types/mezoActivity"
 import { useEffect, useMemo, useState } from "react"
 import { type Address, parseUnits } from "viem"
@@ -23,26 +34,11 @@ type StoredState = {
   }
 }
 
-const DEFAULT_BUDGET_MEZO = 4_000_000
-const DEFAULT_REWARD_FLOOR_MEZO = 20
-
 export function defaultRange(): { fromTs: number; toTs: number } {
   const now = Math.floor(Date.now() / 1000)
   const toTs = snapToThursdayUTC(now, "down")
   const fromTs = toTs - 8 * WEEK
   return { fromTs, toTs }
-}
-
-export function defaultParams(): AcademyParams {
-  return {
-    budgetMezoWad: parseUnits(String(DEFAULT_BUDGET_MEZO), 18),
-    weightNew: 2,
-    weightExt: 1,
-    weightBoost: 1,
-    participationMultiplier: 2,
-    mezoUsd: 0.05,
-    rewardFloorMezoWad: parseUnits(String(DEFAULT_REWARD_FLOOR_MEZO), 18),
-  }
 }
 
 function loadStored(): {
@@ -65,11 +61,13 @@ function loadStored(): {
           String(parsed.params?.budgetMezo ?? DEFAULT_BUDGET_MEZO),
           18,
         ),
-        weightNew: parsed.params?.weightNew ?? 2,
-        weightExt: parsed.params?.weightExt ?? 1,
-        weightBoost: parsed.params?.weightBoost ?? 1,
-        participationMultiplier: parsed.params?.participationMultiplier ?? 2,
-        mezoUsd: parsed.params?.mezoUsd ?? 0.05,
+        weightNew: parsed.params?.weightNew ?? DEFAULT_WEIGHT_NEW,
+        weightExt: parsed.params?.weightExt ?? DEFAULT_WEIGHT_EXT,
+        weightBoost: parsed.params?.weightBoost ?? DEFAULT_WEIGHT_BOOST,
+        participationMultiplier:
+          parsed.params?.participationMultiplier ??
+          DEFAULT_PARTICIPATION_MULTIPLIER,
+        mezoUsd: parsed.params?.mezoUsd ?? DEFAULT_MEZO_USD,
         rewardFloorMezoWad: parseUnits(
           String(parsed.params?.rewardFloorMezo ?? DEFAULT_REWARD_FLOOR_MEZO),
           18,
