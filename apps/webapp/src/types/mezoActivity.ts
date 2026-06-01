@@ -110,6 +110,7 @@ export type MezoActivityItem = {
   totalWeight?: bigint
   boost?: bigint
   boostableTokenId?: bigint
+  tokenAddress?: Address
   gaugeAddress?: Address
   recipient?: Address
   actionType: MezoActivityActionType
@@ -192,6 +193,7 @@ export type MezoActivityApiItem = Omit<
   | "totalWeight"
   | "boost"
   | "boostableTokenId"
+  | "tokenAddress"
   | "period"
   | "newPeriod"
   | "firstRecipientAmount"
@@ -220,6 +222,7 @@ export type MezoActivityApiItem = Omit<
   totalWeight?: string
   boost?: string
   boostableTokenId?: string
+  tokenAddress?: Address
   period?: string
   newPeriod?: string
   firstRecipientAmount?: string

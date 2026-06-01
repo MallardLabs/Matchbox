@@ -59,6 +59,7 @@ type ExplorerActivityEvent = {
   mergeDestPrevAmount?: string | null
   mergeDestPrevDuration?: string | null
   mergeDestPrevIsPermanent?: boolean | null
+  token?: string | null
   gauge?: string | null
   boostableTokenId?: string | null
   boost?: string | null
@@ -235,6 +236,7 @@ async function fetchExplorerActivityRaw(
           mergeDestPrevAmount
           mergeDestPrevDuration
           mergeDestPrevIsPermanent
+          token
           gauge
           boostableTokenId
           boost
@@ -272,6 +274,7 @@ async function fetchExplorerActivityRaw(
     const actorAddress = normalizeAddress(event.actor ?? undefined)
     const recipientAddress = normalizeAddress(event.recipient ?? undefined)
     const txFromAddress = normalizeAddress(event.txFrom ?? undefined)
+    const tokenAddress = normalizeAddress(event.token ?? undefined)
     const gaugeAddress = normalizeAddress(event.gauge ?? undefined)
     const txHash = maybeHash(event.txHash)
     const pokeMethod = mapPokeMethod(event.pokeMethod)
@@ -328,6 +331,7 @@ async function fetchExplorerActivityRaw(
         ...(event.boostableTokenId
           ? { boostableTokenId: BigInt(event.boostableTokenId) }
           : {}),
+        ...(tokenAddress ? { tokenAddress } : {}),
         ...(gaugeAddress ? { gaugeAddress } : {}),
         ...(pokeMethod ? { pokeMethod } : {}),
         ...(contract ? { contract } : {}),
