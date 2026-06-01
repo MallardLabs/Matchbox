@@ -3,9 +3,12 @@ import { useActivityEnrichment } from "@/hooks/useActivityEnrichment"
 import {
   type IncentiveHistoryEpoch,
   type IncentiveHistoryScope,
+  type IncentiveHistoryTarget,
   useActivityIncentiveHistory,
 } from "@/hooks/useActivityIncentiveHistory"
+import { useAllGaugeProfiles } from "@/hooks/useGaugeProfiles"
 import { useMezoActivity } from "@/hooks/useMezoActivity"
+import { usePools } from "@/hooks/usePools"
 import {
   SYSTEM_ACTION_TYPES_GRAPHQL,
   USER_ACTION_TYPES_GRAPHQL,
@@ -27,6 +30,7 @@ import type {
   MezoSystemFilter,
 } from "@/types/mezoActivity"
 import { useEffect, useMemo, useState } from "react"
+import { formatUnits } from "viem"
 
 const ACTIVITY_FILTERS: Array<{ key: MezoActivityFilter; label: string }> = [
   { key: "locks", label: "Locks" },
@@ -135,6 +139,16 @@ function formatUsdDetailed(value: number): string {
   })}`
 }
 
+function formatTokenCompact(value: number): string {
+  if (!Number.isFinite(value) || value <= 0) return "0"
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(2)}M`
+  if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`
+  if (value >= 1) {
+    return value.toLocaleString(undefined, { maximumFractionDigits: 2 })
+  }
+  return value.toLocaleString(undefined, { maximumFractionDigits: 4 })
+}
+
 function formatEpochRange(start: number, end: number): string {
   const from = new Date(start * 1000).toLocaleDateString(undefined, {
     month: "short",
@@ -163,6 +177,15 @@ function scopedEvents(
   if (scope === "vebtc") return epoch.vebtcEvents
   if (scope === "pools") return epoch.poolsEvents
   return epoch.totalEvents
+}
+
+function scopedTargets(
+  epoch: IncentiveHistoryEpoch | undefined,
+  scope: IncentiveHistoryScope,
+): IncentiveHistoryTarget[] {
+  if (!epoch) return []
+  if (scope === "both") return epoch.targets
+  return epoch.targets.filter((target) => target.domain === scope)
 }
 
 function isSystemItem(item: MezoActivityItem): boolean {
@@ -779,9 +802,12 @@ function IncentiveHistoryPanel({
 }) {
   const { epochs, isLoading, isError, error, isFetching } =
     useActivityIncentiveHistory()
+  const { pools } = usePools()
+  const { profiles } = useAllGaugeProfiles()
   const [selectedEpochStart, setSelectedEpochStart] = useState<
     number | undefined
   >()
+  const [showDetails, setShowDetails] = useState(false)
 
   useEffect(() => {
     if (epochs.length === 0) return
@@ -802,12 +828,42 @@ function IncentiveHistoryPanel({
   const maxUsd = Math.max(...epochs.map((epoch) => scopedUsd(epoch, scope)), 1)
   const selectedUsd = selectedEpoch ? scopedUsd(selectedEpoch, scope) : 0
   const selectedEvents = selectedEpoch ? scopedEvents(selectedEpoch, scope) : 0
+  const selectedTargets = scopedTargets(selectedEpoch, scope)
   const canGoBack = selectedIndex > 0
   const canGoForward = selectedIndex < epochs.length - 1
+
+  const poolsByGauge = useMemo(() => {
+    const map = new Map<string, (typeof pools)[number]>()
+    for (const pool of pools) {
+      if (pool.gauge) map.set(pool.gauge.toLowerCase(), pool)
+    }
+    return map
+  }, [pools])
 
   const goToEpoch = (index: number) => {
     const next = epochs[index]
     if (next) setSelectedEpochStart(next.epochStart)
+  }
+
+  const targetLabel = (target: IncentiveHistoryTarget): string => {
+    if (!target.gaugeAddress) return "Unassigned gauge"
+    if (target.domain === "pools") {
+      const pool = poolsByGauge.get(target.gaugeAddress.toLowerCase())
+      if (pool) return `${pool.token0.symbol}/${pool.token1.symbol}`
+    }
+    const profile = profiles.get(target.gaugeAddress.toLowerCase())
+    return profile?.display_name?.trim() || shortenAddress(target.gaugeAddress)
+  }
+
+  const targetSubLabel = (target: IncentiveHistoryTarget): string => {
+    if (target.domain === "pools" && target.gaugeAddress) {
+      const pool = poolsByGauge.get(target.gaugeAddress.toLowerCase())
+      if (pool) {
+        const kind = pool.volatility === "stable" ? "Stable" : "Volatile"
+        return `${kind} pool`
+      }
+    }
+    return target.domain === "vebtc" ? "veBTC gauge" : "Pool gauge"
   }
 
   return (
@@ -927,6 +983,88 @@ function IncentiveHistoryPanel({
             </span>
             <span>Current</span>
           </div>
+
+          <button
+            type="button"
+            onClick={() => setShowDetails((current) => !current)}
+            aria-expanded={showDetails}
+            className="mt-4 flex w-full items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-left text-sm text-[var(--content-secondary)] transition-colors hover:text-[#F7931A]"
+          >
+            <span>
+              {selectedTargets.length} gauge
+              {selectedTargets.length === 1 ? "" : "s"} with incentives
+            </span>
+            <span
+              aria-hidden="true"
+              className={`text-xs transition-transform ${showDetails ? "rotate-180" : ""}`}
+            >
+              ▾
+            </span>
+          </button>
+
+          {showDetails ? (
+            <div className="mt-2 overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--surface)]">
+              {selectedTargets.length > 0 ? (
+                selectedTargets.map((target) => (
+                  <div
+                    key={`${target.domain}-${target.gaugeAddress ?? "unknown"}`}
+                    className="flex flex-col gap-3 border-b border-[var(--border)] px-3 py-3 last:border-b-0 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <span
+                          className={`size-2 flex-none rounded-full ${
+                            target.domain === "vebtc"
+                              ? "bg-[#F7931A]"
+                              : "bg-[var(--content-secondary)]"
+                          }`}
+                        />
+                        <p className="truncate text-sm font-medium text-[var(--content-primary)]">
+                          {targetLabel(target)}
+                        </p>
+                      </div>
+                      <p className="mt-1 truncate text-xs text-[var(--content-tertiary)]">
+                        {targetSubLabel(target)}
+                        {target.gaugeAddress
+                          ? ` · ${shortenAddress(target.gaugeAddress)}`
+                          : ""}
+                      </p>
+                      {target.tokens.length > 0 ? (
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {target.tokens.slice(0, 4).map((token) => (
+                            <span
+                              key={`${token.tokenAddress ?? "unknown"}-${token.symbol}`}
+                              className="rounded-md border border-[var(--border)] bg-[var(--surface-secondary)] px-1.5 py-0.5 text-[10px] text-[var(--content-secondary)]"
+                            >
+                              {formatTokenCompact(
+                                Number(
+                                  formatUnits(token.amount, token.decimals),
+                                ),
+                              )}{" "}
+                              {token.symbol}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                    <div className="flex flex-none items-center justify-between gap-4 sm:flex-col sm:items-end sm:gap-1">
+                      <p className="font-mono text-sm font-semibold tabular-nums text-[var(--content-primary)]">
+                        {formatUsdDetailed(target.totalUsd)}
+                      </p>
+                      <p className="text-xs text-[var(--content-tertiary)]">
+                        {target.eventCount} event
+                        {target.eventCount === 1 ? "" : "s"}
+                      </p>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <p className="px-3 py-4 text-sm text-[var(--content-tertiary)]">
+                  No indexed incentive deposits for this filter and epoch.
+                </p>
+              )}
+            </div>
+          ) : null}
 
           {isLoading ? (
             <p className="mt-3 text-xs text-[var(--content-tertiary)]">

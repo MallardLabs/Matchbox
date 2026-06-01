@@ -26,6 +26,15 @@ export type IncentiveHistoryToken = {
   eventCount: number
 }
 
+export type IncentiveHistoryTarget = {
+  domain: IncentiveHistoryDomain
+  gaugeAddress?: Address
+  totalUsd: number
+  eventCount: number
+  unpricedEvents: number
+  tokens: IncentiveHistoryToken[]
+}
+
 export type IncentiveHistoryEpoch = {
   epochStart: number
   epochEnd: number
@@ -38,11 +47,12 @@ export type IncentiveHistoryEpoch = {
   totalEvents: number
   unpricedEvents: number
   tokens: IncentiveHistoryToken[]
+  targets: IncentiveHistoryTarget[]
 }
 
 const WEEK_SECONDS = 7 * 24 * 60 * 60
 const HISTORY_START_EPOCH = Math.floor(Date.UTC(2026, 3, 2) / 1000)
-const INCENTIVE_ACTION_TYPES = ["INCENTIVE_ADDED", "REWARD_NOTIFIED"] as const
+const INCENTIVE_ACTION_TYPES = ["INCENTIVE_ADDED"] as const
 
 const NETWORK_BY_CHAIN: Record<number, "mainnet" | "testnet"> = {
   [CHAIN_ID.mainnet]: "mainnet",
@@ -76,11 +86,16 @@ function createEpoch(epochStart: number, label: string): IncentiveHistoryEpoch {
     totalEvents: 0,
     unpricedEvents: 0,
     tokens: [],
+    targets: [],
   }
 }
 
 function tokenSortValue(token: IncentiveHistoryToken): number {
   return token.usdValue ?? 0
+}
+
+function targetSortValue(target: IncentiveHistoryTarget): number {
+  return target.totalUsd
 }
 
 export function useActivityIncentiveHistory(): {
@@ -234,14 +249,11 @@ export function useActivityIncentiveHistory(): {
       byEpoch.set(epochStart, epoch)
     }
     const tokenTotals = new Map<string, IncentiveHistoryToken>()
+    const targetTotals = new Map<string, IncentiveHistoryTarget>()
+    const targetTokenTotals = new Map<string, IncentiveHistoryToken>()
 
     for (const item of query.data ?? []) {
-      if (
-        item.actionType !== "incentiveAdded" &&
-        item.actionType !== "rewardNotified"
-      ) {
-        continue
-      }
+      if (item.actionType !== "incentiveAdded") continue
       const domain = domainForItem(item)
       if (!domain) continue
 
@@ -298,14 +310,66 @@ export function useActivityIncentiveHistory(): {
           eventCount: 1,
         })
       }
+
+      const targetKey = `${epochStart}:${domain}:${
+        item.gaugeAddress?.toLowerCase() ?? "unknown"
+      }`
+      const target = targetTotals.get(targetKey)
+      if (target) {
+        target.eventCount += 1
+        if (usdValue === null) target.unpricedEvents += 1
+        else target.totalUsd += usdValue
+      } else {
+        targetTotals.set(targetKey, {
+          domain,
+          ...(item.gaugeAddress ? { gaugeAddress: item.gaugeAddress } : {}),
+          totalUsd: usdValue ?? 0,
+          eventCount: 1,
+          unpricedEvents: usdValue === null ? 1 : 0,
+          tokens: [],
+        })
+      }
+
+      const targetTokenKey = `${targetKey}:${
+        tokenAddress?.toLowerCase() ?? "unknown"
+      }`
+      const existingTargetToken = targetTokenTotals.get(targetTokenKey)
+      if (existingTargetToken) {
+        existingTargetToken.amount += amount
+        existingTargetToken.eventCount += 1
+        existingTargetToken.usdValue =
+          existingTargetToken.usdValue === null || usdValue === null
+            ? existingTargetToken.usdValue
+            : existingTargetToken.usdValue + usdValue
+      } else {
+        targetTokenTotals.set(targetTokenKey, {
+          domain,
+          ...(tokenAddress ? { tokenAddress } : {}),
+          symbol: token?.symbol ?? "Unknown",
+          amount,
+          decimals: token?.decimals ?? 18,
+          usdValue,
+          eventCount: 1,
+        })
+      }
     }
 
     for (const [key, token] of tokenTotals) {
       const epochStart = Number(key.split(":")[0])
       byEpoch.get(epochStart)?.tokens.push(token)
     }
+    for (const [key, token] of targetTokenTotals) {
+      const targetKey = key.split(":").slice(0, 3).join(":")
+      targetTotals.get(targetKey)?.tokens.push(token)
+    }
+    for (const [key, target] of targetTotals) {
+      const epochStart = Number(key.split(":")[0])
+      target.tokens.sort((a, b) => tokenSortValue(b) - tokenSortValue(a))
+      byEpoch.get(epochStart)?.targets.push(target)
+    }
     for (const epoch of byEpoch.values()) {
       epoch.tokens.sort((a, b) => tokenSortValue(b) - tokenSortValue(a))
+      epoch.targets.sort((a, b) => targetSortValue(b) - targetSortValue(a))
     }
 
     return orderedEpochs
