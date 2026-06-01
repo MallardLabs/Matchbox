@@ -1,7 +1,6 @@
 import { SpringIn } from "@/components/SpringIn"
 import { useActivityEnrichment } from "@/hooks/useActivityEnrichment"
 import {
-  type IncentiveHistoryDomain,
   type IncentiveHistoryEpoch,
   type IncentiveHistoryScope,
   useActivityIncentiveHistory,
@@ -28,7 +27,6 @@ import type {
   MezoSystemFilter,
 } from "@/types/mezoActivity"
 import { useEffect, useMemo, useState } from "react"
-import { formatUnits } from "viem"
 
 const ACTIVITY_FILTERS: Array<{ key: MezoActivityFilter; label: string }> = [
   { key: "locks", label: "Locks" },
@@ -129,14 +127,12 @@ function formatUsdCompact(value: number): string {
   return "<$1"
 }
 
-function formatTokenCompact(value: number): string {
-  if (!Number.isFinite(value) || value <= 0) return "0"
-  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(2)}M`
-  if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`
-  if (value >= 1) {
-    return value.toLocaleString(undefined, { maximumFractionDigits: 2 })
-  }
-  return value.toLocaleString(undefined, { maximumFractionDigits: 4 })
+function formatUsdDetailed(value: number): string {
+  if (!Number.isFinite(value) || value <= 0) return "$0.00"
+  return `$${value.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`
 }
 
 function formatEpochRange(start: number, end: number): string {
@@ -167,21 +163,6 @@ function scopedEvents(
   if (scope === "vebtc") return epoch.vebtcEvents
   if (scope === "pools") return epoch.poolsEvents
   return epoch.totalEvents
-}
-
-function scopedTokens(
-  epoch: IncentiveHistoryEpoch,
-  scope: IncentiveHistoryScope,
-) {
-  if (scope === "both") return epoch.tokens
-  return epoch.tokens.filter((token) => token.domain === scope)
-}
-
-function includesDomain(
-  scope: IncentiveHistoryScope,
-  domain: IncentiveHistoryDomain,
-): boolean {
-  return scope === "both" || scope === domain
 }
 
 function isSystemItem(item: MezoActivityItem): boolean {
@@ -798,32 +779,40 @@ function IncentiveHistoryPanel({
 }) {
   const { epochs, isLoading, isError, error, isFetching } =
     useActivityIncentiveHistory()
+  const [selectedEpochStart, setSelectedEpochStart] = useState<
+    number | undefined
+  >()
+
+  useEffect(() => {
+    if (epochs.length === 0) return
+    setSelectedEpochStart((current) => {
+      if (current && epochs.some((epoch) => epoch.epochStart === current)) {
+        return current
+      }
+      return epochs[epochs.length - 1]?.epochStart
+    })
+  }, [epochs])
+
+  const selectedIndex = Math.max(
+    epochs.findIndex((epoch) => epoch.epochStart === selectedEpochStart),
+    0,
+  )
+  const selectedEpoch =
+    epochs[selectedIndex] ?? epochs[epochs.length - 1] ?? undefined
   const maxUsd = Math.max(...epochs.map((epoch) => scopedUsd(epoch, scope)), 1)
-  const [previousEpoch, currentEpoch] = epochs
-  const currentUsd = currentEpoch ? scopedUsd(currentEpoch, scope) : 0
-  const previousUsd = previousEpoch ? scopedUsd(previousEpoch, scope) : 0
-  const deltaUsd = currentUsd - previousUsd
-  const deltaLabel =
-    deltaUsd === 0
-      ? "$0"
-      : `${deltaUsd > 0 ? "+" : "-"}${formatUsdCompact(Math.abs(deltaUsd))}`
-  const hasAnyEvents = epochs.some((epoch) => scopedEvents(epoch, scope) > 0)
+  const selectedUsd = selectedEpoch ? scopedUsd(selectedEpoch, scope) : 0
+  const selectedEvents = selectedEpoch ? scopedEvents(selectedEpoch, scope) : 0
+  const canGoBack = selectedIndex > 0
+  const canGoForward = selectedIndex < epochs.length - 1
+
+  const goToEpoch = (index: number) => {
+    const next = epochs[index]
+    if (next) setSelectedEpochStart(next.epochStart)
+  }
 
   return (
     <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 md:p-5">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div>
-          <p className="text-xs text-[var(--content-tertiary)]">
-            Incentives deployed
-          </p>
-          <h2 className="mt-1 text-balance text-xl font-semibold text-[var(--content-primary)] md:text-2xl">
-            This epoch vs previous epoch
-          </h2>
-          <p className="mt-2 max-w-2xl text-pretty text-sm text-[var(--content-secondary)]">
-            Tracks posted incentives across veBTC gauges and pool bribe
-            contracts. USD totals use live token pricing when available.
-          </p>
-        </div>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="inline-flex w-full rounded-lg border border-[var(--border)] bg-[var(--surface-secondary)] p-1 sm:w-auto">
           {INCENTIVE_SCOPE_OPTIONS.map((option) => (
             <button
@@ -841,145 +830,102 @@ function IncentiveHistoryPanel({
             </button>
           ))}
         </div>
+        <p className="text-xs text-[var(--content-tertiary)]">
+          Epoch history starts Apr 2
+        </p>
       </div>
 
-      <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-[1fr_2fr]">
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-1">
-          <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-secondary)] p-3">
-            <p className="text-xs text-[var(--content-tertiary)]">This epoch</p>
-            <p className="mt-1 font-mono text-2xl font-semibold tabular-nums text-[var(--content-primary)]">
-              {formatUsdCompact(currentUsd)}
+      <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--surface-secondary)] p-4">
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <p className="text-xs uppercase text-[var(--content-tertiary)]">
+              Total incentives
             </p>
-            <p className="mt-1 text-xs text-[var(--content-tertiary)]">
-              {currentEpoch
-                ? `${scopedEvents(currentEpoch, scope)} deployment${
-                    scopedEvents(currentEpoch, scope) === 1 ? "" : "s"
+            <p className="mt-2 truncate font-mono text-2xl font-semibold tabular-nums text-[var(--content-primary)] md:text-3xl">
+              ~{formatUsdDetailed(selectedUsd)}
+            </p>
+            <p className="mt-2 text-xs text-[var(--content-tertiary)]">
+              {selectedEpoch
+                ? `${formatEpochRange(selectedEpoch.epochStart, selectedEpoch.epochEnd)} · ${selectedEvents} deployment${
+                    selectedEvents === 1 ? "" : "s"
                   }`
-                : "0 deployments"}
+                : "Loading epoch"}
             </p>
           </div>
-          <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-secondary)] p-3">
-            <p className="text-xs text-[var(--content-tertiary)]">
-              Change vs previous
-            </p>
-            <p
-              className={`mt-1 font-mono text-2xl font-semibold tabular-nums ${
-                deltaUsd > 0
-                  ? "text-[var(--positive)]"
-                  : deltaUsd < 0
-                    ? "text-[var(--negative)]"
-                    : "text-[var(--content-primary)]"
-              }`}
+
+          <div className="flex flex-none items-center gap-1">
+            <button
+              type="button"
+              onClick={() => goToEpoch(selectedIndex - 1)}
+              disabled={!canGoBack}
+              aria-label="Show previous epoch"
+              className="flex size-9 items-center justify-center rounded-md border border-[var(--border)] bg-[var(--surface)] text-lg text-[var(--content-secondary)] transition-colors hover:text-[#F7931A] disabled:cursor-not-allowed disabled:opacity-40"
             >
-              {deltaLabel}
-            </p>
-            <p className="mt-1 text-xs text-[var(--content-tertiary)]">
-              Previous: {formatUsdCompact(previousUsd)}
-            </p>
+              ‹
+            </button>
+            <button
+              type="button"
+              onClick={() => goToEpoch(selectedIndex + 1)}
+              disabled={!canGoForward}
+              aria-label="Show next epoch"
+              className="flex size-9 items-center justify-center rounded-md border border-[var(--border)] bg-[var(--surface)] text-lg text-[var(--content-secondary)] transition-colors hover:text-[#F7931A] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              ›
+            </button>
           </div>
         </div>
 
-        <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-secondary)] p-3">
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-3 text-xs text-[var(--content-tertiary)]">
-              {includesDomain(scope, "vebtc") ? (
-                <span className="inline-flex items-center gap-1.5">
-                  <span className="size-2 rounded-full bg-[#F7931A]" />
-                  veBTC
-                </span>
-              ) : null}
-              {includesDomain(scope, "pools") ? (
-                <span className="inline-flex items-center gap-1.5">
-                  <span className="size-2 rounded-full bg-[var(--content-secondary)]" />
-                  Pools
-                </span>
-              ) : null}
-            </div>
-            <span className="text-xs text-[var(--content-tertiary)]">
-              {isFetching && !isLoading ? "Refreshing..." : "Last two epochs"}
-            </span>
+        <div className="mt-5">
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <p className="text-xs text-[var(--content-tertiary)]">
+              Past epochs
+            </p>
+            <p className="text-xs text-[var(--content-tertiary)]">
+              {isFetching && !isLoading ? "Refreshing..." : "USD deployed"}
+            </p>
           </div>
-
-          <div className="grid min-h-[260px] grid-cols-2 gap-4">
+          <div
+            className="grid h-32 items-end gap-1.5"
+            style={{
+              gridTemplateColumns: `repeat(${Math.max(epochs.length, 1)}, minmax(18px, 1fr))`,
+            }}
+          >
             {epochs.map((epoch) => {
               const total = scopedUsd(epoch, scope)
-              const barHeight = hasAnyEvents
-                ? Math.max((total / maxUsd) * 100, total > 0 ? 8 : 0)
-                : 0
-              const vebtcShare = total > 0 ? (epoch.vebtcUsd / total) * 100 : 0
-              const poolsShare = total > 0 ? (epoch.poolsUsd / total) * 100 : 0
-              const tokens = scopedTokens(epoch, scope).slice(0, 3)
+              const barHeight =
+                total > 0 ? Math.max((total / maxUsd) * 100, 8) : 0
+              const isSelected = epoch.epochStart === selectedEpoch?.epochStart
 
               return (
-                <div key={epoch.epochStart} className="flex min-w-0 flex-col">
-                  <div className="flex flex-1 items-end justify-center rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 pt-6">
-                    <div
-                      className="flex w-full max-w-[104px] flex-col-reverse overflow-hidden rounded-t-md border border-[var(--border)] bg-[var(--surface-inset)]"
-                      style={{ height: `${barHeight}%` }}
-                      aria-label={`${epoch.label}: ${formatUsdCompact(total)}`}
-                    >
-                      {includesDomain(scope, "pools") && epoch.poolsUsd > 0 ? (
-                        <div
-                          className="bg-[var(--content-secondary)]"
-                          style={{
-                            height:
-                              scope === "pools" ? "100%" : `${poolsShare}%`,
-                          }}
-                        />
-                      ) : null}
-                      {includesDomain(scope, "vebtc") && epoch.vebtcUsd > 0 ? (
-                        <div
-                          className="bg-[#F7931A]"
-                          style={{
-                            height:
-                              scope === "vebtc" ? "100%" : `${vebtcShare}%`,
-                          }}
-                        />
-                      ) : null}
-                    </div>
-                  </div>
-                  <div className="mt-3 min-w-0">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-medium text-[var(--content-primary)]">
-                          {epoch.label}
-                        </p>
-                        <p className="truncate text-xs text-[var(--content-tertiary)]">
-                          {formatEpochRange(epoch.epochStart, epoch.epochEnd)}
-                        </p>
-                      </div>
-                      <p className="font-mono text-sm font-semibold tabular-nums text-[var(--content-primary)]">
-                        {formatUsdCompact(total)}
-                      </p>
-                    </div>
-                    {tokens.length > 0 ? (
-                      <div className="mt-2 flex flex-wrap gap-1.5">
-                        {tokens.map((token) => (
-                          <span
-                            key={`${epoch.epochStart}-${token.domain}-${token.symbol}-${token.tokenAddress ?? "unknown"}`}
-                            className="rounded-md border border-[var(--border)] bg-[var(--surface)] px-1.5 py-0.5 text-[10px] text-[var(--content-secondary)]"
-                            title={
-                              token.usdValue === null
-                                ? "No USD price available"
-                                : formatUsdCompact(token.usdValue)
-                            }
-                          >
-                            {formatTokenCompact(
-                              Number(formatUnits(token.amount, token.decimals)),
-                            )}{" "}
-                            {token.symbol}
-                          </span>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="mt-2 text-xs text-[var(--content-tertiary)]">
-                        No deployments
-                      </p>
-                    )}
-                  </div>
-                </div>
+                <button
+                  key={epoch.epochStart}
+                  type="button"
+                  onClick={() => setSelectedEpochStart(epoch.epochStart)}
+                  aria-label={`${formatEpochRange(epoch.epochStart, epoch.epochEnd)}: ${formatUsdCompact(total)}`}
+                  aria-pressed={isSelected}
+                  title={`${formatEpochRange(epoch.epochStart, epoch.epochEnd)} · ${formatUsdDetailed(total)}`}
+                  className="flex h-full min-h-0 items-end rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-[#F7931A]"
+                >
+                  <span
+                    className={`block w-full rounded-t-sm transition-colors ${
+                      isSelected
+                        ? "bg-[#F7931A]"
+                        : "bg-[var(--content-muted)] hover:bg-[var(--content-secondary)]"
+                    }`}
+                    style={{ height: `${barHeight}%` }}
+                  />
+                </button>
               )
             })}
+          </div>
+          <div className="mt-2 flex items-center justify-between text-[10px] text-[var(--content-tertiary)]">
+            <span>Apr 2</span>
+            <span>
+              {selectedEpoch
+                ? `${selectedIndex + 1} / ${epochs.length}`
+                : "0 / 0"}
+            </span>
+            <span>Current</span>
           </div>
 
           {isLoading ? (

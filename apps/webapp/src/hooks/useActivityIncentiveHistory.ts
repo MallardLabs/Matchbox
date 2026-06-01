@@ -29,7 +29,7 @@ export type IncentiveHistoryToken = {
 export type IncentiveHistoryEpoch = {
   epochStart: number
   epochEnd: number
-  label: "Previous epoch" | "This epoch"
+  label: string
   vebtcUsd: number
   poolsUsd: number
   totalUsd: number
@@ -41,6 +41,7 @@ export type IncentiveHistoryEpoch = {
 }
 
 const WEEK_SECONDS = 7 * 24 * 60 * 60
+const HISTORY_START_EPOCH = Math.floor(Date.UTC(2026, 3, 2) / 1000)
 const INCENTIVE_ACTION_TYPES = ["INCENTIVE_ADDED", "REWARD_NOTIFIED"] as const
 
 const NETWORK_BY_CHAIN: Record<number, "mainnet" | "testnet"> = {
@@ -62,10 +63,7 @@ function domainForItem(
   return undefined
 }
 
-function createEpoch(
-  epochStart: number,
-  label: IncentiveHistoryEpoch["label"],
-): IncentiveHistoryEpoch {
+function createEpoch(epochStart: number, label: string): IncentiveHistoryEpoch {
   return {
     epochStart,
     epochEnd: epochStart + WEEK_SECONDS,
@@ -87,7 +85,7 @@ function tokenSortValue(token: IncentiveHistoryToken): number {
 
 export function useActivityIncentiveHistory(): {
   epochs: IncentiveHistoryEpoch[]
-  previousEpochStart: number
+  historyStartEpoch: number
   currentEpochStart: number
   isLoading: boolean
   isError: boolean
@@ -102,14 +100,14 @@ export function useActivityIncentiveHistory(): {
     () => epochStartFor(Math.floor(Date.now() / 1000)),
     [],
   )
-  const previousEpochStart = currentEpochStart - WEEK_SECONDS
+  const historyStartEpoch = Math.min(HISTORY_START_EPOCH, currentEpochStart)
   const toTimestamp = currentEpochStart + WEEK_SECONDS - 1
 
   const query = useQuery({
     queryKey: [
       "activity-incentive-history",
       network,
-      previousEpochStart,
+      historyStartEpoch,
       currentEpochStart,
     ],
     enabled: isNetworkReady && !!network,
@@ -119,7 +117,7 @@ export function useActivityIncentiveHistory(): {
       for (let page = 0; page < 10; page += 1) {
         const params = new URLSearchParams({
           network,
-          from: String(previousEpochStart),
+          from: String(historyStartEpoch),
           to: String(toTimestamp),
           limit: "1000",
           page: String(page),
@@ -221,12 +219,20 @@ export function useActivityIncentiveHistory(): {
   const { prices, isLoading: isLoadingPrices } = useTokenPrices(priceInputs)
 
   const epochs = useMemo(() => {
-    const previous = createEpoch(previousEpochStart, "Previous epoch")
-    const current = createEpoch(currentEpochStart, "This epoch")
-    const byEpoch = new Map<number, IncentiveHistoryEpoch>([
-      [previousEpochStart, previous],
-      [currentEpochStart, current],
-    ])
+    const orderedEpochs: IncentiveHistoryEpoch[] = []
+    const byEpoch = new Map<number, IncentiveHistoryEpoch>()
+    for (
+      let epochStart = historyStartEpoch;
+      epochStart <= currentEpochStart;
+      epochStart += WEEK_SECONDS
+    ) {
+      const epoch = createEpoch(
+        epochStart,
+        epochStart === currentEpochStart ? "Current epoch" : "Past epoch",
+      )
+      orderedEpochs.push(epoch)
+      byEpoch.set(epochStart, epoch)
+    }
     const tokenTotals = new Map<string, IncentiveHistoryToken>()
 
     for (const item of query.data ?? []) {
@@ -239,10 +245,7 @@ export function useActivityIncentiveHistory(): {
       const domain = domainForItem(item)
       if (!domain) continue
 
-      const epochStart =
-        item.timestamp >= currentEpochStart
-          ? currentEpochStart
-          : previousEpochStart
+      const epochStart = epochStartFor(item.timestamp)
       const epoch = byEpoch.get(epochStart)
       if (!epoch) continue
 
@@ -305,12 +308,12 @@ export function useActivityIncentiveHistory(): {
       epoch.tokens.sort((a, b) => tokenSortValue(b) - tokenSortValue(a))
     }
 
-    return [previous, current]
-  }, [query.data, tokenMeta, prices, previousEpochStart, currentEpochStart])
+    return orderedEpochs
+  }, [query.data, tokenMeta, prices, historyStartEpoch, currentEpochStart])
 
   return {
     epochs,
-    previousEpochStart,
+    historyStartEpoch,
     currentEpochStart,
     isLoading:
       query.isLoading ||
