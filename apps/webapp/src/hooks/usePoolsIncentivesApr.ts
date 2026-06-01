@@ -5,7 +5,8 @@ import { useBtcPrice } from "@/hooks/useBtcPrice"
 import { useMezoPrice } from "@/hooks/useMezoPrice"
 import { type Pool, poolTvlUsd } from "@/hooks/usePools"
 import { useTokenList } from "@/hooks/useTokenList"
-import { getTokenUsdPrice } from "@repo/shared"
+import { useDexTokenPrices } from "@/hooks/useTokenPrices"
+import { getTokenPriceType, getTokenUsdPrice } from "@repo/shared"
 import { useCallback, useMemo } from "react"
 import type { Address } from "viem"
 import { erc20Abi, formatUnits, zeroAddress } from "viem"
@@ -238,6 +239,31 @@ export function usePoolsIncentivesApr(pools: Pool[]): {
     },
   })
 
+  const dexAddresses = useMemo(() => {
+    const addresses: Address[] = []
+
+    for (const { token } of resolvedSlots) {
+      const lower = token.toLowerCase()
+      const known = knownTokens.find((t) => t.address.toLowerCase() === lower)
+      let symbol = known?.symbol
+
+      if (!known) {
+        const unknownIdx = unknownTokens.findIndex(
+          (t) => t.toLowerCase() === lower,
+        )
+        symbol = metaData?.[unknownIdx * 2]?.result as string | undefined
+      }
+
+      if (getTokenPriceType(token, symbol) === "unknown") {
+        addresses.push(token)
+      }
+    }
+
+    return addresses
+  }, [resolvedSlots, knownTokens, unknownTokens, metaData])
+  const { prices: dexPrices, isLoading: isLoadingDex } =
+    useDexTokenPrices(dexAddresses)
+
   const map = useMemo(() => {
     const m = new Map<string, PoolIncentivesData>()
 
@@ -283,7 +309,10 @@ export function usePoolsIncentivesApr(pools: Pool[]): {
       }
 
       const d = decimals ?? 18
-      const price = getTokenUsdPrice(slot.token, symbol, btcPrice, mezoPrice)
+      const price =
+        getTokenUsdPrice(slot.token, symbol, btcPrice, mezoPrice) ??
+        dexPrices.get(slot.token.toLowerCase()) ??
+        null
       const entry = m.get(slot.pool.address.toLowerCase())
       if (!entry) return
 
@@ -338,6 +367,7 @@ export function usePoolsIncentivesApr(pools: Pool[]): {
     metaData,
     btcPrice,
     mezoPrice,
+    dexPrices,
   ])
 
   const refetch = useCallback(() => {
@@ -361,7 +391,8 @@ export function usePoolsIncentivesApr(pools: Pool[]): {
       isLoadingLengths ||
       isLoadingRewards ||
       isLoadingCurrent ||
-      isLoadingNext,
+      isLoadingNext ||
+      isLoadingDex,
     refetch,
   }
 }

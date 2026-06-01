@@ -1,10 +1,11 @@
 import { useGaugeTopology } from "@/hooks/useGaugeTopology"
 import type { GaugeTopologyResponse } from "@/types/gaugeTopology"
-import { getTokenUsdPrice } from "@repo/shared"
+import { getTokenPriceType, getTokenUsdPrice } from "@repo/shared"
 import { useMemo } from "react"
 import type { Address } from "viem"
 import { useBtcPrice } from "./useBtcPrice"
 import { useMezoPrice } from "./useMezoPrice"
+import { useDexTokenPrices } from "./useTokenPrices"
 
 const EPOCHS_PER_YEAR = 52
 
@@ -83,6 +84,23 @@ export function useGaugeAPY(
     enabled: !!gaugeAddress,
   })
 
+  const dexAddresses = useMemo(() => {
+    if (!gaugeAddress) return []
+
+    const gauge = topology?.gauges.find(
+      (entry) =>
+        entry.gaugeAddress.toLowerCase() === gaugeAddress.toLowerCase(),
+    )
+    return (gauge?.rewardTokens ?? [])
+      .filter(
+        (token) =>
+          getTokenPriceType(token.tokenAddress, token.symbol) === "unknown",
+      )
+      .map((token) => token.tokenAddress)
+  }, [gaugeAddress, topology])
+  const { prices: dexPrices, isLoading: isLoadingDex } =
+    useDexTokenPrices(dexAddresses)
+
   const incentivesByToken = useMemo(() => {
     if (!gaugeAddress) return []
 
@@ -96,12 +114,15 @@ export function useGaugeAPY(
       .map((token) => {
         const amount = BigInt(token.epochAmount)
         const tokenAmount = Number(amount) / 10 ** token.decimals
-        const price = getTokenUsdPrice(
-          token.tokenAddress,
-          token.symbol,
-          btcPrice,
-          mezoPrice,
-        )
+        const price =
+          getTokenUsdPrice(
+            token.tokenAddress,
+            token.symbol,
+            btcPrice,
+            mezoPrice,
+          ) ??
+          dexPrices.get(token.tokenAddress.toLowerCase()) ??
+          null
         const usdValue = price !== null ? tokenAmount * price : 0
 
         return {
@@ -113,7 +134,7 @@ export function useGaugeAPY(
         }
       })
       .filter((token) => token.amount > 0n)
-  }, [gaugeAddress, topology, btcPrice, mezoPrice])
+  }, [gaugeAddress, topology, btcPrice, mezoPrice, dexPrices])
 
   const totalIncentivesUSD = useMemo(
     () => incentivesByToken.reduce((sum, token) => sum + token.usdValue, 0),
@@ -131,7 +152,7 @@ export function useGaugeAPY(
     apy,
     totalIncentivesUSD,
     totalVeMEZOWeight: totalWeight ?? 0n,
-    isLoading: isLoadingTopology,
+    isLoading: isLoadingTopology || isLoadingDex,
     incentivesByToken,
   }
 }
@@ -159,6 +180,30 @@ export function useGaugesAPY(
     return map
   }, [topology])
 
+  const dexAddresses = useMemo(() => {
+    const gaugeAddresses = new Set(
+      gauges.map((gauge) => gauge.address.toLowerCase()),
+    )
+    const addresses: string[] = []
+
+    for (const gauge of topology?.gauges ?? []) {
+      if (!gaugeAddresses.has(gauge.gaugeAddress.toLowerCase())) continue
+
+      for (const rewardToken of gauge.rewardTokens) {
+        if (
+          getTokenPriceType(rewardToken.tokenAddress, rewardToken.symbol) ===
+          "unknown"
+        ) {
+          addresses.push(rewardToken.tokenAddress)
+        }
+      }
+    }
+
+    return addresses
+  }, [gauges, topology])
+  const { prices: dexPrices, isLoading: isLoadingDex } =
+    useDexTokenPrices(dexAddresses)
+
   const apyMap = useMemo(() => {
     const map = new Map<string, GaugeAPYData>()
 
@@ -172,12 +217,15 @@ export function useGaugesAPY(
         if (amount <= 0n) continue
 
         const tokenAmount = Number(amount) / 10 ** rewardToken.decimals
-        const price = getTokenUsdPrice(
-          rewardToken.tokenAddress,
-          rewardToken.symbol,
-          btcPrice,
-          mezoPrice,
-        )
+        const price =
+          getTokenUsdPrice(
+            rewardToken.tokenAddress,
+            rewardToken.symbol,
+            btcPrice,
+            mezoPrice,
+          ) ??
+          dexPrices.get(rewardToken.tokenAddress.toLowerCase()) ??
+          null
         const usdValue = price !== null ? tokenAmount * price : 0
         totalIncentivesUSD += usdValue
 
@@ -205,11 +253,12 @@ export function useGaugesAPY(
     }
 
     return map
-  }, [gauges, topologyMap, btcPrice, mezoPrice])
+  }, [gauges, topologyMap, btcPrice, mezoPrice, dexPrices])
 
   return {
     apyMap,
-    isLoading: isLoadingTopology || (gauges.length > 0 && !topology),
+    isLoading:
+      isLoadingTopology || isLoadingDex || (gauges.length > 0 && !topology),
   }
 }
 
