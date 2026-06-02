@@ -6,8 +6,8 @@
     "codegen": "graph codegen",
     "build": "graph build",
     "build:mezo-testnet": "graph build testnet/subgraph.yaml",
-    "deploy:mezo": "goldsky subgraph deploy matchbox-explorer/3.2.0 --path .",
-    "deploy:mezo-testnet": "pnpm run build:mezo-testnet && goldsky subgraph deploy matchbox-explorer-testnet/3.2.0 --path .",
+    "deploy:mezo": "goldsky subgraph deploy matchbox-explorer/3.2.1 --path .",
+    "deploy:mezo-testnet": "pnpm run build:mezo-testnet && goldsky subgraph deploy matchbox-explorer-testnet/3.2.1 --path .",
     "deploy:mainnet": "pnpm run deploy:mezo",
     "deploy:testnet": "pnpm run deploy:mezo-testnet"
   },
