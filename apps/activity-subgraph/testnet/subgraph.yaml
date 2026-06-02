@@ -124,7 +124,7 @@ templates:
         - name: BribeVotingReward
           file: ../abis/BribeVotingReward.json
       eventHandlers:
-        - event: NotifyReward(indexed address,indexed address,uint256)
+        - event: NotifyReward(indexed address,indexed address,indexed uint256,uint256)
           handler: handleBribeNotifyReward
       file: ../src/bribes.ts
 
