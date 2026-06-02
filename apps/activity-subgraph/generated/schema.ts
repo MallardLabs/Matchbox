@@ -2103,3 +2103,71 @@ export class ActivityStats extends Entity {
     this.set("lastUpdatedAt", Value.fromBigInt(value));
   }
 }
+
+export class BribeToPool extends Entity {
+  constructor(id: string) {
+    super();
+    this.set("id", Value.fromString(id));
+  }
+
+  save(): void {
+    let id = this.get("id");
+    assert(id != null, "Cannot save BribeToPool entity without an ID");
+    if (id) {
+      assert(
+        id.kind == ValueKind.STRING,
+        `Entities of type BribeToPool must have an ID of type String but the id '${id.displayData()}' is of type ${id.displayKind()}`,
+      );
+      store.set("BribeToPool", id.toString(), this);
+    }
+  }
+
+  static loadInBlock(id: string): BribeToPool | null {
+    return changetype<BribeToPool | null>(
+      store.get_in_block("BribeToPool", id),
+    );
+  }
+
+  static load(id: string): BribeToPool | null {
+    return changetype<BribeToPool | null>(store.get("BribeToPool", id));
+  }
+
+  get id(): string {
+    let value = this.get("id");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toString();
+    }
+  }
+
+  set id(value: string) {
+    this.set("id", Value.fromString(value));
+  }
+
+  get poolAddress(): Bytes {
+    let value = this.get("poolAddress");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toBytes();
+    }
+  }
+
+  set poolAddress(value: Bytes) {
+    this.set("poolAddress", Value.fromBytes(value));
+  }
+
+  get gaugeAddress(): Bytes {
+    let value = this.get("gaugeAddress");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toBytes();
+    }
+  }
+
+  set gaugeAddress(value: Bytes) {
+    this.set("gaugeAddress", Value.fromBytes(value));
+  }
+}

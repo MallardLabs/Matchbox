@@ -1,5 +1,6 @@
 import { useNetwork } from "@/contexts/NetworkContext"
 import { useTokenList } from "@/hooks/useTokenList"
+import { usePools } from "@/hooks/usePools"
 import { useTokenPrices } from "@/hooks/useTokenPrices"
 import { deserializeActivityItem } from "@/lib/mezoActivity/normalize"
 import type {
@@ -110,6 +111,8 @@ export function useActivityIncentiveHistory(): {
   const { chainId, isNetworkReady } = useNetwork()
   const network = NETWORK_BY_CHAIN[chainId]
   const { tokens: knownTokens, isLoading: isLoadingTokenList } = useTokenList()
+  const { isLoading: isLoadingPools } = usePools()
+
 
   const currentEpochStart = useMemo(
     () => epochStartFor(Math.floor(Date.now() / 1000)),
@@ -311,8 +314,10 @@ export function useActivityIncentiveHistory(): {
         })
       }
 
+      const targetAddress = item.gaugeAddress
+
       const targetKey = `${epochStart}:${domain}:${
-        item.gaugeAddress?.toLowerCase() ?? "unknown"
+        targetAddress?.toLowerCase() ?? "unknown"
       }`
       const target = targetTotals.get(targetKey)
       if (target) {
@@ -322,7 +327,7 @@ export function useActivityIncentiveHistory(): {
       } else {
         targetTotals.set(targetKey, {
           domain,
-          ...(item.gaugeAddress ? { gaugeAddress: item.gaugeAddress } : {}),
+          ...(targetAddress ? { gaugeAddress: targetAddress } : {}),
           totalUsd: usdValue ?? 0,
           eventCount: 1,
           unpricedEvents: usdValue === null ? 1 : 0,
@@ -383,7 +388,8 @@ export function useActivityIncentiveHistory(): {
       query.isLoading ||
       isLoadingTokenList ||
       isLoadingUnknownMeta ||
-      isLoadingPrices,
+      isLoadingPrices ||
+      isLoadingPools,
     isError: query.isError,
     error: query.error,
     isFetching: query.isFetching,

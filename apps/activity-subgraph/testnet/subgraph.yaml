@@ -107,3 +107,24 @@ dataSources:
         - event: NotifyReward(indexed address,indexed address,uint256)
           handler: handlePoolNotifyReward
       file: ../src/pools-voter.ts
+templates:
+  - kind: ethereum
+    name: BribeVotingReward
+    network: mezo-testnet
+    source:
+      abi: BribeVotingReward
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - ActivityEvent
+        - ActivityStats
+      abis:
+        - name: BribeVotingReward
+          file: ../abis/BribeVotingReward.json
+      eventHandlers:
+        - event: NotifyReward(indexed address,indexed address,uint256)
+          handler: handleBribeNotifyReward
+      file: ../src/bribes.ts
+

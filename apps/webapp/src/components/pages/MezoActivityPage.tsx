@@ -1,4 +1,5 @@
 import { SpringIn } from "@/components/SpringIn"
+import { TokenIcon } from "@/components/TokenIcon"
 import { useActivityEnrichment } from "@/hooks/useActivityEnrichment"
 import {
   type IncentiveHistoryEpoch,
@@ -840,6 +841,54 @@ function IncentiveHistoryPanel({
     return map
   }, [pools])
 
+  const renderTargetIcon = (target: IncentiveHistoryTarget) => {
+    if (!target.gaugeAddress) {
+      return (
+        <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-[var(--surface-secondary)] text-[var(--content-tertiary)]">
+          ❓
+        </div>
+      )
+    }
+    if (target.domain === "pools") {
+      const pool = poolsByGauge.get(target.gaugeAddress.toLowerCase())
+      if (pool) {
+        return (
+          <div className="relative flex h-8 w-11 flex-shrink-0 items-center">
+            <div className="absolute left-0 top-0 overflow-hidden rounded-full border border-[var(--border)] bg-[var(--surface-secondary)]">
+              <TokenIcon symbol={pool.token0.symbol} size={20} />
+            </div>
+            <div className="absolute top-0 z-10 overflow-hidden rounded-full border border-[var(--border)] bg-[var(--surface-secondary)]" style={{ left: "14px" }}>
+              <TokenIcon symbol={pool.token1.symbol} size={20} />
+            </div>
+          </div>
+        )
+      }
+      return (
+        <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-[var(--surface-secondary)] text-[var(--content-tertiary)]">
+          🏊
+        </div>
+      )
+    }
+
+    const profile = profiles.get(target.gaugeAddress.toLowerCase())
+    if (profile?.profile_picture_url) {
+      return (
+        <img
+          src={profile.profile_picture_url}
+          alt=""
+          className="h-8 w-8 flex-shrink-0 rounded-lg border border-[var(--border)] object-cover"
+        />
+      )
+    }
+    return (
+      <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg border border-[rgba(247,147,26,0.2)] bg-[rgba(247,147,26,0.06)] text-[#F7931A]">
+        <span className="font-mono text-2xs font-semibold">
+          {profile?.vebtc_token_id ? `#${profile.vebtc_token_id}` : "veBTC"}
+        </span>
+      </div>
+    )
+  }
+
   const goToEpoch = (index: number) => {
     const next = epochs[index]
     if (next) setSelectedEpochStart(next.epochStart)
@@ -991,7 +1040,7 @@ function IncentiveHistoryPanel({
             className="mt-4 flex w-full items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-left text-sm text-[var(--content-secondary)] transition-colors hover:text-[#F7931A]"
           >
             <span>
-              {selectedTargets.length} gauge
+              {selectedTargets.length} {scope === "pools" ? "pool" : scope === "vebtc" ? "gauge" : "gauge/pool"}
               {selectedTargets.length === 1 ? "" : "s"} with incentives
             </span>
             <span
@@ -1008,52 +1057,51 @@ function IncentiveHistoryPanel({
                 selectedTargets.map((target) => (
                   <div
                     key={`${target.domain}-${target.gaugeAddress ?? "unknown"}`}
-                    className="flex flex-col gap-3 border-b border-[var(--border)] px-3 py-3 last:border-b-0 sm:flex-row sm:items-center sm:justify-between"
+                    className="flex flex-col gap-3 border-b border-[var(--border)] px-4 py-3.5 last:border-b-0 sm:flex-row sm:items-center sm:justify-between hover:bg-[var(--surface-secondary)]/20 transition-colors"
                   >
-                    <div className="min-w-0">
-                      <div className="flex min-w-0 items-center gap-2">
-                        <span
-                          className={`size-2 flex-none rounded-full ${
-                            target.domain === "vebtc"
-                              ? "bg-[#F7931A]"
-                              : "bg-[var(--content-secondary)]"
-                          }`}
-                        />
-                        <p className="truncate text-sm font-medium text-[var(--content-primary)]">
+                    <div className="flex min-w-0 items-center gap-3">
+                      {renderTargetIcon(target)}
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-[var(--content-primary)]">
                           {targetLabel(target)}
                         </p>
-                      </div>
-                      <p className="mt-1 truncate text-xs text-[var(--content-tertiary)]">
-                        {targetSubLabel(target)}
-                        {target.gaugeAddress
-                          ? ` · ${shortenAddress(target.gaugeAddress)}`
-                          : ""}
-                      </p>
-                      {target.tokens.length > 0 ? (
-                        <div className="mt-2 flex flex-wrap gap-1.5">
-                          {target.tokens.slice(0, 4).map((token) => (
-                            <span
-                              key={`${token.tokenAddress ?? "unknown"}-${token.symbol}`}
-                              className="rounded-md border border-[var(--border)] bg-[var(--surface-secondary)] px-1.5 py-0.5 text-[10px] text-[var(--content-secondary)]"
-                            >
-                              {formatTokenCompact(
-                                Number(
-                                  formatUnits(token.amount, token.decimals),
-                                ),
-                              )}{" "}
-                              {token.symbol}
-                            </span>
-                          ))}
+                        <div className="mt-1 flex items-center gap-1.5 text-xs text-[var(--content-tertiary)]">
+                          <span>{targetSubLabel(target)}</span>
+                          {target.gaugeAddress ? (
+                            <>
+                              <span>·</span>
+                              <span className="font-mono">{shortenAddress(target.gaugeAddress)}</span>
+                            </>
+                          ) : null}
                         </div>
-                      ) : null}
+                        {target.tokens.length > 0 ? (
+                          <div className="mt-2 flex flex-wrap gap-1.5">
+                            {target.tokens.slice(0, 4).map((token) => (
+                              <span
+                                key={`${token.tokenAddress ?? "unknown"}-${token.symbol}`}
+                                className="inline-flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--surface-secondary)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--content-secondary)]"
+                              >
+                                <TokenIcon symbol={token.symbol} size={12} />
+                                <span>
+                                  {formatTokenCompact(
+                                    Number(
+                                      formatUnits(token.amount, token.decimals),
+                                    ),
+                                  )}{" "}
+                                  {token.symbol}
+                                </span>
+                              </span>
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
                     </div>
-                    <div className="flex flex-none items-center justify-between gap-4 sm:flex-col sm:items-end sm:gap-1">
+                    <div className="flex flex-none flex-row items-center justify-between gap-4 pl-11 sm:flex-col sm:items-end sm:gap-1 sm:pl-0">
                       <p className="font-mono text-sm font-semibold tabular-nums text-[var(--content-primary)]">
                         {formatUsdDetailed(target.totalUsd)}
                       </p>
                       <p className="text-xs text-[var(--content-tertiary)]">
-                        {target.eventCount} event
-                        {target.eventCount === 1 ? "" : "s"}
+                        {target.eventCount} event{target.eventCount === 1 ? "" : "s"}
                       </p>
                     </div>
                   </div>

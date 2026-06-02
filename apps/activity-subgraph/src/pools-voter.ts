@@ -7,6 +7,8 @@ import {
   NotifyReward,
   Voted,
 } from "../generated/PoolsVoter/PoolsVoter"
+import { BribeVotingReward } from "../generated/templates"
+import { BribeToPool } from "../generated/schema"
 import {
   baseActivity,
   BOOST_ABSTAIN,
@@ -50,6 +52,13 @@ export function handlePoolGaugeCreated(event: GaugeCreated): void {
   gauge.createdAt = event.block.timestamp
   gauge.isAlive = true
   gauge.save()
+
+  // Track dynamic pool bribe contracts and map the bribe contract to the pool and gauge
+  BribeVotingReward.create(event.params.bribeVotingReward)
+  const mapping = new BribeToPool(event.params.bribeVotingReward.toHexString())
+  mapping.poolAddress = event.params.pool
+  mapping.gaugeAddress = event.params.gauge
+  mapping.save()
 }
 
 export function handlePoolVoted(event: Voted): void {

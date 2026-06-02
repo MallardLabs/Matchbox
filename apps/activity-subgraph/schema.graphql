@@ -226,3 +226,9 @@ type ActivityStats @entity(immutable: false) {
   systemEvents: BigInt!
   lastUpdatedAt: BigInt!
 }
+
+type BribeToPool @entity(immutable: true) {
+  id: ID!
+  poolAddress: Bytes!
+  gaugeAddress: Bytes!
+}

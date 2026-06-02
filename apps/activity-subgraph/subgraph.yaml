@@ -373,3 +373,24 @@ dataSources:
         - event: PCVDebtPayment(uint256)
           handler: handlePcvDebtPayment
       file: ./src/pcv.ts
+templates:
+  - kind: ethereum
+    name: BribeVotingReward
+    network: mezo
+    source:
+      abi: BribeVotingReward
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - ActivityEvent
+        - ActivityStats
+      abis:
+        - name: BribeVotingReward
+          file: ./abis/BribeVotingReward.json
+      eventHandlers:
+        - event: NotifyReward(indexed address,indexed address,uint256)
+          handler: handleBribeNotifyReward
+      file: ./src/bribes.ts
+
