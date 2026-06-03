@@ -86,6 +86,11 @@ function getArrayItem<T>(items: readonly T[], index: number): T {
   return item
 }
 
+function getEndpointLabel(endpointIndex: number): string {
+  const endpoint = getArrayItem(MEZO_MAINNET_RPC_ENDPOINTS, endpointIndex)
+  return `${endpoint.label} (${endpoint.url})`
+}
+
 export function createMezoMainnetTransport(): Transport {
   const transports = MEZO_MAINNET_RPC_ENDPOINTS.map((endpoint) =>
     http(endpoint.url, {
@@ -109,16 +114,74 @@ export function createMezoMainnetTransport(): Transport {
 
       if (preference !== "auto") {
         const endpoint = getMezoMainnetRpcEndpoint(preference)
-        const endpointIndex = Math.max(
+        const preferredEndpointIndex = Math.max(
           0,
           MEZO_MAINNET_RPC_ENDPOINTS.findIndex(
             (candidate) => candidate.id === endpoint.id,
           ),
         )
-        publishActiveEndpoint(endpoint)
-        return getArrayItem(runtimeTransports, endpointIndex).request(
-          args,
-        ) as never
+        const now = Date.now()
+        const endpointOrder =
+          cooldownUntil[preferredEndpointIndex] <= now
+            ? [
+                preferredEndpointIndex,
+                ...runtimeTransports
+                  .map((_, index) => index)
+                  .filter((index) => index !== preferredEndpointIndex),
+              ]
+            : [
+                ...runtimeTransports
+                  .map((_, index) => index)
+                  .filter((index) => index !== preferredEndpointIndex),
+                preferredEndpointIndex,
+              ]
+
+        let lastError: unknown
+
+        for (let index = 0; index < endpointOrder.length; index += 1) {
+          const endpointIndex = endpointOrder[index] ?? preferredEndpointIndex
+          const candidateEndpoint = getArrayItem(
+            MEZO_MAINNET_RPC_ENDPOINTS,
+            endpointIndex,
+          )
+
+          if (
+            (cooldownUntil[endpointIndex] ?? 0) > now &&
+            index < endpointOrder.length - 1
+          ) {
+            continue
+          }
+
+          try {
+            const result = await getArrayItem(
+              runtimeTransports,
+              endpointIndex,
+            ).request(args)
+            publishActiveEndpoint(candidateEndpoint)
+            return result as never
+          } catch (error) {
+            lastError = error
+
+            if (
+              !isRetryableRpcError(error) ||
+              index === endpointOrder.length - 1
+            ) {
+              throw error
+            }
+
+            cooldownUntil[endpointIndex] = Date.now() + RATE_LIMIT_COOLDOWN_MS
+            console.warn("[RPC] Falling back from preferred Mezo mainnet RPC", {
+              preferredEndpoint: getEndpointLabel(preferredEndpointIndex),
+              failedEndpoint: candidateEndpoint.url,
+              nextEndpoint: getEndpointLabel(
+                endpointOrder[index + 1] ?? preferredEndpointIndex,
+              ),
+              error,
+            })
+          }
+        }
+
+        throw lastError
       }
 
       const now = Date.now()

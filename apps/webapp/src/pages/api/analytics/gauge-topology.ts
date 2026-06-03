@@ -1,6 +1,6 @@
 import {
   DEFAULT_MEZO_TESTNET_RPC_URL,
-  MEZO_MAINNET_RPC_ENDPOINTS,
+  MEZO_MAINNET_SERVER_RPC_ENDPOINTS,
   getMezoMainnetRpcEndpoint,
   isMezoMainnetRpcEndpointId,
 } from "@/config/mezoRpc"
@@ -76,7 +76,7 @@ function getRpcUrls(
       return [getMezoMainnetRpcEndpoint(rpcEndpointId).url]
     }
 
-    return MEZO_MAINNET_RPC_ENDPOINTS.map((endpoint) => endpoint.url)
+    return MEZO_MAINNET_SERVER_RPC_ENDPOINTS.map((endpoint) => endpoint.url)
   }
 
   return [DEFAULT_MEZO_TESTNET_RPC_URL]

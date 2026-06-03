@@ -15,14 +15,18 @@ export const MEZO_MAINNET_RPC_ENDPOINTS = [
     url: "https://mainnet.mezo.public.validationcloud.io",
   },
   {
-    id: "imperator",
-    label: "Imperator",
-    url: "https://rpc_evm-mezo.imperator.co",
-  },
-  {
     id: "drpc",
     label: "dRPC",
     url: "https://mezo.drpc.org",
+  },
+] as const
+
+export const MEZO_MAINNET_SERVER_RPC_ENDPOINTS = [
+  ...MEZO_MAINNET_RPC_ENDPOINTS,
+  {
+    id: "imperator",
+    label: "Imperator",
+    url: "https://rpc_evm-mezo.imperator.co",
   },
 ] as const
 
