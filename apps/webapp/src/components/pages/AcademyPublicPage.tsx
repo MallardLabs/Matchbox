@@ -1,26 +1,52 @@
+import AcademyDiscordCard from "@/components/AcademyDiscordCard"
 import AcademyPublicActorProfile from "@/components/AcademyPublicActorProfile"
 import AcademyPublicLeaderboard from "@/components/AcademyPublicLeaderboard"
 import { InitialLoader } from "@/components/InitialLoader"
 import { SpringIn } from "@/components/SpringIn"
 import { useAcademyActorProfile } from "@/hooks/useAcademyActorProfile"
 import { useAcademyLeaderboard } from "@/hooks/useAcademyLeaderboard"
+import { useAcademySemesters } from "@/hooks/useAcademySemesters"
+import { LinkExternal02 } from "@mezo-org/mezo-clay"
 import { useEffect, useMemo, useState } from "react"
 import type { Address } from "viem"
 import { useAccount } from "wagmi"
 
+// Default to the inaugural season; users can switch to later ones.
+const DEFAULT_SEMESTER_ID = "0"
+
 export default function AcademyPublicPage() {
   const { address: walletAddress, isConnected } = useAccount()
+  const { data: semesters } = useAcademySemesters()
+  const seasons = semesters ?? []
+
+  const [selectedSemesterId, setSelectedSemesterId] =
+    useState(DEFAULT_SEMESTER_ID)
+  // Resolve the active season, falling back to Season 0 then the earliest defined.
+  const selectedSeason =
+    seasons.find((s) => s.semesterId === selectedSemesterId) ??
+    seasons.find((s) => s.semesterId === DEFAULT_SEMESTER_ID) ??
+    seasons[0] ??
+    null
+  // null while the season list is still loading → the leaderboard hook waits
+  // rather than flashing the auto-resolved current season.
+  const selectedWindow =
+    seasons.length === 0
+      ? null
+      : selectedSeason
+        ? { fromTs: selectedSeason.fromTs, toTs: selectedSeason.toTs }
+        : undefined
+
   const {
     data: leaderboardData,
     isLoading: leaderboardLoading,
     isError: leaderboardError,
     error,
-  } = useAcademyLeaderboard()
+  } = useAcademyLeaderboard(selectedWindow)
   const [selectedActor, setSelectedActor] = useState<Address | null>(null)
 
-  // Fetch selected actor profile details
+  // Fetch selected actor profile details (same window as the leaderboard).
   const { data: actorProfileData, isLoading: actorProfileLoading } =
-    useAcademyActorProfile(selectedActor)
+    useAcademyActorProfile(selectedActor, selectedWindow)
 
   const userStats = useMemo(() => {
     if (!walletAddress || !leaderboardData) return null
@@ -108,7 +134,45 @@ export default function AcademyPublicPage() {
           Points leaderboard for protocol participation. Track veMEZO lockers
           and veBTC voters active on the network.
         </p>
+        <a
+          href="https://mezo.org/blog/mezo-academy/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex w-fit items-center gap-1 text-sm font-medium text-brand no-underline transition-colors hover:underline"
+        >
+          Learn about Mezo Academy
+          <LinkExternal02 size={14} />
+        </a>
       </header>
+
+      {/* Season switcher */}
+      {seasons.length > 1 && (
+        <div className="flex items-center gap-3">
+          <span className="text-xs font-semibold uppercase tracking-wider text-[var(--content-tertiary)]">
+            Season
+          </span>
+          <div className="inline-flex rounded-lg border border-[var(--border)] bg-[var(--surface)] p-0.5">
+            {seasons.map((s) => {
+              const active = s.semesterId === selectedSeason?.semesterId
+              return (
+                <button
+                  key={s.semesterId}
+                  type="button"
+                  onClick={() => setSelectedSemesterId(s.semesterId)}
+                  aria-pressed={active}
+                  className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                    active
+                      ? "bg-brand text-white"
+                      : "text-[var(--content-secondary)] hover:text-[var(--content-primary)]"
+                  }`}
+                >
+                  {s.label}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Metadata Bar */}
       <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-[var(--border)] bg-[var(--surface-tertiary)] px-5 py-4 shadow-sm">
@@ -118,7 +182,10 @@ export default function AcademyPublicPage() {
               Window:
             </span>
             <span className="font-mono font-medium text-[var(--content-primary)]">
-              {dateRangeStr} (Last 8 weeks)
+              {dateRangeStr}{" "}
+              {selectedSeason
+                ? `(${selectedSeason.label}${selectedSeason.isCurrent ? "" : " · ended"})`
+                : "(Last 8 weeks)"}
             </span>
           </div>
           <div className="flex items-center gap-1.5">
@@ -204,6 +271,13 @@ export default function AcademyPublicPage() {
               </div>
             </div>
           </div>
+        </SpringIn>
+      )}
+
+      {/* Discord link status */}
+      {isConnected && walletAddress && (
+        <SpringIn variant="card">
+          <AcademyDiscordCard walletAddress={walletAddress} />
         </SpringIn>
       )}
 

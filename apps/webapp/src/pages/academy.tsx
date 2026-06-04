@@ -1,6 +1,15 @@
-import AcademyPublicPage from "@/components/pages/AcademyPublicPage"
+import { InitialLoader } from "@/components/InitialLoader"
 import { getAppUrl, getOgImageUrl } from "@/utils/seo"
+import dynamic from "next/dynamic"
 import Head from "next/head"
+
+// Loaded client-side only: the page pulls @mezo-org/mezo-clay, which touches
+// `document` at import time and would break Next's server-side page-data
+// collection (mirrors the other page routes, e.g. dashboard.tsx).
+const AcademyPublicPage = dynamic(
+  () => import("@/components/pages/AcademyPublicPage"),
+  { ssr: false, loading: () => <InitialLoader /> },
+)
 
 export default function Academy() {
   const ogImageUrl = getOgImageUrl()
@@ -28,13 +37,6 @@ export default function Academy() {
         <meta name="twitter:title" content={title} />
         <meta name="twitter:description" content={description} />
         <meta name="twitter:image" content={ogImageUrl} />
-
-        <link
-          rel="preload"
-          href="/api/academy/leaderboard?network=mainnet"
-          as="fetch"
-          crossOrigin="anonymous"
-        />
       </Head>
       <AcademyPublicPage />
     </>

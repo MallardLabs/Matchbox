@@ -75,6 +75,12 @@ export default async function handler(request: Request): Promise<Response> {
 
   const url = new URL(request.url)
   const chainId = parseChainId(url.searchParams.get("network"))
+  // Opt-in cull for the public leaderboard page: drop actors below the reward
+  // floor (i.e. who wouldn't earn a payout at the season cutoff). The threshold
+  // itself stays server-side (params.rewardFloorMezoWad) and is never exposed.
+  // Off by default so server callers like the Discord role reconciler still see
+  // every participant with points.
+  const qualifiedOnly = url.searchParams.get("qualifiedOnly") === "1"
 
   try {
     const now = Math.floor(Date.now() / 1000)
@@ -152,7 +158,14 @@ export default async function handler(request: Request): Promise<Response> {
       toTs,
     )
 
-    const serializedRows = simResult.rows.map((row) => ({
+    // When culling, keep only actors at/above the reward floor. `culledBelowFloor`
+    // is computed inside simulate() over this exact window, so it reflects the
+    // payout each actor would get for the season's duration.
+    const visibleRows = qualifiedOnly
+      ? simResult.rows.filter((row) => !row.culledBelowFloor)
+      : simResult.rows
+
+    const serializedRows = visibleRows.map((row) => ({
       actor: row.actor,
       pointsWad: row.pointsWad.toString(),
       lockPointsWad: row.lockPointsWad.toString(),
@@ -170,7 +183,10 @@ export default async function handler(request: Request): Promise<Response> {
 
     const serializedTotals = {
       pointsWad: simResult.totals.pointsWad.toString(),
-      participants: simResult.totals.participants,
+      // Reflect the visible list so the page's "Actors" count matches the rows shown.
+      participants: qualifiedOnly
+        ? visibleRows.length
+        : simResult.totals.participants,
       boostCount: simResult.totals.boostCount,
       newLockCount: simResult.totals.newLockCount,
       extensionCount: simResult.totals.extensionCount,

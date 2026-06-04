@@ -1,4 +1,5 @@
 import type { ReactNode } from "react"
+import AcademyEligibilityBanner from "./AcademyEligibilityBanner"
 import { Footer } from "./Footer"
 import { Header } from "./Header"
 
@@ -10,6 +11,7 @@ export function Layout({ children }: LayoutProps): JSX.Element {
   return (
     <div className="relative z-10 flex min-h-screen flex-col bg-transparent">
       <Header />
+      <AcademyEligibilityBanner />
       <main className="mx-auto w-full max-w-7xl flex-1 px-3 py-4 sm:px-4 sm:py-6 md:px-6 md:py-8 lg:px-8">
         {children}
       </main>

@@ -147,19 +147,20 @@ function SettingsIcon(): JSX.Element {
 
 type NavChild = { href: string; label: string }
 type NavItem =
-  | { href: string; label: string; children?: never }
+  | { href: string; label: string; isNew?: boolean; children?: never }
   | { label: string; children: NavChild[]; href?: never }
 
 const navItems: NavItem[] = [
   { href: "/dashboard", label: "dashboard" },
   { href: "/boost", label: "veMEZO" },
   { href: "/incentives", label: "veBTC" },
-  { href: "/pools", label: "pools" },
+  { href: "/academy", label: "academy", isNew: true },
   {
     label: "more",
     children: [
       { href: "/how-to", label: "how2" },
       { href: "/activity", label: "activity" },
+      { href: "/pools", label: "pools" },
     ],
   },
 ]
@@ -355,6 +356,15 @@ export function Header(): JSX.Element {
                     </span>
                   )}
                   {item.label}
+                  {item.isNew && (
+                    <>
+                      <span
+                        className="ml-1.5 inline-block h-1.5 w-1.5 rounded-full bg-[#F7931A] align-middle"
+                        aria-hidden="true"
+                      />
+                      <span className="sr-only">new</span>
+                    </>
+                  )}
                   {isActive && (
                     <span
                       className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#F7931A]"
@@ -610,6 +620,15 @@ export function Header(): JSX.Element {
                     </span>
                   )}
                   {item.label}
+                  {item.isNew && (
+                    <>
+                      <span
+                        className="ml-2 inline-block h-1.5 w-1.5 rounded-full bg-[#F7931A] align-middle"
+                        aria-hidden="true"
+                      />
+                      <span className="sr-only">new</span>
+                    </>
+                  )}
                 </NextLink>
               )
             })}

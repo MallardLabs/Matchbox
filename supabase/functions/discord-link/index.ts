@@ -118,6 +118,91 @@ Deno.serve(async (req) => {
     })
   }
 
+  // --- Look up an existing link by wallet address (for the /academy card). ---
+  // Read-only, keyed by a single address; returns only display name + avatar.
+  if (req.method === "GET" && action === "profile") {
+    const address = url.searchParams.get("address") ?? ""
+    if (!isAddress(address)) {
+      return json({ success: false, reason: "bad_address" }, 400)
+    }
+    const { data } = await supabase
+      .from("discord_wallet_links")
+      .select(
+        "discord_user_id, discord_username, discord_global_name, discord_avatar",
+      )
+      .eq("wallet_address", address.toLowerCase())
+      .maybeSingle()
+    if (!data) return json({ success: true, linked: false })
+    return json({
+      success: true,
+      linked: true,
+      discordUsername: data.discord_username,
+      discordGlobalName: data.discord_global_name,
+      avatarUrl: avatarUrl(data.discord_user_id, data.discord_avatar),
+    })
+  }
+
+  // --- List all defined seasons (for the /academy season switcher). ---
+  if (req.method === "GET" && action === "semesters") {
+    const now = Math.floor(Date.now() / 1000)
+    const { data } = await supabase
+      .from("discord_semesters")
+      .select("semester_id, label, from_ts, to_ts")
+      .eq("active", true)
+      .order("from_ts", { ascending: true })
+    const semesters = (data ?? []).map((r) => {
+      const fromTs = Number(r.from_ts)
+      const toTs = Number(r.to_ts)
+      return {
+        semesterId: r.semester_id as string,
+        label: r.label as string,
+        fromTs,
+        toTs,
+        isCurrent: now >= fromTs && now < toTs,
+      }
+    })
+    return json({ success: true, semesters })
+  }
+
+  // --- Resolve the semester window the /academy leaderboard should display. ---
+  // Returns the semester containing now, else the most recent one that has
+  // started, else the earliest defined. No role_id filter: the academy window is
+  // wanted even before a Discord role is configured. Server-side clock.
+  if (req.method === "GET" && action === "current-semester") {
+    const now = Math.floor(Date.now() / 1000)
+    const { data } = await supabase
+      .from("discord_semesters")
+      .select("semester_id, label, from_ts, to_ts")
+      .eq("active", true)
+      .order("from_ts", { ascending: true })
+    const rows = (data ?? []).map((r) => ({
+      semesterId: r.semester_id as string,
+      label: r.label as string,
+      fromTs: Number(r.from_ts),
+      toTs: Number(r.to_ts),
+    }))
+    if (rows.length === 0) return json({ success: true, semester: null })
+    // Pin to a specific semester when asked (e.g. the inaugural Season 0 banner),
+    // independent of which semester is currently active.
+    const requestedId = url.searchParams.get("semesterId")
+    if (requestedId !== null) {
+      const found = rows.find((s) => s.semesterId === requestedId)
+      return json({
+        success: true,
+        semester: found
+          ? { ...found, isCurrent: now >= found.fromTs && now < found.toTs }
+          : null,
+      })
+    }
+    const current = rows.find((s) => now >= s.fromTs && now < s.toTs)
+    const started = rows.filter((s) => s.fromTs <= now)
+    const chosen = current ?? started[started.length - 1] ?? rows[0]
+    return json({
+      success: true,
+      semester: { ...chosen, isCurrent: chosen === current },
+    })
+  }
+
   // --- Return the exact message the connected wallet should sign. ---
   if (req.method === "GET" && action === "message") {
     const token = url.searchParams.get("token") ?? ""

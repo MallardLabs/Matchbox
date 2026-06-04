@@ -1,4 +1,5 @@
 import { useNetwork } from "@/contexts/NetworkContext"
+import { useAcademySemester } from "@/hooks/useAcademySemester"
 import type { LeaderboardRow, SimTotals } from "@/lib/academy/simulate"
 import { CHAIN_ID } from "@repo/shared/contracts"
 import { useQuery } from "@tanstack/react-query"
@@ -107,17 +108,21 @@ function deserializeLeaderboard(
   }
 }
 
-function storageKey(network: "mainnet" | "testnet") {
-  return `${STORAGE_PREFIX}:${network}`
+// Cache is keyed by network AND window so a rolling-window payload is never shown
+// for a semester window (or vice-versa). `windowKey` is `${fromTs}-${toTs}` for a
+// fixed semester window, or "rolling" for the default last-8-epoch window.
+function storageKey(network: "mainnet" | "testnet", windowKey: string) {
+  return `${STORAGE_PREFIX}:${network}:${windowKey}`
 }
 
 function readStoredLeaderboard(
   network: "mainnet" | "testnet" | undefined,
+  windowKey: string,
 ): AcademyLeaderboardData | undefined {
   if (!network || typeof window === "undefined") return undefined
 
   try {
-    const raw = window.localStorage.getItem(storageKey(network))
+    const raw = window.localStorage.getItem(storageKey(network, windowKey))
     if (!raw) return undefined
     const parsed = JSON.parse(raw) as {
       savedAt: number
@@ -138,13 +143,14 @@ function readStoredLeaderboard(
 
 function writeStoredLeaderboard(
   network: "mainnet" | "testnet",
+  windowKey: string,
   payload: ApiLeaderboardResponse,
 ) {
   if (typeof window === "undefined") return
 
   try {
     window.localStorage.setItem(
-      storageKey(network),
+      storageKey(network, windowKey),
       JSON.stringify({ savedAt: Date.now(), payload }),
     )
   } catch {
@@ -152,23 +158,48 @@ function writeStoredLeaderboard(
   }
 }
 
-export function useAcademyLeaderboard() {
+export function useAcademyLeaderboard(
+  windowOverride?: { fromTs: number; toTs: number } | null,
+) {
   const { chainId, isNetworkReady } = useNetwork()
   const network = NETWORK_BY_CHAIN[chainId]
 
+  // windowOverride semantics:
+  //  - object    → pin this fixed window (e.g. a selected season, or the banner).
+  //  - null      → caller is still resolving its window; wait, don't fetch.
+  //  - undefined → fall back to the auto-resolved current season (rolling if none),
+  //                resolved here so consumers that share it stay on one window.
+  const { data: semester, isLoading: semesterLoading } = useAcademySemester()
+  const waiting = windowOverride === null
+  const resolved =
+    windowOverride ??
+    (semester ? { fromTs: semester.fromTs, toTs: semester.toTs } : null)
+  const win = resolved ? { from: resolved.fromTs, to: resolved.toTs } : null
+  const windowKey = win ? `${win.from}-${win.to}` : "rolling"
+
   return useQuery<AcademyLeaderboardData>({
-    queryKey: ["academy-leaderboard", network],
-    enabled: isNetworkReady && !!network,
+    queryKey: ["academy-leaderboard", network, windowKey],
+    // An explicit window fetches immediately; a null override waits; otherwise
+    // wait for the auto-resolve so we don't fetch rolling then refetch.
+    enabled:
+      isNetworkReady &&
+      !!network &&
+      !waiting &&
+      (windowOverride !== undefined || !semesterLoading),
     staleTime: 5 * 60 * 1000, // 5 min client-side staleTime
-    initialData: () => readStoredLeaderboard(network),
+    initialData: () => readStoredLeaderboard(network, windowKey),
     initialDataUpdatedAt: () => {
-      const stored = readStoredLeaderboard(network)
+      const stored = readStoredLeaderboard(network, windowKey)
       return stored?.meta.generatedAt ? stored.meta.generatedAt * 1000 : 0
     },
     queryFn: async () => {
       if (!network) throw new Error("Unsupported network")
 
-      const res = await fetch(`/api/academy/leaderboard?network=${network}`)
+      const windowParams = win ? `&from=${win.from}&to=${win.to}` : ""
+      // qualifiedOnly: show only actors who'd earn a payout at the season cutoff.
+      const res = await fetch(
+        `/api/academy/leaderboard?network=${network}${windowParams}&qualifiedOnly=1`,
+      )
       if (!res.ok) {
         throw new Error(`Failed to fetch leaderboard: ${res.statusText}`)
       }
@@ -177,7 +208,7 @@ export function useAcademyLeaderboard() {
         throw new Error(data.error || "Failed to fetch leaderboard")
       }
 
-      writeStoredLeaderboard(network, data)
+      writeStoredLeaderboard(network, windowKey, data)
       return deserializeLeaderboard(data)
     },
   })
