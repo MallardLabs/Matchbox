@@ -13,14 +13,32 @@ import { useAccount } from "wagmi"
 
 // Default to the inaugural season; users can switch to later ones.
 const DEFAULT_SEMESTER_ID = "0"
+const SEASON_CHOICE_KEY = "mezo-academy-season-choice-v1"
+
+// Default to Season 0, but remember the user's last choice across visits.
+function readSeasonChoice(): string {
+  if (typeof window === "undefined") return DEFAULT_SEMESTER_ID
+  try {
+    return window.localStorage.getItem(SEASON_CHOICE_KEY) ?? DEFAULT_SEMESTER_ID
+  } catch {
+    return DEFAULT_SEMESTER_ID
+  }
+}
 
 export default function AcademyPublicPage() {
   const { address: walletAddress, isConnected } = useAccount()
   const { data: semesters, isLoading: seasonsLoading } = useAcademySemesters()
   const seasons = semesters ?? []
 
-  const [selectedSemesterId, setSelectedSemesterId] =
-    useState(DEFAULT_SEMESTER_ID)
+  const [selectedSemesterId, setSelectedSemesterId] = useState(readSeasonChoice)
+  const selectSeason = (id: string) => {
+    setSelectedSemesterId(id)
+    try {
+      window.localStorage.setItem(SEASON_CHOICE_KEY, id)
+    } catch {
+      // Ignore quota/private-mode failures.
+    }
+  }
   // Resolve the active season, falling back to Season 0 then the earliest defined.
   const selectedSeason =
     seasons.find((s) => s.semesterId === selectedSemesterId) ??
@@ -163,7 +181,7 @@ export default function AcademyPublicPage() {
                 <button
                   key={s.semesterId}
                   type="button"
-                  onClick={() => setSelectedSemesterId(s.semesterId)}
+                  onClick={() => selectSeason(s.semesterId)}
                   aria-pressed={active}
                   className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
                     active
