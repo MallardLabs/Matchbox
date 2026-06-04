@@ -18,9 +18,11 @@ import { avatarUrl } from "../_shared/discord.ts"
 import {
   type SupabaseClient,
   buildLinkMessage,
+  buildUnlinkMessage,
   getActiveSemesters,
   pointsFromWad,
   reconcileRoles,
+  revokeAllRoles,
 } from "../_shared/discordLink.ts"
 
 const JSON_HEADERS = { ...corsHeaders, "Content-Type": "application/json" }
@@ -88,6 +90,14 @@ const verifySchema = z.object({
   ),
 })
 
+const unlinkSchema = z.object({
+  address: z.string().min(1),
+  signature: z.custom<Hex>(
+    (v) => typeof v === "string" && /^0x[0-9a-fA-F]+$/.test(v),
+    "invalid signature",
+  ),
+})
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: corsHeaders })
@@ -140,6 +150,61 @@ Deno.serve(async (req) => {
       discordGlobalName: data.discord_global_name,
       avatarUrl: avatarUrl(data.discord_user_id, data.discord_avatar),
     })
+  }
+
+  // --- Return the message a wallet signs to unlink itself. ---
+  if (req.method === "GET" && action === "unlink-message") {
+    const address = url.searchParams.get("address") ?? ""
+    if (!isAddress(address)) {
+      return json({ success: false, reason: "bad_address" }, 400)
+    }
+    return json({
+      success: true,
+      message: buildUnlinkMessage({ domain: linkDomain(), address }),
+    })
+  }
+
+  // --- Verify a wallet signature, then remove its Discord link + roles. ---
+  if (req.method === "POST" && action === "unlink") {
+    let body: unknown
+    try {
+      body = await req.json()
+    } catch (_err) {
+      return json({ success: false, reason: "bad_request" }, 400)
+    }
+    const parsed = unlinkSchema.safeParse(body)
+    if (!parsed.success) {
+      return json({ success: false, reason: "bad_request" }, 400)
+    }
+    if (!isAddress(parsed.data.address)) {
+      return json({ success: false, reason: "bad_address" }, 400)
+    }
+    const address = getAddress(parsed.data.address)
+    const walletLower = address.toLowerCase()
+
+    const validSig = await verifyMessage({
+      address,
+      message: buildUnlinkMessage({ domain: linkDomain(), address }),
+      signature: parsed.data.signature,
+    })
+    if (!validSig) {
+      return json({ success: false, reason: "bad_signature" }, 401)
+    }
+
+    const { data: link } = await supabase
+      .from("discord_wallet_links")
+      .select("discord_user_id, wallet_address, guild_id, granted_roles")
+      .eq("wallet_address", walletLower)
+      .maybeSingle()
+    if (link) {
+      const semesters = await getActiveSemesters(supabase)
+      await revokeAllRoles({ supabase, link, semesters })
+      await supabase
+        .from("discord_wallet_links")
+        .delete()
+        .eq("wallet_address", walletLower)
+    }
+    return json({ success: true })
   }
 
   // --- List all defined seasons (for the /academy season switcher). ---

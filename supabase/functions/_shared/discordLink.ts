@@ -77,6 +77,23 @@ export function buildLinkMessage(args: {
   ].join("\n")
 }
 
+// The message a wallet signs to unlink itself from Discord. Deterministic so the
+// verifier can rebuild and compare it byte-for-byte.
+export function buildUnlinkMessage(args: {
+  domain: string
+  address: string
+}): string {
+  const checksummed = getAddress(args.address)
+  return [
+    `${args.domain} wants you to unlink your wallet from your Discord account.`,
+    "",
+    `Wallet: ${checksummed}`,
+    "",
+    "Signing this message proves you own this wallet. It does not create a",
+    "transaction or cost any gas.",
+  ].join("\n")
+}
+
 function webappBaseUrl(): string {
   const baseUrl = Deno.env.get("MATCHBOX_WEBAPP_URL")
   if (!baseUrl) throw new Error("Missing MATCHBOX_WEBAPP_URL")
