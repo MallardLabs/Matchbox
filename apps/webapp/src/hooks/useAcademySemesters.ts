@@ -61,7 +61,9 @@ export function useAcademySemesters() {
         const data = await res.json()
         const seasons: AcademySeason[] =
           data?.success && Array.isArray(data.semesters) ? data.semesters : []
-        writeStored(seasons)
+        // Only cache a real result so a transient failure (e.g. the function not
+        // yet redeployed) doesn't pin an empty list for the cache's lifetime.
+        if (seasons.length > 0) writeStored(seasons)
         return seasons
       } catch {
         return []
