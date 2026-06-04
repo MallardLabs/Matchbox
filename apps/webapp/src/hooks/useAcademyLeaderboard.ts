@@ -158,21 +158,30 @@ function writeStoredLeaderboard(
   }
 }
 
-export function useAcademyLeaderboard() {
+export function useAcademyLeaderboard(windowOverride?: {
+  fromTs: number
+  toTs: number
+}) {
   const { chainId, isNetworkReady } = useNetwork()
   const network = NETWORK_BY_CHAIN[chainId]
 
-  // The window comes from the semester table (null => rolling fallback). Resolved
-  // here so every consumer of this hook (page + actor profile) shares one window.
+  // Default: window comes from the semester table (null => rolling fallback),
+  // resolved here so the page + actor profile share one window. A windowOverride
+  // pins a fixed window (e.g. the Season 0 eligibility banner) regardless of which
+  // semester is currently active.
   const { data: semester, isLoading: semesterLoading } = useAcademySemester()
-  const win = semester ? { from: semester.fromTs, to: semester.toTs } : null
+  const resolved =
+    windowOverride ??
+    (semester ? { fromTs: semester.fromTs, toTs: semester.toTs } : null)
+  const win = resolved ? { from: resolved.fromTs, to: resolved.toTs } : null
   const windowKey = win ? `${win.from}-${win.to}` : "rolling"
 
   return useQuery<AcademyLeaderboardData>({
     queryKey: ["academy-leaderboard", network, windowKey],
-    // Wait for the semester to resolve before fetching, so we don't fetch the
-    // rolling window first and then refetch the semester window.
-    enabled: isNetworkReady && !!network && !semesterLoading,
+    // With an explicit override we can fetch immediately; otherwise wait for the
+    // semester to resolve so we don't fetch the rolling window then refetch.
+    enabled:
+      isNetworkReady && !!network && (!!windowOverride || !semesterLoading),
     staleTime: 5 * 60 * 1000, // 5 min client-side staleTime
     initialData: () => readStoredLeaderboard(network, windowKey),
     initialDataUpdatedAt: () => {

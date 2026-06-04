@@ -160,6 +160,18 @@ Deno.serve(async (req) => {
       toTs: Number(r.to_ts),
     }))
     if (rows.length === 0) return json({ success: true, semester: null })
+    // Pin to a specific semester when asked (e.g. the inaugural Season 0 banner),
+    // independent of which semester is currently active.
+    const requestedId = url.searchParams.get("semesterId")
+    if (requestedId !== null) {
+      const found = rows.find((s) => s.semesterId === requestedId)
+      return json({
+        success: true,
+        semester: found
+          ? { ...found, isCurrent: now >= found.fromTs && now < found.toTs }
+          : null,
+      })
+    }
     const current = rows.find((s) => now >= s.fromTs && now < s.toTs)
     const started = rows.filter((s) => s.fromTs <= now)
     const chosen = current ?? started[started.length - 1] ?? rows[0]

@@ -1,26 +1,25 @@
 import { useAcademyLeaderboard } from "@/hooks/useAcademyLeaderboard"
+import { useAcademySemester } from "@/hooks/useAcademySemester"
 import { LinkExternal02 } from "@mezo-org/mezo-clay"
 import { useEffect, useState } from "react"
 import { useAccount } from "wagmi"
 
 const BLOG_URL = "https://mezo.org/blog/mezo-academy/"
 const DISMISS_KEY = "mezo-academy-eligibility-banner-dismissed-v1"
-
-// Feature flag: the banner stays hidden until NEXT_PUBLIC_ACADEMY_BANNER_ENABLED
-// is set to "true"/"1" in the deploy env (requires a rebuild to take effect).
-const BANNER_ENABLED =
-  process.env.NEXT_PUBLIC_ACADEMY_BANNER_ENABLED === "true" ||
-  process.env.NEXT_PUBLIC_ACADEMY_BANNER_ENABLED === "1"
+// The inaugural distribution is Season 0; the banner is pinned to it so the
+// "first distribution" wording stays accurate once later seasons exist.
+const INAUGURAL_SEMESTER_ID = "0"
 
 // App-wide banner shown to a connected wallet that qualifies for the Mezo Academy
-// distribution. Eligibility = membership in the (server-culled) leaderboard, which
-// already excludes wallets below the reward cutoff — mirroring the blog's note that
-// sub-threshold participants weren't contemplated. Dismissible and remembered.
+// inaugural distribution (Season 0). Eligibility = membership in that season's
+// server-culled leaderboard, which already excludes wallets below the reward
+// cutoff — mirroring the blog's note that sub-threshold participants weren't
+// contemplated. Dismissible and remembered.
 export default function AcademyEligibilityBanner(): JSX.Element | null {
   const { address, isConnected } = useAccount()
-  // Gated behind the feature flag; also mount the leaderboard-fetching inner only
-  // when connected, so disconnected visitors don't trigger the heavy query app-wide.
-  if (!BANNER_ENABLED || !isConnected || !address) return null
+  // Mount the leaderboard-fetching inner only when connected, so disconnected
+  // visitors don't trigger the heavy leaderboard query app-wide.
+  if (!isConnected || !address) return null
   return <EligibilityBannerInner address={address} />
 }
 
@@ -29,7 +28,12 @@ function EligibilityBannerInner({
 }: {
   address: string
 }): JSX.Element | null {
-  const { data: leaderboardData } = useAcademyLeaderboard()
+  // Pin to Season 0's window specifically, independent of the active semester.
+  const { data: season0 } = useAcademySemester(INAUGURAL_SEMESTER_ID)
+  const window0 = season0
+    ? { fromTs: season0.fromTs, toTs: season0.toTs }
+    : undefined
+  const { data: leaderboardData } = useAcademyLeaderboard(window0)
   // Hidden until hydration confirms it hasn't been dismissed (avoids SSR flash).
   const [dismissed, setDismissed] = useState(true)
 
@@ -38,8 +42,12 @@ function EligibilityBannerInner({
     setDismissed(window.localStorage.getItem(DISMISS_KEY) === "1")
   }, [])
 
+  // Only trust leaderboard data that actually corresponds to Season 0's window.
   const eligible =
+    !!season0 &&
     !!leaderboardData &&
+    leaderboardData.meta.fromTs === season0.fromTs &&
+    leaderboardData.meta.toTs === season0.toTs &&
     leaderboardData.rows.some(
       (r) => r.actor.toLowerCase() === address.toLowerCase(),
     )
