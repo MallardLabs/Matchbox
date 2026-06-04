@@ -16,7 +16,7 @@ const DEFAULT_SEMESTER_ID = "0"
 
 export default function AcademyPublicPage() {
   const { address: walletAddress, isConnected } = useAccount()
-  const { data: semesters } = useAcademySemesters()
+  const { data: semesters, isLoading: seasonsLoading } = useAcademySemesters()
   const seasons = semesters ?? []
 
   const [selectedSemesterId, setSelectedSemesterId] =
@@ -27,14 +27,17 @@ export default function AcademyPublicPage() {
     seasons.find((s) => s.semesterId === DEFAULT_SEMESTER_ID) ??
     seasons[0] ??
     null
-  // null while the season list is still loading → the leaderboard hook waits
-  // rather than flashing the auto-resolved current season.
-  const selectedWindow =
-    seasons.length === 0
+  // Window semantics for the leaderboard hook:
+  //  - a selected season  → pin that window.
+  //  - list still loading  → null (wait, don't flash the wrong window).
+  //  - list settled empty  → undefined (fall back to the rolling window) so the
+  //    page still loads if the semesters endpoint is unavailable, rather than
+  //    waiting forever and showing "Failed to load".
+  const selectedWindow = selectedSeason
+    ? { fromTs: selectedSeason.fromTs, toTs: selectedSeason.toTs }
+    : seasonsLoading
       ? null
-      : selectedSeason
-        ? { fromTs: selectedSeason.fromTs, toTs: selectedSeason.toTs }
-        : undefined
+      : undefined
 
   const {
     data: leaderboardData,
@@ -103,7 +106,9 @@ export default function AcademyPublicPage() {
     return () => window.removeEventListener("keydown", handler)
   }, [selectedActor])
 
-  if (leaderboardLoading) {
+  // selectedWindow === null means we're still resolving the season list; show the
+  // loader rather than briefly falling through to the error state below.
+  if (leaderboardLoading || selectedWindow === null) {
     return <InitialLoader />
   }
 
