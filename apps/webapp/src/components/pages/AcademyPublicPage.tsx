@@ -1,15 +1,19 @@
+import AcademyDiscordCard from "@/components/AcademyDiscordCard"
 import AcademyPublicActorProfile from "@/components/AcademyPublicActorProfile"
 import AcademyPublicLeaderboard from "@/components/AcademyPublicLeaderboard"
 import { InitialLoader } from "@/components/InitialLoader"
 import { SpringIn } from "@/components/SpringIn"
 import { useAcademyActorProfile } from "@/hooks/useAcademyActorProfile"
 import { useAcademyLeaderboard } from "@/hooks/useAcademyLeaderboard"
+import { useAcademySemester } from "@/hooks/useAcademySemester"
+import { LinkExternal02 } from "@mezo-org/mezo-clay"
 import { useEffect, useMemo, useState } from "react"
 import type { Address } from "viem"
 import { useAccount } from "wagmi"
 
 export default function AcademyPublicPage() {
   const { address: walletAddress, isConnected } = useAccount()
+  const { data: semester } = useAcademySemester()
   const {
     data: leaderboardData,
     isLoading: leaderboardLoading,
@@ -108,6 +112,15 @@ export default function AcademyPublicPage() {
           Points leaderboard for protocol participation. Track veMEZO lockers
           and veBTC voters active on the network.
         </p>
+        <a
+          href="https://mezo.org/blog/mezo-academy/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex w-fit items-center gap-1 text-sm font-medium text-brand no-underline transition-colors hover:underline"
+        >
+          Learn about Mezo Academy
+          <LinkExternal02 size={14} />
+        </a>
       </header>
 
       {/* Metadata Bar */}
@@ -118,7 +131,10 @@ export default function AcademyPublicPage() {
               Window:
             </span>
             <span className="font-mono font-medium text-[var(--content-primary)]">
-              {dateRangeStr} (Last 8 weeks)
+              {dateRangeStr}{" "}
+              {semester
+                ? `(${semester.label}${semester.isCurrent ? "" : " · ended"})`
+                : "(Last 8 weeks)"}
             </span>
           </div>
           <div className="flex items-center gap-1.5">
@@ -204,6 +220,13 @@ export default function AcademyPublicPage() {
               </div>
             </div>
           </div>
+        </SpringIn>
+      )}
+
+      {/* Discord link status */}
+      {isConnected && walletAddress && (
+        <SpringIn variant="card">
+          <AcademyDiscordCard walletAddress={walletAddress} />
         </SpringIn>
       )}
 

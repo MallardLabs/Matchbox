@@ -28,13 +28,6 @@ export default function Academy() {
         <meta name="twitter:title" content={title} />
         <meta name="twitter:description" content={description} />
         <meta name="twitter:image" content={ogImageUrl} />
-
-        <link
-          rel="preload"
-          href="/api/academy/leaderboard?network=mainnet"
-          as="fetch"
-          crossOrigin="anonymous"
-        />
       </Head>
       <AcademyPublicPage />
     </>
