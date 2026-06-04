@@ -6,6 +6,7 @@ import { SpringIn } from "@/components/SpringIn"
 import { useAcademyActorProfile } from "@/hooks/useAcademyActorProfile"
 import { useAcademyLeaderboard } from "@/hooks/useAcademyLeaderboard"
 import { useAcademySemesters } from "@/hooks/useAcademySemesters"
+import { snapToThursdayUTC } from "@/lib/academy/epoch"
 import { LinkExternal02 } from "@mezo-org/mezo-clay"
 import { useEffect, useMemo, useState } from "react"
 import type { Address } from "viem"
@@ -31,7 +32,9 @@ export default function AcademyPublicPage() {
   const seasons = semesters ?? []
 
   const [selectedSemesterId, setSelectedSemesterId] = useState(readSeasonChoice)
+  const [userPicked, setUserPicked] = useState(false)
   const selectSeason = (id: string) => {
+    setUserPicked(true)
     setSelectedSemesterId(id)
     try {
       window.localStorage.setItem(SEASON_CHOICE_KEY, id)
@@ -39,10 +42,23 @@ export default function AcademyPublicPage() {
       // Ignore quota/private-mode failures.
     }
   }
-  // Resolve the active season, falling back to Season 0 then the earliest defined.
+
+  // A season is only a sensible *default* view once it has a completed epoch;
+  // a just-started season (e.g. Season 1 before its first epoch closes) has an
+  // empty leaderboard, so we don't auto-land on it — but the user can still
+  // pick it explicitly from the switcher.
+  const currentEpoch = snapToThursdayUTC(Math.floor(Date.now() / 1000), "down")
+  const hasCompletedEpoch = (s: { fromTs: number }) => currentEpoch > s.fromTs
+
+  const remembered = seasons.find((s) => s.semesterId === selectedSemesterId)
+  // Honor an explicit pick always; only auto-restore a remembered season if it
+  // has data. Otherwise fall back to Season 0, then the earliest with data.
   const selectedSeason =
-    seasons.find((s) => s.semesterId === selectedSemesterId) ??
+    (remembered && (userPicked || hasCompletedEpoch(remembered))
+      ? remembered
+      : null) ??
     seasons.find((s) => s.semesterId === DEFAULT_SEMESTER_ID) ??
+    seasons.find(hasCompletedEpoch) ??
     seasons[0] ??
     null
   // Window semantics for the leaderboard hook:
