@@ -163,7 +163,7 @@ export default function AcademyPublicPage() {
   const dateRangeStr = `${new Date(meta.fromTs * 1000).toISOString().slice(0, 10)} → ${new Date(meta.toTs * 1000).toISOString().slice(0, 10)}`
 
   return (
-    <div className="mx-auto flex w-full max-w-7xl flex-col gap-8 px-4 py-8 md:py-16">
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 pb-12 pt-4">
       {/* Page Header */}
       <header className="flex flex-col gap-2">
         <h1 className="text-3xl font-bold tracking-tight text-[var(--content-primary)] sm:text-4xl md:text-5xl bg-gradient-to-r from-[var(--content-primary)] to-[var(--content-secondary)] bg-clip-text text-transparent">
@@ -252,71 +252,74 @@ export default function AcademyPublicPage() {
         )}
       </div>
 
-      {/* User Stats Card */}
-      {isConnected && walletAddress && userStats && (
-        <SpringIn variant="card">
-          <div className="rounded-xl border border-brand/30 bg-brand/5 p-5 shadow-sm">
-            <h2 className="text-sm font-semibold uppercase tracking-wider text-brand mb-3">
-              Your Academy Stats ({walletAddress.slice(0, 6)}…
-              {walletAddress.slice(-4)})
-            </h2>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-primary)] px-3.5 py-2.5">
-                <div className="text-[10px] uppercase tracking-wider text-[var(--content-secondary)]">
-                  Leaderboard Rank
-                </div>
-                <div className="mt-1 font-mono text-lg font-bold text-[var(--content-primary)]">
-                  {userStats.rank}
-                </div>
-              </div>
-              <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-primary)] px-3.5 py-2.5">
-                <div className="text-[10px] uppercase tracking-wider text-[var(--content-secondary)]">
-                  Points
-                </div>
-                <div className="mt-1 font-mono text-lg font-bold text-[var(--content-primary)]">
-                  {Number(userStats.row.pointsWad / 10n ** 12n) / 1e6 > 0
-                    ? (
-                        Number(userStats.row.pointsWad / 10n ** 12n) / 1e6
-                      ).toLocaleString(undefined, { maximumFractionDigits: 2 })
-                    : "0.00"}
-                </div>
-              </div>
-              <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-primary)] px-3.5 py-2.5">
-                <div className="text-[10px] uppercase tracking-wider text-[var(--content-secondary)]">
-                  Share
-                </div>
-                <div className="mt-1 font-mono text-lg font-bold text-[var(--content-primary)]">
-                  {userStats.share.toFixed(2)}%
-                </div>
-              </div>
-              <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-primary)] px-3.5 py-2.5">
-                <div className="text-[10px] uppercase tracking-wider text-[var(--content-secondary)]">
-                  Participation
-                </div>
-                <div className="mt-1 font-mono text-lg font-bold text-[var(--content-primary)]">
-                  {userStats.row.fullyParticipated ? (
-                    <span
-                      className="text-[#F7931A]"
-                      title="Fully participated: voted in every epoch"
-                    >
-                      ★ Full (2x bonus)
-                    </span>
-                  ) : (
-                    <span>
-                      {userStats.row.activeEpochs} / {totals.totalEpochs} epochs
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        </SpringIn>
-      )}
-
-      {/* Discord link status */}
+      {/* Your stats + Discord — condensed, side by side on large screens */}
       {isConnected && walletAddress && (
         <SpringIn variant="card">
-          <AcademyDiscordCard walletAddress={walletAddress} />
+          <div className="grid gap-4 lg:grid-cols-3">
+            {userStats && (
+              <div className="h-full rounded-xl border border-brand/30 bg-brand/5 p-5 shadow-sm lg:col-span-2">
+                <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-brand">
+                  Your Academy Stats ({walletAddress.slice(0, 6)}…
+                  {walletAddress.slice(-4)})
+                </h2>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-primary)] px-3.5 py-2.5">
+                    <div className="text-[10px] uppercase tracking-wider text-[var(--content-secondary)]">
+                      Leaderboard Rank
+                    </div>
+                    <div className="mt-1 font-mono text-lg font-bold text-[var(--content-primary)]">
+                      {userStats.rank}
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-primary)] px-3.5 py-2.5">
+                    <div className="text-[10px] uppercase tracking-wider text-[var(--content-secondary)]">
+                      Points
+                    </div>
+                    <div className="mt-1 font-mono text-lg font-bold text-[var(--content-primary)]">
+                      {Number(userStats.row.pointsWad / 10n ** 12n) / 1e6 > 0
+                        ? (
+                            Number(userStats.row.pointsWad / 10n ** 12n) / 1e6
+                          ).toLocaleString(undefined, {
+                            maximumFractionDigits: 2,
+                          })
+                        : "0.00"}
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-primary)] px-3.5 py-2.5">
+                    <div className="text-[10px] uppercase tracking-wider text-[var(--content-secondary)]">
+                      Share
+                    </div>
+                    <div className="mt-1 font-mono text-lg font-bold text-[var(--content-primary)]">
+                      {userStats.share.toFixed(2)}%
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-primary)] px-3.5 py-2.5">
+                    <div className="text-[10px] uppercase tracking-wider text-[var(--content-secondary)]">
+                      Participation
+                    </div>
+                    <div className="mt-1 font-mono text-lg font-bold text-[var(--content-primary)]">
+                      {userStats.row.fullyParticipated ? (
+                        <span
+                          className="text-[#F7931A]"
+                          title="Fully participated: voted in every epoch"
+                        >
+                          ★ Full (2x bonus)
+                        </span>
+                      ) : (
+                        <span>
+                          {userStats.row.activeEpochs} / {totals.totalEpochs}{" "}
+                          epochs
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+            <div className={userStats ? "lg:col-span-1" : "lg:col-span-3"}>
+              <AcademyDiscordCard walletAddress={walletAddress} />
+            </div>
+          </div>
         </SpringIn>
       )}
 
