@@ -231,13 +231,10 @@ export default function LinkWalletPage(): JSX.Element {
                           key={s.semesterId}
                           className="flex items-center justify-between gap-3"
                         >
-                          <span className="flex items-center gap-2 text-sm text-[var(--content-primary)]">
-                            <span aria-hidden="true">
-                              {s.qualifies ? "✅" : "⬜"}
-                            </span>
+                          <span className="whitespace-nowrap text-sm text-[var(--content-primary)]">
                             {s.label}
                           </span>
-                          <span className="text-sm text-[var(--content-secondary)]">
+                          <span className="whitespace-nowrap text-right text-sm text-[var(--content-secondary)]">
                             {s.points.toLocaleString()} pts
                             {s.qualifies ? " · role granted" : ""}
                           </span>
