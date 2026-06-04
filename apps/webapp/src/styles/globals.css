@@ -948,3 +948,36 @@
     transform: translateX(-50%);
   }
 }
+
+/* ============================================
+   LINK FLOW PROGRESS BAR
+   Indeterminate sheen that sweeps across the fill while a linking step
+   is in flight (awaiting signature / confirming ownership).
+   ============================================ */
+
+.link-progress-sheen {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.55),
+    transparent
+  );
+  animation: link-progress-sheen 1.4s ease-in-out infinite;
+}
+
+@keyframes link-progress-sheen {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .link-progress-sheen {
+    animation: none;
+  }
+}
