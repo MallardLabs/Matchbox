@@ -158,18 +158,19 @@ function writeStoredLeaderboard(
   }
 }
 
-export function useAcademyLeaderboard(windowOverride?: {
-  fromTs: number
-  toTs: number
-}) {
+export function useAcademyLeaderboard(
+  windowOverride?: { fromTs: number; toTs: number } | null,
+) {
   const { chainId, isNetworkReady } = useNetwork()
   const network = NETWORK_BY_CHAIN[chainId]
 
-  // Default: window comes from the semester table (null => rolling fallback),
-  // resolved here so the page + actor profile share one window. A windowOverride
-  // pins a fixed window (e.g. the Season 0 eligibility banner) regardless of which
-  // semester is currently active.
+  // windowOverride semantics:
+  //  - object    → pin this fixed window (e.g. a selected season, or the banner).
+  //  - null      → caller is still resolving its window; wait, don't fetch.
+  //  - undefined → fall back to the auto-resolved current season (rolling if none),
+  //                resolved here so consumers that share it stay on one window.
   const { data: semester, isLoading: semesterLoading } = useAcademySemester()
+  const waiting = windowOverride === null
   const resolved =
     windowOverride ??
     (semester ? { fromTs: semester.fromTs, toTs: semester.toTs } : null)
@@ -178,10 +179,13 @@ export function useAcademyLeaderboard(windowOverride?: {
 
   return useQuery<AcademyLeaderboardData>({
     queryKey: ["academy-leaderboard", network, windowKey],
-    // With an explicit override we can fetch immediately; otherwise wait for the
-    // semester to resolve so we don't fetch the rolling window then refetch.
+    // An explicit window fetches immediately; a null override waits; otherwise
+    // wait for the auto-resolve so we don't fetch rolling then refetch.
     enabled:
-      isNetworkReady && !!network && (!!windowOverride || !semesterLoading),
+      isNetworkReady &&
+      !!network &&
+      !waiting &&
+      (windowOverride !== undefined || !semesterLoading),
     staleTime: 5 * 60 * 1000, // 5 min client-side staleTime
     initialData: () => readStoredLeaderboard(network, windowKey),
     initialDataUpdatedAt: () => {

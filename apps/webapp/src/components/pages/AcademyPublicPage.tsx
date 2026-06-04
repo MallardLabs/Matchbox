@@ -5,26 +5,48 @@ import { InitialLoader } from "@/components/InitialLoader"
 import { SpringIn } from "@/components/SpringIn"
 import { useAcademyActorProfile } from "@/hooks/useAcademyActorProfile"
 import { useAcademyLeaderboard } from "@/hooks/useAcademyLeaderboard"
-import { useAcademySemester } from "@/hooks/useAcademySemester"
+import { useAcademySemesters } from "@/hooks/useAcademySemesters"
 import { LinkExternal02 } from "@mezo-org/mezo-clay"
 import { useEffect, useMemo, useState } from "react"
 import type { Address } from "viem"
 import { useAccount } from "wagmi"
 
+// Default to the inaugural season; users can switch to later ones.
+const DEFAULT_SEMESTER_ID = "0"
+
 export default function AcademyPublicPage() {
   const { address: walletAddress, isConnected } = useAccount()
-  const { data: semester } = useAcademySemester()
+  const { data: semesters } = useAcademySemesters()
+  const seasons = semesters ?? []
+
+  const [selectedSemesterId, setSelectedSemesterId] =
+    useState(DEFAULT_SEMESTER_ID)
+  // Resolve the active season, falling back to Season 0 then the earliest defined.
+  const selectedSeason =
+    seasons.find((s) => s.semesterId === selectedSemesterId) ??
+    seasons.find((s) => s.semesterId === DEFAULT_SEMESTER_ID) ??
+    seasons[0] ??
+    null
+  // null while the season list is still loading → the leaderboard hook waits
+  // rather than flashing the auto-resolved current season.
+  const selectedWindow =
+    seasons.length === 0
+      ? null
+      : selectedSeason
+        ? { fromTs: selectedSeason.fromTs, toTs: selectedSeason.toTs }
+        : undefined
+
   const {
     data: leaderboardData,
     isLoading: leaderboardLoading,
     isError: leaderboardError,
     error,
-  } = useAcademyLeaderboard()
+  } = useAcademyLeaderboard(selectedWindow)
   const [selectedActor, setSelectedActor] = useState<Address | null>(null)
 
-  // Fetch selected actor profile details
+  // Fetch selected actor profile details (same window as the leaderboard).
   const { data: actorProfileData, isLoading: actorProfileLoading } =
-    useAcademyActorProfile(selectedActor)
+    useAcademyActorProfile(selectedActor, selectedWindow)
 
   const userStats = useMemo(() => {
     if (!walletAddress || !leaderboardData) return null
@@ -123,6 +145,35 @@ export default function AcademyPublicPage() {
         </a>
       </header>
 
+      {/* Season switcher */}
+      {seasons.length > 1 && (
+        <div className="flex items-center gap-3">
+          <span className="text-xs font-semibold uppercase tracking-wider text-[var(--content-tertiary)]">
+            Season
+          </span>
+          <div className="inline-flex rounded-lg border border-[var(--border)] bg-[var(--surface)] p-0.5">
+            {seasons.map((s) => {
+              const active = s.semesterId === selectedSeason?.semesterId
+              return (
+                <button
+                  key={s.semesterId}
+                  type="button"
+                  onClick={() => setSelectedSemesterId(s.semesterId)}
+                  aria-pressed={active}
+                  className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                    active
+                      ? "bg-brand text-white"
+                      : "text-[var(--content-secondary)] hover:text-[var(--content-primary)]"
+                  }`}
+                >
+                  {s.label}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Metadata Bar */}
       <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-[var(--border)] bg-[var(--surface-tertiary)] px-5 py-4 shadow-sm">
         <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-[var(--content-secondary)]">
@@ -132,8 +183,8 @@ export default function AcademyPublicPage() {
             </span>
             <span className="font-mono font-medium text-[var(--content-primary)]">
               {dateRangeStr}{" "}
-              {semester
-                ? `(${semester.label}${semester.isCurrent ? "" : " · ended"})`
+              {selectedSeason
+                ? `(${selectedSeason.label}${selectedSeason.isCurrent ? "" : " · ended"})`
                 : "(Last 8 weeks)"}
             </span>
           </div>

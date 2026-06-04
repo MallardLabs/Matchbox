@@ -21,10 +21,15 @@ export type AcademyActorProfileData = {
   row: LeaderboardRow | null
 }
 
-export function useAcademyActorProfile(actor: Address | null) {
+export function useAcademyActorProfile(
+  actor: Address | null,
+  windowOverride?: { fromTs: number; toTs: number } | null,
+) {
   const { chainId, isNetworkReady } = useNetwork()
   const network = NETWORK_BY_CHAIN[chainId]
-  const { data: leaderboardData } = useAcademyLeaderboard()
+  // Use the same window as the leaderboard the actor was opened from, so the
+  // drawer's activity + row match the selected season.
+  const { data: leaderboardData } = useAcademyLeaderboard(windowOverride)
 
   const fromTs = leaderboardData?.meta.fromTs
   const toTs = leaderboardData?.meta.toTs

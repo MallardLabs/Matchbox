@@ -142,6 +142,28 @@ Deno.serve(async (req) => {
     })
   }
 
+  // --- List all defined seasons (for the /academy season switcher). ---
+  if (req.method === "GET" && action === "semesters") {
+    const now = Math.floor(Date.now() / 1000)
+    const { data } = await supabase
+      .from("discord_semesters")
+      .select("semester_id, label, from_ts, to_ts")
+      .eq("active", true)
+      .order("from_ts", { ascending: true })
+    const semesters = (data ?? []).map((r) => {
+      const fromTs = Number(r.from_ts)
+      const toTs = Number(r.to_ts)
+      return {
+        semesterId: r.semester_id as string,
+        label: r.label as string,
+        fromTs,
+        toTs,
+        isCurrent: now >= fromTs && now < toTs,
+      }
+    })
+    return json({ success: true, semesters })
+  }
+
   // --- Resolve the semester window the /academy leaderboard should display. ---
   // Returns the semester containing now, else the most recent one that has
   // started, else the earliest defined. No role_id filter: the academy window is

@@ -32,9 +32,11 @@ function AcademyBannerInner({
   // Pin eligibility to Season 0's window specifically, independent of the
   // currently-active semester.
   const { data: season0 } = useAcademySemester(INAUGURAL_SEMESTER_ID)
+  // null while Season 0's window is still loading → the leaderboard hook waits
+  // instead of briefly fetching the current season.
   const window0 = season0
     ? { fromTs: season0.fromTs, toTs: season0.toTs }
-    : undefined
+    : null
   const { data: leaderboardData } = useAcademyLeaderboard(window0)
   // Hidden until hydration confirms it hasn't been dismissed (avoids SSR flash).
   const [dismissed, setDismissed] = useState(true)
