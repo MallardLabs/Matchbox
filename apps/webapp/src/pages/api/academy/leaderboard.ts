@@ -1,6 +1,6 @@
 import { BLACKLISTED_SYSTEM_ACTORS } from "@/lib/academy/blacklistedActors"
 import { defaultAcademyParams } from "@/lib/academy/constants"
-import { WEEK, resolveWindow } from "@/lib/academy/epoch"
+import { WEEK, resolveWindow, snapToThursdayUTC } from "@/lib/academy/epoch"
 import { simulate } from "@/lib/academy/simulate"
 import { fetchMezoActivity } from "@/lib/mezoActivity/dataSources"
 import type { MezoActivityItem } from "@/types/mezoActivity"
@@ -86,11 +86,45 @@ export default async function handler(request: Request): Promise<Response> {
     const now = Math.floor(Date.now() / 1000)
     // Optional fixed window (unix seconds) for per-semester leaderboards; defaults
     // to the rolling last-8-epoch window.
-    const { fromTs, toTs } = resolveWindow(
+    const { fromTs, toTs: requestedToTs } = resolveWindow(
       url.searchParams.get("from"),
       url.searchParams.get("to"),
       now,
     )
+    // Never credit epochs that haven't completed: clamp the window end to the most
+    // recent epoch boundary. For an in-progress season (end in the future) this
+    // stops sticky votes from being projected into epochs that haven't happened.
+    const toTs = Math.min(requestedToTs, snapToThursdayUTC(now, "down"))
+
+    // No completed epoch in range yet (e.g. a season that just started) — nothing
+    // to compute. Return empty rather than walking the vote history pointlessly.
+    if (toTs <= fromTs) {
+      return new Response(
+        JSON.stringify({
+          success: true,
+          rows: [],
+          totals: {
+            pointsWad: "0",
+            participants: 0,
+            boostCount: 0,
+            newLockCount: 0,
+            extensionCount: 0,
+            totalEpochs: 0,
+            fullParticipationCount: 0,
+            activeVoteAggregateWad: "0",
+          },
+          meta: { fromTs, toTs, generatedAt: now },
+        }),
+        {
+          status: 200,
+          headers: {
+            "Content-Type": "application/json",
+            "Cache-Control": "public, max-age=300, s-maxage=900",
+            ...CORS_HEADERS,
+          },
+        },
+      )
+    }
 
     // 1. Fetch Lock track events strictly in range
     const lockEvents: MezoActivityItem[] = []
