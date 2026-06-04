@@ -83,7 +83,7 @@ export default function AcademyDiscordCard({ walletAddress }: Props) {
   }
 
   return (
-    <div className="h-full rounded-xl border border-brand/30 bg-brand/5 p-5 shadow-sm">
+    <div className="rounded-xl border border-brand/30 bg-brand/5 p-5 shadow-sm">
       <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-brand">
         Discord
       </h2>
