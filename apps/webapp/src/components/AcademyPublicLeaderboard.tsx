@@ -187,10 +187,32 @@ export default function AcademyPublicLeaderboard({
               onChange={(e) => setLimit(Number(e.target.value))}
               className="rounded-lg border border-[var(--border)] bg-[var(--surface-tertiary)] px-2 py-1.5 font-mono text-xs text-[var(--content-primary)] focus:border-[#F7931A] focus:outline-none cursor-pointer"
             >
-              <option value={50}>50</option>
-              <option value={100}>100</option>
-              <option value={250}>250</option>
-              <option value={1000}>1000</option>
+              {/* Explicit option colors so the native dropdown is legible on
+                  Windows (otherwise white-on-white in dark mode). */}
+              <option
+                value={50}
+                className="bg-[var(--surface)] text-[var(--content-primary)]"
+              >
+                50
+              </option>
+              <option
+                value={100}
+                className="bg-[var(--surface)] text-[var(--content-primary)]"
+              >
+                100
+              </option>
+              <option
+                value={250}
+                className="bg-[var(--surface)] text-[var(--content-primary)]"
+              >
+                250
+              </option>
+              <option
+                value={1000}
+                className="bg-[var(--surface)] text-[var(--content-primary)]"
+              >
+                1000
+              </option>
             </select>
           </label>
         </div>
