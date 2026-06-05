@@ -12,41 +12,36 @@ import { useEffect, useMemo, useState } from "react"
 import type { Address } from "viem"
 import { useAccount } from "wagmi"
 
-// Always land on the inaugural season (Season 0); users can switch to later
-// ones via the switcher within a session.
-const DEFAULT_SEMESTER_ID = "0"
+// The leaderboard is presented as a single "Class of 2026" cohort spanning the
+// union of every defined window — there is intentionally no per-season choice.
+const CLASS_LABEL = "Class of 2026"
 
 export default function AcademyPublicPage() {
   const { address: walletAddress, isConnected } = useAccount()
   const { data: semesters, isLoading: seasonsLoading } = useAcademySemesters()
   const seasons = semesters ?? []
 
-  const [selectedSemesterId, setSelectedSemesterId] =
-    useState(DEFAULT_SEMESTER_ID)
-  const selectSeason = (id: string) => setSelectedSemesterId(id)
-
-  // For the "no standings yet" notice: a season only has data once an epoch has
-  // completed; vote weight is never projected into epochs that haven't happened.
+  // For the "no standings yet" notice: the cohort only has data once an epoch
+  // has completed; vote weight is never projected into epochs that haven't
+  // happened.
   const currentEpoch = snapToThursdayUTC(Math.floor(Date.now() / 1000), "down")
-  const hasCompletedEpoch = (s: { fromTs: number }) => currentEpoch > s.fromTs
 
-  // Resolve the selected season, defaulting to Season 0 then the earliest defined.
-  const selectedSeason =
-    seasons.find((s) => s.semesterId === selectedSemesterId) ??
-    seasons.find((s) => s.semesterId === DEFAULT_SEMESTER_ID) ??
-    seasons[0] ??
-    null
+  // The displayed window is the union of all defined windows: earliest start to
+  // latest end, presented as one cohort.
+  const classWindow =
+    seasons.length > 0
+      ? {
+          fromTs: Math.min(...seasons.map((s) => s.fromTs)),
+          toTs: Math.max(...seasons.map((s) => s.toTs)),
+        }
+      : null
   // Window semantics for the leaderboard hook:
-  //  - a selected season  → pin that window.
+  //  - a resolved window  → pin it.
   //  - list still loading  → null (wait, don't flash the wrong window).
   //  - list settled empty  → undefined (fall back to the rolling window) so the
   //    page still loads if the semesters endpoint is unavailable, rather than
   //    waiting forever and showing "Failed to load".
-  const selectedWindow = selectedSeason
-    ? { fromTs: selectedSeason.fromTs, toTs: selectedSeason.toTs }
-    : seasonsLoading
-      ? null
-      : undefined
+  const selectedWindow = classWindow ?? (seasonsLoading ? null : undefined)
 
   const {
     data: leaderboardData,
@@ -115,10 +110,9 @@ export default function AcademyPublicPage() {
     return () => window.removeEventListener("keydown", handler)
   }, [selectedActor])
 
-  const seasonNotStarted =
-    !!selectedSeason && !hasCompletedEpoch(selectedSeason)
-  const firstEpochCloseStr = selectedSeason
-    ? new Date((selectedSeason.fromTs + WEEK) * 1000).toISOString().slice(0, 10)
+  const seasonNotStarted = !!classWindow && currentEpoch <= classWindow.fromTs
+  const firstEpochCloseStr = classWindow
+    ? new Date((classWindow.fromTs + WEEK) * 1000).toISOString().slice(0, 10)
     : ""
 
   // Connected wallet's link card — shown both alongside stats and in the
@@ -133,12 +127,12 @@ export default function AcademyPublicPage() {
       <>
         <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-tertiary)] px-5 py-12 text-center shadow-sm">
           <p className="font-semibold text-[var(--content-primary)]">
-            No standings yet for {selectedSeason?.label}
+            No standings yet for the {CLASS_LABEL}
           </p>
           <p className="mx-auto mt-1 max-w-md text-sm text-[var(--content-secondary)]">
-            This season is underway, but no epoch has completed. Only completed
-            epochs count toward points and vote weight, so standings appear
-            after the first epoch closes on {firstEpochCloseStr}.
+            The {CLASS_LABEL} is underway, but no epoch has completed. Only
+            completed epochs count toward points and vote weight, so standings
+            appear after the first epoch closes on {firstEpochCloseStr}.
           </p>
         </div>
         {discordCard && <SpringIn variant="card">{discordCard}</SpringIn>}
@@ -173,9 +167,7 @@ export default function AcademyPublicPage() {
               </span>
               <span className="font-mono font-medium text-[var(--content-primary)]">
                 {dateRangeStr}{" "}
-                {selectedSeason
-                  ? `(${selectedSeason.label}${selectedSeason.isCurrent ? "" : " · ended"})`
-                  : "(Last 8 weeks)"}
+                {classWindow ? `(${CLASS_LABEL})` : "(Last 8 weeks)"}
               </span>
             </div>
             <div className="flex items-center gap-1.5">
@@ -323,34 +315,12 @@ export default function AcademyPublicPage() {
         </a>
       </header>
 
-      {/* Season switcher */}
-      {seasons.length > 1 && (
-        <div className="flex items-center gap-3">
-          <span className="text-xs font-semibold uppercase tracking-wider text-[var(--content-tertiary)]">
-            Season
-          </span>
-          <div className="inline-flex rounded-lg border border-[var(--border)] bg-[var(--surface)] p-0.5">
-            {seasons.map((s) => {
-              const active = s.semesterId === selectedSeason?.semesterId
-              return (
-                <button
-                  key={s.semesterId}
-                  type="button"
-                  onClick={() => selectSeason(s.semesterId)}
-                  aria-pressed={active}
-                  className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-                    active
-                      ? "bg-brand text-white"
-                      : "text-[var(--content-secondary)] hover:text-[var(--content-primary)]"
-                  }`}
-                >
-                  {s.label}
-                </button>
-              )
-            })}
-          </div>
-        </div>
-      )}
+      {/* Single cohort indicator — intentionally one tab, no season choice. */}
+      <div className="inline-flex w-fit rounded-lg border border-[var(--border)] bg-[var(--surface)] p-0.5">
+        <span className="rounded-md bg-brand px-3 py-1.5 text-sm font-medium text-white">
+          {CLASS_LABEL}
+        </span>
+      </div>
 
       {body}
     </div>
