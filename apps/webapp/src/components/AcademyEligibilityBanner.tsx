@@ -72,7 +72,7 @@ function AcademyBannerInner({
     : "Track your Mezo Academy standing"
   const subtext = eligible
     ? "You qualified for the inaugural veMEZO distribution — see where you rank."
-    : "See where you rank among veMEZO lockers and veBTC voters this season."
+    : "See where you rank among veMEZO lockers and veBTC voters."
 
   return (
     <div className="mx-auto w-full max-w-7xl px-3 pt-4 sm:px-4 md:px-6 lg:px-8">
