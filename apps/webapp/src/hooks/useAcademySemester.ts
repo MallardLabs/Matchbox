@@ -42,6 +42,20 @@ function readStored(semesterId?: string): AcademySemester | undefined {
   }
 }
 
+// Age of the cached window so React Query knows whether the seeded initialData
+// is already stale, instead of treating it as fresh on every mount.
+function readStoredAt(semesterId?: string): number | undefined {
+  if (typeof window === "undefined") return undefined
+  try {
+    const raw = window.localStorage.getItem(storageKey(semesterId))
+    if (!raw) return undefined
+    const parsed = JSON.parse(raw) as { savedAt: number }
+    return parsed.savedAt || undefined
+  } catch {
+    return undefined
+  }
+}
+
 function writeStored(semester: AcademySemester, semesterId?: string) {
   if (typeof window === "undefined") return
   try {
@@ -61,6 +75,11 @@ export function useAcademySemester(semesterId?: string) {
     queryKey: ["academy-semester", semesterId ?? "current"],
     staleTime: 30 * 60 * 1000,
     initialData: () => readStored(semesterId),
+    initialDataUpdatedAt: () => readStoredAt(semesterId),
+    // Admin changes to discord_semesters must reach visitors promptly, not be
+    // pinned for the 24h cache lifetime: always revalidate on mount. The cached
+    // window still renders instantly (flash-free) while the refetch runs.
+    refetchOnMount: "always",
     // Never throw: a failure here means "no semester", which the leaderboard
     // treats as the rolling-window fallback.
     queryFn: async () => {

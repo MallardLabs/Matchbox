@@ -34,6 +34,20 @@ function readStored(): AcademySeason[] | undefined {
   }
 }
 
+// Age of the cached list so React Query knows whether the seeded initialData is
+// already stale, instead of treating it as fresh on every mount.
+function readStoredAt(): number | undefined {
+  if (typeof window === "undefined") return undefined
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY)
+    if (!raw) return undefined
+    const parsed = JSON.parse(raw) as { savedAt: number }
+    return parsed.savedAt || undefined
+  } catch {
+    return undefined
+  }
+}
+
 function writeStored(seasons: AcademySeason[]) {
   if (typeof window === "undefined") return
   try {
@@ -53,6 +67,12 @@ export function useAcademySemesters() {
     queryKey: ["academy-semesters"],
     staleTime: 30 * 60 * 1000,
     initialData: readStored,
+    initialDataUpdatedAt: readStoredAt,
+    // Admin changes to discord_semesters (e.g. switching the /academy window)
+    // must reach visitors promptly, not be pinned for the 24h cache lifetime:
+    // always revalidate on mount. The cached list still renders instantly
+    // (flash-free) while the refetch runs in the background.
+    refetchOnMount: "always",
     queryFn: async () => {
       try {
         const res = await fetch(`${FUNCTIONS_URL}?action=semesters`, {
