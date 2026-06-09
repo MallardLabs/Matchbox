@@ -1,6 +1,6 @@
 import { useDiscordLink } from "@/hooks/useDiscordLink"
 import { useQueryClient } from "@tanstack/react-query"
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useSignMessage } from "wagmi"
 
 // Invite to the Mezo Discord server, where the Matchbox bot lives.
@@ -35,6 +35,93 @@ function UnlinkIcon(): JSX.Element {
       <line x1="8" y1="12" x2="12" y2="12" />
       <line x1="3" y1="3" x2="21" y2="21" />
     </svg>
+  )
+}
+
+function DiscordIcon(): JSX.Element {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="16"
+      height="16"
+      fill="currentColor"
+      viewBox="0 0 16 16"
+      aria-hidden="true"
+    >
+      <path d="M13.545 2.907a13.2 13.2 0 0 0-3.257-1.011.05.05 0 0 0-.052.025c-.141.25-.297.577-.406.833a12.2 12.2 0 0 0-3.658 0 8 8 0 0 0-.412-.833.05.05 0 0 0-.052-.025c-1.125.194-2.22.534-3.257 1.011a.04.04 0 0 0-.021.018C.356 6.024-.213 9.047.066 12.032q.003.022.021.037a13.3 13.3 0 0 0 3.995 2.02.05.05 0 0 0 .056-.019q.463-.63.818-1.329a.05.05 0 0 0-.01-.059l-.018-.011a9 9 0 0 1-1.248-.595.05.05 0 0 1-.02-.066l.015-.019q.127-.095.248-.195a.05.05 0 0 1 .051-.007c2.619 1.196 5.454 1.196 8.041 0a.05.05 0 0 1 .053.007q.121.1.248.195a.05.05 0 0 1-.004.085 8 8 0 0 1-1.249.594.05.05 0 0 0-.03.03.05.05 0 0 0 .003.041c.24.465.515.909.817 1.329a.05.05 0 0 0 .056.019 13.2 13.2 0 0 0 4.001-2.02.05.05 0 0 0 .021-.037c.334-3.451-.559-6.449-2.366-9.106a.03.03 0 0 0-.02-.019m-8.198 7.307c-.789 0-1.438-.724-1.438-1.612s.637-1.613 1.438-1.613c.807 0 1.45.73 1.438 1.613 0 .888-.637 1.612-1.438 1.612m5.316 0c-.788 0-1.438-.724-1.438-1.612s.637-1.613 1.438-1.613c.807 0 1.451.73 1.438 1.613 0 .888-.631 1.612-1.438 1.612" />
+    </svg>
+  )
+}
+
+function CompactLinkButton({
+  discordInvite,
+}: { discordInvite: string }): JSX.Element {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener("mousedown", handler)
+    return () => document.removeEventListener("mousedown", handler)
+  }, [open])
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-1.5 text-sm font-medium text-brand transition-opacity hover:opacity-80"
+      >
+        <DiscordIcon />
+        Link Discord
+      </button>
+
+      {open && (
+        <div className="absolute right-0 top-full z-20 mt-2 w-64 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-lg">
+          <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-[var(--content-muted)]">
+            How to link
+          </p>
+          <ol className="space-y-2.5 text-sm text-[var(--content-secondary)]">
+            <li className="flex gap-2.5">
+              <span className="mt-px shrink-0 font-mono text-xs font-bold text-brand">
+                1
+              </span>
+              <span>Join the Mezo Discord server.</span>
+            </li>
+            <li className="flex gap-2.5">
+              <span className="mt-px shrink-0 font-mono text-xs font-bold text-brand">
+                2
+              </span>
+              <span>
+                Run{" "}
+                <code className="rounded bg-[var(--surface-secondary)] px-1 py-0.5 text-xs">
+                  /matchbox
+                </code>{" "}
+                in any channel.
+              </span>
+            </li>
+            <li className="flex gap-2.5">
+              <span className="mt-px shrink-0 font-mono text-xs font-bold text-brand">
+                3
+              </span>
+              <span>Open the link, connect this wallet, and sign.</span>
+            </li>
+          </ol>
+          <a
+            href={discordInvite}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-4 flex items-center justify-center gap-2 rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white no-underline transition-opacity hover:opacity-90"
+          >
+            <DiscordIcon />
+            Join the Mezo server
+          </a>
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -140,25 +227,7 @@ export default function AcademyDiscordCard({
         </div>
       )
     }
-    return (
-      <a
-        href={MEZO_DISCORD_INVITE}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="flex items-center gap-1.5 text-sm font-medium text-brand no-underline transition-opacity hover:opacity-80"
-      >
-        <svg
-          viewBox="0 0 24 24"
-          fill="currentColor"
-          className="h-4 w-4"
-          aria-hidden="true"
-        >
-          <title>Discord</title>
-          <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057c.002.022.015.043.032.054a19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03z" />
-        </svg>
-        Link Discord
-      </a>
-    )
+    return <CompactLinkButton discordInvite={MEZO_DISCORD_INVITE} />
   }
 
   return (
