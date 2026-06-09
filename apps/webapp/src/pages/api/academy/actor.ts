@@ -4,7 +4,7 @@ import {
 } from "@/lib/academy/actorProfile"
 import { BLACKLISTED_SYSTEM_ACTORS } from "@/lib/academy/blacklistedActors"
 import { defaultAcademyParams } from "@/lib/academy/constants"
-import { WEEK, resolveWindow } from "@/lib/academy/epoch"
+import { WEEK, resolveWindow, snapToThursdayUTC } from "@/lib/academy/epoch"
 import { simulate } from "@/lib/academy/simulate"
 import { fetchMezoActivity } from "@/lib/mezoActivity/dataSources"
 import { serializeActivityItem } from "@/lib/mezoActivity/normalize"
@@ -180,11 +180,12 @@ export default async function handler(request: Request): Promise<Response> {
     const now = Math.floor(Date.now() / 1000)
     // Optional fixed window (unix seconds), used for per-semester point lookups.
     // Defaults to the rolling last-8-epoch window. Snapped to epoch boundaries.
-    const { fromTs, toTs } = resolveWindow(
+    const { fromTs, toTs: requestedToTs } = resolveWindow(
       url.searchParams.get("from"),
       url.searchParams.get("to"),
       now,
     )
+    const toTs = Math.min(requestedToTs, snapToThursdayUTC(now, "down"))
 
     // Fetch Lock track events strictly in range
     const lockEvents: MezoActivityItem[] = []

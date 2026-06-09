@@ -24,6 +24,8 @@ import {
   randomToken,
   reconcileRoles,
   revokeAllRoles,
+  type Semester,
+  type SemesterQualification,
   type SupabaseClient,
 } from "../_shared/discordLink.ts"
 
@@ -44,16 +46,28 @@ const ADMINISTRATOR_PERMISSION = 1n << 3n
 const MANAGE_ROLES_PERMISSION = 1n << 28n
 const JSON_HEADERS = { ...corsHeaders, "Content-Type": "application/json" }
 
+// Matchbox brand orange as a Discord embed colour integer.
+const EMBED_COLOR = 0xf7931a
+const EMBED_COLOR_SUCCESS = 0x22c55e
+const EMBED_COLOR_NEUTRAL = 0x44403c
+
 function jsonResponse(body: unknown): Response {
   return new Response(JSON.stringify(body), { headers: JSON_HEADERS })
 }
 
-function ephemeral(content: string, components?: unknown[]): unknown {
+type DiscordEmbed = {
+  color?: number
+  description?: string
+  fields?: { name: string; value: string; inline?: boolean }[]
+  footer?: { text: string }
+}
+
+function ephemeralEmbed(embed: DiscordEmbed, components?: unknown[]): unknown {
   return {
     type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
     data: {
       flags: MessageFlags.EPHEMERAL,
-      content,
+      embeds: [embed],
       components: components ?? [],
     },
   }
@@ -103,7 +117,25 @@ function manageButtonsRow(): unknown {
   }
 }
 
-// Create a short-lived linking session and return the URL the user opens.
+// Format a unix timestamp as "MMM D, YYYY" (e.g. "Apr 2, 2026").
+function fmtTs(ts: number): string {
+  return new Date(ts * 1000).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  })
+}
+
+// Human-readable display name for a semester period based on its properties.
+// Inaugural (floor-gated) semesters get a distinct name; live seasons use the
+// DB label.
+function periodName(s: SemesterQualification | Semester): string {
+  const sf = "require_floor" in s ? s.require_floor : true
+  return sf ? "Inaugural Distribution" : "Live Season"
+}
+
+// Create a new short-lived linking session and return the URL the user opens.
 async function createLinkUrl(
   supabase: SupabaseClient,
   user: DiscordUser,
@@ -132,8 +164,7 @@ async function createLinkUrl(
   return `${webappUrl}/link?token=${token}`
 }
 
-// Background work for an already-linked user running /matchbox: look up points
-// per semester, reconcile the roles, and edit the deferred reply with the result.
+// Background work for an already-linked user running /matchbox.
 async function followupLinkedStatus(args: {
   supabase: SupabaseClient
   appId: string
@@ -141,50 +172,59 @@ async function followupLinkedStatus(args: {
   link: DiscordWalletLink
 }): Promise<void> {
   const { supabase, appId, interactionToken, link } = args
-  let content: string
+  let embed: DiscordEmbed
   try {
     const semesters = await getActiveSemesters(supabase)
     const result = await reconcileRoles({ supabase, link, semesters })
 
-    const lines = [
-      "🔗 **Your Matchbox link**",
-      `Wallet: \`${truncateAddress(link.wallet_address)}\``,
-      "",
-    ]
-    if (result.semesters.length === 0 && !result.liveRoleId) {
-      lines.push("No semester roles are configured yet.")
-    } else {
-      for (const s of result.semesters) {
-        const pts = pointsFromWad(s.pointsWad).toLocaleString()
-        lines.push(
-          `${s.qualifies ? "✅" : "⬜"} **${s.label}** — ${pts} pts${
-            s.qualifies ? " · role granted" : ""
-          }`,
-        )
-      }
-      if (result.liveRoleId) {
-        const pts = pointsFromWad(result.livePointsWad ?? 0n).toLocaleString()
-        lines.push(
-          `${result.liveQualifies ? "✅" : "⬜"} **Current** — ${pts} pts${
-            result.liveQualifies ? " · role granted" : ""
-          }`,
-        )
-      }
+    const fields: DiscordEmbed["fields"] = []
+
+    for (const s of result.semesters) {
+      const pts = pointsFromWad(s.pointsWad).toLocaleString()
+      const dateRange = `${fmtTs(s.from_ts)} – ${fmtTs(s.to_ts)}`
+      const status = s.qualifies ? "✅ Eligible" : "❌ Not eligible"
+      fields.push({
+        name: `${periodName(s)}  ·  ${dateRange}`,
+        value: `${pts} pts  ·  ${status}`,
+        inline: false,
+      })
     }
-    content = lines.join("\n")
+
+    if (result.liveRoleId) {
+      const pts = pointsFromWad(result.livePointsWad ?? 0n).toLocaleString()
+      const status = result.liveQualifies ? "✅ Eligible" : "❌ Not eligible"
+      fields.push({
+        name: "Current window (rolling 8 weeks)",
+        value: `${pts} pts  ·  ${status}`,
+        inline: false,
+      })
+    }
+
+    const roleActive = result.semesters.some((s) => s.qualifies) ||
+      result.liveQualifies
+    const footerParts = ["Class of 2026"]
+    if (roleActive) footerParts.push("role active")
+
+    embed = {
+      color: EMBED_COLOR,
+      description: `Wallet: \`${truncateAddress(link.wallet_address)}\``,
+      fields: fields.length > 0
+        ? fields
+        : [{ name: "No seasons configured", value: "Check back soon.", inline: false }],
+      footer: { text: footerParts.join("  ·  ") },
+    }
   } catch (err) {
     console.error("followupLinkedStatus error:", err)
-    content = [
-      "🔗 **Your Matchbox link**",
-      `Wallet: \`${truncateAddress(link.wallet_address)}\``,
-      "Couldn't fetch your Academy points right now — please try again shortly.",
-    ].join("\n")
+    embed = {
+      color: EMBED_COLOR_NEUTRAL,
+      description: `Wallet: \`${truncateAddress(link.wallet_address)}\`\n\nCouldn't fetch your Academy points right now — please try again shortly.`,
+    }
   }
 
   await editOriginalInteraction({
     appId,
     interactionToken,
-    payload: { content, components: [manageButtonsRow()] },
+    payload: { content: null, embeds: [embed], components: [manageButtonsRow()] },
   })
 }
 
@@ -217,8 +257,11 @@ async function followupUnlink(args: {
     appId,
     interactionToken,
     payload: {
-      content:
-        "✅ Your wallet has been unlinked and any Matchbox roles removed.\nYou can link a new wallet below.",
+      content: null,
+      embeds: [{
+        color: EMBED_COLOR_SUCCESS,
+        description: "Your wallet has been unlinked and any Matchbox roles removed.\nLink a new wallet below whenever you're ready.",
+      }],
       components: [linkButtonRow(url)],
     },
   })
@@ -237,8 +280,11 @@ async function followupRelink(args: {
     appId,
     interactionToken,
     payload: {
-      content:
-        "Open the link below to connect and verify a different wallet. Linking a new wallet replaces your current one.",
+      content: null,
+      embeds: [{
+        color: EMBED_COLOR,
+        description: "Open the link below to connect and verify a different wallet. This replaces your current one.",
+      }],
       components: [linkButtonRow(url, "Link a different wallet")],
     },
   })
@@ -250,7 +296,7 @@ async function followupPokeRoles(args: {
   interactionToken: string
 }): Promise<void> {
   const { supabase, appId, interactionToken } = args
-  let content: string
+  let embed: DiscordEmbed
   try {
     const semesters = await getActiveSemesters(supabase)
     const includeLive = Boolean(Deno.env.get("DISCORD_ROLE_ID"))
@@ -272,25 +318,27 @@ async function followupPokeRoles(args: {
       }
     }
 
-    content = [
-      "Role sync complete.",
-      `Processed: ${processed.toLocaleString()}`,
-      `Failed: ${failed.toLocaleString()}`,
-      `Semester role windows: ${semesters.length.toLocaleString()}`,
-      `Live role: ${includeLive ? "enabled" : "disabled"}`,
-    ].join("\n")
+    embed = {
+      color: EMBED_COLOR_SUCCESS,
+      description: "Role sync complete.",
+      fields: [
+        { name: "Processed", value: processed.toLocaleString(), inline: true },
+        { name: "Failed", value: failed.toLocaleString(), inline: true },
+        { name: "Season windows", value: semesters.length.toLocaleString(), inline: true },
+      ],
+    }
   } catch (err) {
     console.error("followupPokeRoles error:", err)
-    content = [
-      "Role sync failed.",
-      "I couldn't reconcile Academy roles right now. Check function logs for details.",
-    ].join("\n")
+    embed = {
+      color: 0xef4444,
+      description: "Role sync failed. Check the function logs for details.",
+    }
   }
 
   await editOriginalInteraction({
     appId,
     interactionToken,
-    payload: { content },
+    payload: { content: null, embeds: [embed] },
   })
 }
 
@@ -298,7 +346,6 @@ function runBackground(promise: Promise<unknown>): void {
   if (typeof EdgeRuntime !== "undefined" && EdgeRuntime) {
     EdgeRuntime.waitUntil(promise)
   } else {
-    // Fallback for local/dev runtimes without waitUntil.
     promise.catch((err) => console.error("background task error:", err))
   }
 }
@@ -343,7 +390,9 @@ Deno.serve(async (req) => {
   const commandName: string | undefined = interaction.data?.name
 
   if (!user?.id) {
-    return jsonResponse(ephemeral("Couldn't identify your Discord account."))
+    return jsonResponse(
+      ephemeralEmbed({ color: EMBED_COLOR_NEUTRAL, description: "Couldn't identify your Discord account." }),
+    )
   }
 
   // Slash commands.
@@ -351,7 +400,10 @@ Deno.serve(async (req) => {
     if (commandName === "poke-roles") {
       if (!hasRoleManagerPermission(interaction.member?.permissions)) {
         return jsonResponse(
-          ephemeral("You need Manage Roles permission to run `/poke-roles`."),
+          ephemeralEmbed({
+            color: EMBED_COLOR_NEUTRAL,
+            description: "You need **Manage Roles** permission to run `/poke-roles`.",
+          }),
         )
       }
 
@@ -363,7 +415,9 @@ Deno.serve(async (req) => {
     }
 
     if (commandName !== "matchbox") {
-      return jsonResponse(ephemeral("Unsupported command."))
+      return jsonResponse(
+        ephemeralEmbed({ color: EMBED_COLOR_NEUTRAL, description: "Unsupported command." }),
+      )
     }
 
     const { data: link } = await supabase
@@ -375,8 +429,11 @@ Deno.serve(async (req) => {
     if (!link) {
       const url = await createLinkUrl(supabase, user, guildId)
       return jsonResponse(
-        ephemeral(
-          "👋 Link your wallet to Matchbox to track your Mezo Academy points.\nOpen the link below, connect your wallet, and sign to verify ownership.",
+        ephemeralEmbed(
+          {
+            color: EMBED_COLOR,
+            description: "Link your wallet to Matchbox to track your Mezo Academy points and earn the **Class of 2026** Discord role.",
+          },
           [linkButtonRow(url)],
         ),
       )
@@ -408,5 +465,7 @@ Deno.serve(async (req) => {
     return jsonResponse({ type: 6 })
   }
 
-  return jsonResponse(ephemeral("Unsupported interaction."))
+  return jsonResponse(
+    ephemeralEmbed({ color: EMBED_COLOR_NEUTRAL, description: "Unsupported interaction." }),
+  )
 })

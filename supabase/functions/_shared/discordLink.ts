@@ -259,6 +259,9 @@ export type SemesterQualification = {
   role_id: string
   qualifies: boolean
   pointsWad: bigint
+  from_ts: number
+  to_ts: number
+  require_floor: boolean
 }
 
 export type ReconcileResult = {
@@ -305,6 +308,9 @@ export async function reconcileRoles(args: {
       role_id: s.role_id,
       qualifies: qualified,
       pointsWad: q.pointsWad,
+      from_ts: s.from_ts,
+      to_ts: s.to_ts,
+      require_floor: s.require_floor,
     })
   }
 
