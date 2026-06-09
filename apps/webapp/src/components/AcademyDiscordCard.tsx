@@ -80,7 +80,7 @@ function CompactLinkButton({
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full z-20 mt-2 w-64 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-lg">
+        <div className="absolute right-0 bottom-full z-20 mb-2 w-64 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-lg">
           <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-[var(--content-muted)]">
             How to link
           </p>
