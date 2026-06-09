@@ -90,19 +90,6 @@ export default function AcademyPublicPage() {
     }
   }, [walletAddress, leaderboardData])
 
-  const timeAgoStr = useMemo(() => {
-    if (!leaderboardData?.meta.generatedAt) return ""
-    const generatedAt = leaderboardData.meta.generatedAt
-    const diff = Math.floor(Date.now() / 1000) - generatedAt
-    if (diff < 0) return "Just now" // timezone/skew safety
-    if (diff < 60) return "Just now"
-    const mins = Math.floor(diff / 60)
-    if (mins < 60) return `${mins}m ago`
-    const hrs = Math.floor(mins / 60)
-    if (hrs < 24) return `${hrs}h ago`
-    return `${Math.floor(hrs / 24)}d ago`
-  }, [leaderboardData?.meta.generatedAt])
-
   useEffect(() => {
     if (!selectedActor) return
     const handler = (e: KeyboardEvent) => {
@@ -157,8 +144,9 @@ export default function AcademyPublicPage() {
     )
   } else {
     const { rows, totals, meta } = leaderboardData
+    const displayFromTs = classWindow ? classWindow.fromTs : meta.fromTs
     const displayToTs = classWindow ? classWindow.toTs : meta.toTs
-    const dateRangeStr = `${new Date(meta.fromTs * 1000).toISOString().slice(0, 10)} → ${new Date(displayToTs * 1000).toISOString().slice(0, 10)}`
+    const dateRangeStr = `${new Date(displayFromTs * 1000).toISOString().slice(0, 10)} → ${new Date(displayToTs * 1000).toISOString().slice(0, 10)}`
     body = (
       <>
         {/* Metadata row — flat, no card */}
@@ -170,15 +158,6 @@ export default function AcademyPublicPage() {
           </span>
           <span aria-hidden>·</span>
           <span>{totals.participants.toLocaleString()} actors</span>
-          {timeAgoStr && (
-            <span className="ml-auto flex items-center gap-1.5">
-              <span
-                className="h-1.5 w-1.5 rounded-full bg-[#22C55E]"
-                aria-hidden
-              />
-              Updated {timeAgoStr}
-            </span>
-          )}
         </div>
 
         {/* Your stats + Discord — flat strip, no nested cards */}
