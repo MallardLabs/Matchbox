@@ -215,7 +215,8 @@ export default function AcademyPublicPage() {
                       Participation
                     </div>
                     <div className="mt-0.5 font-mono text-2xl font-bold text-[var(--content-primary)]">
-                      {userStats.row.fullyParticipated ? (
+                      {userStats.row.fullyParticipated &&
+                      totals.totalEpochs >= semesterEpochs ? (
                         <span
                           className="text-brand"
                           title="Voted in every epoch"
