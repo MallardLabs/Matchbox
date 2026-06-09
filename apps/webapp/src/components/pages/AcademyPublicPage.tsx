@@ -147,6 +147,10 @@ export default function AcademyPublicPage() {
     const displayFromTs = classWindow ? classWindow.fromTs : meta.fromTs
     const displayToTs = classWindow ? classWindow.toTs : meta.toTs
     const dateRangeStr = `${new Date(displayFromTs * 1000).toISOString().slice(0, 10)} → ${new Date(displayToTs * 1000).toISOString().slice(0, 10)}`
+    // Total epochs in the semester window (fixed), vs completed epochs from sim.
+    const semesterEpochs = classWindow
+      ? Math.round((classWindow.toTs - classWindow.fromTs) / WEEK)
+      : totals.totalEpochs
     body = (
       <>
         {/* Metadata row — flat, no card */}
@@ -154,7 +158,7 @@ export default function AcademyPublicPage() {
           <span className="font-mono">{dateRangeStr}</span>
           <span aria-hidden>·</span>
           <span>
-            {totals.totalEpochs} {totals.totalEpochs === 1 ? "epoch" : "epochs"}
+            {totals.totalEpochs}/{semesterEpochs} {semesterEpochs === 1 ? "epoch" : "epochs"}
           </span>
           <span aria-hidden>·</span>
           <span>{totals.participants.toLocaleString()} actors</span>
@@ -222,7 +226,7 @@ export default function AcademyPublicPage() {
                         <span>
                           {userStats.row.activeEpochs}
                           <span className="text-base font-normal text-[var(--content-muted)]">
-                            /{totals.totalEpochs}
+                            /{semesterEpochs}
                           </span>
                         </span>
                       )}
