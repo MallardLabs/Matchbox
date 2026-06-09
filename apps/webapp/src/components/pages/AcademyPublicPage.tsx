@@ -34,8 +34,8 @@ export default function AcademyPublicPage() {
     const current = seasons.find((s) => s.isCurrent)
     if (current) return { fromTs: current.fromTs, toTs: current.toTs }
     const started = seasons.filter((s) => s.fromTs <= currentEpoch)
-    const chosen = started.length > 0 ? started[started.length - 1] : seasons[0]
-    return { fromTs: chosen.fromTs, toTs: chosen.toTs }
+    const chosen = (started.length > 0 ? started : seasons).at(-1)
+    return chosen ? { fromTs: chosen.fromTs, toTs: chosen.toTs } : null
   })()
   // Window semantics for the leaderboard hook:
   //  - a resolved window  → pin it.
@@ -161,110 +161,100 @@ export default function AcademyPublicPage() {
     const dateRangeStr = `${new Date(meta.fromTs * 1000).toISOString().slice(0, 10)} → ${new Date(displayToTs * 1000).toISOString().slice(0, 10)}`
     body = (
       <>
-        {/* Metadata Bar */}
-        <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-[var(--border)] bg-[var(--surface-tertiary)] px-5 py-4 shadow-sm">
-          <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-[var(--content-secondary)]">
-            <div className="flex items-center gap-1.5">
-              <span className="text-[var(--content-tertiary)] uppercase text-xs tracking-wider font-semibold">
-                Window:
-              </span>
-              <span className="font-mono font-medium text-[var(--content-primary)]">
-                {dateRangeStr}{" "}
-                {classWindow ? `(${CLASS_LABEL})` : "(Last 8 weeks)"}
-              </span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="text-[var(--content-tertiary)] uppercase text-xs tracking-wider font-semibold">
-                Epochs:
-              </span>
-              <span className="font-mono font-medium text-[var(--content-primary)]">
-                {totals.totalEpochs}
-              </span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="text-[var(--content-tertiary)] uppercase text-xs tracking-wider font-semibold">
-                Actors:
-              </span>
-              <span className="font-mono font-medium text-[var(--content-primary)]">
-                {totals.participants}
-              </span>
-            </div>
-          </div>
+        {/* Metadata row — flat, no card */}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-[var(--border)] pb-3 text-xs text-[var(--content-muted)]">
+          <span className="font-mono">{dateRangeStr}</span>
+          <span aria-hidden>·</span>
+          <span>
+            {totals.totalEpochs} {totals.totalEpochs === 1 ? "epoch" : "epochs"}
+          </span>
+          <span aria-hidden>·</span>
+          <span>{totals.participants.toLocaleString()} actors</span>
           {timeAgoStr && (
-            <div className="flex items-center gap-1.5 text-xs text-[var(--content-tertiary)] font-medium">
-              <span className="h-1.5 w-1.5 rounded-full bg-[#22C55E]" />
-              <span>Updated {timeAgoStr}</span>
-            </div>
+            <span className="ml-auto flex items-center gap-1.5">
+              <span
+                className="h-1.5 w-1.5 rounded-full bg-[#22C55E]"
+                aria-hidden
+              />
+              Updated {timeAgoStr}
+            </span>
           )}
         </div>
 
-        {/* Your stats + Discord — condensed, side by side on large screens */}
+        {/* Your stats + Discord — flat strip, no nested cards */}
         {isConnected && walletAddress && (
           <SpringIn variant="card">
-            <div className="grid items-start gap-4 lg:grid-cols-3">
-              {userStats && (
-                <div className="rounded-xl border border-brand/30 bg-brand/5 p-5 shadow-sm lg:col-span-2">
-                  <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-brand">
-                    Your Academy Stats ({walletAddress.slice(0, 6)}…
-                    {walletAddress.slice(-4)})
-                  </h2>
-                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                    <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-primary)] px-3.5 py-2.5">
-                      <div className="text-[10px] uppercase tracking-wider text-[var(--content-secondary)]">
-                        Leaderboard Rank
-                      </div>
-                      <div className="mt-1 font-mono text-lg font-bold text-[var(--content-primary)]">
-                        {userStats.rank}
-                      </div>
+            <div className="border-b border-[var(--border)] pb-5">
+              <div className="mb-3 flex items-center justify-between">
+                <span className="text-[11px] font-semibold uppercase tracking-widest text-[var(--content-muted)]">
+                  Your stats · {walletAddress.slice(0, 6)}…
+                  {walletAddress.slice(-4)}
+                </span>
+                <AcademyDiscordCard walletAddress={walletAddress} compact />
+              </div>
+              {userStats ? (
+                <div className="flex flex-wrap items-end gap-x-8 gap-y-4">
+                  <div>
+                    <div className="text-[10px] uppercase tracking-widest text-[var(--content-muted)]">
+                      Rank
                     </div>
-                    <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-primary)] px-3.5 py-2.5">
-                      <div className="text-[10px] uppercase tracking-wider text-[var(--content-secondary)]">
-                        Points
-                      </div>
-                      <div className="mt-1 font-mono text-lg font-bold text-[var(--content-primary)]">
-                        {Number(userStats.row.pointsWad / 10n ** 12n) / 1e6 > 0
-                          ? (
-                              Number(userStats.row.pointsWad / 10n ** 12n) / 1e6
-                            ).toLocaleString(undefined, {
-                              maximumFractionDigits: 2,
-                            })
-                          : "0.00"}
-                      </div>
+                    <div className="mt-0.5 font-mono text-2xl font-bold text-[var(--content-primary)]">
+                      {userStats.rank}
                     </div>
-                    <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-primary)] px-3.5 py-2.5">
-                      <div className="text-[10px] uppercase tracking-wider text-[var(--content-secondary)]">
-                        Share
-                      </div>
-                      <div className="mt-1 font-mono text-lg font-bold text-[var(--content-primary)]">
-                        {userStats.share.toFixed(2)}%
-                      </div>
+                  </div>
+                  <div className="h-10 w-px bg-[var(--border)]" aria-hidden />
+                  <div>
+                    <div className="text-[10px] uppercase tracking-widest text-[var(--content-muted)]">
+                      Points
                     </div>
-                    <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-primary)] px-3.5 py-2.5">
-                      <div className="text-[10px] uppercase tracking-wider text-[var(--content-secondary)]">
-                        Participation
-                      </div>
-                      <div className="mt-1 font-mono text-lg font-bold text-[var(--content-primary)]">
-                        {userStats.row.fullyParticipated ? (
-                          <span
-                            className="text-[#F7931A]"
-                            title="Fully participated: voted in every epoch"
-                          >
-                            ★ Full (2x bonus)
+                    <div className="mt-0.5 font-mono text-2xl font-bold text-[var(--content-primary)]">
+                      {Number(userStats.row.pointsWad / 10n ** 12n) / 1e6 > 0
+                        ? (
+                            Number(userStats.row.pointsWad / 10n ** 12n) / 1e6
+                          ).toLocaleString(undefined, {
+                            maximumFractionDigits: 2,
+                          })
+                        : "0"}
+                    </div>
+                  </div>
+                  <div className="h-10 w-px bg-[var(--border)]" aria-hidden />
+                  <div>
+                    <div className="text-[10px] uppercase tracking-widest text-[var(--content-muted)]">
+                      Share
+                    </div>
+                    <div className="mt-0.5 font-mono text-2xl font-bold text-[var(--content-primary)]">
+                      {userStats.share.toFixed(2)}%
+                    </div>
+                  </div>
+                  <div className="h-10 w-px bg-[var(--border)]" aria-hidden />
+                  <div>
+                    <div className="text-[10px] uppercase tracking-widest text-[var(--content-muted)]">
+                      Participation
+                    </div>
+                    <div className="mt-0.5 font-mono text-2xl font-bold text-[var(--content-primary)]">
+                      {userStats.row.fullyParticipated ? (
+                        <span
+                          className="text-brand"
+                          title="Voted in every epoch"
+                        >
+                          ★ Full
+                        </span>
+                      ) : (
+                        <span>
+                          {userStats.row.activeEpochs}
+                          <span className="text-base font-normal text-[var(--content-muted)]">
+                            /{totals.totalEpochs}
                           </span>
-                        ) : (
-                          <span>
-                            {userStats.row.activeEpochs} / {totals.totalEpochs}{" "}
-                            epochs
-                          </span>
-                        )}
-                      </div>
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
+              ) : (
+                <p className="text-sm text-[var(--content-muted)]">
+                  Your wallet has no recorded activity in this window yet.
+                </p>
               )}
-              <div className={userStats ? "lg:col-span-1" : "lg:col-span-3"}>
-                <AcademyDiscordCard walletAddress={walletAddress} />
-              </div>
             </div>
           </SpringIn>
         )}
