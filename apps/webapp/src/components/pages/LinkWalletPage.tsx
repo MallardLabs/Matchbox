@@ -323,64 +323,54 @@ export default function LinkWalletPage(): JSX.Element {
         {session.status === "ready" &&
           (!result ? (
             <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-lg">
-              {/* Connection visual */}
-              <div className="flex items-center justify-between px-6 pt-6 pb-5">
-                <div className="flex items-center gap-2.5">
-                  <img
-                    src={session.avatarUrl}
-                    alt=""
-                    width={36}
-                    height={36}
-                    className="h-9 w-9 rounded-full ring-1 ring-[var(--border)]"
-                  />
-                  <div>
-                    <p className="text-xs font-semibold leading-none text-[var(--content-primary)]">
-                      {displayName ?? discordHandle ?? "Discord"}
-                    </p>
-                    {discordHandle &&
-                      displayName &&
-                      displayName !== discordHandle && (
-                        <p className="mt-0.5 text-[11px] leading-none text-[var(--content-tertiary)]">
-                          @{discordHandle}
-                        </p>
-                      )}
-                  </div>
-                </div>
-
-                <svg
-                  viewBox="0 0 32 12"
-                  fill="none"
-                  className="w-8 flex-shrink-0 text-[var(--content-muted)]"
-                  aria-hidden="true"
-                >
-                  <path
-                    d="M0 6h28M24 2l5 4-5 4"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-
-                <div className="flex items-center rounded-lg border border-[var(--border)] bg-[var(--surface-secondary)] px-3 py-1.5">
-                  <span className="text-xs font-bold tracking-wide text-[var(--content-primary)]">
-                    Matchbox
-                  </span>
-                </div>
+              {/* Matchbox brand header */}
+              <div className="flex items-center gap-2.5 px-6 pt-5 pb-4">
+                <img
+                  src="/matchbox_icon.png"
+                  alt="Matchbox"
+                  width={28}
+                  height={28}
+                  className="h-7 w-7 rounded-md"
+                />
+                <span className="text-sm font-bold tracking-wide text-[var(--content-primary)]">
+                  Matchbox
+                </span>
               </div>
 
               <div className="border-t border-[var(--border)]" />
 
-              {/* Heading */}
+              {/* Heading + Authorizing as */}
               <div className="px-6 pt-5 pb-4">
                 <h1 className="text-[15px] font-semibold leading-snug text-[var(--content-primary)]">
                   Matchbox wants to connect your wallet
                 </h1>
-                <p className="mt-1 text-sm text-[var(--content-secondary)]">
-                  {discordHandle
-                    ? `Authorizing as @${discordHandle}`
-                    : "Confirm your wallet ownership to continue"}
-                </p>
+
+                {(discordHandle ?? displayName) && (
+                  <div className="mt-3 flex items-center gap-2.5 rounded-lg border border-[var(--border)] bg-[var(--surface-secondary)] px-3 py-2">
+                    <img
+                      src={session.avatarUrl}
+                      alt=""
+                      width={28}
+                      height={28}
+                      className="h-7 w-7 flex-shrink-0 rounded-full"
+                    />
+                    <div className="min-w-0">
+                      <p className="text-[11px] leading-none text-[var(--content-muted)]">
+                        Authorizing as
+                      </p>
+                      <p className="mt-0.5 truncate text-xs font-semibold leading-none text-[var(--content-primary)]">
+                        {displayName ?? discordHandle}
+                        {discordHandle &&
+                          displayName &&
+                          displayName !== discordHandle && (
+                            <span className="ml-1 font-normal text-[var(--content-tertiary)]">
+                              @{discordHandle}
+                            </span>
+                          )}
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="border-t border-[var(--border)]" />

@@ -26,15 +26,17 @@ export default function AcademyPublicPage() {
   // happened.
   const currentEpoch = snapToThursdayUTC(Math.floor(Date.now() / 1000), "down")
 
-  // The displayed window is the union of all defined windows: earliest start to
-  // latest end, presented as one cohort.
-  const classWindow =
-    seasons.length > 0
-      ? {
-          fromTs: Math.min(...seasons.map((s) => s.fromTs)),
-          toTs: Math.max(...seasons.map((s) => s.toTs)),
-        }
-      : null
+  // Use the current live season's window only — the leaderboard shows one active
+  // window at a time, not a union across all seasons. Fall back to the most
+  // recently started season if none is marked current.
+  const classWindow = (() => {
+    if (seasons.length === 0) return null
+    const current = seasons.find((s) => s.isCurrent)
+    if (current) return { fromTs: current.fromTs, toTs: current.toTs }
+    const started = seasons.filter((s) => s.fromTs <= currentEpoch)
+    const chosen = started.length > 0 ? started[started.length - 1] : seasons[0]
+    return { fromTs: chosen.fromTs, toTs: chosen.toTs }
+  })()
   // Window semantics for the leaderboard hook:
   //  - a resolved window  → pin it.
   //  - list still loading  → null (wait, don't flash the wrong window).

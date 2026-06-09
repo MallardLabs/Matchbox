@@ -292,15 +292,30 @@ export async function reconcileRoles(args: {
   const managed = new Set<string>()
   const semesterResults: SemesterQualification[] = []
 
-  for (const s of semesters) {
-    managed.add(s.role_id)
-    const q = await qualifier.qualification(link.wallet_address, {
-      from: s.from_ts,
-      to: s.to_ts,
-    })
-    // Floor semesters (e.g. Semester 0): must survive the ≥20 MEZO reward-floor cull.
-    // No-floor semesters (e.g. Semester 1+): any participation qualifies.
-    const qualified = s.require_floor ? q.qualifies : q.pointsWad > 0n
+  // Register all managed role IDs up-front before parallel checks.
+  for (const s of semesters) managed.add(s.role_id)
+  const liveRoleId = Deno.env.get("DISCORD_ROLE_ID") ?? null
+  if (liveRoleId) managed.add(liveRoleId)
+
+  // Run all qualification checks in parallel — each is an independent
+  // simulation call, so serial execution doubles (or worse) the latency.
+  const [semChecks, liveQ] = await Promise.all([
+    Promise.all(
+      semesters.map(async (s) => {
+        const q = await qualifier.qualification(link.wallet_address, {
+          from: s.from_ts,
+          to: s.to_ts,
+        })
+        const qualified = s.require_floor ? q.qualifies : q.pointsWad > 0n
+        return { s, q, qualified }
+      }),
+    ),
+    liveRoleId
+      ? qualifier.qualification(link.wallet_address)
+      : Promise.resolve(null),
+  ])
+
+  for (const { s, q, qualified } of semChecks) {
     if (qualified) target.add(s.role_id)
     semesterResults.push({
       semester_id: s.semester_id,
@@ -314,14 +329,11 @@ export async function reconcileRoles(args: {
     })
   }
 
-  const liveRoleId = Deno.env.get("DISCORD_ROLE_ID") ?? null
   let liveQualifies = false
   let livePointsWad: bigint | null = null
-  if (liveRoleId) {
-    managed.add(liveRoleId)
-    const q = await qualifier.qualification(link.wallet_address)
-    livePointsWad = q.pointsWad
-    liveQualifies = q.qualifies
+  if (liveRoleId && liveQ) {
+    livePointsWad = liveQ.pointsWad
+    liveQualifies = liveQ.qualifies
     if (liveQualifies) target.add(liveRoleId)
   }
 

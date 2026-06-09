@@ -132,7 +132,7 @@ function fmtTs(ts: number): string {
 // DB label.
 function periodName(s: SemesterQualification | Semester): string {
   const sf = "require_floor" in s ? s.require_floor : true
-  return sf ? "Inaugural Distribution" : "Live Season"
+  return sf ? "Inaugural Distribution" : "Class of 2026"
 }
 
 // Create a new short-lived linking session and return the URL the user opens.
