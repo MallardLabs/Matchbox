@@ -1,6 +1,6 @@
 import { useNetwork } from "@/contexts/NetworkContext"
-import { useTokenList } from "@/hooks/useTokenList"
 import { usePools } from "@/hooks/usePools"
+import { useTokenList } from "@/hooks/useTokenList"
 import { useTokenPrices } from "@/hooks/useTokenPrices"
 import { deserializeActivityItem } from "@/lib/mezoActivity/normalize"
 import type {
@@ -112,7 +112,6 @@ export function useActivityIncentiveHistory(): {
   const network = NETWORK_BY_CHAIN[chainId]
   const { tokens: knownTokens, isLoading: isLoadingTokenList } = useTokenList()
   const { isLoading: isLoadingPools } = usePools()
-
 
   const currentEpochStart = useMemo(
     () => epochStartFor(Math.floor(Date.now() / 1000)),

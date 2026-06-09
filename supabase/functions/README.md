@@ -18,13 +18,14 @@ Records daily snapshots of gauge performance metrics into the `gauge_history` ta
 ### Matchbox Discord bot (`discord-interactions`, `discord-link`, `discord-reconcile-roles`)
 
 These functions implement the Matchbox Discord bot, which links a Discord account to
-a wallet and grants **per-semester roles** based on Mezo Academy points. A member
-holds a semester's role iff they earned **> 0 points** during that semester's window.
+a wallet and grants **per-semester roles** based on Mezo Academy allocations. A
+member holds a semester's role iff their simulated reward survives the Academy
+reward-floor cull for that semester's window.
 
 - **`discord-interactions`** — Discord's HTTP Interactions endpoint. Handles the
-  `/matchbox` slash command and the Unlink / Re-link buttons. Authenticates every
-  request via the Ed25519 signature Discord attaches (no Supabase JWT), so deploy
-  with `--no-verify-jwt`.
+  `/matchbox` and `/poke-roles` slash commands plus the Unlink / Re-link buttons.
+  Authenticates every request via the Ed25519 signature Discord attaches (no
+  Supabase JWT), so deploy with `--no-verify-jwt`.
 - **`discord-link`** — backs the web `/link` page. Resolves a link token to the
   Discord profile shown on the page, returns the message to sign, and verifies the
   wallet signature to store the link + reconcile semester roles. Also deploy with
@@ -55,7 +56,8 @@ based on the live rolling 8-epoch window. Leave it unset for semester-only roles
 **Flow:** `/matchbox` → bot replies with an ephemeral link to `/link?token=…` → user
 connects a wallet and signs → `discord-link` verifies, stores the link, and grants a
 role for each qualifying semester. Re-running `/matchbox` shows per-semester points +
-an Unlink button.
+an Unlink button. Members with Manage Roles can run `/poke-roles` to reconcile all
+linked members immediately.
 
 #### Setup
 
@@ -90,7 +92,7 @@ an Unlink button.
    Information) to:
    `https://YOUR_PROJECT_REF.supabase.co/functions/v1/discord-interactions`
    Discord sends a signed PING to validate it — it should save successfully.
-6. **Register the `/matchbox` command** (guild-scoped, appears instantly):
+6. **Register slash commands** (guild-scoped, appears instantly):
    ```bash
    DISCORD_APP_ID=... DISCORD_BOT_TOKEN=... DISCORD_GUILD_ID=... \
      deno run --allow-env --allow-net \
@@ -99,6 +101,7 @@ an Unlink button.
 7. **Schedule reconciliation** (keeps roles current as points change). Use the
    Dashboard schedule on `discord-reconcile-roles`, or pg_cron (see Option 2 below)
    pointed at `.../functions/v1/discord-reconcile-roles`, e.g. hourly `0 * * * *`.
+   For one-off manual cleanup, run `/poke-roles` in Discord.
 
 ## Setup & Deployment
 

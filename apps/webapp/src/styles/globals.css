@@ -19,7 +19,7 @@
   /* Content/Text - strong contrast but not pure black */
   --content-primary: #1c1917;
   --content-secondary: #57534e;
-  --content-tertiary: #78716c;
+  --content-tertiary: #6b6560;
   --content-muted: #a8a29e;
 
   /* Borders */
@@ -58,8 +58,8 @@
 
   --content-primary: #fafaf9;
   --content-secondary: #a8a29e;
-  --content-tertiary: #78716c;
-  --content-muted: #57534e;
+  --content-tertiary: #a8a29e;
+  --content-muted: #78716c;
 
   --border: #2a2a2a;
   --border-focus: #f7931a;

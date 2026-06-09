@@ -275,6 +275,7 @@ export default async function handler(request: Request): Promise<Response> {
           extensionPointsWad: row.extensionPointsWad.toString(),
           votePointsWad: row.votePointsWad.toString(),
           participationBonusWad: row.participationBonusWad.toString(),
+          rewardMezoWad: row.rewardMezoWad.toString(),
           vePowerWad: row.vePowerWad.toString(),
           newLockCount: row.newLockCount,
           extensionCount: row.extensionCount,
@@ -282,6 +283,7 @@ export default async function handler(request: Request): Promise<Response> {
           activeEpochs: row.activeEpochs,
           fullyParticipated: row.fullyParticipated,
           flagged: row.flagged,
+          culledBelowFloor: row.culledBelowFloor,
         }
       : null
 
@@ -295,8 +297,7 @@ export default async function handler(request: Request): Promise<Response> {
       status: 200,
       headers: {
         "Content-Type": "application/json",
-        "Cache-Control":
-          "public, max-age=300, s-maxage=14400, stale-while-revalidate=3600",
+        "Cache-Control": "private, max-age=300",
         ...CORS_HEADERS,
       },
     })

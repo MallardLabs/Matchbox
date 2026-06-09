@@ -86,7 +86,8 @@ async function discordRequest(
   })
 }
 
-// Add the points role. Idempotent on Discord's side (no-op if already held).
+// Add a bot-managed Academy role. Idempotent on Discord's side (no-op if
+// already held).
 export async function addGuildRole(args: {
   guildId: string
   userId: string
@@ -102,7 +103,7 @@ export async function addGuildRole(args: {
   return res.ok
 }
 
-// Remove the points role. Idempotent (no-op if not held).
+// Remove a bot-managed Academy role. Idempotent (no-op if not held).
 export async function removeGuildRole(args: {
   guildId: string
   userId: string

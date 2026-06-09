@@ -1,7 +1,7 @@
 // Supabase Edge Function: discord-reconcile-roles
-// Scheduled job that re-checks every linked member's Academy points per semester
-// and adds/removes Discord roles so they stay correct between /matchbox runs
-// (points drift as the live window slides and members keep earning).
+// Scheduled job that re-checks every linked member's Academy allocation per
+// semester and adds/removes Discord roles so they stay correct between /matchbox
+// runs (points drift as the live window slides and members keep earning).
 //
 // Unlike the interaction functions, this is NOT public — schedule it with pg_cron
 // using the service-role key (see functions/README.md). It fetches each window's

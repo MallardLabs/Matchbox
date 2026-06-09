@@ -1,4 +1,4 @@
-// Registers the /matchbox slash command with Discord.
+// Registers the Matchbox slash commands with Discord.
 //
 // Guild-scoped commands appear instantly (global commands can take up to an hour),
 // so this registers to DISCORD_GUILD_ID. Re-run it whenever the command definition
@@ -25,6 +25,13 @@ const commands = [
     description: "Link your wallet and view your Mezo Academy points",
     type: 1, // CHAT_INPUT
   },
+  {
+    name: "poke-roles",
+    description: "Reconcile all linked members' Mezo Academy roles",
+    type: 1, // CHAT_INPUT
+    // Manage Roles permission. Runtime handler checks this too.
+    default_member_permissions: "268435456",
+  },
 ]
 
 const res = await fetch(
@@ -45,5 +52,5 @@ if (!res.ok) {
   Deno.exit(1)
 }
 
-console.log("Registered /matchbox to guild", guildId)
+console.log("Registered /matchbox and /poke-roles to guild", guildId)
 console.log(await res.json())

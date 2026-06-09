@@ -196,9 +196,11 @@ export function useAcademyLeaderboard(
       if (!network) throw new Error("Unsupported network")
 
       const windowParams = win ? `&from=${win.from}&to=${win.to}` : ""
-      // qualifiedOnly: show only actors who'd earn a payout at the season cutoff.
+      // Apply the reward-floor filter only for semesters that require it (Semester 0).
+      // No-floor semesters (Semester 1+) show all participants.
+      const qualifiedOnly = semester?.requireFloor !== false ? "1" : "0"
       const res = await fetch(
-        `/api/academy/leaderboard?network=${network}${windowParams}&qualifiedOnly=1`,
+        `/api/academy/leaderboard?network=${network}${windowParams}&qualifiedOnly=${qualifiedOnly}`,
       )
       if (!res.ok) {
         throw new Error(`Failed to fetch leaderboard: ${res.statusText}`)

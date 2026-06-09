@@ -1,7 +1,7 @@
 // Supabase Edge Function: discord-link
 // Backs the web /link page. Resolves a link token to the Discord profile shown on
 // the page, hands back the exact message to sign, and verifies the signature to
-// store the wallet <-> Discord link + reconcile the points role.
+// store the wallet <-> Discord link + reconcile Academy allocation roles.
 // Deploy with --no-verify-jwt: the link token is the capability and the wallet
 // signature is the proof; no Supabase JWT is involved.
 
@@ -224,6 +224,7 @@ Deno.serve(async (req) => {
         fromTs,
         toTs,
         isCurrent: now >= fromTs && now < toTs,
+        requireFloor: r.require_floor ?? true,
       }
     })
     return json({ success: true, semesters })
@@ -237,7 +238,7 @@ Deno.serve(async (req) => {
     const now = Math.floor(Date.now() / 1000)
     const { data } = await supabase
       .from("discord_semesters")
-      .select("semester_id, label, from_ts, to_ts")
+      .select("semester_id, label, from_ts, to_ts, require_floor")
       .eq("active", true)
       .order("from_ts", { ascending: true })
     const rows = (data ?? []).map((r) => ({
@@ -245,6 +246,7 @@ Deno.serve(async (req) => {
       label: r.label as string,
       fromTs: Number(r.from_ts),
       toTs: Number(r.to_ts),
+      requireFloor: r.require_floor ?? true,
     }))
     if (rows.length === 0) return json({ success: true, semester: null })
     // Pin to a specific semester when asked (e.g. the inaugural Season 0 banner),
@@ -396,12 +398,28 @@ Deno.serve(async (req) => {
         },
         semesters,
       })
-      semesterResults = result.semesters.map((s) => ({
-        semesterId: s.semester_id,
-        label: s.label,
-        qualifies: s.qualifies,
-        points: pointsFromWad(s.pointsWad),
-      }))
+      // Merge semester results that share the same role_id (e.g. the two
+      // "Class of 2026" windows) into a single display row: union of qualifies,
+      // sum of points. This keeps the link confirmation page clean.
+      const mergedByRole = new Map<
+        string,
+        { semesterId: string; label: string; qualifies: boolean; points: number }
+      >()
+      for (const s of result.semesters) {
+        const existing = mergedByRole.get(s.role_id)
+        if (existing) {
+          existing.qualifies = existing.qualifies || s.qualifies
+          existing.points += pointsFromWad(s.pointsWad)
+        } else {
+          mergedByRole.set(s.role_id, {
+            semesterId: s.semester_id,
+            label: s.label,
+            qualifies: s.qualifies,
+            points: pointsFromWad(s.pointsWad),
+          })
+        }
+      }
+      semesterResults = [...mergedByRole.values()]
       pointsAvailable = true
     } catch (err) {
       console.error("points/role reconcile error:", err)

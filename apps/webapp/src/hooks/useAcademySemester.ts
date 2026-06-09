@@ -11,6 +11,9 @@ export type AcademySemester = {
   fromTs: number
   toTs: number
   isCurrent: boolean
+  // When true the reward-floor cull filters the leaderboard and role check.
+  // When false any participation counts (Semester 1+ behaviour).
+  requireFloor?: boolean
 } | null
 
 const FUNCTIONS_URL = `${process.env.NEXT_PUBLIC_SUPABASE_URL ?? ""}/functions/v1/discord-link`

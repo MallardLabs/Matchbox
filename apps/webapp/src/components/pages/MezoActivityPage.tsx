@@ -857,7 +857,10 @@ function IncentiveHistoryPanel({
             <div className="absolute left-0 top-0 overflow-hidden rounded-full border border-[var(--border)] bg-[var(--surface-secondary)]">
               <TokenIcon symbol={pool.token0.symbol} size={20} />
             </div>
-            <div className="absolute top-0 z-10 overflow-hidden rounded-full border border-[var(--border)] bg-[var(--surface-secondary)]" style={{ left: "14px" }}>
+            <div
+              className="absolute top-0 z-10 overflow-hidden rounded-full border border-[var(--border)] bg-[var(--surface-secondary)]"
+              style={{ left: "14px" }}
+            >
               <TokenIcon symbol={pool.token1.symbol} size={20} />
             </div>
           </div>
@@ -1040,7 +1043,12 @@ function IncentiveHistoryPanel({
             className="mt-4 flex w-full items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-left text-sm text-[var(--content-secondary)] transition-colors hover:text-[#F7931A]"
           >
             <span>
-              {selectedTargets.length} {scope === "pools" ? "pool" : scope === "vebtc" ? "gauge" : "gauge/pool"}
+              {selectedTargets.length}{" "}
+              {scope === "pools"
+                ? "pool"
+                : scope === "vebtc"
+                  ? "gauge"
+                  : "gauge/pool"}
               {selectedTargets.length === 1 ? "" : "s"} with incentives
             </span>
             <span
@@ -1070,7 +1078,9 @@ function IncentiveHistoryPanel({
                           {target.gaugeAddress ? (
                             <>
                               <span>·</span>
-                              <span className="font-mono">{shortenAddress(target.gaugeAddress)}</span>
+                              <span className="font-mono">
+                                {shortenAddress(target.gaugeAddress)}
+                              </span>
                             </>
                           ) : null}
                         </div>
@@ -1101,7 +1111,8 @@ function IncentiveHistoryPanel({
                         {formatUsdDetailed(target.totalUsd)}
                       </p>
                       <p className="text-xs text-[var(--content-tertiary)]">
-                        {target.eventCount} event{target.eventCount === 1 ? "" : "s"}
+                        {target.eventCount} event
+                        {target.eventCount === 1 ? "" : "s"}
                       </p>
                     </div>
                   </div>

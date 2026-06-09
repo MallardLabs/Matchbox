@@ -7,6 +7,7 @@ export type AcademySeason = {
   fromTs: number
   toTs: number
   isCurrent: boolean
+  requireFloor?: boolean
 }
 
 const FUNCTIONS_URL = `${process.env.NEXT_PUBLIC_SUPABASE_URL ?? ""}/functions/v1/discord-link`

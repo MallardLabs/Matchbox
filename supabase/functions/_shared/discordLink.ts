@@ -1,7 +1,7 @@
 // Linking + semester-role primitives shared by the Matchbox edge functions:
-// the signed-message format, random token/nonce generation, the Academy points
-// lookup (rolling or fixed window), and the role reconciliation rule
-// (a member holds a semester's role iff they earned points in that window).
+// the signed-message format, random token/nonce generation, the Academy
+// allocation lookup (rolling or fixed window), and the role reconciliation rule
+// (a member holds a semester's role iff they survive the reward-floor cull).
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 import { getAddress } from "https://esm.sh/viem@2"
@@ -28,6 +28,9 @@ export type Semester = {
   from_ts: number
   to_ts: number
   role_id: string
+  // When true the reward-floor cull applies (Semester 0 behaviour).
+  // When false any participation (pointsWad > 0) qualifies.
+  require_floor: boolean
 }
 
 export type WindowRange = { from: number; to: number }
@@ -100,13 +103,19 @@ function webappBaseUrl(): string {
   return baseUrl.replace(/\/$/, "")
 }
 
-// Fetch a wallet's Academy points (WAD, 18 decimals) from the webapp's on-demand
-// actor API. Pass a range for a fixed semester window; omit it for the rolling
-// last-8-epoch window. Throws on network/HTTP failure.
-export async function fetchAcademyPointsWad(
+export type RoleQualification = {
+  qualifies: boolean
+  pointsWad: bigint
+}
+
+// Fetch a wallet's Academy role qualification from the webapp's on-demand actor
+// API. Pass a range for a fixed semester window; omit it for the rolling
+// last-8-epoch window. Throws on network/HTTP failure. A wallet qualifies only
+// if its simulated reward survives the Academy reward floor/cull pass.
+export async function fetchAcademyRoleQualification(
   address: string,
   range?: WindowRange,
-): Promise<bigint> {
+): Promise<RoleQualification> {
   const network = Deno.env.get("ACADEMY_NETWORK") ?? "mainnet"
   let url = `${webappBaseUrl()}/api/academy/actor?actor=${address}&network=${network}`
   if (range) url += `&from=${range.from}&to=${range.to}`
@@ -115,13 +124,44 @@ export async function fetchAcademyPointsWad(
   if (!res.ok) throw new Error(`Academy actor API returned ${res.status}`)
   const data = await res.json()
   if (data?.success !== true) throw new Error("Academy actor API failed")
-  const pointsWad = data?.row?.pointsWad
-  if (typeof pointsWad !== "string") return 0n
-  return BigInt(pointsWad)
+  const row = data?.row
+  const pointsWad =
+    typeof row?.pointsWad === "string" ? BigInt(row.pointsWad) : 0n
+  const rewardMezoWad =
+    typeof row?.rewardMezoWad === "string" ? BigInt(row.rewardMezoWad) : 0n
+  return {
+    pointsWad,
+    qualifies:
+      pointsWad > 0n && rewardMezoWad > 0n && row?.culledBelowFloor !== true,
+  }
 }
 
-// Fetch the set of wallets (lowercased) with > 0 points in a window, in one
-// leaderboard call. Used by the reconcile cron to avoid per-wallet fetches.
+// Fetch the set of wallets (lowercased) whose simulated reward survived the
+// reward floor/cull pass in one leaderboard call. Used by the reconcile cron to
+// avoid per-wallet fetches.
+export async function fetchWindowQualifiers(
+  range?: WindowRange,
+): Promise<Set<string>> {
+  const network = Deno.env.get("ACADEMY_NETWORK") ?? "mainnet"
+  let url =
+    `${webappBaseUrl()}/api/academy/leaderboard?network=${network}&qualifiedOnly=1`
+  if (range) url += `&from=${range.from}&to=${range.to}`
+
+  const res = await fetch(url, { headers: { Accept: "application/json" } })
+  if (!res.ok) throw new Error(`Academy leaderboard API returned ${res.status}`)
+  const data = await res.json()
+  if (data?.success !== true) throw new Error("Academy leaderboard API failed")
+  const set = new Set<string>()
+  for (const row of data.rows ?? []) {
+    if (typeof row?.actor === "string") {
+      set.add(String(row.actor).toLowerCase())
+    }
+  }
+  return set
+}
+
+// Fetch the set of wallets (lowercased) that have ANY points in a window,
+// regardless of the reward floor. Used for no-floor semesters (Semester 1+).
 export async function fetchWindowParticipants(
   range?: WindowRange,
 ): Promise<Set<string>> {
@@ -135,7 +175,7 @@ export async function fetchWindowParticipants(
   if (data?.success !== true) throw new Error("Academy leaderboard API failed")
   const set = new Set<string>()
   for (const row of data.rows ?? []) {
-    if (typeof row?.pointsWad === "string" && BigInt(row.pointsWad) > 0n) {
+    if (typeof row?.actor === "string") {
       set.add(String(row.actor).toLowerCase())
     }
   }
@@ -153,7 +193,7 @@ export async function getActiveSemesters(
 ): Promise<Semester[]> {
   const { data } = await supabase
     .from("discord_semesters")
-    .select("semester_id, label, from_ts, to_ts, role_id")
+    .select("semester_id, label, from_ts, to_ts, role_id, require_floor")
     .eq("active", true)
     .not("role_id", "is", null)
     .order("from_ts", { ascending: true })
@@ -164,21 +204,25 @@ export async function getActiveSemesters(
     from_ts: Number(r.from_ts),
     to_ts: Number(r.to_ts),
     role_id: r.role_id,
+    require_floor: r.require_floor ?? true,
   }))
 }
 
-// Resolves whether a wallet has > 0 points in a window. The default hits the
-// per-wallet actor API; the cron supplies a set-backed implementation.
+// Resolves whether a wallet survived the Academy reward floor in a window. The
+// default hits the per-wallet actor API; the cron supplies a set-backed
+// implementation.
 export type Qualifier = {
-  pointsWad(wallet: string, range?: WindowRange): Promise<bigint>
+  qualification(wallet: string, range?: WindowRange): Promise<RoleQualification>
 }
 
 export const defaultQualifier: Qualifier = {
-  pointsWad: (wallet, range) => fetchAcademyPointsWad(wallet, range),
+  qualification: (wallet, range) => fetchAcademyRoleQualification(wallet, range),
 }
 
-// Build a Qualifier backed by pre-fetched participant sets (one leaderboard call
+// Build a Qualifier backed by pre-fetched qualifier sets (one leaderboard call
 // per distinct window) for efficient bulk reconciliation.
+// For floor semesters: fetches only wallets that survived the reward-floor cull.
+// For no-floor semesters: fetches all wallets with any points.
 export async function buildSetQualifier(args: {
   semesters: Semester[]
   includeLive: boolean
@@ -187,14 +231,24 @@ export async function buildSetQualifier(args: {
   for (const s of args.semesters) {
     const key = `${s.from_ts}-${s.to_ts}`
     if (!windowSets.has(key)) {
-      windowSets.set(key, await fetchWindowParticipants({ from: s.from_ts, to: s.to_ts }))
+      const fetcher = s.require_floor
+        ? fetchWindowQualifiers
+        : fetchWindowParticipants
+      windowSets.set(
+        key,
+        await fetcher({ from: s.from_ts, to: s.to_ts }),
+      )
     }
   }
-  const liveSet = args.includeLive ? await fetchWindowParticipants() : null
+  const liveSet = args.includeLive ? await fetchWindowQualifiers() : null
   return {
-    pointsWad: (wallet, range) => {
+    qualification: (wallet, range) => {
       const set = range ? windowSets.get(`${range.from}-${range.to}`) : liveSet
-      return Promise.resolve(set?.has(wallet.toLowerCase()) ? 1n : 0n)
+      const qualifies = set?.has(wallet.toLowerCase()) ?? false
+      return Promise.resolve({
+        qualifies,
+        pointsWad: qualifies ? 1n : 0n,
+      })
     },
   }
 }
@@ -215,10 +269,11 @@ export type ReconcileResult = {
   livePointsWad: bigint | null
 }
 
-// Bring a member's Discord roles into agreement with their points: hold each
-// semester's role iff points in that window > 0, plus the optional live role
-// (when DISCORD_ROLE_ID is set) iff current rolling points > 0. Adds/removes only
-// the roles the bot manages and persists granted_roles.
+// Bring a member's Discord roles into agreement with their Academy allocation:
+// hold each semester's role iff their simulated reward survives the reward floor,
+// plus the optional live role (when DISCORD_ROLE_ID is set) iff the rolling
+// window survives the floor. Adds/removes only the roles the bot manages and
+// persists granted_roles.
 export async function reconcileRoles(args: {
   supabase: SupabaseClient
   link: DiscordWalletLink
@@ -236,18 +291,20 @@ export async function reconcileRoles(args: {
 
   for (const s of semesters) {
     managed.add(s.role_id)
-    const pts = await qualifier.pointsWad(link.wallet_address, {
+    const q = await qualifier.qualification(link.wallet_address, {
       from: s.from_ts,
       to: s.to_ts,
     })
-    const qualifies = pts > 0n
-    if (qualifies) target.add(s.role_id)
+    // Floor semesters (e.g. Semester 0): must survive the ≥20 MEZO reward-floor cull.
+    // No-floor semesters (e.g. Semester 1+): any participation qualifies.
+    const qualified = s.require_floor ? q.qualifies : q.pointsWad > 0n
+    if (qualified) target.add(s.role_id)
     semesterResults.push({
       semester_id: s.semester_id,
       label: s.label,
       role_id: s.role_id,
-      qualifies,
-      pointsWad: pts,
+      qualifies: qualified,
+      pointsWad: q.pointsWad,
     })
   }
 
@@ -256,8 +313,9 @@ export async function reconcileRoles(args: {
   let livePointsWad: bigint | null = null
   if (liveRoleId) {
     managed.add(liveRoleId)
-    livePointsWad = await qualifier.pointsWad(link.wallet_address)
-    liveQualifies = livePointsWad > 0n
+    const q = await qualifier.qualification(link.wallet_address)
+    livePointsWad = q.pointsWad
+    liveQualifies = q.qualifies
     if (liveQualifies) target.add(liveRoleId)
   }
 

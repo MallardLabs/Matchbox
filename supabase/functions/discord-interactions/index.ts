@@ -1,6 +1,6 @@
 // Supabase Edge Function: discord-interactions
 // Discord's HTTP Interactions endpoint for the Matchbox bot. Handles the
-// /matchbox slash command and the Unlink / Re-link buttons. Deploy with
+// /matchbox and /poke-roles slash commands and the Unlink / Re-link buttons. Deploy with
 // --no-verify-jwt: Discord can't send a Supabase JWT, so we authenticate every
 // request with the Ed25519 signature instead.
 
@@ -8,15 +8,15 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 import { corsHeaders, handleCors } from "../_shared/cors.ts"
 import {
   ButtonStyle,
+  editOriginalInteraction,
   InteractionResponseType,
   InteractionType,
   MessageFlags,
-  editOriginalInteraction,
   verifyDiscordSignature,
 } from "../_shared/discord.ts"
 import {
+  buildSetQualifier,
   type DiscordWalletLink,
-  type SupabaseClient,
   getActiveSemesters,
   linkTokenExpiry,
   pointsFromWad,
@@ -24,6 +24,7 @@ import {
   randomToken,
   reconcileRoles,
   revokeAllRoles,
+  type SupabaseClient,
 } from "../_shared/discordLink.ts"
 
 // EdgeRuntime is provided by the Supabase edge runtime; lets background work
@@ -39,6 +40,8 @@ type DiscordUser = {
   avatar?: string | null
 }
 
+const ADMINISTRATOR_PERMISSION = 1n << 3n
+const MANAGE_ROLES_PERMISSION = 1n << 28n
 const JSON_HEADERS = { ...corsHeaders, "Content-Type": "application/json" }
 
 function jsonResponse(body: unknown): Response {
@@ -58,6 +61,19 @@ function ephemeral(content: string, components?: unknown[]): unknown {
 
 function truncateAddress(address: string): string {
   return `${address.slice(0, 6)}…${address.slice(-4)}`
+}
+
+function hasRoleManagerPermission(permissions: string | undefined): boolean {
+  if (!permissions) return false
+  try {
+    const bits = BigInt(permissions)
+    return (
+      (bits & ADMINISTRATOR_PERMISSION) !== 0n ||
+      (bits & MANAGE_ROLES_PERMISSION) !== 0n
+    )
+  } catch (_err) {
+    return false
+  }
 }
 
 function linkButtonRow(url: string, label = "Link wallet"): unknown {
@@ -141,13 +157,17 @@ async function followupLinkedStatus(args: {
       for (const s of result.semesters) {
         const pts = pointsFromWad(s.pointsWad).toLocaleString()
         lines.push(
-          `${s.qualifies ? "✅" : "⬜"} **${s.label}** — ${pts} pts${s.qualifies ? " · role granted" : ""}`,
+          `${s.qualifies ? "✅" : "⬜"} **${s.label}** — ${pts} pts${
+            s.qualifies ? " · role granted" : ""
+          }`,
         )
       }
       if (result.liveRoleId) {
         const pts = pointsFromWad(result.livePointsWad ?? 0n).toLocaleString()
         lines.push(
-          `${result.liveQualifies ? "✅" : "⬜"} **Current** — ${pts} pts${result.liveQualifies ? " · role granted" : ""}`,
+          `${result.liveQualifies ? "✅" : "⬜"} **Current** — ${pts} pts${
+            result.liveQualifies ? " · role granted" : ""
+          }`,
         )
       }
     }
@@ -224,6 +244,56 @@ async function followupRelink(args: {
   })
 }
 
+async function followupPokeRoles(args: {
+  supabase: SupabaseClient
+  appId: string
+  interactionToken: string
+}): Promise<void> {
+  const { supabase, appId, interactionToken } = args
+  let content: string
+  try {
+    const semesters = await getActiveSemesters(supabase)
+    const includeLive = Boolean(Deno.env.get("DISCORD_ROLE_ID"))
+    const qualifier = await buildSetQualifier({ semesters, includeLive })
+
+    const { data: links } = await supabase
+      .from("discord_wallet_links")
+      .select("discord_user_id, wallet_address, guild_id, granted_roles")
+
+    let processed = 0
+    let failed = 0
+    for (const link of links ?? []) {
+      try {
+        await reconcileRoles({ supabase, link, semesters, qualifier })
+        processed += 1
+      } catch (err) {
+        failed += 1
+        console.error(`poke-roles failed for ${link.discord_user_id}:`, err)
+      }
+    }
+
+    content = [
+      "Role sync complete.",
+      `Processed: ${processed.toLocaleString()}`,
+      `Failed: ${failed.toLocaleString()}`,
+      `Semester role windows: ${semesters.length.toLocaleString()}`,
+      `Live role: ${includeLive ? "enabled" : "disabled"}`,
+    ].join("\n")
+  } catch (err) {
+    console.error("followupPokeRoles error:", err)
+    content = [
+      "Role sync failed.",
+      "I couldn't reconcile Academy roles right now. Check function logs for details.",
+    ].join("\n")
+  }
+
+  await editOriginalInteraction({
+    appId,
+    interactionToken,
+    payload: { content },
+  })
+}
+
 function runBackground(promise: Promise<unknown>): void {
   if (typeof EdgeRuntime !== "undefined" && EdgeRuntime) {
     EdgeRuntime.waitUntil(promise)
@@ -266,17 +336,36 @@ Deno.serve(async (req) => {
     { auth: { autoRefreshToken: false, persistSession: false } },
   )
 
-  const user: DiscordUser | undefined =
-    interaction.member?.user ?? interaction.user
+  const user: DiscordUser | undefined = interaction.member?.user ??
+    interaction.user
   const guildId: string | null = interaction.guild_id ?? null
   const interactionToken: string = interaction.token
+  const commandName: string | undefined = interaction.data?.name
 
   if (!user?.id) {
     return jsonResponse(ephemeral("Couldn't identify your Discord account."))
   }
 
-  // /matchbox slash command.
+  // Slash commands.
   if (interaction.type === InteractionType.APPLICATION_COMMAND) {
+    if (commandName === "poke-roles") {
+      if (!hasRoleManagerPermission(interaction.member?.permissions)) {
+        return jsonResponse(
+          ephemeral("You need Manage Roles permission to run `/poke-roles`."),
+        )
+      }
+
+      runBackground(followupPokeRoles({ supabase, appId, interactionToken }))
+      return jsonResponse({
+        type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE,
+        data: { flags: MessageFlags.EPHEMERAL },
+      })
+    }
+
+    if (commandName !== "matchbox") {
+      return jsonResponse(ephemeral("Unsupported command."))
+    }
+
     const { data: link } = await supabase
       .from("discord_wallet_links")
       .select("discord_user_id, wallet_address, guild_id, granted_roles")
