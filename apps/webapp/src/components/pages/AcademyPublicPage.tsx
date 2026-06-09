@@ -155,7 +155,8 @@ export default function AcademyPublicPage() {
     )
   } else {
     const { rows, totals, meta } = leaderboardData
-    const dateRangeStr = `${new Date(meta.fromTs * 1000).toISOString().slice(0, 10)} → ${new Date(meta.toTs * 1000).toISOString().slice(0, 10)}`
+    const displayToTs = classWindow ? classWindow.toTs : meta.toTs
+    const dateRangeStr = `${new Date(meta.fromTs * 1000).toISOString().slice(0, 10)} → ${new Date(displayToTs * 1000).toISOString().slice(0, 10)}`
     body = (
       <>
         {/* Metadata Bar */}
