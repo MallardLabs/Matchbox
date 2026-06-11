@@ -33,8 +33,14 @@ export default function AcademyPublicPage() {
     if (seasons.length === 0) return null
     const current = seasons.find((s) => s.isCurrent)
     if (current) return { fromTs: current.fromTs, toTs: current.toTs }
-    const started = seasons.filter((s) => s.fromTs <= currentEpoch)
-    const chosen = (started.length > 0 ? started : seasons).at(-1)
+    // No season contains "now". Prefer the next upcoming season (the page then
+    // shows its "not started yet" state) over silently rendering an already-ended
+    // season as if it were live — an ended window reports full points and N/N
+    // epochs, which reads as a stale/regressed leaderboard. Only when every
+    // season has ended do we fall back to the most recent one (final standings
+    // for the concluded cohort). Seasons are ordered by fromTs ascending.
+    const upcoming = seasons.filter((s) => s.fromTs > currentEpoch)
+    const chosen = upcoming[0] ?? seasons.at(-1)
     return chosen ? { fromTs: chosen.fromTs, toTs: chosen.toTs } : null
   })()
   // Window semantics for the leaderboard hook:
@@ -158,7 +164,8 @@ export default function AcademyPublicPage() {
           <span className="font-mono">{dateRangeStr}</span>
           <span aria-hidden>·</span>
           <span>
-            {totals.totalEpochs}/{semesterEpochs} {semesterEpochs === 1 ? "epoch" : "epochs"}
+            {totals.totalEpochs}/{semesterEpochs}{" "}
+            {semesterEpochs === 1 ? "epoch" : "epochs"}
           </span>
           <span aria-hidden>·</span>
           <span>{totals.participants.toLocaleString()} actors</span>

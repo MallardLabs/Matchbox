@@ -212,7 +212,7 @@ Deno.serve(async (req) => {
     const now = Math.floor(Date.now() / 1000)
     const { data } = await supabase
       .from("discord_semesters")
-      .select("semester_id, label, from_ts, to_ts")
+      .select("semester_id, label, from_ts, to_ts, require_floor")
       .eq("active", true)
       .order("from_ts", { ascending: true })
     const semesters = (data ?? []).map((r) => {
@@ -231,9 +231,11 @@ Deno.serve(async (req) => {
   }
 
   // --- Resolve the semester window the /academy leaderboard should display. ---
-  // Returns the semester containing now, else the most recent one that has
-  // started, else the earliest defined. No role_id filter: the academy window is
-  // wanted even before a Discord role is configured. Server-side clock.
+  // Returns the semester containing now, else the next upcoming season, else the
+  // most recent (concluded) one. Preferring the upcoming season over an ended one
+  // keeps a finished window from being presented as if it were live. No role_id
+  // filter: the academy window is wanted even before a Discord role is
+  // configured. Server-side clock.
   if (req.method === "GET" && action === "current-semester") {
     const now = Math.floor(Date.now() / 1000)
     const { data } = await supabase
@@ -262,8 +264,8 @@ Deno.serve(async (req) => {
       })
     }
     const current = rows.find((s) => now >= s.fromTs && now < s.toTs)
-    const started = rows.filter((s) => s.fromTs <= now)
-    const chosen = current ?? started[started.length - 1] ?? rows[0]
+    const upcoming = rows.filter((s) => s.fromTs > now)
+    const chosen = current ?? upcoming[0] ?? rows[rows.length - 1]
     return json({
       success: true,
       semester: { ...chosen, isCurrent: chosen === current },
