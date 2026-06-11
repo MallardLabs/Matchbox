@@ -15,6 +15,13 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Methods": "GET, OPTIONS",
 } as const
 
+// Netlify's CDN cache key only varies on Next's __nextDataReq/_rsc params by
+// default, so it ignores our window params and collapses every request into one
+// entry — a Season 0 (from/to) response then gets served for the live Semester
+// window, surfacing stale points/epochs. Force the cache key to include the
+// params that actually select the dataset.
+const CACHE_VARY = "query=network|from|to|qualifiedOnly"
+
 const LOCK_ACTION_TYPES = [
   "LOCK_CREATED",
   "LOCK_AMOUNT_INCREASED",
@@ -120,6 +127,7 @@ export default async function handler(request: Request): Promise<Response> {
           headers: {
             "Content-Type": "application/json",
             "Cache-Control": "public, max-age=300, s-maxage=900",
+            "Netlify-Vary": CACHE_VARY,
             ...CORS_HEADERS,
           },
         },
@@ -247,6 +255,7 @@ export default async function handler(request: Request): Promise<Response> {
         "Content-Type": "application/json",
         "Cache-Control":
           "public, max-age=300, s-maxage=14400, stale-while-revalidate=3600",
+        "Netlify-Vary": CACHE_VARY,
         ...CORS_HEADERS,
       },
     })
