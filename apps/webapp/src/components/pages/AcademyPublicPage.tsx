@@ -1,8 +1,10 @@
 import AcademyDiscordCard from "@/components/AcademyDiscordCard"
 import AcademyPublicActorProfile from "@/components/AcademyPublicActorProfile"
 import AcademyPublicLeaderboard from "@/components/AcademyPublicLeaderboard"
+import AcademyShareCard from "@/components/AcademyShareCard"
 import { InitialLoader } from "@/components/InitialLoader"
 import { SpringIn } from "@/components/SpringIn"
+import { useNetwork } from "@/contexts/NetworkContext"
 import { useAcademyActorProfile } from "@/hooks/useAcademyActorProfile"
 import { useAcademyLeaderboard } from "@/hooks/useAcademyLeaderboard"
 import { useAcademySemesters } from "@/hooks/useAcademySemesters"
@@ -18,6 +20,7 @@ const CLASS_LABEL = "Class of 2026"
 
 export default function AcademyPublicPage() {
   const { address: walletAddress, isConnected } = useAccount()
+  const { isMainnet } = useNetwork()
   const { data: semesters, isLoading: seasonsLoading } = useAcademySemesters()
   const seasons = semesters ?? []
 
@@ -29,10 +32,10 @@ export default function AcademyPublicPage() {
   // Use the current live season's window only — the leaderboard shows one active
   // window at a time, not a union across all seasons. Fall back to the most
   // recently started season if none is marked current.
-  const classWindow = (() => {
+  const classSeason = (() => {
     if (seasons.length === 0) return null
     const current = seasons.find((s) => s.isCurrent)
-    if (current) return { fromTs: current.fromTs, toTs: current.toTs }
+    if (current) return current
     // No season contains "now". Prefer the next upcoming season (the page then
     // shows its "not started yet" state) over silently rendering an already-ended
     // season as if it were live — an ended window reports full points and N/N
@@ -40,9 +43,11 @@ export default function AcademyPublicPage() {
     // season has ended do we fall back to the most recent one (final standings
     // for the concluded cohort). Seasons are ordered by fromTs ascending.
     const upcoming = seasons.filter((s) => s.fromTs > currentEpoch)
-    const chosen = upcoming[0] ?? seasons.at(-1)
-    return chosen ? { fromTs: chosen.fromTs, toTs: chosen.toTs } : null
+    return upcoming[0] ?? seasons.at(-1) ?? null
   })()
+  const classWindow = classSeason
+    ? { fromTs: classSeason.fromTs, toTs: classSeason.toTs }
+    : null
   // Window semantics for the leaderboard hook:
   //  - a resolved window  → pin it.
   //  - list still loading  → null (wait, don't flash the wrong window).
@@ -58,6 +63,24 @@ export default function AcademyPublicPage() {
     error,
   } = useAcademyLeaderboard(selectedWindow)
   const [selectedActor, setSelectedActor] = useState<Address | null>(null)
+  const [shareOpen, setShareOpen] = useState(false)
+
+  // URL of the shareable standings card for the connected wallet. Mirrors the
+  // leaderboard hook's window + qualifiedOnly so the card's rank/share match
+  // what "Your stats" shows.
+  const shareCardUrl = useMemo(() => {
+    if (!walletAddress) return null
+    const params = new URLSearchParams({
+      actor: walletAddress,
+      network: isMainnet ? "mainnet" : "testnet",
+      qualifiedOnly: classSeason?.requireFloor === false ? "0" : "1",
+    })
+    if (classWindow) {
+      params.set("from", String(classWindow.fromTs))
+      params.set("to", String(classWindow.toTs))
+    }
+    return `/api/og/academy?${params.toString()}`
+  }, [walletAddress, isMainnet, classSeason, classWindow])
 
   // Fetch selected actor profile details (same window as the leaderboard).
   const { data: actorProfileData, isLoading: actorProfileLoading } =
@@ -180,7 +203,18 @@ export default function AcademyPublicPage() {
                   Your stats · {walletAddress.slice(0, 6)}…
                   {walletAddress.slice(-4)}
                 </span>
-                <AcademyDiscordCard walletAddress={walletAddress} compact />
+                <div className="flex items-center gap-2">
+                  {userStats && shareCardUrl && (
+                    <button
+                      type="button"
+                      onClick={() => setShareOpen(true)}
+                      className="rounded-lg border border-[var(--border)] bg-[var(--surface-tertiary)] px-3 py-1.5 text-xs font-semibold text-[var(--content-primary)] transition-colors hover:border-brand"
+                    >
+                      Share
+                    </button>
+                  )}
+                  <AcademyDiscordCard walletAddress={walletAddress} compact />
+                </div>
               </div>
               {userStats ? (
                 <div className="flex flex-wrap items-end gap-x-8 gap-y-4">
@@ -307,6 +341,13 @@ export default function AcademyPublicPage() {
       </div>
 
       {body}
+
+      {shareOpen && shareCardUrl && (
+        <AcademyShareCard
+          cardUrl={shareCardUrl}
+          onClose={() => setShareOpen(false)}
+        />
+      )}
     </div>
   )
 }

@@ -141,6 +141,35 @@ export async function editOriginalInteraction(args: {
   return res.ok
 }
 
+// Edit the original (deferred) interaction reply with a file attachment.
+// Discord file uploads require multipart/form-data: a `payload_json` part plus
+// a `files[N]` part. We deliberately don't set Content-Type so fetch can add the
+// multipart boundary itself.
+export async function editOriginalInteractionWithAttachment(args: {
+  appId: string
+  interactionToken: string
+  payload: Record<string, unknown>
+  file: { name: string; data: ArrayBuffer; contentType?: string }
+}): Promise<boolean> {
+  const form = new FormData()
+  form.append("payload_json", JSON.stringify(args.payload))
+  const blob = new Blob([args.file.data], {
+    type: args.file.contentType ?? "application/octet-stream",
+  })
+  form.append("files[0]", blob, args.file.name)
+
+  const res = await fetch(
+    `${DISCORD_API}/webhooks/${args.appId}/${args.interactionToken}/messages/@original`,
+    { method: "PATCH", body: form },
+  )
+  if (!res.ok) {
+    console.warn(
+      `editOriginalInteractionWithAttachment failed (${res.status}): ${await res.text()}`,
+    )
+  }
+  return res.ok
+}
+
 // Build a CDN avatar URL, falling back to the user's default embed avatar.
 export function avatarUrl(userId: string, avatarHash: string | null): string {
   if (avatarHash) {

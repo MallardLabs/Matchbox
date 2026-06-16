@@ -9,6 +9,7 @@ import { corsHeaders, handleCors } from "../_shared/cors.ts"
 import {
   ButtonStyle,
   editOriginalInteraction,
+  editOriginalInteractionWithAttachment,
   InteractionResponseType,
   InteractionType,
   MessageFlags,
@@ -101,6 +102,12 @@ function manageButtonsRow(): unknown {
   return {
     type: 1,
     components: [
+      {
+        type: 2,
+        style: ButtonStyle.PRIMARY,
+        label: "Share card",
+        custom_id: "mb_share",
+      },
       {
         type: 2,
         style: ButtonStyle.DANGER,
@@ -290,6 +297,102 @@ async function followupRelink(args: {
   })
 }
 
+// Build the shareable standings card for a linked user and post it as a new
+// ephemeral image (the /matchbox status message is left intact). The PNG is
+// rendered by the webapp's /api/og/academy route; Discord's client then offers
+// native copy/save on the attachment.
+async function followupShareCard(args: {
+  supabase: SupabaseClient
+  appId: string
+  interactionToken: string
+  user: DiscordUser
+}): Promise<void> {
+  const { supabase, appId, interactionToken, user } = args
+
+  const { data: link } = await supabase
+    .from("discord_wallet_links")
+    .select("wallet_address")
+    .eq("discord_user_id", user.id)
+    .maybeSingle()
+
+  if (!link?.wallet_address) {
+    await editOriginalInteraction({
+      appId,
+      interactionToken,
+      payload: {
+        content: null,
+        embeds: [
+          {
+            color: EMBED_COLOR_NEUTRAL,
+            description:
+              "Link your wallet with `/matchbox` first, then you can share your standing.",
+          },
+        ],
+      },
+    })
+    return
+  }
+
+  try {
+    const semesters = await getActiveSemesters(supabase)
+    const now = Math.floor(Date.now() / 1000)
+    // Prefer the live season (its window contains "now"); otherwise fall back to
+    // the most recent one. Matches the window the public leaderboard renders.
+    const season =
+      semesters.find((s) => now >= s.from_ts && now < s.to_ts) ??
+      semesters.at(-1) ??
+      null
+
+    const network = Deno.env.get("ACADEMY_NETWORK") ?? "mainnet"
+    const base = (Deno.env.get("MATCHBOX_WEBAPP_URL") ?? "").replace(/\/$/, "")
+    const params = new URLSearchParams({
+      actor: link.wallet_address,
+      network,
+    })
+    if (season) {
+      params.set("from", String(season.from_ts))
+      params.set("to", String(season.to_ts))
+      params.set("qualifiedOnly", season.require_floor ? "1" : "0")
+    }
+
+    const cardUrl = `${base}/api/og/academy?${params.toString()}`
+    const imgRes = await fetch(cardUrl)
+    if (!imgRes.ok) throw new Error(`card render returned ${imgRes.status}`)
+    const bytes = await imgRes.arrayBuffer()
+
+    await editOriginalInteractionWithAttachment({
+      appId,
+      interactionToken,
+      payload: {
+        content: null,
+        embeds: [],
+        attachments: [{ id: 0, filename: "mezo-academy-card.png" }],
+      },
+      file: {
+        name: "mezo-academy-card.png",
+        data: bytes,
+        contentType: "image/png",
+      },
+    })
+  } catch (err) {
+    console.error("followupShareCard error:", err)
+    await editOriginalInteraction({
+      appId,
+      interactionToken,
+      payload: {
+        content: null,
+        embeds: [
+          {
+            color: EMBED_COLOR_NEUTRAL,
+            description:
+              "Couldn't build your share card right now — please try again shortly.",
+          },
+        ],
+      },
+    })
+  }
+}
+
 async function followupPokeRoles(args: {
   supabase: SupabaseClient
   appId: string
@@ -452,6 +555,19 @@ Deno.serve(async (req) => {
   // Button clicks.
   if (interaction.type === InteractionType.MESSAGE_COMPONENT) {
     const customId: string = interaction.data?.custom_id ?? ""
+    if (customId === "mb_share") {
+      // Post the card as a NEW ephemeral message so the status message (and its
+      // buttons) stay put. Type 5 on a component defers a fresh response, which
+      // editOriginalInteraction then fills in — it does not touch the button
+      // message the way a type-6 update would.
+      runBackground(
+        followupShareCard({ supabase, appId, interactionToken, user }),
+      )
+      return jsonResponse({
+        type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE,
+        data: { flags: MessageFlags.EPHEMERAL },
+      })
+    }
     if (customId === "mb_unlink") {
       runBackground(
         followupUnlink({ supabase, appId, interactionToken, user, guildId }),
