@@ -1,10 +1,13 @@
-import { WEEK, resolveWindow, snapToThursdayUTC } from "@/lib/academy/epoch"
+import { WEEK, resolveWindow } from "@/lib/academy/epoch"
 import { ImageResponse } from "@vercel/og"
 import type { NextRequest } from "next/server"
 
 export const config = {
   runtime: "edge",
 }
+
+const WIDTH = 1280
+const HEIGHT = 750
 
 // Per-actor, per-window image behind the CDN. Netlify ignores query params in
 // the cache key unless told otherwise, so without this every wallet collapses
@@ -25,10 +28,72 @@ type LeaderboardResponse = {
   error?: string
 }
 
+type Standing = {
+  rankStr: string
+  pointsWad: bigint
+  share: number
+  activeEpochs: number
+  totalEpochs: number
+  fullyParticipated: boolean
+}
+
 // Same formatting the leaderboard table uses (AcademyPublicLeaderboard.tsx).
 function fmtPoints(wad: bigint): string {
   const value = Number(wad / 10n ** 12n) / 1e6
   return value.toLocaleString(undefined, { maximumFractionDigits: 2 })
+}
+
+// Pull the leaderboard for this window from our own origin and derive the same
+// numbers the page shows in "Your stats" (AcademyPublicPage.tsx). The
+// leaderboard route is CDN-cached, so repeat card renders are cheap.
+async function loadStanding(
+  origin: string,
+  actor: string,
+  network: string,
+  fromTs: number,
+  toTs: number,
+  qualifiedOnly: string,
+): Promise<Standing> {
+  const empty: Standing = {
+    rankStr: "Unranked",
+    pointsWad: 0n,
+    share: 0,
+    activeEpochs: 0,
+    totalEpochs: 0,
+    fullyParticipated: false,
+  }
+  try {
+    const lbUrl = new URL("/api/academy/leaderboard", origin)
+    lbUrl.searchParams.set("network", network)
+    lbUrl.searchParams.set("from", String(fromTs))
+    lbUrl.searchParams.set("to", String(toTs))
+    lbUrl.searchParams.set("qualifiedOnly", qualifiedOnly)
+
+    const res = await fetch(lbUrl.toString())
+    const data = (await res.json()) as LeaderboardResponse
+    if (!data.success || !data.rows) return empty
+
+    const totalEpochs = data.totals?.totalEpochs ?? 0
+    const lower = actor.toLowerCase()
+    const idx = data.rows.findIndex((r) => r.actor.toLowerCase() === lower)
+    if (idx < 0) return { ...empty, totalEpochs }
+
+    const row = data.rows[idx]
+    if (!row) return { ...empty, totalEpochs }
+    const total = data.rows.reduce((acc, r) => acc + BigInt(r.pointsWad), 0n)
+    const pointsWad = BigInt(row.pointsWad)
+    return {
+      rankStr: `#${idx + 1}`,
+      pointsWad,
+      share: total > 0n ? Number((pointsWad * 10_000n) / total) / 100 : 0,
+      activeEpochs: row.activeEpochs,
+      totalEpochs,
+      fullyParticipated: row.fullyParticipated,
+    }
+  } catch (err) {
+    console.error("academy og: failed to load leaderboard", err)
+    return empty
+  }
 }
 
 // Fetch a Google font as TTF (Satori cannot parse woff2). An archaic
@@ -82,79 +147,50 @@ export default async function handler(req: NextRequest) {
   const qualifiedOnly = searchParams.get("qualifiedOnly") ?? "1"
 
   const now = Math.floor(Date.now() / 1000)
-  const { fromTs, toTs: requestedToTs } = resolveWindow(
+  // `toTs` here is the season END (may be in the future). The leaderboard route
+  // clamps it to the last completed epoch for the simulation, so we pass it
+  // straight through and size the season from the full, unclamped window —
+  // otherwise an in-progress season reports e.g. 2/2 instead of 2/8.
+  const { fromTs, toTs } = resolveWindow(
     searchParams.get("from"),
     searchParams.get("to"),
     now,
   )
-  const toTs = Math.min(requestedToTs, snapToThursdayUTC(now, "down"))
-
-  // Pull the leaderboard for this window from our own origin and derive the
-  // same numbers the page shows in "Your stats" (AcademyPublicPage.tsx).
-  let rankStr = "Unranked"
-  let pointsWad = 0n
-  let share = 0
-  let activeEpochs = 0
-  let totalEpochs = 0
-  let fullyParticipated = false
-
-  try {
-    const lbUrl = new URL("/api/academy/leaderboard", req.url)
-    lbUrl.searchParams.set("network", network)
-    lbUrl.searchParams.set("from", String(fromTs))
-    lbUrl.searchParams.set("to", String(toTs))
-    lbUrl.searchParams.set("qualifiedOnly", qualifiedOnly)
-
-    const res = await fetch(lbUrl.toString())
-    const data = (await res.json()) as LeaderboardResponse
-    if (data.success && data.rows) {
-      const lower = actor.toLowerCase()
-      const idx = data.rows.findIndex((r) => r.actor.toLowerCase() === lower)
-      const total = data.rows.reduce((acc, r) => acc + BigInt(r.pointsWad), 0n)
-      totalEpochs = data.totals?.totalEpochs ?? 0
-      if (idx >= 0) {
-        const row = data.rows[idx]
-        if (row) {
-          pointsWad = BigInt(row.pointsWad)
-          activeEpochs = row.activeEpochs
-          fullyParticipated = row.fullyParticipated
-          rankStr = `#${idx + 1}`
-          share = total > 0n ? Number((pointsWad * 10_000n) / total) / 100 : 0
-        }
-      }
-    }
-  } catch (err) {
-    console.error("academy og: failed to load leaderboard", err)
-  }
-
   const semesterEpochs = Math.max(1, Math.round((toTs - fromTs) / WEEK))
-  const isFull = fullyParticipated && totalEpochs >= semesterEpochs
-  const pointsStr = pointsWad > 0n ? fmtPoints(pointsWad) : "0"
-  const shareStr = `${share.toFixed(2)}%`
-  const participationStr = `${activeEpochs}/${semesterEpochs}`
-  const epochStr = `${totalEpochs}/${semesterEpochs}`
 
   // Glyph subset for the font fetch — every character we render.
-  const fontText =
-    "POINTSRANKSHAREPARTICIPATIONEPCYUabcdefghijklmnopqrstuvwxyz0123456789.,#%/★ -"
-  const [regular, bold] = await Promise.all([
-    loadGoogleFont("IBM Plex Mono", 500, fontText),
-    loadGoogleFont("IBM Plex Mono", 700, fontText),
+  const fontText = "POINTSRANKSHAREPARTICIPATIONEPCHUnranked0123456789.,#%/- "
+
+  // Standings and fonts are independent — fetch them concurrently so the slower
+  // of the two (usually the leaderboard) sets the wall-clock, not their sum.
+  const [standing, regular, bold] = await Promise.all([
+    loadStanding(req.url, actor, network, fromTs, toTs, qualifiedOnly),
+    loadGoogleFont("IBM Plex Sans", 500, fontText),
+    loadGoogleFont("IBM Plex Sans", 700, fontText),
   ])
+
   const fonts = [
     regular && {
-      name: "IBM Plex Mono",
+      name: "IBM Plex Sans",
       data: regular,
       weight: 500,
       style: "normal",
     },
-    bold && { name: "IBM Plex Mono", data: bold, weight: 700, style: "normal" },
+    bold && { name: "IBM Plex Sans", data: bold, weight: 700, style: "normal" },
   ].filter(Boolean) as {
     name: string
     data: ArrayBuffer
     weight: 500 | 700
     style: "normal"
   }[]
+
+  const isFull =
+    standing.fullyParticipated && standing.totalEpochs >= semesterEpochs
+  const pointsStr =
+    standing.pointsWad > 0n ? fmtPoints(standing.pointsWad) : "0"
+  const shareStr = `${standing.share.toFixed(2)}%`
+  const participationStr = `${standing.activeEpochs}/${semesterEpochs}`
+  const epochStr = `${standing.totalEpochs}/${semesterEpochs}`
 
   const bgUrl = new URL("/academy-card-bg.png", req.url).toString()
 
@@ -166,22 +202,41 @@ export default async function handler(req: NextRequest) {
     letterSpacing: "3px",
   }
   const valueStyle = {
-    fontSize: "46px",
+    fontSize: "48px",
     fontWeight: 700,
     color: "#FFFFFF",
   }
 
-  const StatBlock = ({ label, value }: { label: string; value: string }) => (
+  const StatBlock = ({
+    label,
+    value,
+    star,
+  }: { label: string; value: string; star?: boolean }) => (
     <div
       style={{
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
-        gap: "10px",
+        gap: "12px",
       }}
     >
       <span style={labelStyle}>{label}</span>
-      <span style={valueStyle}>{value}</span>
+      <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+        {star ? (
+          // Rendered as SVG (not a ★ glyph) so it always shows — the subset font
+          // doesn't carry U+2605.
+          <svg
+            width="38"
+            height="38"
+            viewBox="0 0 24 24"
+            fill="#F7931A"
+            aria-hidden="true"
+          >
+            <path d="M12 .587l3.668 7.431 8.2 1.192-5.934 5.782 1.401 8.168L12 18.896l-7.335 3.864 1.401-8.168L.132 9.21l8.2-1.192z" />
+          </svg>
+        ) : null}
+        <span style={valueStyle}>{value}</span>
+      </div>
     </div>
   )
 
@@ -192,15 +247,15 @@ export default async function handler(req: NextRequest) {
         width: "100%",
         display: "flex",
         position: "relative",
-        fontFamily: "IBM Plex Mono, monospace",
+        fontFamily: "IBM Plex Sans, sans-serif",
       }}
     >
       {/* Template background (logo, "Mezo Academy", gradient, footer baked in) */}
       <img
         src={bgUrl}
         alt=""
-        width={1200}
-        height={750}
+        width={WIDTH}
+        height={HEIGHT}
         style={{ position: "absolute", top: 0, left: 0 }}
       />
 
@@ -209,7 +264,7 @@ export default async function handler(req: NextRequest) {
         style={{
           position: "absolute",
           top: "150px",
-          right: "90px",
+          right: "96px",
           display: "flex",
           alignItems: "center",
           gap: "12px",
@@ -237,8 +292,8 @@ export default async function handler(req: NextRequest) {
           position: "absolute",
           top: 0,
           left: 0,
-          width: "1200px",
-          height: "750px",
+          width: `${WIDTH}px`,
+          height: `${HEIGHT}px`,
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
@@ -263,22 +318,23 @@ export default async function handler(req: NextRequest) {
           style={{
             display: "flex",
             alignItems: "flex-start",
-            gap: "72px",
-            marginTop: "56px",
+            gap: "104px",
+            marginTop: "60px",
           }}
         >
-          <StatBlock label="Rank" value={rankStr} />
+          <StatBlock label="Rank" value={standing.rankStr} />
           <StatBlock label="Share" value={shareStr} />
           <StatBlock
             label="Participation"
-            value={isFull ? `★ ${participationStr}` : participationStr}
+            value={participationStr}
+            star={isFull}
           />
         </div>
       </div>
     </div>,
     {
-      width: 1200,
-      height: 750,
+      width: WIDTH,
+      height: HEIGHT,
       ...(fonts.length > 0 ? { fonts } : {}),
       headers: {
         "Cache-Control":

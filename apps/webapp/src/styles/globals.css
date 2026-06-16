@@ -250,6 +250,41 @@
     }
   }
 
+  /* Sweeping "shine" for in-progress text (e.g. the share-card renderer),
+     matching the shimmer assistants use for their "thinking" indicators. A
+     light band travels across muted text via a clipped moving gradient. */
+  .text-shimmer {
+    background: linear-gradient(
+      90deg,
+      var(--content-muted) 0%,
+      var(--content-muted) 35%,
+      var(--content-primary) 50%,
+      var(--content-muted) 65%,
+      var(--content-muted) 100%
+    );
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: text-shimmer 1.8s linear infinite;
+  }
+
+  @keyframes text-shimmer {
+    0% {
+      background-position: 200% 0;
+    }
+    100% {
+      background-position: -200% 0;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .text-shimmer {
+      animation: none;
+      color: var(--content-secondary);
+    }
+  }
+
   /* Progress-bar shine variant for the Academy fetch loader. Reuses the
      moving-shine animation as .optimal-vemezo-shine, but tuned for a wider,
      softer sweep so it reads as steady in-progress state rather than the

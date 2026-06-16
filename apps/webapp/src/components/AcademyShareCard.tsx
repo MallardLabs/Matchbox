@@ -107,11 +107,13 @@ export default function AcademyShareCard({ cardUrl, onClose }: Props) {
         </div>
 
         <div className="p-5">
-          {/* Card preview (8:5, matches the rendered image) */}
-          <div className="relative aspect-[8/5] w-full overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface-tertiary)]">
+          {/* Card preview (matches the rendered 1280×750 image) */}
+          <div className="relative aspect-[128/75] w-full overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface-tertiary)]">
             {!imgLoaded && !imgError && (
-              <div className="absolute inset-0 flex items-center justify-center text-xs text-[var(--content-muted)]">
-                Rendering card…
+              <div className="absolute inset-0 flex items-center justify-center">
+                <span className="text-shimmer text-2xl font-semibold tracking-tight">
+                  Rendering your card…
+                </span>
               </div>
             )}
             {imgError ? (
