@@ -346,6 +346,8 @@ async function followupShareCard(args: {
     const network = Deno.env.get("ACADEMY_NETWORK") ?? "mainnet"
     const base = (Deno.env.get("MATCHBOX_WEBAPP_URL") ?? "").replace(/\/$/, "")
     const params = new URLSearchParams({
+      // Cache-key version — keep in lockstep with /api/og/academy + the webapp.
+      v: "2",
       actor: link.wallet_address,
       network,
     })

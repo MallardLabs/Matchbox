@@ -71,6 +71,9 @@ export default function AcademyPublicPage() {
   const shareCardUrl = useMemo(() => {
     if (!walletAddress) return null
     const params = new URLSearchParams({
+      // Cache-key version — bump in lockstep with the og route when the card
+      // rendering changes, to bypass stale CDN entries.
+      v: "2",
       actor: walletAddress,
       network: isMainnet ? "mainnet" : "testnet",
       qualifiedOnly: classSeason?.requireFloor === false ? "0" : "1",

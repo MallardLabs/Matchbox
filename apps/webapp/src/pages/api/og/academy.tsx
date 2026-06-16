@@ -11,8 +11,16 @@ const HEIGHT = 750
 
 // Per-actor, per-window image behind the CDN. Netlify ignores query params in
 // the cache key unless told otherwise, so without this every wallet collapses
-// onto one cached card. Mirrors the leaderboard route's CACHE_VARY.
-const CACHE_VARY = "query=actor|from|to|network|qualifiedOnly"
+// onto one cached card. `v` is a manual cache-key version: bump it (and the
+// callers) whenever the rendering changes, so stale CDN entries are bypassed.
+const CACHE_VARY = "query=v|actor|from|to|network|qualifiedOnly"
+
+// @vercel/og hard-codes `Cache-Control: public, immutable, no-transform,
+// max-age=31536000`, which pins the FIRST render in the browser and Netlify's
+// durable cache effectively forever — the card never reflects new data or code.
+// We replace it with a revalidating policy (mirrors the leaderboard route).
+const CARD_CACHE_CONTROL =
+  "public, max-age=300, s-maxage=14400, stale-while-revalidate=3600"
 
 type LeaderboardRowLite = {
   actor: string
@@ -96,38 +104,18 @@ async function loadStanding(
   }
 }
 
-// Fetch a Google font as TTF (Satori cannot parse woff2). An archaic
-// User-Agent makes Google serve TrueType instead of woff2. The `text` subset
-// keeps the payload tiny and reliable on the edge. Returns null on any
-// failure so the card still renders with Satori's default font.
-async function loadGoogleFont(
-  family: string,
-  weight: number,
-  text: string,
-): Promise<ArrayBuffer | null> {
+// Load an IBM Plex Sans weight as WOFF, straight from the Fontsource CDN.
+// Satori parses ttf/otf/woff but NOT woff2/eot — and Google's css2 endpoint only
+// hands those out (woff2 to modern UAs, eot to archaic ones), so we fetch the
+// woff file directly instead. Returns null on failure so the card still renders
+// with Satori's default font rather than erroring.
+async function loadPlexSans(weight: 500 | 700): Promise<ArrayBuffer | null> {
   try {
-    const params = new URLSearchParams({
-      family: `${family}:wght@${weight}`,
-      text,
-    })
-    const cssRes = await fetch(
-      `https://fonts.googleapis.com/css2?${params.toString()}`,
-      {
-        headers: {
-          "User-Agent":
-            "Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.1; SV1)",
-        },
-      },
+    const res = await fetch(
+      `https://cdn.jsdelivr.net/npm/@fontsource/ibm-plex-sans@5/files/ibm-plex-sans-latin-${weight}-normal.woff`,
     )
-    if (!cssRes.ok) return null
-    const css = await cssRes.text()
-    const match = css.match(
-      /src:\s*url\(([^)]+)\)\s*format\(['"]?(?:truetype|opentype)['"]?\)/,
-    )
-    if (!match?.[1]) return null
-    const fontRes = await fetch(match[1])
-    if (!fontRes.ok) return null
-    return await fontRes.arrayBuffer()
+    if (!res.ok) return null
+    return await res.arrayBuffer()
   } catch {
     return null
   }
@@ -158,15 +146,12 @@ export default async function handler(req: NextRequest) {
   )
   const semesterEpochs = Math.max(1, Math.round((toTs - fromTs) / WEEK))
 
-  // Glyph subset for the font fetch — every character we render.
-  const fontText = "POINTSRANKSHAREPARTICIPATIONEPCHUnranked0123456789.,#%/- "
-
   // Standings and fonts are independent — fetch them concurrently so the slower
   // of the two (usually the leaderboard) sets the wall-clock, not their sum.
   const [standing, regular, bold] = await Promise.all([
     loadStanding(req.url, actor, network, fromTs, toTs, qualifiedOnly),
-    loadGoogleFont("IBM Plex Sans", 500, fontText),
-    loadGoogleFont("IBM Plex Sans", 700, fontText),
+    loadPlexSans(500),
+    loadPlexSans(700),
   ])
 
   const fonts = [
@@ -194,7 +179,9 @@ export default async function handler(req: NextRequest) {
 
   const bgUrl = new URL("/academy-card-bg.png", req.url).toString()
 
+  const FONT_FAMILY = "IBM Plex Sans, sans-serif"
   const labelStyle = {
+    fontFamily: FONT_FAMILY,
     fontSize: "20px",
     fontWeight: 500,
     color: "#A89A88",
@@ -202,6 +189,7 @@ export default async function handler(req: NextRequest) {
     letterSpacing: "3px",
   }
   const valueStyle = {
+    fontFamily: FONT_FAMILY,
     fontSize: "48px",
     fontWeight: 700,
     color: "#FFFFFF",
@@ -240,7 +228,7 @@ export default async function handler(req: NextRequest) {
     </div>
   )
 
-  return new ImageResponse(
+  const image = new ImageResponse(
     <div
       style={{
         height: "100%",
@@ -272,6 +260,7 @@ export default async function handler(req: NextRequest) {
       >
         <span
           style={{
+            fontFamily: FONT_FAMILY,
             fontSize: "18px",
             fontWeight: 500,
             color: "#A89A88",
@@ -281,7 +270,14 @@ export default async function handler(req: NextRequest) {
         >
           Epoch
         </span>
-        <span style={{ fontSize: "26px", fontWeight: 700, color: "#F7931A" }}>
+        <span
+          style={{
+            fontFamily: FONT_FAMILY,
+            fontSize: "26px",
+            fontWeight: 700,
+            color: "#F7931A",
+          }}
+        >
           {epochStr}
         </span>
       </div>
@@ -304,6 +300,7 @@ export default async function handler(req: NextRequest) {
         <span style={{ ...labelStyle, fontSize: "22px" }}>Points</span>
         <span
           style={{
+            fontFamily: FONT_FAMILY,
             fontSize: "150px",
             fontWeight: 700,
             color: "#FFFFFF",
@@ -336,11 +333,14 @@ export default async function handler(req: NextRequest) {
       width: WIDTH,
       height: HEIGHT,
       ...(fonts.length > 0 ? { fonts } : {}),
-      headers: {
-        "Cache-Control":
-          "public, max-age=300, s-maxage=14400, stale-while-revalidate=3600",
-        "Netlify-Vary": CACHE_VARY,
-      },
     },
   )
+
+  // Rebuild the response so our Cache-Control fully REPLACES @vercel/og's
+  // immutable default (passing it via options merely appends, leaving the
+  // immutable directive in place).
+  const headers = new Headers(image.headers)
+  headers.set("Cache-Control", CARD_CACHE_CONTROL)
+  headers.set("Netlify-Vary", CACHE_VARY)
+  return new Response(image.body, { status: image.status, headers })
 }
