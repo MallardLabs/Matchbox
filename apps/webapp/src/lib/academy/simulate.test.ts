@@ -163,6 +163,48 @@ test("vote placed mid-epoch counts for that epoch (end-of-epoch snapshot)", () =
   assert.equal(result.rows[0]?.votePointsWad, parseUnits("50", 18))
 })
 
+test("live open epoch credits current vote points without participation bonus", () => {
+  const openToTs = TO_TS + 60
+  const params: AcademyParams = {
+    ...PARAMS,
+    participationMultiplier: 2,
+  }
+  const result = simulate(
+    { lockEvents: [], voteEvents: [voteEvent(REGULAR, TO_TS + 30)] },
+    params,
+    FROM_TS,
+    openToTs,
+    { includeOpenEpoch: true },
+  )
+
+  assert.equal(result.totals.totalEpochs, 5)
+  assert.equal(result.rows[0]?.activeEpochs, 1)
+  assert.equal(result.rows[0]?.votePointsWad, parseUnits("50", 18))
+  assert.equal(result.rows[0]?.participationBonusWad, 0n)
+  assert.equal(result.rows[0]?.fullyParticipated, false)
+})
+
+test("live open epoch excludes current points from participation bonus base", () => {
+  const openToTs = TO_TS + 60
+  const params: AcademyParams = {
+    ...PARAMS,
+    participationMultiplier: 2,
+  }
+  const result = simulate(
+    { lockEvents: [], voteEvents: [voteEvent(REGULAR, FROM_TS + 60)] },
+    params,
+    FROM_TS,
+    openToTs,
+    { includeOpenEpoch: true },
+  )
+
+  assert.equal(result.totals.totalEpochs, 5)
+  assert.equal(result.rows[0]?.activeEpochs, 5)
+  assert.equal(result.rows[0]?.votePointsWad, parseUnits("250", 18))
+  assert.equal(result.rows[0]?.participationBonusWad, parseUnits("200", 18))
+  assert.equal(result.rows[0]?.fullyParticipated, true)
+})
+
 test("vote then abstain in same epoch nets to zero for that epoch", () => {
   // Boost then abstain inside epoch 0; epochs 1+ never see active weight.
   const t0 = FROM_TS + 60

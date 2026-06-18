@@ -1,6 +1,6 @@
 import { BLACKLISTED_SYSTEM_ACTORS } from "@/lib/academy/blacklistedActors"
 import { defaultAcademyParams } from "@/lib/academy/constants"
-import { WEEK, resolveWindow, snapToThursdayUTC } from "@/lib/academy/epoch"
+import { WEEK, resolveWindow } from "@/lib/academy/epoch"
 import { simulate } from "@/lib/academy/simulate"
 import { fetchMezoActivity } from "@/lib/mezoActivity/dataSources"
 import type { MezoActivityItem } from "@/types/mezoActivity"
@@ -20,7 +20,7 @@ const CORS_HEADERS = {
 // entry — a Season 0 (from/to) response then gets served for the live Semester
 // window, surfacing stale points/epochs. Force the cache key to include the
 // params that actually select the dataset.
-const CACHE_VARY = "query=network|from|to|qualifiedOnly"
+const CACHE_VARY = "query=network|from|to|qualifiedOnly|asOf"
 
 const LOCK_ACTION_TYPES = [
   "LOCK_CREATED",
@@ -93,18 +93,17 @@ export default async function handler(request: Request): Promise<Response> {
     const now = Math.floor(Date.now() / 1000)
     // Optional fixed window (unix seconds) for per-semester leaderboards; defaults
     // to the rolling last-8-epoch window.
+    const hasExplicitTo = url.searchParams.has("to")
     const { fromTs, toTs: requestedToTs } = resolveWindow(
       url.searchParams.get("from"),
       url.searchParams.get("to"),
       now,
     )
-    // Never credit epochs that haven't completed: clamp the window end to the most
-    // recent epoch boundary. For an in-progress season (end in the future) this
-    // stops sticky votes from being projected into epochs that haven't happened.
-    const toTs = Math.min(requestedToTs, snapToThursdayUTC(now, "down"))
+    // Fixed Academy seasons are live: fetch through now so current-epoch vote
+    // points update as events index. Rolling callers keep completed epochs.
+    const toTs = hasExplicitTo ? Math.min(requestedToTs, now) : requestedToTs
 
-    // No completed epoch in range yet (e.g. a season that just started) — nothing
-    // to compute. Return empty rather than walking the vote history pointlessly.
+    // No time in range yet (e.g. an upcoming season).
     if (toTs <= fromTs) {
       return new Response(
         JSON.stringify({
@@ -126,7 +125,7 @@ export default async function handler(request: Request): Promise<Response> {
           status: 200,
           headers: {
             "Content-Type": "application/json",
-            "Cache-Control": "public, max-age=300, s-maxage=900",
+            "Cache-Control": "public, max-age=15, s-maxage=30",
             "Netlify-Vary": CACHE_VARY,
             ...CORS_HEADERS,
           },
@@ -198,6 +197,7 @@ export default async function handler(request: Request): Promise<Response> {
       params,
       fromTs,
       toTs,
+      { includeOpenEpoch: hasExplicitTo },
     )
 
     // When culling, keep only actors at/above the reward floor. `culledBelowFloor`
@@ -254,7 +254,7 @@ export default async function handler(request: Request): Promise<Response> {
       headers: {
         "Content-Type": "application/json",
         "Cache-Control":
-          "public, max-age=300, s-maxage=14400, stale-while-revalidate=3600",
+          "public, max-age=15, s-maxage=30, stale-while-revalidate=30",
         "Netlify-Vary": CACHE_VARY,
         ...CORS_HEADERS,
       },

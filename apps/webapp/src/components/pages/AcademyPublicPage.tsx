@@ -24,10 +24,10 @@ export default function AcademyPublicPage() {
   const { data: semesters, isLoading: seasonsLoading } = useAcademySemesters()
   const seasons = semesters ?? []
 
-  // For the "no standings yet" notice: the cohort only has data once an epoch
-  // has completed; vote weight is never projected into epochs that haven't
-  // happened.
-  const currentEpoch = snapToThursdayUTC(Math.floor(Date.now() / 1000), "down")
+  // For the "no standings yet" notice and season selection. The leaderboard
+  // itself can include the current open epoch once the season has started.
+  const nowTs = Math.floor(Date.now() / 1000)
+  const currentEpoch = snapToThursdayUTC(nowTs, "down")
 
   // Use the current live season's window only — the leaderboard shows one active
   // window at a time, not a union across all seasons. Fall back to the most
@@ -131,7 +131,7 @@ export default function AcademyPublicPage() {
     return () => window.removeEventListener("keydown", handler)
   }, [selectedActor])
 
-  const seasonNotStarted = !!classWindow && currentEpoch <= classWindow.fromTs
+  const seasonNotStarted = !!classWindow && nowTs < classWindow.fromTs
   const firstEpochCloseStr = classWindow
     ? new Date((classWindow.fromTs + WEEK) * 1000).toISOString().slice(0, 10)
     : ""

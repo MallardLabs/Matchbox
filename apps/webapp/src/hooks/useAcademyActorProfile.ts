@@ -66,6 +66,7 @@ export function useAcademyActorProfile(
         fromTs,
         toTs,
         blacklist: new Set(BLACKLISTED_SYSTEM_ACTORS),
+        includeOpenEpoch: true,
       })
 
       const lower = actor.toLowerCase()

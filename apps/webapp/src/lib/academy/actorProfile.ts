@@ -1,4 +1,4 @@
-import { WEEK, enumerateEpochs } from "@/lib/academy/epoch"
+import { WEEK, enumerateEpochsForWindow } from "@/lib/academy/epoch"
 import {
   type LockSnapshot,
   computeLockTrackDelta,
@@ -119,9 +119,20 @@ export function computeActorProfile(args: {
   fromTs: number
   toTs: number
   blacklist?: ReadonlySet<Address>
+  includeOpenEpoch?: boolean
 }): ActorProfile {
-  const { actor, lockEvents, voteEvents, fromTs, toTs, blacklist } = args
-  const epochs = enumerateEpochs(fromTs, toTs)
+  const {
+    actor,
+    lockEvents,
+    voteEvents,
+    fromTs,
+    toTs,
+    blacklist,
+    includeOpenEpoch,
+  } = args
+  const epochs = enumerateEpochsForWindow(fromTs, toTs, {
+    includeOpenEpoch: includeOpenEpoch === true,
+  })
   const totalEpochs = epochs.length
 
   const checksummed = (() => {

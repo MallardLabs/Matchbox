@@ -1,4 +1,8 @@
-import { WEEK, enumerateEpochs, epochStartFor } from "@/lib/academy/epoch"
+import {
+  WEEK,
+  enumerateEpochsForWindow,
+  epochStartFor,
+} from "@/lib/academy/epoch"
 import {
   type LockSnapshot,
   computeLockTrackDelta,
@@ -179,6 +183,10 @@ export type SimInput = {
   blacklist?: ReadonlySet<Address>
 }
 
+export type SimOptions = {
+  includeOpenEpoch?: boolean
+}
+
 function scaleWad(value: bigint, factor: number): bigint {
   if (!Number.isFinite(factor) || factor <= 0) return 0n
   const scaled = Math.round(factor * 1_000_000)
@@ -219,6 +227,9 @@ type ActorAccumulator = {
   lockPointsWad: bigint
   extensionPointsWad: bigint
   votePointsWad: bigint
+  openEpochLockPointsWad: bigint
+  openEpochExtensionPointsWad: bigint
+  openEpochVotePointsWad: bigint
   participationBonusWad: bigint
   vePowerWad: bigint
   voteWeightEpochSumWad: bigint
@@ -238,6 +249,9 @@ function emptyActor(actor: Address): ActorAccumulator {
     lockPointsWad: 0n,
     extensionPointsWad: 0n,
     votePointsWad: 0n,
+    openEpochLockPointsWad: 0n,
+    openEpochExtensionPointsWad: 0n,
+    openEpochVotePointsWad: 0n,
     participationBonusWad: 0n,
     vePowerWad: 0n,
     voteWeightEpochSumWad: 0n,
@@ -285,9 +299,19 @@ export function simulate(
   params: AcademyParams,
   fromTs: number,
   toTs: number,
+  opts: SimOptions = {},
 ): SimResult {
-  const epochs = enumerateEpochs(fromTs, toTs)
+  const epochs = enumerateEpochsForWindow(fromTs, toTs, {
+    includeOpenEpoch: opts.includeOpenEpoch === true,
+  })
   const totalEpochs = epochs.length
+  const openEpochStart = epochStartFor(toTs)
+  const hasOpenEpoch =
+    opts.includeOpenEpoch === true &&
+    openEpochStart !== toTs &&
+    epochs[epochs.length - 1] === openEpochStart
+  const participationEpochs = hasOpenEpoch ? epochs.slice(0, -1) : epochs
+  const participationEpochCount = participationEpochs.length
 
   const accs = new Map<string, ActorAccumulator>()
   const get = (actor: Address) => {
@@ -352,6 +376,10 @@ export function simulate(
     const extPts = scaleWad(delta.durationExtendedVeWad, params.weightExt)
     acc.lockPointsWad += newPts
     acc.extensionPointsWad += extPts
+    if (hasOpenEpoch && epochStartFor(ev.timestamp) === openEpochStart) {
+      acc.openEpochLockPointsWad += newPts
+      acc.openEpochExtensionPointsWad += extPts
+    }
     acc.vePowerWad += delta.amountAddedVeWad + delta.durationExtendedVeWad
 
     if (actionType === "lockCreated" || actionType === "lockAmountIncreased") {
@@ -412,7 +440,11 @@ export function simulate(
     for (const vote of activeVotes.values()) {
       if (vote.weight <= 0n) continue
       const acc = get(vote.owner)
-      acc.votePointsWad += scaleWad(vote.weight, params.weightBoost)
+      const pts = scaleWad(vote.weight, params.weightBoost)
+      acc.votePointsWad += pts
+      if (hasOpenEpoch && epochStart === openEpochStart) {
+        acc.openEpochVotePointsWad += pts
+      }
       acc.voteWeightEpochSumWad += vote.weight
       acc.participatedEpochs.add(epochStart)
     }
@@ -530,13 +562,21 @@ export function simulate(
   // The eligible base sums lock + extension + vote so a pure voter who
   // participated in every epoch actually gets rewarded for it.
   for (const acc of allActors) {
+    const closedParticipatedEpochs = participationEpochs.filter((epoch) =>
+      acc.participatedEpochs.has(epoch),
+    ).length
     if (
-      totalEpochs > 0 &&
-      acc.participatedEpochs.size >= totalEpochs &&
+      participationEpochCount > 0 &&
+      closedParticipatedEpochs >= participationEpochCount &&
       params.participationMultiplier > 1
     ) {
       const eligible =
-        acc.lockPointsWad + acc.extensionPointsWad + acc.votePointsWad
+        acc.lockPointsWad +
+        acc.extensionPointsWad +
+        acc.votePointsWad -
+        acc.openEpochLockPointsWad -
+        acc.openEpochExtensionPointsWad -
+        acc.openEpochVotePointsWad
       acc.participationBonusWad = scaleWad(
         eligible,
         params.participationMultiplier - 1,
@@ -572,7 +612,8 @@ export function simulate(
         totalPoints > 0n ? (params.budgetMezoWad * pointsWad) / totalPoints : 0n
 
       const fullyParticipated =
-        totalEpochs > 0 && acc.participatedEpochs.size >= totalEpochs
+        participationEpochCount > 0 &&
+        participationEpochs.every((epoch) => acc.participatedEpochs.has(epoch))
 
       const avgActiveVoteWeightWad =
         totalEpochs > 0 ? acc.voteWeightEpochSumWad / BigInt(totalEpochs) : 0n

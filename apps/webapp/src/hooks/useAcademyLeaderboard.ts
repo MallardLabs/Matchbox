@@ -10,7 +10,8 @@ const NETWORK_BY_CHAIN: Record<number, "mainnet" | "testnet"> = {
 }
 
 const STORAGE_PREFIX = "mezo-academy-leaderboard-v1"
-const STORAGE_MAX_AGE_MS = 24 * 60 * 60 * 1000
+const STORAGE_MAX_AGE_MS = 5 * 60 * 1000
+const LIVE_REFRESH_MS = 30 * 1000
 
 export type AcademyLeaderboardData = {
   rows: LeaderboardRow[]
@@ -175,6 +176,7 @@ export function useAcademyLeaderboard(
     windowOverride ??
     (semester ? { fromTs: semester.fromTs, toTs: semester.toTs } : null)
   const win = resolved ? { from: resolved.fromTs, to: resolved.toTs } : null
+  const isLiveWindow = !!win && win.to > Math.floor(Date.now() / 1000)
   const windowKey = win ? `${win.from}-${win.to}` : "rolling"
 
   return useQuery<AcademyLeaderboardData>({
@@ -186,7 +188,9 @@ export function useAcademyLeaderboard(
       !!network &&
       !waiting &&
       (windowOverride !== undefined || !semesterLoading),
-    staleTime: 5 * 60 * 1000, // 5 min client-side staleTime
+    staleTime: 15 * 1000,
+    refetchInterval: isLiveWindow ? LIVE_REFRESH_MS : false,
+    refetchIntervalInBackground: false,
     initialData: () => readStoredLeaderboard(network, windowKey),
     initialDataUpdatedAt: () => {
       const stored = readStoredLeaderboard(network, windowKey)
@@ -196,11 +200,12 @@ export function useAcademyLeaderboard(
       if (!network) throw new Error("Unsupported network")
 
       const windowParams = win ? `&from=${win.from}&to=${win.to}` : ""
+      const asOf = Math.floor(Date.now() / LIVE_REFRESH_MS)
       // Apply the reward-floor filter only for semesters that require it (Semester 0).
       // No-floor semesters (Semester 1+) show all participants.
       const qualifiedOnly = semester?.requireFloor !== false ? "1" : "0"
       const res = await fetch(
-        `/api/academy/leaderboard?network=${network}${windowParams}&qualifiedOnly=${qualifiedOnly}`,
+        `/api/academy/leaderboard?network=${network}${windowParams}&qualifiedOnly=${qualifiedOnly}&asOf=${asOf}`,
       )
       if (!res.ok) {
         throw new Error(`Failed to fetch leaderboard: ${res.statusText}`)

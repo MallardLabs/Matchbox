@@ -24,6 +24,22 @@ export function enumerateEpochs(fromTs: number, toTs: number): number[] {
   return out
 }
 
+export function enumerateEpochsForWindow(
+  fromTs: number,
+  toTs: number,
+  opts: { includeOpenEpoch?: boolean } = {},
+): number[] {
+  const epochs = enumerateEpochs(fromTs, toTs)
+  if (!opts.includeOpenEpoch) return epochs
+
+  const openEpoch = snapToThursdayUTC(toTs, "down")
+  if (toTs <= fromTs || openEpoch < fromTs || openEpoch === toTs) {
+    return epochs
+  }
+  if (epochs[epochs.length - 1] === openEpoch) return epochs
+  return [...epochs, openEpoch]
+}
+
 export function epochStartFor(ts: number): number {
   return snapToThursdayUTC(ts, "down")
 }
