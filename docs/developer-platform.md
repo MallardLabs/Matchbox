@@ -327,7 +327,7 @@ pnpm --filter @repo/developer-api exec wrangler secret put MEZO_RPC_URL
 Deploy:
 
 ```powershell
-pnpm --filter @repo/developer-api deploy
+pnpm --filter @repo/developer-api exec wrangler deploy
 ```
 
 The first deployment also creates the Durable Object migration for per-key quotas.
@@ -357,7 +357,7 @@ Use these Netlify build settings:
 | --- | --- |
 | Base directory | `apps/developer-platform` |
 | Build command | use the included `netlify.toml` command |
-| Publish directory | `.next` |
+| Publish directory | `apps/developer-platform/.next` |
 | Production branch | same production branch used for Matchbox |
 
 Add these environment variables to the new Netlify site:
@@ -452,7 +452,7 @@ Set it in two places:
 If you are using the checked-in Worker config for the flag, update `apps/developer-api/wrangler.jsonc` and run:
 
 ```powershell
-pnpm --filter @repo/developer-api deploy
+pnpm --filter @repo/developer-api exec wrangler deploy
 ```
 
 Keep this disabled:
