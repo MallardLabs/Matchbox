@@ -1,8 +1,9 @@
+import { cn } from "@/utils/cn"
 import Link from "next/link"
 
 type MatchboxLogoProps = {
   href?: string
-  suffix?: "ID" | "Developers"
+  suffix?: "ID" | "Developer Platform"
   inverse?: boolean
 }
 
@@ -14,18 +15,26 @@ export function MatchboxLogo({
   return (
     <Link
       href={href}
-      className={`inline-flex items-center gap-2 no-underline ${inverse ? "text-white" : "text-ink"}`}
+      className={cn(
+        "inline-flex items-center gap-3 no-underline",
+        inverse ? "text-white" : "text-ink dark:text-stone-100",
+      )}
       aria-label={suffix ? `Matchbox ${suffix}` : "Matchbox"}
     >
-      <span
-        aria-hidden="true"
-        className="flex size-8 items-center justify-center rounded-md bg-brand font-mono text-sm font-bold text-ink"
-      >
-        M
-      </span>
-      <span className="text-xl font-semibold">matchbox</span>
+      <img
+        src="/matchbox.png"
+        alt=""
+        width={120}
+        height={32}
+        className="h-8 w-auto dark:invert"
+      />
       {suffix ? (
-        <span className={inverse ? "text-white/60" : "text-stone-500"}>
+        <span
+          className={cn(
+            "text-xl font-semibold leading-none sm:text-2xl",
+            inverse ? "text-white" : "text-ink dark:text-stone-100",
+          )}
+        >
           {suffix}
         </span>
       ) : null}

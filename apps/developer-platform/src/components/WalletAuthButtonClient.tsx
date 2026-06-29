@@ -1,8 +1,14 @@
 import type { WalletAuthButtonProps } from "@/components/WalletAuthButton"
 import { wagmiConfig } from "@/config/wagmi"
+import { useTheme } from "@/contexts/ThemeContext"
 import { useMatchboxWalletBridge } from "@/hooks/useMatchboxWalletBridge"
 import { useWalletIdentity } from "@/hooks/useWalletIdentity"
-import { ConnectButton, RainbowKitProvider } from "@rainbow-me/rainbowkit"
+import {
+  ConnectButton,
+  RainbowKitProvider,
+  darkTheme,
+  lightTheme,
+} from "@rainbow-me/rainbowkit"
 import { useState } from "react"
 import { WagmiProvider } from "wagmi"
 
@@ -156,9 +162,23 @@ function WalletAuthButtonInner({
 export function WalletAuthButtonClient(
   props: WalletAuthButtonProps,
 ): JSX.Element {
+  const { theme } = useTheme()
+  const rainbowTheme =
+    theme === "dark"
+      ? darkTheme({
+          accentColor: "#F7931A",
+          accentColorForeground: "#171717",
+          borderRadius: "medium",
+        })
+      : lightTheme({
+          accentColor: "#F7931A",
+          accentColorForeground: "#171717",
+          borderRadius: "medium",
+        })
+
   return (
     <WagmiProvider config={wagmiConfig}>
-      <RainbowKitProvider>
+      <RainbowKitProvider theme={rainbowTheme}>
         <WalletAuthButtonInner {...props} />
       </RainbowKitProvider>
     </WagmiProvider>

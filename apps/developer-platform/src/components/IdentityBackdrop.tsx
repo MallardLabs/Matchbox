@@ -2,7 +2,7 @@ export function IdentityBackdrop(): JSX.Element {
   return (
     <svg
       aria-hidden="true"
-      className="pointer-events-none fixed inset-0 size-full text-stone-300"
+      className="pointer-events-none fixed inset-0 size-full text-stone-300 dark:text-stone-800"
       viewBox="0 0 1440 900"
       fill="none"
       preserveAspectRatio="xMidYMid slice"
