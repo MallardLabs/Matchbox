@@ -95,7 +95,7 @@ async function verifyOwnership(input: {
   ownerAddress: string
 }): Promise<boolean> {
   const client = createPublicClient({
-    transport: http(Deno.env.get("MEZO_RPC_URL") ?? "https://rpc-http.mezo.org"),
+    transport: http(Deno.env.get("MEZO_RPC_URL") ?? "https://mezo-mainnet.boar.network"),
   })
   const [onchainOwner, mappedGauge] = await Promise.all([
     client.readContract({

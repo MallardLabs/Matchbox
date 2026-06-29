@@ -155,7 +155,7 @@ SUPABASE_URL=https://YOUR_PROJECT.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=...
 API_KEY_PEPPER=...same value as portal...
 API_GATEWAY_SECRET=...same value as portal...
-MEZO_RPC_URL=https://rpc-http.mezo.org
+MEZO_RPC_URL=https://mezo-mainnet.boar.network
 DEVELOPER_PLATFORM_ENABLED=false
 DEVELOPER_PROFILE_API_ENABLED=false
 ```
@@ -225,7 +225,7 @@ Deploy:
 
 ```powershell
 supabase functions deploy upsert-gauge-profile --no-verify-jwt
-supabase secrets set MEZO_RPC_URL=https://rpc-http.mezo.org
+supabase secrets set MEZO_RPC_URL=https://mezo-mainnet.boar.network
 ```
 
 The function performs its own nonce, wallet signature, and on-chain ownership checks. It intentionally does not rely on Supabase's gateway JWT check.

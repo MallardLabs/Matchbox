@@ -26,6 +26,6 @@
   "vars": {
     "DEVELOPER_PLATFORM_ENABLED": "false",
     "DEVELOPER_PROFILE_API_ENABLED": "false",
-    "MEZO_RPC_URL": "https://rpc-http.mezo.org",
+    "MEZO_RPC_URL": "https://mezo-mainnet.boar.network",
   },
 }

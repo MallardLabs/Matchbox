@@ -6,7 +6,7 @@ export const mezoMainnet = defineChain({
   id: 31612,
   name: "Mezo",
   nativeCurrency: { decimals: 18, name: "Bitcoin", symbol: "BTC" },
-  rpcUrls: { default: { http: ["https://rpc-http.mezo.org"] } },
+  rpcUrls: { default: { http: ["https://mezo-mainnet.boar.network"] } },
 })
 
 export const wagmiConfig = getDefaultConfig({
@@ -17,7 +17,7 @@ export const wagmiConfig = getDefaultConfig({
     "00000000000000000000000000000000",
   chains: [mezoMainnet, mainnet],
   transports: {
-    [mezoMainnet.id]: http("https://rpc-http.mezo.org"),
+    [mezoMainnet.id]: http("https://mezo-mainnet.boar.network"),
     [mainnet.id]: http("https://cloudflare-eth.com"),
   },
   ssr: true,

@@ -49,7 +49,7 @@ export function middleware(request: NextRequest) {
     response.headers.set("Referrer-Policy", "no-referrer")
     response.headers.set(
       "Content-Security-Policy",
-      `default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://*.walletconnect.com wss://*.walletconnect.com https://api.web3modal.org https://*.reown.com wss://*.reown.com https://rpc-http.mezo.org https://cloudflare-eth.com; frame-ancestors ${idOrigin}; base-uri 'none'; form-action 'none'`,
+      `default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://*.walletconnect.com wss://*.walletconnect.com https://api.web3modal.org https://*.reown.com wss://*.reown.com https://mezo-mainnet.boar.network https://cloudflare-eth.com; frame-ancestors ${idOrigin}; base-uri 'none'; form-action 'none'`,
     )
     return response
   }

@@ -17,7 +17,7 @@ const nextConfig = {
           {
             key: "Content-Security-Policy",
             value:
-              "default-src 'self'; connect-src 'self' https://api.matchbox.markets https://*.supabase.co wss://*.supabase.co https://*.walletconnect.com wss://*.walletconnect.com https://api.web3modal.org https://*.reown.com wss://*.reown.com https://rpc-http.mezo.org https://cloudflare-eth.com; img-src 'self' data: https://cdn.discordapp.com https://*.supabase.co; frame-src https://app.matchbox.markets; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+              "default-src 'self'; connect-src 'self' https://api.matchbox.markets https://*.supabase.co wss://*.supabase.co https://*.walletconnect.com wss://*.walletconnect.com https://api.web3modal.org https://*.reown.com wss://*.reown.com https://mezo-mainnet.boar.network https://cloudflare-eth.com; img-src 'self' data: https://cdn.discordapp.com https://*.supabase.co; frame-src https://app.matchbox.markets; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
           },
         ],
       },
