@@ -1,0 +1,165 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Matchbox Developer API",
+    "version": "1.0.0-beta.1",
+    "description": "Consent-first access to Matchbox gauge and profile data."
+  },
+  "servers": [{ "url": "https://api.matchbox.markets" }],
+  "security": [{ "bearerAuth": [] }],
+  "paths": {
+    "/v1/gauges/{gaugeAddress}": {
+      "get": {
+        "operationId": "getGauge",
+        "summary": "Get a mainnet gauge by address",
+        "parameters": [
+          {
+            "name": "gaugeAddress",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": { "$ref": "#/components/responses/Gauge" },
+          "404": { "$ref": "#/components/responses/Error" },
+          "429": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/v1/vebtc/{tokenId}/gauge": {
+      "get": {
+        "operationId": "getGaugeByVeBtcToken",
+        "summary": "Get a mainnet gauge by veBTC token ID",
+        "parameters": [
+          {
+            "name": "tokenId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "pattern": "^[0-9]+$" }
+          }
+        ],
+        "responses": {
+          "200": { "$ref": "#/components/responses/Gauge" },
+          "404": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/v1/profiles/by-wallet/{walletAddress}": {
+      "get": {
+        "operationId": "getProfileByWallet",
+        "summary": "Get a profile consented to the calling app",
+        "parameters": [
+          {
+            "name": "walletAddress",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": { "$ref": "#/components/responses/Profile" },
+          "404": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/v1/authorizations/exchange": {
+      "post": {
+        "operationId": "exchangeAuthorization",
+        "summary": "Exchange a one-time consent code",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AuthorizationExchangeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "$ref": "#/components/responses/Authorization" },
+          "400": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": { "bearerAuth": { "type": "http", "scheme": "bearer" } },
+    "schemas": {
+      "Gauge": { "type": "object", "additionalProperties": true },
+      "Profile": { "type": "object", "additionalProperties": true },
+      "Authorization": { "type": "object", "additionalProperties": true },
+      "AuthorizationExchangeRequest": {
+        "type": "object",
+        "required": ["code", "redirectUri"],
+        "properties": {
+          "code": { "type": "string" },
+          "redirectUri": { "type": "string", "format": "uri" }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "required": ["error"],
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": ["code", "message", "requestId"],
+            "properties": {
+              "code": { "type": "string" },
+              "message": { "type": "string" },
+              "requestId": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "responses": {
+      "Gauge": {
+        "description": "Gauge response",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": { "data": { "$ref": "#/components/schemas/Gauge" } }
+            }
+          }
+        }
+      },
+      "Profile": {
+        "description": "Consented profile response",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "data": { "$ref": "#/components/schemas/Profile" }
+              }
+            }
+          }
+        }
+      },
+      "Authorization": {
+        "description": "Authorization exchange response",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "data": { "$ref": "#/components/schemas/Authorization" }
+              }
+            }
+          }
+        }
+      },
+      "Error": {
+        "description": "Error response",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/Error" }
+          }
+        }
+      }
+    }
+  }
+}

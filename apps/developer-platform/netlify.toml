@@ -1,0 +1,7 @@
+[build]
+  command = "cd ../.. && pnpm --filter @repo/developer-platform build"
+  publish = ".next"
+
+[build.environment]
+  SECRETS_SCAN_OMIT_KEYS = "NEXT_PUBLIC_SUPABASE_URL,NEXT_PUBLIC_SUPABASE_ANON_KEY,NEXT_PUBLIC_APP_URL,NEXT_PUBLIC_ID_URL,NEXT_PUBLIC_DEVELOPER_URL"
+

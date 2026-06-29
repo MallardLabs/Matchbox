@@ -39,6 +39,21 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL(`https://${APP_HOST}/dashboard`), 308)
   }
 
+  if (host === APP_HOST && pathname === "/id-bridge") {
+    const response = NextResponse.next()
+    const idOrigin = new URL(
+      process.env.NEXT_PUBLIC_ID_URL ?? "https://id.matchbox.markets",
+    ).origin
+    response.headers.set("Cache-Control", "private, no-store, max-age=0")
+    response.headers.set("X-Content-Type-Options", "nosniff")
+    response.headers.set("Referrer-Policy", "no-referrer")
+    response.headers.set(
+      "Content-Security-Policy",
+      `default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://*.walletconnect.com wss://*.walletconnect.com https://api.web3modal.org https://*.reown.com wss://*.reown.com https://rpc-http.mezo.org https://cloudflare-eth.com; frame-ancestors ${idOrigin}; base-uri 'none'; form-action 'none'`,
+    )
+    return response
+  }
+
   return NextResponse.next()
 }
 

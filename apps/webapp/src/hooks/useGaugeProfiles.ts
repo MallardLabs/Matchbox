@@ -14,7 +14,90 @@ import {
 import { useNetwork } from "@/contexts/NetworkContext"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import type { Address } from "viem"
-import { useReadContract } from "wagmi"
+import { useReadContract, useSignMessage } from "wagmi"
+import { z } from "zod"
+
+const gaugeProfileSchema = z.object({
+  gauge_address: z.string(),
+  vebtc_token_id: z.string(),
+  owner_address: z.string(),
+  profile_picture_url: z.string().nullable(),
+  description: z.string().nullable(),
+  display_name: z.string().nullable(),
+  website_url: z.string().nullable(),
+  social_links: z
+    .object({
+      twitter: z.string().optional(),
+      discord: z.string().optional(),
+      telegram: z.string().optional(),
+      github: z.string().optional(),
+      medium: z.string().optional(),
+      website: z.string().optional(),
+    })
+    .transform(
+      (links): SocialLinks => ({
+        ...(links.twitter ? { twitter: links.twitter } : {}),
+        ...(links.discord ? { discord: links.discord } : {}),
+        ...(links.telegram ? { telegram: links.telegram } : {}),
+        ...(links.github ? { github: links.github } : {}),
+        ...(links.medium ? { medium: links.medium } : {}),
+        ...(links.website ? { website: links.website } : {}),
+      }),
+    )
+    .nullable(),
+  incentive_strategy: z.string().nullable(),
+  voting_strategy: z.string().nullable(),
+  tags: z.array(z.string()).nullable(),
+  is_featured: z.boolean(),
+  created_at: z.string(),
+  updated_at: z.string(),
+})
+
+const nonceResponseSchema = z.object({ message: z.string() })
+const avatarUploadResponseSchema = z.object({
+  path: z.string(),
+  token: z.string(),
+})
+const profileWriteResponseSchema = z.object({ profile: gaugeProfileSchema })
+
+type GaugeWriteOperation = "upsert-profile" | "upload-avatar"
+
+async function invokeGaugeProfileWrite(body: unknown): Promise<unknown> {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  if (!url || !anonKey)
+    throw new Error("Gauge profile service is not configured")
+  const response = await fetch(`${url}/functions/v1/upsert-gauge-profile`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${anonKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  })
+  const data: unknown = await response.json()
+  if (!response.ok) throw new Error("Gauge ownership verification failed")
+  return data
+}
+
+async function createGaugeWriteProof(args: {
+  operation: GaugeWriteOperation
+  gaugeAddress: Address
+  veBtcTokenId: bigint
+  ownerAddress: Address
+  signMessage: (message: string) => Promise<string>
+}): Promise<{ message: string; signature: string }> {
+  const rawNonce = await invokeGaugeProfileWrite({
+    action: "nonce",
+    operation: args.operation,
+    gaugeAddress: args.gaugeAddress,
+    veBtcTokenId: args.veBtcTokenId.toString(),
+    ownerAddress: args.ownerAddress,
+  })
+  const nonce = nonceResponseSchema.parse(rawNonce)
+  const signature = await args.signMessage(nonce.message)
+  return { message: nonce.message, signature }
+}
 
 /**
  * Get profiles for a list of gauge addresses.
@@ -87,6 +170,7 @@ export function useUpsertGaugeProfile() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<Error | null>(null)
   const { refetch } = useAllGaugeProfilesFromContext()
+  const { signMessageAsync } = useSignMessage()
 
   const upsertProfile = useCallback(
     async ({
@@ -105,43 +189,46 @@ export function useUpsertGaugeProfile() {
       setIsLoading(true)
       setError(null)
 
-      const { data, error: upsertError } = await supabase
-        .from("gauge_profiles")
-        .upsert(
-          {
-            gauge_address: gaugeAddress.toLowerCase(),
-            vebtc_token_id: veBTCTokenId.toString(),
-            owner_address: ownerAddress.toLowerCase(),
-            profile_picture_url: profilePictureUrl,
-            description,
-            display_name: displayName,
-            website_url: websiteUrl,
-            social_links: socialLinks,
-            incentive_strategy: incentiveStrategy,
-            voting_strategy: votingStrategy,
-            tags,
+      try {
+        const proof = await createGaugeWriteProof({
+          operation: "upsert-profile",
+          gaugeAddress,
+          veBtcTokenId: veBTCTokenId,
+          ownerAddress,
+          signMessage: async (message) => signMessageAsync({ message }),
+        })
+        const rawResult = await invokeGaugeProfileWrite({
+          action: "upsert-profile",
+          gaugeAddress,
+          veBtcTokenId: veBTCTokenId.toString(),
+          ownerAddress,
+          proof,
+          profile: {
+            profilePictureUrl: profilePictureUrl ?? null,
+            description: description ?? null,
+            displayName: displayName ?? null,
+            websiteUrl: websiteUrl ?? null,
+            socialLinks: socialLinks ?? null,
+            incentiveStrategy: incentiveStrategy ?? null,
+            votingStrategy: votingStrategy ?? null,
+            tags: tags ?? null,
           },
-          {
-            onConflict: "gauge_address",
-          },
-        )
-        .select()
-        .single()
-
-      if (upsertError) {
-        console.error("Error upserting gauge profile:", upsertError)
-        setError(new Error(upsertError.message))
+        })
+        const result = profileWriteResponseSchema.parse(rawResult)
+        await refetch()
+        setIsLoading(false)
+        return result.profile satisfies GaugeProfile
+      } catch (caughtError) {
+        const message =
+          caughtError instanceof Error
+            ? caughtError.message
+            : "Unable to update gauge profile"
+        setError(new Error(message))
         setIsLoading(false)
         return null
       }
-
-      // Refetch all profiles to update the cache
-      await refetch()
-
-      setIsLoading(false)
-      return data as unknown as GaugeProfile
     },
-    [refetch],
+    [refetch, signMessageAsync],
   )
 
   return {
@@ -206,37 +293,66 @@ export function useGaugeHistory(
 export function useUploadProfilePicture() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<Error | null>(null)
+  const { signMessageAsync } = useSignMessage()
 
   const uploadPicture = useCallback(
-    async (gaugeAddress: Address, file: File) => {
+    async (
+      gaugeAddress: Address,
+      veBtcTokenId: bigint,
+      ownerAddress: Address,
+      file: File,
+    ) => {
       setIsLoading(true)
       setError(null)
 
-      const fileExt = file.name.split(".").pop()
-      const fileName = `${gaugeAddress.toLowerCase()}.${fileExt}`
-      const filePath = `${fileName}`
-
-      const { error: uploadError } = await supabase.storage
-        .from("gauge-avatars")
-        .upload(filePath, file, {
-          upsert: true,
+      try {
+        const extension = file.name.split(".").pop()?.toLowerCase()
+        if (
+          !extension ||
+          !["jpg", "jpeg", "png", "gif", "webp"].includes(extension)
+        ) {
+          throw new Error("Choose a JPG, PNG, GIF, or WebP image")
+        }
+        const proof = await createGaugeWriteProof({
+          operation: "upload-avatar",
+          gaugeAddress,
+          veBtcTokenId,
+          ownerAddress,
+          signMessage: async (message) => signMessageAsync({ message }),
         })
-
-      if (uploadError) {
-        console.error("Error uploading profile picture:", uploadError)
-        setError(new Error(uploadError.message))
+        const rawAuthorization = await invokeGaugeProfileWrite({
+          action: "upload-avatar",
+          gaugeAddress,
+          veBtcTokenId: veBtcTokenId.toString(),
+          ownerAddress,
+          proof,
+          extension,
+        })
+        const authorization = avatarUploadResponseSchema.parse(rawAuthorization)
+        const { error: uploadError } = await supabase.storage
+          .from("gauge-avatars")
+          .uploadToSignedUrl(authorization.path, authorization.token, file, {
+            contentType: file.type,
+          })
+        if (uploadError) throw new Error(uploadError.message)
+        const {
+          data: { publicUrl },
+        } = supabase.storage
+          .from("gauge-avatars")
+          .getPublicUrl(authorization.path)
+        setIsLoading(false)
+        return publicUrl
+      } catch (caughtError) {
+        const message =
+          caughtError instanceof Error
+            ? caughtError.message
+            : "Avatar upload failed"
+        setError(new Error(message))
         setIsLoading(false)
         return null
       }
-
-      const {
-        data: { publicUrl },
-      } = supabase.storage.from("gauge-avatars").getPublicUrl(filePath)
-
-      setIsLoading(false)
-      return publicUrl
     },
-    [],
+    [signMessageAsync],
   )
 
   return {

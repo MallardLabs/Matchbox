@@ -1,0 +1,70 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+  --canvas: #f5f2ea;
+  --ink: #171717;
+  --muted: #68645e;
+  --line: #d8d3c8;
+  --brand: #f7931a;
+  --panel: #1e1e1e;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-width: 320px;
+  background: var(--canvas);
+  font-family: "IBM Plex Sans", system-ui, sans-serif;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  min-height: 100dvh;
+  margin: 0;
+  background: var(--canvas);
+  color: var(--ink);
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+a {
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 3px solid var(--brand);
+  outline-offset: 3px;
+}
+
+::selection {
+  background: rgba(247, 147, 26, 0.26);
+}
+
+@layer components {
+  .primary-button {
+    @apply inline-flex min-h-11 items-center justify-center rounded-lg bg-brand px-5 py-2.5 font-semibold text-ink transition-colors duration-150 hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .secondary-button {
+    @apply inline-flex min-h-11 items-center justify-center rounded-lg border border-white/20 bg-white/5 px-5 py-2.5 font-semibold text-white transition-colors duration-150 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .light-secondary-button {
+    @apply inline-flex min-h-11 items-center justify-center rounded-lg border border-stone-300 bg-white px-5 py-2.5 font-semibold text-ink transition-colors duration-150 hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .form-input {
+    @apply min-h-11 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-ink placeholder:text-stone-400 focus:border-brand focus:outline-none;
+  }
+}

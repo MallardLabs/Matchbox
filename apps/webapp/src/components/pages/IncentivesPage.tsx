@@ -532,7 +532,12 @@ export default function IncentivesPage(): JSX.Element {
 
     // Upload picture if there's a pending file
     if (pendingPictureFile) {
-      const uploadedUrl = await uploadPicture(gaugeAddress, pendingPictureFile)
+      const uploadedUrl = await uploadPicture(
+        gaugeAddress,
+        selectedLock.tokenId,
+        walletAddress,
+        pendingPictureFile,
+      )
       if (uploadedUrl) {
         pictureUrl = uploadedUrl
       }

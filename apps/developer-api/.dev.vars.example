@@ -1,0 +1,7 @@
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=replace-me
+API_KEY_PEPPER=replace-with-at-least-32-random-bytes
+API_GATEWAY_SECRET=replace-with-a-different-random-secret
+MEZO_RPC_URL=https://rpc-http.mezo.org
+DEVELOPER_PLATFORM_ENABLED=false
+DEVELOPER_PROFILE_API_ENABLED=false
