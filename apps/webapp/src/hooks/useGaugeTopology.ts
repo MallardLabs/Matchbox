@@ -1,7 +1,9 @@
 import { getContractConfig } from "@/config/contracts"
 import {
+  CUSTOM_MEZO_MAINNET_RPC_ENDPOINT_ID,
   MEZO_MAINNET_RPC_PREFERENCE_EVENT,
   type MezoMainnetRpcPreference,
+  type MezoMainnetRpcPreferenceChangeDetail,
   readMezoMainnetRpcPreference,
 } from "@/config/mezoRpc"
 import { QUERY_PROFILES } from "@/config/queryProfiles"
@@ -23,7 +25,11 @@ async function fetchGaugeTopology(
   rpcPreference: MezoMainnetRpcPreference,
 ): Promise<GaugeTopologyResponse> {
   const searchParams = new URLSearchParams({ chainId: String(chainId) })
-  if (chainId === CHAIN_ID.mainnet && rpcPreference !== "auto") {
+  if (
+    chainId === CHAIN_ID.mainnet &&
+    rpcPreference !== "auto" &&
+    rpcPreference !== CUSTOM_MEZO_MAINNET_RPC_ENDPOINT_ID
+  ) {
     searchParams.set("rpc", rpcPreference)
   }
 
@@ -54,7 +60,7 @@ export function useGaugeTopology(options: UseGaugeTopologyOptions = {}) {
 
     const handlePreferenceChange = (event: Event) => {
       const detail = (
-        event as CustomEvent<{ preference: MezoMainnetRpcPreference }>
+        event as CustomEvent<MezoMainnetRpcPreferenceChangeDetail>
       ).detail
       setRpcPreference(detail.preference)
     }

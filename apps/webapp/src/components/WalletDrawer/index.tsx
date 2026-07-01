@@ -1,11 +1,17 @@
 import {
+  CUSTOM_MEZO_MAINNET_RPC_ENDPOINT_ID,
   MEZO_MAINNET_RPC_ACTIVE_EVENT,
   MEZO_MAINNET_RPC_ENDPOINTS,
   MEZO_MAINNET_RPC_PREFERENCE_EVENT,
   type MezoMainnetRpcEndpoint,
   type MezoMainnetRpcPreference,
+  type MezoMainnetRpcPreferenceChangeDetail,
+  getMezoMainnetCustomRpcEndpoint,
   getMezoMainnetRpcEndpoint,
+  normalizeMezoMainnetCustomRpcUrl,
+  readMezoMainnetCustomRpcUrl,
   readMezoMainnetRpcPreference,
+  writeMezoMainnetCustomRpcUrl,
   writeMezoMainnetRpcPreference,
 } from "@/config/mezoRpc"
 import { useNetwork } from "@/contexts/NetworkContext"
@@ -255,11 +261,16 @@ export function WalletDrawer({
   )
   const [rpcPreference, setRpcPreference] =
     useState<MezoMainnetRpcPreference>("auto")
-  const [activeRpcEndpointId, setActiveRpcEndpointId] =
-    useState<MezoMainnetRpcEndpoint["id"]>("internal")
+  const [customRpcUrl, setCustomRpcUrl] = useState("")
+  const [customRpcUrlError, setCustomRpcUrlError] = useState<string | null>(
+    null,
+  )
+  const [activeRpcEndpoint, setActiveRpcEndpoint] =
+    useState<MezoMainnetRpcEndpoint>(() =>
+      getMezoMainnetRpcEndpoint("internal"),
+    )
 
   const isBitcoinWallet = networkFamily === "bitcoin"
-  const activeRpcEndpoint = getMezoMainnetRpcEndpoint(activeRpcEndpointId)
 
   const formatAddress = (addr: string | undefined) => {
     if (!addr) return ""
@@ -279,18 +290,85 @@ export function WalletDrawer({
     }
   }, [])
 
+  const formatRpcUrl = (url: string) => {
+    if (url.length <= 34) {
+      return url
+    }
+
+    return `${url.slice(0, 22)}...${url.slice(-9)}`
+  }
+
   const handleRpcPreferenceChange = useCallback(
     (event: ChangeEvent<HTMLSelectElement>) => {
       const nextPreference = event.target.value as MezoMainnetRpcPreference
       setRpcPreference(nextPreference)
-      writeMezoMainnetRpcPreference(nextPreference)
+      const normalizedCustomRpcUrl =
+        normalizeMezoMainnetCustomRpcUrl(customRpcUrl)
 
-      if (nextPreference !== "auto") {
-        setActiveRpcEndpointId(nextPreference)
+      writeMezoMainnetRpcPreference(
+        nextPreference,
+        normalizedCustomRpcUrl ? { customUrl: normalizedCustomRpcUrl } : {},
+      )
+
+      if (nextPreference === CUSTOM_MEZO_MAINNET_RPC_ENDPOINT_ID) {
+        if (normalizedCustomRpcUrl) {
+          setCustomRpcUrlError(null)
+          setActiveRpcEndpoint(
+            getMezoMainnetCustomRpcEndpoint(normalizedCustomRpcUrl),
+          )
+        } else {
+          setCustomRpcUrlError("Enter a valid HTTP or HTTPS RPC URL.")
+        }
+      } else if (nextPreference !== "auto") {
+        setCustomRpcUrlError(null)
+        setActiveRpcEndpoint(getMezoMainnetRpcEndpoint(nextPreference))
+      } else {
+        setCustomRpcUrlError(null)
       }
     },
-    [],
+    [customRpcUrl],
   )
+
+  const handleCustomRpcUrlChange = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      const nextCustomRpcUrl = event.target.value
+      const normalizedCustomRpcUrl =
+        normalizeMezoMainnetCustomRpcUrl(nextCustomRpcUrl)
+
+      setCustomRpcUrl(nextCustomRpcUrl)
+
+      if (nextCustomRpcUrl.trim() === "") {
+        setCustomRpcUrlError("Enter a valid HTTP or HTTPS RPC URL.")
+        return
+      }
+
+      if (!normalizedCustomRpcUrl) {
+        setCustomRpcUrlError("Enter a valid HTTP or HTTPS RPC URL.")
+        return
+      }
+
+      setCustomRpcUrlError(null)
+      writeMezoMainnetCustomRpcUrl(normalizedCustomRpcUrl)
+
+      if (rpcPreference === CUSTOM_MEZO_MAINNET_RPC_ENDPOINT_ID) {
+        setActiveRpcEndpoint(
+          getMezoMainnetCustomRpcEndpoint(normalizedCustomRpcUrl),
+        )
+        writeMezoMainnetRpcPreference(CUSTOM_MEZO_MAINNET_RPC_ENDPOINT_ID, {
+          customUrl: normalizedCustomRpcUrl,
+        })
+      }
+    },
+    [rpcPreference],
+  )
+
+  const handleCustomRpcUrlBlur = useCallback(() => {
+    const normalizedCustomRpcUrl =
+      normalizeMezoMainnetCustomRpcUrl(customRpcUrl)
+    if (normalizedCustomRpcUrl) {
+      setCustomRpcUrl(normalizedCustomRpcUrl)
+    }
+  }, [customRpcUrl])
 
   useEffect(() => {
     setMounted(true)
@@ -298,18 +376,38 @@ export function WalletDrawer({
 
   useEffect(() => {
     const savedPreference = readMezoMainnetRpcPreference()
+    const savedCustomRpcUrl = readMezoMainnetCustomRpcUrl()
     setRpcPreference(savedPreference)
-    if (savedPreference !== "auto") {
-      setActiveRpcEndpointId(savedPreference)
+    setCustomRpcUrl(savedCustomRpcUrl ?? "")
+    if (
+      savedPreference === CUSTOM_MEZO_MAINNET_RPC_ENDPOINT_ID &&
+      savedCustomRpcUrl
+    ) {
+      setActiveRpcEndpoint(getMezoMainnetCustomRpcEndpoint(savedCustomRpcUrl))
+    } else if (
+      savedPreference !== "auto" &&
+      savedPreference !== CUSTOM_MEZO_MAINNET_RPC_ENDPOINT_ID
+    ) {
+      setActiveRpcEndpoint(getMezoMainnetRpcEndpoint(savedPreference))
     }
 
     const handlePreferenceChange = (event: Event) => {
       const detail = (
-        event as CustomEvent<{ preference: MezoMainnetRpcPreference }>
+        event as CustomEvent<MezoMainnetRpcPreferenceChangeDetail>
       ).detail
       setRpcPreference(detail.preference)
-      if (detail.preference !== "auto") {
-        setActiveRpcEndpointId(detail.preference)
+      if (detail.customUrl) {
+        setCustomRpcUrl(detail.customUrl)
+        setCustomRpcUrlError(null)
+      }
+
+      if (detail.preference === CUSTOM_MEZO_MAINNET_RPC_ENDPOINT_ID) {
+        const customRpcUrl = detail.customUrl ?? readMezoMainnetCustomRpcUrl()
+        if (customRpcUrl) {
+          setActiveRpcEndpoint(getMezoMainnetCustomRpcEndpoint(customRpcUrl))
+        }
+      } else if (detail.preference !== "auto") {
+        setActiveRpcEndpoint(getMezoMainnetRpcEndpoint(detail.preference))
       }
     }
 
@@ -317,7 +415,7 @@ export function WalletDrawer({
       const detail = (
         event as CustomEvent<{ endpoint: MezoMainnetRpcEndpoint }>
       ).detail
-      setActiveRpcEndpointId(detail.endpoint.id)
+      setActiveRpcEndpoint(detail.endpoint)
     }
 
     window.addEventListener(
@@ -750,7 +848,11 @@ export function WalletDrawer({
                           Mainnet RPC
                         </label>
                         <p className="mt-0.5 text-xs text-[var(--content-secondary)]">
-                          Active: {activeRpcEndpoint.label}
+                          Active:{" "}
+                          {activeRpcEndpoint.id ===
+                          CUSTOM_MEZO_MAINNET_RPC_ENDPOINT_ID
+                            ? formatRpcUrl(activeRpcEndpoint.url)
+                            : activeRpcEndpoint.label}
                         </p>
                       </div>
                     </div>
@@ -774,7 +876,38 @@ export function WalletDrawer({
                         {endpoint.label}
                       </option>
                     ))}
+                    <option value={CUSTOM_MEZO_MAINNET_RPC_ENDPOINT_ID}>
+                      Custom URL
+                    </option>
                   </select>
+                  {rpcPreference === CUSTOM_MEZO_MAINNET_RPC_ENDPOINT_ID && (
+                    <div className="mt-2">
+                      <input
+                        id="mainnet-rpc-custom-url"
+                        type="url"
+                        inputMode="url"
+                        value={customRpcUrl}
+                        onChange={handleCustomRpcUrlChange}
+                        onBlur={handleCustomRpcUrlBlur}
+                        placeholder="https://rpc.example.com"
+                        aria-invalid={customRpcUrlError ? "true" : "false"}
+                        aria-describedby={
+                          customRpcUrlError
+                            ? "mainnet-rpc-custom-url-error"
+                            : undefined
+                        }
+                        className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--content-primary)] outline-none transition-colors placeholder:text-[var(--content-secondary)] focus:border-[var(--content-secondary)]"
+                      />
+                      {customRpcUrlError && (
+                        <p
+                          id="mainnet-rpc-custom-url-error"
+                          className="mt-1 text-xs text-red-500"
+                        >
+                          {customRpcUrlError}
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <button

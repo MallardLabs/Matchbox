@@ -1,8 +1,11 @@
 import {
+  CUSTOM_MEZO_MAINNET_RPC_ENDPOINT_ID,
   MEZO_MAINNET_RPC_ACTIVE_EVENT,
   MEZO_MAINNET_RPC_ENDPOINTS,
   type MezoMainnetRpcEndpoint,
+  getMezoMainnetCustomRpcEndpoint,
   getMezoMainnetRpcEndpoint,
+  readMezoMainnetCustomRpcUrl,
   readMezoMainnetRpcPreference,
 } from "@/config/mezoRpc"
 import type { EIP1193RequestFn } from "viem"
@@ -108,11 +111,54 @@ export function createMezoMainnetTransport(): Transport {
       }),
     )
     const cooldownUntil = new Array(MEZO_MAINNET_RPC_ENDPOINTS.length).fill(0)
+    let customRuntimeTransport: (typeof runtimeTransports)[number] | undefined
+    let customRuntimeTransportUrl: string | undefined
+
+    const getCustomRuntimeTransport = (url: string) => {
+      if (customRuntimeTransport && customRuntimeTransportUrl === url) {
+        return customRuntimeTransport
+      }
+
+      customRuntimeTransport = http(url, {
+        batch: true,
+        fetchOptions: { cache: "no-store" },
+        retryCount: 0,
+      })({
+        ...parameters,
+        retryCount: 0,
+      })
+      customRuntimeTransportUrl = url
+      return customRuntimeTransport
+    }
 
     const request: EIP1193RequestFn = async (args) => {
       const preference = readMezoMainnetRpcPreference()
 
-      if (preference !== "auto") {
+      if (preference === CUSTOM_MEZO_MAINNET_RPC_ENDPOINT_ID) {
+        const customRpcUrl = readMezoMainnetCustomRpcUrl()
+        if (customRpcUrl !== null) {
+          try {
+            const result =
+              await getCustomRuntimeTransport(customRpcUrl).request(args)
+            publishActiveEndpoint(getMezoMainnetCustomRpcEndpoint(customRpcUrl))
+            return result as never
+          } catch (error) {
+            if (!isRetryableRpcError(error)) {
+              throw error
+            }
+
+            console.warn("[RPC] Falling back from custom Mezo mainnet RPC", {
+              failedEndpoint: customRpcUrl,
+              error,
+            })
+          }
+        }
+      }
+
+      if (
+        preference !== "auto" &&
+        preference !== CUSTOM_MEZO_MAINNET_RPC_ENDPOINT_ID
+      ) {
         const endpoint = getMezoMainnetRpcEndpoint(preference)
         const preferredEndpointIndex = Math.max(
           0,

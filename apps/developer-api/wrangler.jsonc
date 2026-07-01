@@ -24,7 +24,7 @@
     "head_sampling_rate": 1,
   },
   "vars": {
-    "DEVELOPER_PLATFORM_ENABLED": "false",
+    "DEVELOPER_PLATFORM_ENABLED": "true",
     "DEVELOPER_PROFILE_API_ENABLED": "false",
     "MEZO_RPC_URL": "https://mezo-mainnet.boar.network",
   },
