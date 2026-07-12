@@ -1,13 +1,12 @@
 import { useAcademyActivity } from "@/hooks/useAcademyActivity"
 import { useBlacklist } from "@/hooks/useBlacklist"
 import { computeActorProfile } from "@/lib/academy/actorProfile"
-import { defaultAcademyParams as defaultParams } from "@/lib/academy/constants"
 import {
-  WEEK,
-  enumerateEpochs,
-  epochStartFor,
-  snapToThursdayUTC,
-} from "@/lib/academy/epoch"
+  ACADEMY_SESSION_FROM_TS,
+  ACADEMY_SESSION_TO_TS,
+  defaultAcademyParams as defaultParams,
+} from "@/lib/academy/constants"
+import { enumerateEpochs, epochStartFor } from "@/lib/academy/epoch"
 import { type AcademyParams, simulate } from "@/lib/academy/simulate"
 export { defaultParams }
 import {
@@ -23,7 +22,7 @@ import type { MezoActivityItem } from "@/types/mezoActivity"
 import { useEffect, useMemo, useState } from "react"
 import { type Address, parseUnits } from "viem"
 
-const STORAGE_KEY = "mezo-academy-sim-v2"
+const STORAGE_KEY = "mezo-academy-sim-v3"
 
 type StoredState = {
   fromTs: number
@@ -35,10 +34,10 @@ type StoredState = {
 }
 
 export function defaultRange(): { fromTs: number; toTs: number } {
-  const now = Math.floor(Date.now() / 1000)
-  const toTs = snapToThursdayUTC(now, "down")
-  const fromTs = toTs - 8 * WEEK
-  return { fromTs, toTs }
+  return {
+    fromTs: ACADEMY_SESSION_FROM_TS,
+    toTs: ACADEMY_SESSION_TO_TS,
+  }
 }
 
 function loadStored(): {
@@ -64,6 +63,8 @@ function loadStored(): {
         weightNew: parsed.params?.weightNew ?? DEFAULT_WEIGHT_NEW,
         weightExt: parsed.params?.weightExt ?? DEFAULT_WEIGHT_EXT,
         weightBoost: parsed.params?.weightBoost ?? DEFAULT_WEIGHT_BOOST,
+        pointsSegments:
+          parsed.params?.pointsSegments ?? defaultParams().pointsSegments,
         participationMultiplier:
           parsed.params?.participationMultiplier ??
           DEFAULT_PARTICIPATION_MULTIPLIER,
@@ -147,6 +148,7 @@ export function useAcademySim(opts: { enabled: boolean }) {
         weightNew: params.weightNew,
         weightExt: params.weightExt,
         weightBoost: params.weightBoost,
+        pointsSegments: params.pointsSegments,
         participationMultiplier: params.participationMultiplier,
         mezoUsd: params.mezoUsd,
         rewardFloorMezo,

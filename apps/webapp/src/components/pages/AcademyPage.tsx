@@ -98,6 +98,8 @@ export default function AcademyPage() {
           <ProView
             simResult={simResult}
             params={params}
+            fromTs={fromTs}
+            toTs={toTs}
             setParams={setParams}
             setFromTs={setFromTs}
             setToTs={setToTs}
@@ -115,7 +117,7 @@ export default function AcademyPage() {
           row={actorRow}
           fromTs={fromTs}
           toTs={toTs}
-          weightExt={params.weightExt}
+          params={params}
           onClose={() => setSelectedActor(null)}
         />
       ) : null}
@@ -207,6 +209,8 @@ function RangeBar({
 function ProView({
   simResult,
   params,
+  fromTs,
+  toTs,
   setParams,
   setFromTs,
   setToTs,
@@ -217,6 +221,8 @@ function ProView({
 }: {
   simResult: SimResult | null
   params: ReturnType<typeof useAcademySim>["params"]
+  fromTs: number
+  toTs: number
   setParams: ReturnType<typeof useAcademySim>["setParams"]
   setFromTs: ReturnType<typeof useAcademySim>["setFromTs"]
   setToTs: ReturnType<typeof useAcademySim>["setToTs"]
@@ -230,6 +236,8 @@ function ProView({
       <aside className="flex w-full flex-none flex-col gap-3 md:w-[320px]">
         <AcademyKnobs
           params={params}
+          rangeFromTs={fromTs}
+          rangeToTs={toTs}
           onChange={setParams}
           onReset={() => {
             setParams(defaultParams())

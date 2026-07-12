@@ -2,7 +2,11 @@ import { ClickableAddress } from "@/components/ClickableAddress"
 import { getExplorerTransactionUrl } from "@/config/explorer"
 import { useNetwork } from "@/contexts/NetworkContext"
 import type { ActorProfile, LockDelta } from "@/lib/academy/actorProfile"
-import type { LeaderboardRow } from "@/lib/academy/simulate"
+import {
+  type AcademyParams,
+  type LeaderboardRow,
+  pointsWeightsAt,
+} from "@/lib/academy/simulate"
 import type { MezoActivityItem } from "@/types/mezoActivity"
 import type { Address, Hash } from "viem"
 
@@ -11,7 +15,7 @@ type Props = {
   row: LeaderboardRow | null
   fromTs: number
   toTs: number
-  weightExt: number
+  params: AcademyParams
   onClose: () => void
 }
 
@@ -89,7 +93,7 @@ export default function AcademyActorProfile({
   row,
   fromTs,
   toTs,
-  weightExt,
+  params,
   onClose,
 }: Props) {
   const { chainId } = useNetwork()
@@ -289,7 +293,7 @@ export default function AcademyActorProfile({
                 events={profile.inRangeLocks}
                 txUrl={txUrl}
                 lockDeltas={profile.lockDeltaByEventId}
-                weightExt={weightExt}
+                params={params}
               />
             )}
           </section>
@@ -372,12 +376,12 @@ function EventTable({
   events,
   txUrl,
   lockDeltas,
-  weightExt,
+  params,
 }: {
   events: MezoActivityItem[]
   txUrl: (hash: Hash | undefined) => string | null
   lockDeltas?: Map<string, LockDelta>
-  weightExt?: number
+  params?: AcademyParams
 }) {
   const showDelta = !!lockDeltas
   return (
@@ -404,7 +408,7 @@ function EventTable({
                 </th>
                 <th
                   className="px-2 py-1.5 text-right"
-                  title="Δ-points contributed = ΔvePower × weightExt (lock-track multiplier). Permanent extensions beyond 4y earn 0."
+                  title="Points contributed using the new-lock and extension weights active at the event time."
                 >
                   Δ pts
                 </th>
@@ -453,8 +457,8 @@ function EventTable({
                       {delta ? renderDeltaVe(delta) : "—"}
                     </td>
                     <td className="px-2 py-1 text-right font-mono text-[11px] text-[var(--content-secondary)]">
-                      {delta
-                        ? renderDeltaPts(delta.deltaVeWad, weightExt ?? 1)
+                      {delta && params
+                        ? renderDeltaPts(delta, params, ev.timestamp)
                         : "—"}
                     </td>
                   </>
@@ -575,12 +579,19 @@ function deltaVeMathTooltip(
   return `Δve breakdown:\n${parts.join("\n")}\nTotal = ${fmtVe(delta.deltaVeWad)} veMEZO`
 }
 
-function renderDeltaPts(deltaVeWad: bigint, weightExt: number): string {
-  if (deltaVeWad === 0n) return "0"
-  if (!Number.isFinite(weightExt) || weightExt <= 0) return "—"
-  const scaled = Math.round(weightExt * 1_000_000)
-  const ptsWad = (deltaVeWad * BigInt(scaled)) / 1_000_000n
-  return fmtPoints(ptsWad)
+function renderDeltaPts(
+  delta: LockDelta,
+  params: AcademyParams,
+  timestamp: number,
+): string {
+  if (delta.deltaVeWad === 0n) return "0"
+  const weights = pointsWeightsAt(params, timestamp)
+  const newScaled = Math.round(weights.weightNew * 1_000_000)
+  const extScaled = Math.round(weights.weightExt * 1_000_000)
+  const pointsWad =
+    (delta.amountAddedVeWad * BigInt(newScaled)) / 1_000_000n +
+    (delta.durationExtendedVeWad * BigInt(extScaled)) / 1_000_000n
+  return fmtPoints(pointsWad)
 }
 
 function fmtDuration(

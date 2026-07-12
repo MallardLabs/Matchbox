@@ -114,11 +114,23 @@ import { type Address, getAddress, isAddressEqual } from "viem"
 
 const WAD = 10n ** 18n
 
+export type PointsWeightSegment = {
+  id: string
+  fromTs: number
+  toTs: number
+  weightNew: number
+  weightExt: number
+  weightBoost: number
+}
+
 export type AcademyParams = {
   budgetMezoWad: bigint
   weightNew: number
   weightExt: number
   weightBoost: number
+  // Time-boxed overrides are evaluated in array order. When segments overlap,
+  // the last matching segment wins. Ranges are half-open: [fromTs, toTs).
+  pointsSegments: PointsWeightSegment[]
   participationMultiplier: number
   mezoUsd: number
   // Reward cutoff: actors whose initial pro-rata reward is strictly below
@@ -191,6 +203,27 @@ function scaleWad(value: bigint, factor: number): bigint {
   if (!Number.isFinite(factor) || factor <= 0) return 0n
   const scaled = Math.round(factor * 1_000_000)
   return (value * BigInt(scaled)) / 1_000_000n
+}
+
+export function pointsWeightsAt(
+  params: AcademyParams,
+  timestamp: number,
+): Pick<AcademyParams, "weightNew" | "weightExt" | "weightBoost"> {
+  let weights = {
+    weightNew: params.weightNew,
+    weightExt: params.weightExt,
+    weightBoost: params.weightBoost,
+  }
+  for (const segment of params.pointsSegments) {
+    if (timestamp >= segment.fromTs && timestamp < segment.toTs) {
+      weights = {
+        weightNew: segment.weightNew,
+        weightExt: segment.weightExt,
+        weightBoost: segment.weightBoost,
+      }
+    }
+  }
+  return weights
 }
 
 function isCronActor(addr: Address | undefined): boolean {
@@ -372,8 +405,9 @@ export function simulate(
     const delta = computeLockTrackDelta(ev, fallbackPrev)
     if (delta.flagged) acc.flagged = true
 
-    const newPts = scaleWad(delta.amountAddedVeWad, params.weightNew)
-    const extPts = scaleWad(delta.durationExtendedVeWad, params.weightExt)
+    const weights = pointsWeightsAt(params, ev.timestamp)
+    const newPts = scaleWad(delta.amountAddedVeWad, weights.weightNew)
+    const extPts = scaleWad(delta.durationExtendedVeWad, weights.weightExt)
     acc.lockPointsWad += newPts
     acc.extensionPointsWad += extPts
     if (hasOpenEpoch && epochStartFor(ev.timestamp) === openEpochStart) {
@@ -440,7 +474,8 @@ export function simulate(
     for (const vote of activeVotes.values()) {
       if (vote.weight <= 0n) continue
       const acc = get(vote.owner)
-      const pts = scaleWad(vote.weight, params.weightBoost)
+      const weights = pointsWeightsAt(params, epochStart)
+      const pts = scaleWad(vote.weight, weights.weightBoost)
       acc.votePointsWad += pts
       if (hasOpenEpoch && epochStart === openEpochStart) {
         acc.openEpochVotePointsWad += pts

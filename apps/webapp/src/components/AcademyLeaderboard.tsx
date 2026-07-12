@@ -98,8 +98,10 @@ export default function AcademyLeaderboard({
         isUnranked: true,
       }
     }
+    const matchedRow = rows[idx]
+    if (!matchedRow) return null
     return {
-      row: rows[idx]!,
+      row: matchedRow,
       rank: String(idx + 1),
       isUnranked: false,
     }
@@ -338,6 +340,12 @@ export default function AcademyLeaderboard({
                   <tr
                     className="cursor-pointer bg-brand/10 hover:bg-brand/15 border-l-4 border-brand transition-colors font-semibold"
                     onClick={() => onSelectActor?.(userRowAndRank.row.actor)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        onSelectActor?.(userRowAndRank.row.actor)
+                      }
+                    }}
+                    tabIndex={0}
                   >
                     <td className="px-2 py-1 text-left font-mono text-[11px] text-brand font-bold">
                       {userRowAndRank.isUnranked
@@ -438,6 +446,12 @@ export default function AcademyLeaderboard({
                         : undefined
                     }
                     onClick={() => onSelectActor?.(row.actor)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        onSelectActor?.(row.actor)
+                      }
+                    }}
+                    tabIndex={0}
                   >
                     <td className="px-2 py-1 text-left text-[11px] text-[var(--content-tertiary)]">
                       {i + 1}

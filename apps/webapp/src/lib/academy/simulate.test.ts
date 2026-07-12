@@ -3,8 +3,19 @@ import { test } from "node:test"
 import { type Address, getAddress, parseUnits } from "viem"
 
 import { MEZO_BOOST_POKE_CRON_ADDRESS } from "../mezoActivity/constants"
+import {
+  ACADEMY_BONUS_FROM_TS,
+  ACADEMY_SESSION_FROM_TS,
+  ACADEMY_SESSION_TO_TS,
+  defaultAcademyParams,
+} from "./constants"
 import { WEEK } from "./epoch"
-import { type AcademyParams, type SimInput, simulate } from "./simulate"
+import {
+  type AcademyParams,
+  type SimInput,
+  pointsWeightsAt,
+  simulate,
+} from "./simulate"
 
 import type { MezoActivityItem } from "../../types/mezoActivity"
 
@@ -28,6 +39,7 @@ const PARAMS: AcademyParams = {
   weightNew: 2,
   weightExt: 1,
   weightBoost: 1,
+  pointsSegments: [],
   participationMultiplier: 1,
   mezoUsd: 0.05,
   // Default to disabled so the existing tests behave as written.
@@ -89,6 +101,28 @@ function run(input: Partial<SimInput>) {
   return simulate(finalInput, PARAMS, FROM_TS, TO_TS)
 }
 
+test("academy defaults cover the eight-epoch session and boost its final two epochs", () => {
+  const academyParams = defaultAcademyParams()
+
+  assert.equal(ACADEMY_SESSION_FROM_TS, 1_779_926_400)
+  assert.equal(ACADEMY_SESSION_TO_TS, ACADEMY_SESSION_FROM_TS + 8 * WEEK)
+  assert.deepEqual(pointsWeightsAt(academyParams, ACADEMY_BONUS_FROM_TS - 1), {
+    weightNew: 2,
+    weightExt: 1,
+    weightBoost: 0.5,
+  })
+  assert.deepEqual(pointsWeightsAt(academyParams, ACADEMY_BONUS_FROM_TS), {
+    weightNew: 6,
+    weightExt: 3,
+    weightBoost: 0.5,
+  })
+  assert.deepEqual(pointsWeightsAt(academyParams, ACADEMY_SESSION_TO_TS), {
+    weightNew: 2,
+    weightExt: 1,
+    weightBoost: 0.5,
+  })
+})
+
 test("lock track: blacklisted actor produces no row and increments counter", () => {
   const result = run({
     lockEvents: [
@@ -136,6 +170,101 @@ test("undefined blacklist preserves original behaviour", () => {
   })
   assert.equal(result.totals.droppedBlacklistEvents, 0)
   assert.equal(result.rows.length, 2)
+})
+
+test("points segments override base weights only inside their half-open range", () => {
+  const params: AcademyParams = {
+    ...PARAMS,
+    pointsSegments: [
+      {
+        id: "bonus",
+        fromTs: FROM_TS + WEEK,
+        toTs: FROM_TS + 2 * WEEK,
+        weightNew: 6,
+        weightExt: 3,
+        weightBoost: 0.5,
+      },
+    ],
+  }
+
+  assert.deepEqual(pointsWeightsAt(params, FROM_TS + WEEK - 1), {
+    weightNew: 2,
+    weightExt: 1,
+    weightBoost: 1,
+  })
+  assert.deepEqual(pointsWeightsAt(params, FROM_TS + WEEK), {
+    weightNew: 6,
+    weightExt: 3,
+    weightBoost: 0.5,
+  })
+  assert.deepEqual(pointsWeightsAt(params, FROM_TS + 2 * WEEK), {
+    weightNew: 2,
+    weightExt: 1,
+    weightBoost: 1,
+  })
+})
+
+test("points segments apply the configured new-lock multiplier per event", () => {
+  const params: AcademyParams = {
+    ...PARAMS,
+    pointsSegments: [
+      {
+        id: "bonus",
+        fromTs: FROM_TS + WEEK,
+        toTs: FROM_TS + 2 * WEEK,
+        weightNew: 6,
+        weightExt: 3,
+        weightBoost: 1,
+      },
+    ],
+  }
+  const result = simulate(
+    {
+      lockEvents: [
+        lockEvent(REGULAR, FROM_TS + 100, { tokenId: 1n }),
+        lockEvent(REGULAR, FROM_TS + WEEK + 100, {
+          id: "lock-segment",
+          tokenId: 2n,
+        }),
+      ],
+      voteEvents: [],
+    },
+    params,
+    FROM_TS,
+    TO_TS,
+  )
+
+  assert.equal(result.rows[0]?.lockPointsWad, parseUnits("800", 18))
+})
+
+test("later overlapping points segments take precedence", () => {
+  const params: AcademyParams = {
+    ...PARAMS,
+    pointsSegments: [
+      {
+        id: "outer",
+        fromTs: FROM_TS,
+        toTs: TO_TS,
+        weightNew: 6,
+        weightExt: 3,
+        weightBoost: 1,
+      },
+      {
+        id: "inner",
+        fromTs: FROM_TS + WEEK,
+        toTs: FROM_TS + 2 * WEEK,
+        weightNew: 4,
+        weightExt: 2,
+        weightBoost: 0.75,
+      },
+    ],
+  }
+
+  assert.deepEqual(pointsWeightsAt(params, FROM_TS + WEEK), {
+    weightNew: 4,
+    weightExt: 2,
+    weightBoost: 0.75,
+  })
 })
 
 test("lowercase event address vs checksummed blacklist entry — still filtered", () => {

@@ -54,8 +54,10 @@ export default function AcademyPublicLeaderboard({
         isUnranked: true,
       }
     }
+    const matchedRow = rows[idx]
+    if (!matchedRow) return null
     return {
-      row: rows[idx]!,
+      row: matchedRow,
       rank: String(idx + 1),
       isUnranked: false,
     }
@@ -253,6 +255,12 @@ export default function AcademyPublicLeaderboard({
                   <tr
                     className="cursor-pointer bg-brand/10 hover:bg-brand/15 border-l-4 border-brand transition-colors font-semibold"
                     onClick={() => onSelectActor?.(userRowAndRank.row.actor)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        onSelectActor?.(userRowAndRank.row.actor)
+                      }
+                    }}
+                    tabIndex={0}
                   >
                     <td className="px-4 py-3 text-left font-mono text-xs text-brand font-bold">
                       {userRowAndRank.isUnranked
@@ -262,6 +270,7 @@ export default function AcademyPublicLeaderboard({
                     <td
                       className="px-4 py-3"
                       onClick={(e) => e.stopPropagation()}
+                      onKeyDown={(event) => event.stopPropagation()}
                     >
                       <div className="flex items-center gap-1.5">
                         <ClickableAddress
