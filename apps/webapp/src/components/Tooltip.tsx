@@ -54,7 +54,10 @@ export default function Tooltip({ content, id }: TooltipProps) {
   }, [isOpen, updateTooltipPosition])
 
   return (
-    <span className="relative inline-flex items-center">
+    <span
+      data-svg-export-remove="true"
+      className="relative inline-flex items-center"
+    >
       <button
         ref={buttonRef}
         type="button"

@@ -1,7 +1,8 @@
 import { getContractConfig } from "@/config/contracts"
 import { useNetwork } from "@/contexts/NetworkContext"
 import { type AtomicBatchSupport, getAtomicBatchSupport } from "@/utils/eip5792"
-import { useCallback, useState } from "react"
+import { encodeSafeBatchCall } from "@/utils/safeBatch"
+import { useCallback, useEffect, useState } from "react"
 import type { Address, Hex } from "viem"
 import { sendCalls, waitForCallsStatus } from "viem/actions"
 import {
@@ -11,6 +12,7 @@ import {
   useWriteContract,
 } from "wagmi"
 import type { MultiLockExecutionMode } from "./useMultiLockVoting"
+import { useSafeBatchExport } from "./useSafeBatchExport"
 
 type LockTxStatus = "pending" | "signing" | "confirming" | "success" | "error"
 
@@ -35,6 +37,8 @@ type MultiLockClaimStatus = "idle" | "claiming" | "done"
 
 type UseMultiLockClaimBribesReturn = {
   claimAll: (claims: ClaimLockRequest[]) => void
+  exportClaimBatch: (claims: ClaimLockRequest[]) => Promise<void>
+  copyClaimBatchJson: (claims: ClaimLockRequest[]) => Promise<void>
   lockStates: LockTxState[]
   currentIndex: number
   totalLocks: number
@@ -45,6 +49,10 @@ type UseMultiLockClaimBribesReturn = {
   hasErrors: boolean
   executionMode: MultiLockExecutionMode
   batchSupport: AtomicBatchSupport | null
+  canExportSafeBatch: boolean
+  canCopyBatchJson: boolean
+  copiedBatchJson: boolean
+  safeBatchError: Error | undefined
   clear: () => void
 }
 
@@ -55,6 +63,7 @@ export function useMultiLockClaimBribes(): UseMultiLockClaimBribesReturn {
   const publicClient = usePublicClient({ chainId })
   const { data: walletClient } = useWalletClient({ chainId })
   const { writeContractAsync } = useWriteContract()
+  const safeBatch = useSafeBatchExport("claim-bribes")
 
   const [status, setStatus] = useState<MultiLockClaimStatus>("idle")
   const [executionMode, setExecutionMode] =
@@ -78,6 +87,23 @@ export function useMultiLockClaimBribes(): UseMultiLockClaimBribesReturn {
     },
     [],
   )
+
+  useEffect(() => {
+    if (!safeBatch.pending) return
+
+    setExecutionMode("safe-export")
+    setStatus(safeBatch.status === "executed" ? "done" : "claiming")
+    setLockStates(
+      safeBatch.pending.items.map((item) => ({
+        tokenId: BigInt(item.id),
+        status:
+          safeBatch.status === "executed"
+            ? ("success" as const)
+            : ("confirming" as const),
+        ...(safeBatch.executedHash ? { hash: safeBatch.executedHash } : {}),
+      })),
+    )
+  }, [safeBatch.executedHash, safeBatch.pending, safeBatch.status])
 
   const executeSequential = useCallback(
     async (claims: ClaimLockRequest[]) => {
@@ -260,13 +286,82 @@ export function useMultiLockClaimBribes(): UseMultiLockClaimBribesReturn {
     [accountAddress, chainId, executeBatched, executeSequential, walletClient],
   )
 
+  const exportClaimBatch = useCallback(
+    async (claims: ClaimLockRequest[]) => {
+      const { address, abi } = contracts.boostVoter
+      const validClaims = claims.filter((claim) => claim.bribes.length > 0)
+      if (!address || validClaims.length === 0) return
+
+      const calls = validClaims.map((claim) =>
+        encodeSafeBatchCall({
+          to: address,
+          abi,
+          functionName: "claimBribes",
+          args: [
+            claim.bribes.map((bribe) => bribe.bribeAddress),
+            claim.bribes.map((bribe) => bribe.tokens),
+            claim.tokenId,
+          ],
+        }),
+      )
+      const pending = await safeBatch.exportBatch({
+        name: `Matchbox claim ${validClaims.length} locks`,
+        description:
+          "Atomic Matchbox rewards claim generated for Safe Transaction Builder.",
+        calls,
+        items: validClaims.map((claim) => ({
+          id: claim.tokenId.toString(),
+          label: `Claim rewards for veMEZO #${claim.tokenId.toString()}`,
+        })),
+      })
+      if (!pending) return
+
+      setExecutionMode("safe-export")
+      setStatus("claiming")
+      setLockStates(
+        pending.items.map((item) => ({
+          tokenId: BigInt(item.id),
+          status: "confirming",
+        })),
+      )
+    },
+    [contracts.boostVoter, safeBatch.exportBatch],
+  )
+
+  const copyClaimBatchJson = useCallback(
+    async (claims: ClaimLockRequest[]) => {
+      const { address, abi } = contracts.boostVoter
+      const validClaims = claims.filter((claim) => claim.bribes.length > 0)
+      if (!address) return
+      await safeBatch.copyBatchJson({
+        name: `Matchbox claim ${validClaims.length} locks`,
+        description:
+          "Matchbox rewards claim transaction data. Execute only from the NFT-owning account.",
+        calls: validClaims.map((claim) =>
+          encodeSafeBatchCall({
+            to: address,
+            abi,
+            functionName: "claimBribes",
+            args: [
+              claim.bribes.map((bribe) => bribe.bribeAddress),
+              claim.bribes.map((bribe) => bribe.tokens),
+              claim.tokenId,
+            ],
+          }),
+        ),
+      })
+    },
+    [contracts.boostVoter, safeBatch.copyBatchJson],
+  )
+
   const clear = useCallback(() => {
     setStatus("idle")
     setExecutionMode("sequential")
     setBatchSupport(null)
     setLockStates([])
     setCurrentIndex(0)
-  }, [])
+    safeBatch.clear()
+  }, [safeBatch.clear])
 
   const successCount = lockStates.filter(
     (state) => state.status === "success",
@@ -277,6 +372,8 @@ export function useMultiLockClaimBribes(): UseMultiLockClaimBribesReturn {
 
   return {
     claimAll,
+    exportClaimBatch,
+    copyClaimBatchJson,
     lockStates,
     currentIndex,
     totalLocks: lockStates.length,
@@ -287,6 +384,10 @@ export function useMultiLockClaimBribes(): UseMultiLockClaimBribesReturn {
     hasErrors: errorCount > 0,
     executionMode,
     batchSupport,
+    canExportSafeBatch: safeBatch.canExportSafeBatch,
+    canCopyBatchJson: safeBatch.canCopyBatchJson,
+    copiedBatchJson: safeBatch.copiedBatchJson,
+    safeBatchError: safeBatch.error,
     clear,
   }
 }

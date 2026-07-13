@@ -1,16 +1,19 @@
 import type { GaugeProfile } from "@/config/supabase"
 import { type GaugeAPYData, formatAPY } from "@/hooks/useAPY"
 import type { BoostGauge } from "@/hooks/useGauges"
+import useShiftKeyHeld from "@/hooks/useShiftKeyHeld"
 import { formatUsdValue } from "@/hooks/useTokenPrices"
-import { formatMultiplier } from "@/utils/format"
-import { Tag } from "@mezo-org/mezo-clay"
+import { exportElementAsSvg } from "@/utils/exportElementAsSvg"
+import { formatFixedPoint, formatMultiplier } from "@/utils/format"
+import { Button, Tag } from "@mezo-org/mezo-clay"
+import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import Link from "next/link"
-import type { ReactNode } from "react"
-import { formatUnits } from "viem"
+import { type ReactNode, useRef, useState } from "react"
 import MarqueeText from "./MarqueeText"
 import OptimalVeMEZOProgress from "./OptimalVeMEZOProgress"
 import { TokenIcon } from "./TokenIcon"
 import Tooltip from "./Tooltip"
+import WatchGaugeButton from "./WatchGaugeButton"
 
 type GaugeCardProps = {
   gauge: BoostGauge
@@ -37,6 +40,12 @@ export default function GaugeCard({
   projectedBoostMultiplier,
   children,
 }: GaugeCardProps) {
+  const cardRef = useRef<HTMLElement>(null)
+  const isShiftKeyHeld = useShiftKeyHeld()
+  const prefersReducedMotion = useReducedMotion()
+  const [isHovered, setIsHovered] = useState(false)
+  const [isExporting, setIsExporting] = useState(false)
+  const [exportError, setExportError] = useState<string | null>(null)
   const displayAPY =
     displayAPYOverride !== undefined
       ? displayAPYOverride
@@ -57,8 +66,33 @@ export default function GaugeCard({
     projectedBoostMultiplier !== undefined &&
     Math.abs(projectedBoostMultiplier - gauge.boostMultiplier) > 0.005
 
+  const gaugeName = profile?.display_name || `gauge-${gauge.veBTCTokenId}`
+  const handleExport = async () => {
+    if (!cardRef.current || isExporting) return
+    const safeName = gaugeName
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/(^-|-$)/g, "")
+
+    setExportError(null)
+    setIsExporting(true)
+    try {
+      await exportElementAsSvg(
+        cardRef.current,
+        `matchbox-${safeName || "gauge"}.svg`,
+      )
+    } catch {
+      setExportError("Couldn't export this gauge. Please try again.")
+    } finally {
+      setIsExporting(false)
+    }
+  }
+
   return (
     <article
+      ref={cardRef}
+      onPointerEnter={() => setIsHovered(true)}
+      onPointerLeave={() => setIsHovered(false)}
       className={`flex min-w-0 flex-col gap-3 overflow-hidden rounded-xl border bg-[var(--surface)] p-3 sm:p-4 ${
         isSelected ? "border-[var(--positive)]" : "border-[var(--border)]"
       }`}
@@ -111,7 +145,11 @@ export default function GaugeCard({
             )}
           </div>
         </Link>
-        <div className="self-start">
+        <div
+          data-svg-export-nowrap="true"
+          className="flex shrink-0 items-center gap-2 self-start"
+        >
+          <WatchGaugeButton gaugeAddress={gauge.address} compact />
           <Tag color={gauge.isAlive ? "green" : "red"} closeable={false}>
             {gauge.isAlive ? "Active" : "Inactive"}
           </Tag>
@@ -122,14 +160,14 @@ export default function GaugeCard({
           <dt className="text-[var(--content-tertiary)]">veBTC Weight</dt>
           <dd className="font-mono text-[var(--content-primary)]">
             {gauge.veBTCWeight !== undefined
-              ? formatUnits(gauge.veBTCWeight, 18).slice(0, 10)
+              ? formatFixedPoint(gauge.veBTCWeight)
               : "-"}
           </dd>
         </div>
         <div>
           <dt className="text-[var(--content-tertiary)]">veMEZO Weight</dt>
           <dd className="font-mono text-[var(--content-primary)]">
-            {formatUnits(gauge.totalWeight, 18).slice(0, 10)}
+            {formatFixedPoint(gauge.totalWeight)}
           </dd>
           <div
             className="grid transition-[grid-template-rows] duration-300 ease-out"
@@ -140,7 +178,7 @@ export default function GaugeCard({
             <div className="overflow-hidden">
               {hasProjection && (
                 <p className="pt-0.5 font-mono text-2xs font-medium tabular-nums text-[#F7931A]">
-                  +{formatUnits(projectedVoteWeight ?? 0n, 18).slice(0, 10)}
+                  +{formatFixedPoint(projectedVoteWeight ?? 0n)}
                 </p>
               )}
             </div>
@@ -218,24 +256,62 @@ export default function GaugeCard({
             </div>
           )}
       </dl>
-      <dl className="mt-auto text-xs">
-        <div>
-          <dt className="flex flex-wrap items-center gap-1.5 text-[var(--content-tertiary)]">
-            Optimal veMEZO
-            <Tooltip
-              id={`gc-optimal-${gauge.address}`}
-              content="veMEZO voting weight on this gauge that reaches maximum (5x) boost. System totals use veBTC unboostedTotalVotingPower() and veMEZO totalVotingPower() from escrow—the same bases as the Boost calculator. Below that, the bar fills in orange toward the goal. At the target the bar is green. If oversubscribed, a red layer grows over the green from 0% at 1× to 100% at 2× the optimal weight (full red); beyond 2× the bar stays full red—more veMEZO dilutes rewards per voter."
-            />
-          </dt>
-          <dd className="min-w-0 text-[var(--content-primary)]">
-            <OptimalVeMEZOProgress
-              optimalTarget={gauge.optimalVeMEZO}
-              effectiveWeight={effectiveWeight}
-              size="sm"
-            />
-          </dd>
-        </div>
-      </dl>
+      <div className="relative mt-auto">
+        <dl className="text-xs">
+          <div>
+            <dt className="flex flex-wrap items-center gap-1.5 text-[var(--content-tertiary)]">
+              Optimal veMEZO
+              <Tooltip
+                id={`gc-optimal-${gauge.address}`}
+                content="veMEZO voting weight on this gauge that reaches maximum (5x) boost. System totals use veBTC unboostedTotalVotingPower() and veMEZO totalVotingPower() from escrow—the same bases as the Boost calculator. Below that, the bar fills in orange toward the goal. At the target the bar is green. If oversubscribed, a red layer grows over the green from 0% at 1× to 100% at 2× the optimal weight (full red); beyond 2× the bar stays full red—more veMEZO dilutes rewards per voter."
+              />
+            </dt>
+            <dd className="min-w-0 text-[var(--content-primary)]">
+              <OptimalVeMEZOProgress
+                optimalTarget={gauge.optimalVeMEZO}
+                effectiveWeight={effectiveWeight}
+                size="sm"
+              />
+            </dd>
+          </div>
+        </dl>
+        <AnimatePresence>
+          {isShiftKeyHeld && isHovered && (
+            <motion.div
+              data-svg-export-ignore="true"
+              className="absolute inset-0 z-10 flex flex-col justify-end gap-1 bg-[var(--surface)]"
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 12 }}
+              transition={{
+                duration: prefersReducedMotion ? 0 : 0.16,
+                ease: "easeOut",
+              }}
+            >
+              <Button
+                kind="secondary"
+                size="small"
+                onClick={handleExport}
+                disabled={isExporting}
+                overrides={{
+                  BaseButton: {
+                    style: {
+                      width: "100%",
+                    },
+                  },
+                }}
+              >
+                {isExporting ? "Exporting…" : "Export SVG"}
+              </Button>
+              {exportError && (
+                <p className="text-pretty text-2xs text-[var(--negative)]">
+                  {exportError}
+                </p>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
       {children}
     </article>
   )

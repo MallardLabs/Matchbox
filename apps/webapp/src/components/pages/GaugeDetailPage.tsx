@@ -4,6 +4,7 @@ import OptimalVeMEZOProgress from "@/components/OptimalVeMEZOProgress"
 import { SpringIn } from "@/components/SpringIn"
 import { TokenIcon } from "@/components/TokenIcon"
 import Tooltip from "@/components/Tooltip"
+import WatchGaugeButton from "@/components/WatchGaugeButton"
 import { getContractConfig } from "@/config/contracts"
 import { getExplorerAddressUrl } from "@/config/explorer"
 import type { GaugeHistory, GaugeProfile } from "@/config/supabase"
@@ -635,8 +636,9 @@ export default function GaugeDetailPage({
                       )}
                     </div>
 
-                    {isAlive && (
-                      <div className="w-full md:w-auto">
+                    <div className="flex w-full flex-col gap-2 sm:flex-row md:w-auto">
+                      <WatchGaugeButton gaugeAddress={gaugeAddress} />
+                      {isAlive && (
                         <Button
                           kind="secondary"
                           onClick={() => setIsAddIncentiveModalOpen(true)}
@@ -650,8 +652,8 @@ export default function GaugeDetailPage({
                         >
                           Add Incentives
                         </Button>
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </div>
 
                   <div className="mb-4">

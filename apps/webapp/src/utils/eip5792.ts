@@ -89,23 +89,3 @@ export async function getAtomicBatchSupport({
     }
   }
 }
-
-export function getAtomicBatchFallbackMessage(
-  batchSupport: AtomicBatchSupport | null,
-): string | null {
-  if (!batchSupport || batchSupport.supportsAtomicBatching) {
-    return null
-  }
-
-  switch (batchSupport.reason) {
-    case "wallet-not-connected":
-      return "Connect an EVM wallet to use wallet-level batch signing."
-    case "capabilities-error":
-      return "Matchbox could not verify EIP-5792 support for this wallet, so it fell back to one signature per transaction."
-    case "atomic-unsupported":
-    case "capabilities-unavailable":
-      return "This wallet/network did not advertise EIP-5792 atomic batching, so Matchbox fell back to one signature per transaction."
-    case "supported":
-      return null
-  }
-}

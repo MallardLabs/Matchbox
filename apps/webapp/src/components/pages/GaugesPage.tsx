@@ -1,8 +1,10 @@
 import GaugeCard from "@/components/GaugeCard"
 import MarqueeText from "@/components/MarqueeText"
 import { SpringIn } from "@/components/SpringIn"
+import WatchGaugeButton from "@/components/WatchGaugeButton"
 import { formatAPY, useGaugesAPY } from "@/hooks/useAPY"
 import { useAllGaugeProfiles } from "@/hooks/useGaugeProfiles"
+import { useGaugeWatchlist } from "@/hooks/useGaugeWatchlist"
 import { useBoostGauges, useVoterTotals } from "@/hooks/useGauges"
 import type { BoostGauge } from "@/hooks/useGauges"
 import { formatUsdValue } from "@/hooks/useTokenPrices"
@@ -31,7 +33,7 @@ type SortColumn =
   | "apy"
   | null
 type SortDirection = "asc" | "desc"
-type StatusFilter = "all" | "active" | "inactive"
+type StatusFilter = "all" | "active" | "inactive" | "watching"
 
 export default function GaugesPage(): JSX.Element {
   const [, theme] = useStyletron()
@@ -57,6 +59,7 @@ export default function GaugesPage(): JSX.Element {
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc")
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all")
   const [showNeedsBoostOnly, setShowNeedsBoostOnly] = useState(false)
+  const { isWatching, watchedGaugeAddresses } = useGaugeWatchlist()
 
   const handleSort = useCallback(
     (column: SortColumn) => {
@@ -110,6 +113,8 @@ export default function GaugesPage(): JSX.Element {
       result = result.filter((g) => g.isAlive)
     } else if (statusFilter === "inactive") {
       result = result.filter((g) => !g.isAlive)
+    } else if (statusFilter === "watching") {
+      result = result.filter((g) => isWatching(g.address))
     }
 
     if (showNeedsBoostOnly) {
@@ -172,6 +177,7 @@ export default function GaugesPage(): JSX.Element {
     statusFilter,
     showNeedsBoostOnly,
     apyMap,
+    isWatching,
   ])
 
   return (
@@ -288,6 +294,15 @@ export default function GaugesPage(): JSX.Element {
                 >
                   Inactive
                 </Tag>
+                {watchedGaugeAddresses.size > 0 && (
+                  <Tag
+                    closeable={false}
+                    onClick={() => setStatusFilter("watching")}
+                    color={statusFilter === "watching" ? "yellow" : "gray"}
+                  >
+                    ★ Watching
+                  </Tag>
+                )}
               </div>
 
               <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -406,59 +421,66 @@ export default function GaugesPage(): JSX.Element {
                         gauge.address.toLowerCase(),
                       )
                       return (
-                        <Link
-                          href={`/gauges/${gauge.address}`}
-                          className="flex items-center gap-3 text-inherit no-underline before:absolute before:inset-0 before:content-['']"
-                        >
-                          {/* Profile Picture */}
-                          <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center overflow-hidden rounded-full border border-[var(--border)] bg-[var(--surface-secondary)]">
-                            {profile?.profile_picture_url ? (
-                              <img
-                                src={profile.profile_picture_url}
-                                alt={`Gauge #${gauge.veBTCTokenId.toString()}`}
-                                className="h-full w-full object-cover"
-                              />
-                            ) : (
-                              <span className="text-2xs text-[var(--content-secondary)]">
-                                #
-                                {gauge.veBTCTokenId > 0n
-                                  ? gauge.veBTCTokenId.toString()
-                                  : "?"}
-                              </span>
-                            )}
-                          </div>
-                          {/* Gauge Info */}
-                          <div className="flex min-w-0 flex-col gap-0.5">
-                            <div className="flex items-center gap-1.5">
-                              <MarqueeText
-                                className={`min-w-0 flex-1 text-xs font-medium ${
-                                  profile?.display_name ||
-                                  profile?.description ||
-                                  profile?.profile_picture_url
-                                    ? "text-[var(--positive)]"
-                                    : "text-[var(--negative)]"
-                                }`}
-                              >
-                                {profile?.display_name
-                                  ? profile.display_name
-                                  : gauge.veBTCTokenId > 0n
-                                    ? `veBTC #${gauge.veBTCTokenId.toString()}`
-                                    : `${gauge.address.slice(0, 6)}...${gauge.address.slice(-4)}`}
-                              </MarqueeText>
-                              {profile?.display_name &&
-                                gauge.veBTCTokenId > 0n && (
-                                  <span className="flex-shrink-0 rounded bg-[rgba(247,147,26,0.15)] px-1.5 py-0.5 font-mono text-2xs font-semibold tracking-wide text-[#F7931A]">
-                                    #{gauge.veBTCTokenId.toString()}
-                                  </span>
-                                )}
+                        <div className="flex items-center gap-2">
+                          <WatchGaugeButton
+                            gaugeAddress={gauge.address}
+                            compact
+                            className="relative z-10 flex-shrink-0"
+                          />
+                          <Link
+                            href={`/gauges/${gauge.address}`}
+                            className="flex items-center gap-3 text-inherit no-underline before:absolute before:inset-0 before:content-['']"
+                          >
+                            {/* Profile Picture */}
+                            <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center overflow-hidden rounded-full border border-[var(--border)] bg-[var(--surface-secondary)]">
+                              {profile?.profile_picture_url ? (
+                                <img
+                                  src={profile.profile_picture_url}
+                                  alt={`Gauge #${gauge.veBTCTokenId.toString()}`}
+                                  className="h-full w-full object-cover"
+                                />
+                              ) : (
+                                <span className="text-2xs text-[var(--content-secondary)]">
+                                  #
+                                  {gauge.veBTCTokenId > 0n
+                                    ? gauge.veBTCTokenId.toString()
+                                    : "?"}
+                                </span>
+                              )}
                             </div>
-                            {profile?.description && (
-                              <span className="max-w-[200px] truncate text-2xs text-[var(--content-secondary)]">
-                                {profile.description}
-                              </span>
-                            )}
-                          </div>
-                        </Link>
+                            {/* Gauge Info */}
+                            <div className="flex min-w-0 flex-col gap-0.5">
+                              <div className="flex items-center gap-1.5">
+                                <MarqueeText
+                                  className={`min-w-0 flex-1 text-xs font-medium ${
+                                    profile?.display_name ||
+                                    profile?.description ||
+                                    profile?.profile_picture_url
+                                      ? "text-[var(--positive)]"
+                                      : "text-[var(--negative)]"
+                                  }`}
+                                >
+                                  {profile?.display_name
+                                    ? profile.display_name
+                                    : gauge.veBTCTokenId > 0n
+                                      ? `veBTC #${gauge.veBTCTokenId.toString()}`
+                                      : `${gauge.address.slice(0, 6)}...${gauge.address.slice(-4)}`}
+                                </MarqueeText>
+                                {profile?.display_name &&
+                                  gauge.veBTCTokenId > 0n && (
+                                    <span className="flex-shrink-0 rounded bg-[rgba(247,147,26,0.15)] px-1.5 py-0.5 font-mono text-2xs font-semibold tracking-wide text-[#F7931A]">
+                                      #{gauge.veBTCTokenId.toString()}
+                                    </span>
+                                  )}
+                              </div>
+                              {profile?.description && (
+                                <span className="max-w-[200px] truncate text-2xs text-[var(--content-secondary)]">
+                                  {profile.description}
+                                </span>
+                              )}
+                            </div>
+                          </Link>
+                        </div>
                       )
                     }}
                   </TableBuilderColumn>

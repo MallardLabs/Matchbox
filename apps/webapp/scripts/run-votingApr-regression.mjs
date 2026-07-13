@@ -14,6 +14,8 @@ const tscPath = require.resolve("typescript/bin/tsc")
 const sourceFiles = [
   "src/utils/votingApr.ts",
   "src/utils/votingApr.test.ts",
+  "src/utils/safeBatch.ts",
+  "src/utils/safeBatch.test.ts",
   "src/lib/academy/simulate.ts",
   "src/lib/academy/simulate.test.ts",
   "src/lib/academy/epoch.ts",
@@ -25,6 +27,7 @@ const sourceFiles = [
 
 const testEntries = [
   "utils/votingApr.test.js",
+  "utils/safeBatch.test.js",
   "lib/academy/simulate.test.js",
 ]
 

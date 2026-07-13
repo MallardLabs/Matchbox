@@ -1,7 +1,8 @@
 import { getContractConfig } from "@/config/contracts"
 import { useNetwork } from "@/contexts/NetworkContext"
 import { type AtomicBatchSupport, getAtomicBatchSupport } from "@/utils/eip5792"
-import { useCallback, useRef, useState } from "react"
+import { encodeSafeBatchCall } from "@/utils/safeBatch"
+import { useCallback, useEffect, useRef, useState } from "react"
 import type { Address, Hex } from "viem"
 import { sendCalls, waitForCallsStatus } from "viem/actions"
 import {
@@ -10,6 +11,7 @@ import {
   useWalletClient,
   useWriteContract,
 } from "wagmi"
+import { useSafeBatchExport } from "./useSafeBatchExport"
 
 export type LockTxStatus =
   | "pending"
@@ -27,7 +29,7 @@ export type LockTxState = {
 }
 
 type MultiLockVoteStatus = "idle" | "voting" | "done"
-export type MultiLockExecutionMode = "sequential" | "batched"
+export type MultiLockExecutionMode = "sequential" | "batched" | "safe-export"
 
 export type MultiLockExecutionResult = {
   totalLocks: number
@@ -44,6 +46,16 @@ type UseMultiLockVotingReturn = {
     weights: bigint[],
   ) => Promise<MultiLockExecutionResult>
   resetAll: (tokenIds: bigint[]) => Promise<MultiLockExecutionResult>
+  exportVoteBatch: (
+    tokenIds: bigint[],
+    gaugeAddresses: Address[],
+    weights: bigint[],
+  ) => Promise<void>
+  copyVoteBatchJson: (
+    tokenIds: bigint[],
+    gaugeAddresses: Address[],
+    weights: bigint[],
+  ) => Promise<void>
   abort: () => void
   lockStates: LockTxState[]
   currentIndex: number
@@ -55,6 +67,10 @@ type UseMultiLockVotingReturn = {
   hasErrors: boolean
   executionMode: MultiLockExecutionMode
   batchSupport: AtomicBatchSupport | null
+  canExportSafeBatch: boolean
+  canCopyBatchJson: boolean
+  copiedBatchJson: boolean
+  safeBatchError: Error | undefined
   clear: () => void
 }
 
@@ -65,6 +81,7 @@ export function useMultiLockVoting(): UseMultiLockVotingReturn {
   const publicClient = usePublicClient({ chainId })
   const { data: walletClient } = useWalletClient({ chainId })
   const { writeContractAsync } = useWriteContract()
+  const safeBatch = useSafeBatchExport("vote")
 
   const [status, setStatus] = useState<MultiLockVoteStatus>("idle")
   const [executionMode, setExecutionMode] =
@@ -110,6 +127,28 @@ export function useMultiLockVoting(): UseMultiLockVotingReturn {
     lockStatesRef.current = next
     setLockStates(next)
   }, [])
+
+  useEffect(() => {
+    if (!safeBatch.pending) return
+
+    setExecutionMode("safe-export")
+    setStatus(safeBatch.status === "executed" ? "done" : "voting")
+    replaceLockStates(
+      safeBatch.pending.items.map((item) => ({
+        tokenId: BigInt(item.id),
+        status:
+          safeBatch.status === "executed"
+            ? ("success" as const)
+            : ("confirming" as const),
+        ...(safeBatch.executedHash ? { hash: safeBatch.executedHash } : {}),
+      })),
+    )
+  }, [
+    replaceLockStates,
+    safeBatch.executedHash,
+    safeBatch.pending,
+    safeBatch.status,
+  ])
 
   const executeSequential = useCallback(
     async (
@@ -293,6 +332,72 @@ export function useMultiLockVoting(): UseMultiLockVotingReturn {
     ],
   )
 
+  const exportVoteBatch = useCallback(
+    async (
+      tokenIds: bigint[],
+      gaugeAddresses: Address[],
+      weights: bigint[],
+    ) => {
+      const { address, abi } = contracts.boostVoter
+      if (!address) return
+
+      const calls = tokenIds.map((tokenId) =>
+        encodeSafeBatchCall({
+          to: address,
+          abi,
+          functionName: "vote",
+          args: [tokenId, gaugeAddresses, weights],
+        }),
+      )
+      const pending = await safeBatch.exportBatch({
+        name: `Matchbox vote ${tokenIds.length} locks`,
+        description:
+          "Atomic Matchbox gauge vote generated for Safe Transaction Builder.",
+        calls,
+        items: tokenIds.map((tokenId) => ({
+          id: tokenId.toString(),
+          label: `Vote with veMEZO #${tokenId.toString()}`,
+        })),
+      })
+      if (!pending) return
+
+      setExecutionMode("safe-export")
+      setStatus("voting")
+      replaceLockStates(
+        pending.items.map((item) => ({
+          tokenId: BigInt(item.id),
+          status: "confirming",
+        })),
+      )
+    },
+    [contracts.boostVoter, replaceLockStates, safeBatch.exportBatch],
+  )
+
+  const copyVoteBatchJson = useCallback(
+    async (
+      tokenIds: bigint[],
+      gaugeAddresses: Address[],
+      weights: bigint[],
+    ) => {
+      const { address, abi } = contracts.boostVoter
+      if (!address) return
+      await safeBatch.copyBatchJson({
+        name: `Matchbox vote ${tokenIds.length} locks`,
+        description:
+          "Matchbox gauge vote transaction data. Execute only from the NFT-owning account.",
+        calls: tokenIds.map((tokenId) =>
+          encodeSafeBatchCall({
+            to: address,
+            abi,
+            functionName: "vote",
+            args: [tokenId, gaugeAddresses, weights],
+          }),
+        ),
+      })
+    },
+    [contracts.boostVoter, safeBatch.copyBatchJson],
+  )
+
   const resetAll = useCallback(
     async (tokenIds: bigint[]): Promise<MultiLockExecutionResult> => {
       const { address, abi } = contracts.boostVoter
@@ -350,7 +455,8 @@ export function useMultiLockVoting(): UseMultiLockVotingReturn {
     lockStatesRef.current = []
     setCurrentIndex(0)
     abortRef.current = false
-  }, [])
+    safeBatch.clear()
+  }, [safeBatch.clear])
 
   const successCount = lockStates.filter((s) => s.status === "success").length
   const errorCount = lockStates.filter((s) => s.status === "error").length
@@ -358,6 +464,8 @@ export function useMultiLockVoting(): UseMultiLockVotingReturn {
   return {
     voteAll,
     resetAll,
+    exportVoteBatch,
+    copyVoteBatchJson,
     abort,
     lockStates,
     currentIndex,
@@ -369,6 +477,10 @@ export function useMultiLockVoting(): UseMultiLockVotingReturn {
     hasErrors: errorCount > 0,
     executionMode,
     batchSupport,
+    canExportSafeBatch: safeBatch.canExportSafeBatch,
+    canCopyBatchJson: safeBatch.canCopyBatchJson,
+    copiedBatchJson: safeBatch.copiedBatchJson,
+    safeBatchError: safeBatch.error,
     clear,
   }
 }
