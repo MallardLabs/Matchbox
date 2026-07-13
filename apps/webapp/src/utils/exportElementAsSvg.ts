@@ -74,13 +74,31 @@ export async function exportElementAsSvg(
   element: HTMLElement,
   filename: string,
 ) {
-  const bounds = element.getBoundingClientRect()
-  const width = Math.ceil(bounds.width)
-  const height = Math.ceil(bounds.height)
-  const clone = element.cloneNode(true) as HTMLElement
+  const ignoredElements = Array.from(
+    element.querySelectorAll<HTMLElement>("[data-svg-export-ignore]"),
+  )
+  const previousDisplayValues = ignoredElements.map(
+    (ignoredElement) => ignoredElement.style.display,
+  )
+  for (const ignoredElement of ignoredElements) {
+    ignoredElement.style.display = "none"
+  }
 
-  copyComputedStyles(element, clone)
-  preserveFormValues(element, clone)
+  let width: number
+  let height: number
+  let clone: HTMLElement
+  try {
+    const bounds = element.getBoundingClientRect()
+    width = Math.ceil(bounds.width)
+    height = Math.ceil(bounds.height)
+    clone = element.cloneNode(true) as HTMLElement
+    copyComputedStyles(element, clone)
+    preserveFormValues(element, clone)
+  } finally {
+    for (const [index, ignoredElement] of ignoredElements.entries()) {
+      ignoredElement.style.display = previousDisplayValues[index] ?? ""
+    }
+  }
   await embedImages(clone)
 
   clone.setAttribute("xmlns", XHTML_NAMESPACE)

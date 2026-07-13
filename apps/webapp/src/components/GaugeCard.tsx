@@ -1,12 +1,13 @@
 import type { GaugeProfile } from "@/config/supabase"
 import { type GaugeAPYData, formatAPY } from "@/hooks/useAPY"
 import type { BoostGauge } from "@/hooks/useGauges"
+import useShiftKeyHeld from "@/hooks/useShiftKeyHeld"
 import { formatUsdValue } from "@/hooks/useTokenPrices"
 import { exportElementAsSvg } from "@/utils/exportElementAsSvg"
 import { formatMultiplier } from "@/utils/format"
-import { Tag } from "@mezo-org/mezo-clay"
+import { Button, Tag } from "@mezo-org/mezo-clay"
 import Link from "next/link"
-import { type ReactNode, useEffect, useRef } from "react"
+import { type ReactNode, useRef, useState } from "react"
 import { formatUnits } from "viem"
 import MarqueeText from "./MarqueeText"
 import OptimalVeMEZOProgress from "./OptimalVeMEZOProgress"
@@ -40,6 +41,9 @@ export default function GaugeCard({
   children,
 }: GaugeCardProps) {
   const cardRef = useRef<HTMLElement>(null)
+  const isShiftKeyHeld = useShiftKeyHeld()
+  const [isExporting, setIsExporting] = useState(false)
+  const [exportError, setExportError] = useState<string | null>(null)
   const displayAPY =
     displayAPYOverride !== undefined
       ? displayAPYOverride
@@ -61,30 +65,30 @@ export default function GaugeCard({
     Math.abs(projectedBoostMultiplier - gauge.boostMultiplier) > 0.005
 
   const gaugeName = profile?.display_name || `gauge-${gauge.veBTCTokenId}`
-  useEffect(() => {
-    const card = cardRef.current
-    if (!card) return
-
+  const handleExport = async () => {
+    if (!cardRef.current || isExporting) return
     const safeName = gaugeName
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/(^-|-$)/g, "")
-    const handleClick = (event: globalThis.MouseEvent) => {
-      if (!event.shiftKey) return
 
-      event.preventDefault()
-      event.stopPropagation()
-      void exportElementAsSvg(card, `matchbox-${safeName || "gauge"}.svg`)
+    setExportError(null)
+    setIsExporting(true)
+    try {
+      await exportElementAsSvg(
+        cardRef.current,
+        `matchbox-${safeName || "gauge"}.svg`,
+      )
+    } catch {
+      setExportError("Couldn't export this gauge. Please try again.")
+    } finally {
+      setIsExporting(false)
     }
-
-    card.addEventListener("click", handleClick)
-    return () => card.removeEventListener("click", handleClick)
-  }, [gaugeName])
+  }
 
   return (
     <article
       ref={cardRef}
-      title="Shift-click to export this gauge card as SVG"
       className={`flex min-w-0 flex-col gap-3 overflow-hidden rounded-xl border bg-[var(--surface)] p-3 sm:p-4 ${
         isSelected ? "border-[var(--positive)]" : "border-[var(--border)]"
       }`}
@@ -264,6 +268,30 @@ export default function GaugeCard({
         </div>
       </dl>
       {children}
+      {isShiftKeyHeld && (
+        <div data-svg-export-ignore="true" className="flex flex-col gap-1.5">
+          <Button
+            kind="secondary"
+            size="small"
+            onClick={handleExport}
+            disabled={isExporting}
+            overrides={{
+              BaseButton: {
+                style: {
+                  width: "100%",
+                },
+              },
+            }}
+          >
+            {isExporting ? "Exporting…" : "Export SVG"}
+          </Button>
+          {exportError && (
+            <p className="text-pretty text-2xs text-[var(--negative)]">
+              {exportError}
+            </p>
+          )}
+        </div>
+      )}
     </article>
   )
 }
