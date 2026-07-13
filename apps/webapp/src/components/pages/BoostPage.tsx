@@ -18,6 +18,7 @@ import {
 } from "@/hooks/useAPY"
 import { useBtcPrice } from "@/hooks/useBtcPrice"
 import { useAllGaugeProfiles } from "@/hooks/useGaugeProfiles"
+import { useGaugeWatchlist } from "@/hooks/useGaugeWatchlist"
 import type { BoostGauge } from "@/hooks/useGauges"
 import { useBoostGauges, useVoterTotals } from "@/hooks/useGauges"
 import { useVeMEZOLocks } from "@/hooks/useLocks"
@@ -29,7 +30,6 @@ import { usePagination } from "@/hooks/usePagination"
 import { useClaimableBribes } from "@/hooks/useVoting"
 import { useAllVoteAllocations, useBatchVoteState } from "@/hooks/useVoting"
 import { boostMultiplierNumberFromCalculatorInputs } from "@/utils/boostMultiplierFromCalculatorInputs"
-import { getAtomicBatchFallbackMessage } from "@/utils/eip5792"
 import { formatTokenAmount } from "@/utils/format"
 import {
   Button,
@@ -63,7 +63,7 @@ type GaugeSortColumn =
   | "apy"
   | null
 type SortDirection = "asc" | "desc"
-type StatusFilter = "all" | "active" | "inactive"
+type StatusFilter = "all" | "active" | "inactive" | "watching"
 const GAUGES_PER_PAGE = 9
 
 // Extended gauge type with allocation info
@@ -365,6 +365,8 @@ export default function BoostPage(): JSX.Element {
   ])
   const {
     voteAll,
+    exportVoteBatch,
+    copyVoteBatchJson,
     lockStates,
     currentIndex: multiVoteCurrentIndex,
     totalLocks: multiVoteTotalLocks,
@@ -374,11 +376,16 @@ export default function BoostPage(): JSX.Element {
     isDone: isMultiVoteDone,
     hasErrors: multiVoteHasErrors,
     executionMode: multiVoteExecutionMode,
-    batchSupport: multiVoteBatchSupport,
+    canExportSafeBatch: canExportVoteSafeBatch,
+    canCopyBatchJson: canCopyVoteBatchJson,
+    copiedBatchJson: copiedVoteBatchJson,
+    safeBatchError: voteSafeBatchError,
     clear: clearMultiVote,
   } = useMultiLockVoting()
   const {
     unpairAll,
+    exportUnpairBatch,
+    copyUnpairBatchJson,
     txStates: unpairTxStates,
     currentIndex: unpairCurrentIndex,
     totalTransactions: unpairTotalTransactions,
@@ -388,7 +395,10 @@ export default function BoostPage(): JSX.Element {
     isDone: isUnpairDone,
     hasErrors: unpairHasErrors,
     executionMode: unpairExecutionMode,
-    batchSupport: unpairBatchSupport,
+    canExportSafeBatch: canExportUnpairSafeBatch,
+    canCopyBatchJson: canCopyUnpairBatchJson,
+    copiedBatchJson: copiedUnpairBatchJson,
+    safeBatchError: unpairSafeBatchError,
     clear: clearUnpair,
   } = useMultiLockUnpairing()
 
@@ -399,6 +409,7 @@ export default function BoostPage(): JSX.Element {
   const [gaugeStatusFilter, setGaugeStatusFilter] =
     useState<StatusFilter>("active")
   const [showNeedsBoostOnly, setShowNeedsBoostOnly] = useState(false)
+  const { isWatching, watchedGaugeAddresses } = useGaugeWatchlist()
   const [gaugeSearchQuery, setGaugeSearchQuery] = useState("")
   const deferredGaugeSearchQuery = useDeferredValue(gaugeSearchQuery)
 
@@ -637,6 +648,11 @@ export default function BoostPage(): JSX.Element {
 
   const canUnpairSelectedLocks =
     unpairableLocks.length > 0 && unresolvedUnpairCount === 0
+  const unpairSafeActionCount =
+    unpairableLocks.length +
+    (unpairableLocks.some((request) => request.affectedVeBTCTokenIds.length > 0)
+      ? 1
+      : 0)
 
   // Clear allocations only when selection becomes fully empty
   useEffect(() => {
@@ -674,6 +690,8 @@ export default function BoostPage(): JSX.Element {
       result = result.filter((g) => g.isAlive)
     } else if (gaugeStatusFilter === "inactive") {
       result = result.filter((g) => !g.isAlive)
+    } else if (gaugeStatusFilter === "watching") {
+      result = result.filter((g) => isWatching(g.address))
     }
 
     if (showNeedsBoostOnly) {
@@ -754,6 +772,7 @@ export default function BoostPage(): JSX.Element {
     gaugeAllocations,
     gaugeProfiles,
     apyMap,
+    isWatching,
   ])
 
   const {
@@ -876,6 +895,38 @@ export default function BoostPage(): JSX.Element {
     }
   }
 
+  const handleExportVoteBatch = async () => {
+    if (votableLocks.length < 2 || selectedGaugeIndexes.size === 0) return
+
+    const selectedGauges = Array.from(selectedGaugeIndexes)
+      .map((idx) => ({
+        gauge: gauges[idx],
+        weight: gaugeAllocations.get(idx) ?? 0,
+      }))
+      .filter((entry) => entry.gauge !== undefined && entry.weight > 0)
+
+    await exportVoteBatch(
+      votableLocks.map((lock) => lock.tokenId),
+      selectedGauges.map((entry) => entry.gauge?.address as Address),
+      selectedGauges.map((entry) => BigInt(entry.weight)),
+    )
+  }
+
+  const handleCopyVoteBatchJson = async () => {
+    if (votableLocks.length < 2 || selectedGaugeIndexes.size === 0) return
+    const selectedGauges = Array.from(selectedGaugeIndexes)
+      .map((idx) => ({
+        gauge: gauges[idx],
+        weight: gaugeAllocations.get(idx) ?? 0,
+      }))
+      .filter((entry) => entry.gauge !== undefined && entry.weight > 0)
+    await copyVoteBatchJson(
+      votableLocks.map((lock) => lock.tokenId),
+      selectedGauges.map((entry) => entry.gauge?.address as Address),
+      selectedGauges.map((entry) => BigInt(entry.weight)),
+    )
+  }
+
   const handleUnpair = async () => {
     if (!canUnpairSelectedLocks) return
 
@@ -896,6 +947,56 @@ export default function BoostPage(): JSX.Element {
       })
     }
   }
+
+  const handleExportUnpairBatch = async () => {
+    if (!canUnpairSelectedLocks) return
+
+    clearUnpairCleanupTimer()
+    setIsCartOpen(false)
+    setIsUnpairOpen(true)
+    await exportUnpairBatch(unpairableLocks)
+  }
+
+  useEffect(() => {
+    if (!isMultiVoteDone || multiVoteExecutionMode !== "safe-export") return
+
+    void Promise.allSettled([
+      refetchVoteState(),
+      refetchVoteAllocations(),
+    ]).then(() => {
+      scheduleMultiVoteCleanup(() => {
+        setIsCartOpen(false)
+        setGaugeAllocations(new Map())
+        setSelectedGaugeIndexes(new Set())
+        setCartSnapshots(new Map())
+      })
+    })
+  }, [
+    isMultiVoteDone,
+    multiVoteExecutionMode,
+    refetchVoteAllocations,
+    refetchVoteState,
+    scheduleMultiVoteCleanup,
+  ])
+
+  useEffect(() => {
+    if (!isUnpairDone || unpairExecutionMode !== "safe-export") return
+
+    void Promise.allSettled([
+      refetchVoteState(),
+      refetchVoteAllocations(),
+      refetchBoostGauges(),
+    ]).then(() => {
+      scheduleUnpairCleanup(() => setIsUnpairOpen(false))
+    })
+  }, [
+    isUnpairDone,
+    refetchBoostGauges,
+    refetchVoteAllocations,
+    refetchVoteState,
+    scheduleUnpairCleanup,
+    unpairExecutionMode,
+  ])
 
   const handleToggleLock = useCallback((index: number) => {
     setSelectedLockIndexes((prev) => {
@@ -1280,14 +1381,18 @@ export default function BoostPage(): JSX.Element {
                 <div className="mb-3 flex items-center justify-between">
                   <p className="text-xs font-semibold text-[var(--content-primary)]">
                     {isMultiVoteInProgress
-                      ? multiVoteExecutionMode === "batched"
-                        ? "Confirm batch in wallet"
-                        : `Signing transactions (${multiVoteCurrentIndex + 1}/${multiVoteTotalLocks})`
+                      ? multiVoteExecutionMode === "safe-export"
+                        ? "Waiting for execution in Safe"
+                        : multiVoteExecutionMode === "batched"
+                          ? "Confirm batch in wallet"
+                          : `Signing transactions (${multiVoteCurrentIndex + 1}/${multiVoteTotalLocks})`
                       : multiVoteHasErrors
                         ? `${multiVoteSuccessCount} of ${multiVoteTotalLocks} succeeded`
-                        : multiVoteExecutionMode === "batched"
-                          ? "Batch confirmed"
-                          : "All transactions confirmed"}
+                        : multiVoteExecutionMode === "safe-export"
+                          ? "Safe batch executed"
+                          : multiVoteExecutionMode === "batched"
+                            ? "Batch confirmed"
+                            : "All transactions confirmed"}
                   </p>
                   {isMultiVoteDone && !multiVoteHasErrors && (
                     <Tag color="green" closeable={false}>
@@ -1295,12 +1400,6 @@ export default function BoostPage(): JSX.Element {
                     </Tag>
                   )}
                 </div>
-                {multiVoteExecutionMode === "sequential" &&
-                  getAtomicBatchFallbackMessage(multiVoteBatchSupport) && (
-                    <p className="mb-3 text-2xs text-[var(--content-secondary)]">
-                      {getAtomicBatchFallbackMessage(multiVoteBatchSupport)}
-                    </p>
-                  )}
                 {/* Progress bar */}
                 <div className="mb-3 flex h-2 gap-0.5 overflow-hidden rounded-full">
                   {lockStates.map((ls) => (
@@ -1346,7 +1445,10 @@ export default function BoostPage(): JSX.Element {
                         {ls.status === "success" && "Confirmed"}
                         {ls.status === "error" && "Failed"}
                         {ls.status === "signing" && "Confirm in wallet..."}
-                        {ls.status === "confirming" && "Confirming..."}
+                        {ls.status === "confirming" &&
+                          (multiVoteExecutionMode === "safe-export"
+                            ? "Waiting for Safe..."
+                            : "Confirming...")}
                         {ls.status === "pending" && "Pending"}
                         {ls.status === "skipped" && "Skipped"}
                       </span>
@@ -1388,6 +1490,27 @@ export default function BoostPage(): JSX.Element {
                   {cartStatusMessage ?? "Ready to vote."}
                 </div>
                 <div className="flex flex-wrap gap-2">
+                  {canExportUnpairSafeBatch &&
+                    canUnpairSelectedLocks &&
+                    unpairSafeActionCount > 1 &&
+                    !isMultiVoteInProgress &&
+                    !isMultiVoteDone && (
+                      <Button
+                        kind="secondary"
+                        onClick={() => void handleExportUnpairBatch()}
+                      >
+                        Export unpair batch
+                      </Button>
+                    )}
+                  {canCopyUnpairBatchJson && unpairSafeActionCount > 1 && (
+                    <Button
+                      kind="tertiary"
+                      size="small"
+                      onClick={() => void copyUnpairBatchJson(unpairableLocks)}
+                    >
+                      {copiedUnpairBatchJson ? "Copied" : "Copy tx JSON"}
+                    </Button>
+                  )}
                   {canUnpairSelectedLocks &&
                     !isMultiVoteInProgress &&
                     !isMultiVoteDone && (
@@ -1447,33 +1570,61 @@ export default function BoostPage(): JSX.Element {
                       </Button>
                     </>
                   ) : (
-                    <Button
-                      kind="primary"
-                      onClick={handleVote}
-                      isLoading={isMultiVoteInProgress}
-                      disabled={
-                        selectedLocks.length === 0 ||
-                        votableLocks.length === 0 ||
-                        gaugeAllocations.size === 0 ||
-                        totalAllocation === 0 ||
-                        !isAllocationValid ||
-                        isMultiVoteInProgress ||
-                        isMultiVoteDone
-                      }
-                    >
-                      {isMultiVoteInProgress
-                        ? multiVoteExecutionMode === "batched"
-                          ? "Confirm batch..."
-                          : `Signing ${multiVoteCurrentIndex + 1}/${multiVoteTotalLocks}...`
-                        : isMultiVoteDone
-                          ? "Done"
-                          : votableLocks.length > 1
-                            ? `Vote with ${votableLocks.length} Locks (${totalAllocation}%)`
-                            : `Vote (${totalAllocation}%)`}
-                    </Button>
+                    <>
+                      {canExportVoteSafeBatch && votableLocks.length > 1 && (
+                        <Button
+                          kind="secondary"
+                          onClick={() => void handleExportVoteBatch()}
+                          disabled={!isAllocationValid || totalAllocation === 0}
+                        >
+                          Export Safe batch
+                        </Button>
+                      )}
+                      {canCopyVoteBatchJson && votableLocks.length > 1 && (
+                        <Button
+                          kind="tertiary"
+                          size="small"
+                          onClick={() => void handleCopyVoteBatchJson()}
+                          disabled={!isAllocationValid || totalAllocation === 0}
+                        >
+                          {copiedVoteBatchJson ? "Copied" : "Copy tx JSON"}
+                        </Button>
+                      )}
+                      <Button
+                        kind="primary"
+                        onClick={handleVote}
+                        isLoading={isMultiVoteInProgress}
+                        disabled={
+                          selectedLocks.length === 0 ||
+                          votableLocks.length === 0 ||
+                          gaugeAllocations.size === 0 ||
+                          totalAllocation === 0 ||
+                          !isAllocationValid ||
+                          isMultiVoteInProgress ||
+                          isMultiVoteDone
+                        }
+                      >
+                        {isMultiVoteInProgress
+                          ? multiVoteExecutionMode === "safe-export"
+                            ? "Waiting for Safe..."
+                            : multiVoteExecutionMode === "batched"
+                              ? "Confirm batch..."
+                              : `Signing ${multiVoteCurrentIndex + 1}/${multiVoteTotalLocks}...`
+                          : isMultiVoteDone
+                            ? "Done"
+                            : votableLocks.length > 1
+                              ? `Vote with ${votableLocks.length} Locks (${totalAllocation}%)`
+                              : `Vote (${totalAllocation}%)`}
+                      </Button>
+                    </>
                   )}
                 </div>
               </div>
+              {(voteSafeBatchError || unpairSafeBatchError) && (
+                <p className="text-pretty text-xs text-[var(--negative)]">
+                  {(voteSafeBatchError ?? unpairSafeBatchError)?.message}
+                </p>
+              )}
             </div>
           </div>
         </ModalBody>
@@ -1522,14 +1673,18 @@ export default function BoostPage(): JSX.Element {
                 <div className="mb-3 flex items-center justify-between gap-3">
                   <p className="text-xs font-semibold text-[var(--content-primary)]">
                     {isUnpairInProgress
-                      ? unpairExecutionMode === "batched"
-                        ? "Confirm batch in wallet"
-                        : `Signing transactions (${unpairCurrentIndex + 1}/${unpairTotalTransactions})`
+                      ? unpairExecutionMode === "safe-export"
+                        ? "Waiting for execution in Safe"
+                        : unpairExecutionMode === "batched"
+                          ? "Confirm batch in wallet"
+                          : `Signing transactions (${unpairCurrentIndex + 1}/${unpairTotalTransactions})`
                       : unpairHasErrors
                         ? `${unpairSuccessCount} of ${unpairTotalTransactions} confirmed`
-                        : unpairExecutionMode === "batched"
-                          ? "Batch confirmed"
-                          : "All transactions confirmed"}
+                        : unpairExecutionMode === "safe-export"
+                          ? "Safe batch executed"
+                          : unpairExecutionMode === "batched"
+                            ? "Batch confirmed"
+                            : "All transactions confirmed"}
                   </p>
                   {isUnpairDone && !unpairHasErrors && (
                     <Tag color="green" closeable={false}>
@@ -1537,12 +1692,6 @@ export default function BoostPage(): JSX.Element {
                     </Tag>
                   )}
                 </div>
-                {unpairExecutionMode === "sequential" &&
-                  getAtomicBatchFallbackMessage(unpairBatchSupport) && (
-                    <p className="mb-3 text-2xs text-[var(--content-secondary)]">
-                      {getAtomicBatchFallbackMessage(unpairBatchSupport)}
-                    </p>
-                  )}
                 <div className="mb-3 flex h-2 gap-0.5 overflow-hidden rounded-full">
                   {unpairTxStates.map((txState) => (
                     <div
@@ -1583,7 +1732,10 @@ export default function BoostPage(): JSX.Element {
                                 : "text-[var(--content-tertiary)]"
                         }`}
                       >
-                        {getTransactionStatusLabel(txState.status)}
+                        {txState.status === "confirming" &&
+                        unpairExecutionMode === "safe-export"
+                          ? "Waiting for Safe"
+                          : getTransactionStatusLabel(txState.status)}
                       </span>
                     </li>
                   ))}
@@ -1867,6 +2019,17 @@ export default function BoostPage(): JSX.Element {
                       >
                         Inactive
                       </Tag>
+                      {watchedGaugeAddresses.size > 0 && (
+                        <Tag
+                          closeable={false}
+                          onClick={() => setGaugeStatusFilter("watching")}
+                          color={
+                            gaugeStatusFilter === "watching" ? "yellow" : "gray"
+                          }
+                        >
+                          ★ Watching
+                        </Tag>
+                      )}
                     </div>
 
                     {/* Search field */}

@@ -1,7 +1,8 @@
 import { getContractConfig } from "@/config/contracts"
 import { useNetwork } from "@/contexts/NetworkContext"
 import { type AtomicBatchSupport, getAtomicBatchSupport } from "@/utils/eip5792"
-import { useCallback, useRef, useState } from "react"
+import { encodeSafeBatchCall } from "@/utils/safeBatch"
+import { useCallback, useEffect, useRef, useState } from "react"
 import type { Address, Hex } from "viem"
 import { sendCalls, waitForCallsStatus } from "viem/actions"
 import {
@@ -11,6 +12,7 @@ import {
   useWriteContract,
 } from "wagmi"
 import type { LockTxStatus, MultiLockExecutionMode } from "./useMultiLockVoting"
+import { useSafeBatchExport } from "./useSafeBatchExport"
 
 export type UnpairBoostRequest = {
   veMEZOTokenId: bigint
@@ -38,6 +40,8 @@ type MultiLockUnpairStatus = "idle" | "unpairing" | "done"
 
 type UseMultiLockUnpairingReturn = {
   unpairAll: (requests: UnpairBoostRequest[]) => Promise<UnpairExecutionResult>
+  exportUnpairBatch: (requests: UnpairBoostRequest[]) => Promise<void>
+  copyUnpairBatchJson: (requests: UnpairBoostRequest[]) => Promise<void>
   abort: () => void
   txStates: UnpairTxState[]
   currentIndex: number
@@ -49,6 +53,10 @@ type UseMultiLockUnpairingReturn = {
   hasErrors: boolean
   executionMode: MultiLockExecutionMode
   batchSupport: AtomicBatchSupport | null
+  canExportSafeBatch: boolean
+  canCopyBatchJson: boolean
+  copiedBatchJson: boolean
+  safeBatchError: Error | undefined
   clear: () => void
 }
 
@@ -74,6 +82,7 @@ export function useMultiLockUnpairing(): UseMultiLockUnpairingReturn {
   const publicClient = usePublicClient({ chainId })
   const { data: walletClient } = useWalletClient({ chainId })
   const { writeContractAsync } = useWriteContract()
+  const safeBatch = useSafeBatchExport("unpair")
 
   const [status, setStatus] = useState<MultiLockUnpairStatus>("idle")
   const [executionMode, setExecutionMode] =
@@ -168,6 +177,29 @@ export function useMultiLockUnpairing(): UseMultiLockUnpairingReturn {
       allAffectedVeBTCTokenIds,
     }
   }, [])
+
+  useEffect(() => {
+    if (!safeBatch.pending) return
+
+    const nextStates = safeBatch.pending.items.map((item) => ({
+      id: item.id,
+      kind: item.id === "poke-boosts" ? ("poke" as const) : ("reset" as const),
+      label: item.label,
+      status:
+        safeBatch.status === "executed"
+          ? ("success" as const)
+          : ("confirming" as const),
+      ...(safeBatch.executedHash ? { hash: safeBatch.executedHash } : {}),
+    }))
+    setExecutionMode("safe-export")
+    setStatus(safeBatch.status === "executed" ? "done" : "unpairing")
+    replaceTxStates(nextStates)
+  }, [
+    replaceTxStates,
+    safeBatch.executedHash,
+    safeBatch.pending,
+    safeBatch.status,
+  ])
 
   const executeBatched = useCallback(
     async (
@@ -378,6 +410,99 @@ export function useMultiLockUnpairing(): UseMultiLockUnpairingReturn {
     ],
   )
 
+  const exportUnpairBatch = useCallback(
+    async (requests: UnpairBoostRequest[]) => {
+      const { address, abi } = contracts.boostVoter
+      if (!address || requests.length === 0) return
+
+      const { initialStates, allAffectedVeBTCTokenIds } =
+        buildInitialStates(requests)
+      const calls = [
+        ...requests.map((request) =>
+          encodeSafeBatchCall({
+            to: address,
+            abi,
+            functionName: "reset",
+            args: [request.veMEZOTokenId],
+          }),
+        ),
+        ...(allAffectedVeBTCTokenIds.length > 0
+          ? [
+              encodeSafeBatchCall({
+                to: address,
+                abi,
+                functionName: "pokeBoosts",
+                args: [allAffectedVeBTCTokenIds],
+              }),
+            ]
+          : []),
+      ]
+      const pending = await safeBatch.exportBatch({
+        name: `Matchbox unpair ${requests.length} locks`,
+        description:
+          "Atomic Matchbox vote reset and boost refresh generated for Safe Transaction Builder.",
+        calls,
+        items: initialStates.map((state) => ({
+          id: state.id,
+          label: state.label,
+        })),
+      })
+      if (!pending) return
+
+      setExecutionMode("safe-export")
+      setStatus("unpairing")
+      replaceTxStates(
+        pending.items.map((item) => ({
+          id: item.id,
+          kind:
+            item.id === "poke-boosts" ? ("poke" as const) : ("reset" as const),
+          label: item.label,
+          status: "confirming",
+        })),
+      )
+    },
+    [
+      buildInitialStates,
+      contracts.boostVoter,
+      replaceTxStates,
+      safeBatch.exportBatch,
+    ],
+  )
+
+  const copyUnpairBatchJson = useCallback(
+    async (requests: UnpairBoostRequest[]) => {
+      const { address, abi } = contracts.boostVoter
+      if (!address) return
+      const { allAffectedVeBTCTokenIds } = buildInitialStates(requests)
+      await safeBatch.copyBatchJson({
+        name: `Matchbox unpair ${requests.length} locks`,
+        description:
+          "Matchbox reset and boost refresh transaction data. Execute only from the NFT-owning account.",
+        calls: [
+          ...requests.map((request) =>
+            encodeSafeBatchCall({
+              to: address,
+              abi,
+              functionName: "reset",
+              args: [request.veMEZOTokenId],
+            }),
+          ),
+          ...(allAffectedVeBTCTokenIds.length > 0
+            ? [
+                encodeSafeBatchCall({
+                  to: address,
+                  abi,
+                  functionName: "pokeBoosts",
+                  args: [allAffectedVeBTCTokenIds],
+                }),
+              ]
+            : []),
+        ],
+      })
+    },
+    [buildInitialStates, contracts.boostVoter, safeBatch.copyBatchJson],
+  )
+
   const abort = useCallback(() => {
     abortRef.current = true
   }, [])
@@ -390,13 +515,16 @@ export function useMultiLockUnpairing(): UseMultiLockUnpairingReturn {
     txStatesRef.current = []
     setCurrentIndex(0)
     abortRef.current = false
-  }, [])
+    safeBatch.clear()
+  }, [safeBatch.clear])
 
   const successCount = txStates.filter((s) => s.status === "success").length
   const errorCount = txStates.filter((s) => s.status === "error").length
 
   return {
     unpairAll,
+    exportUnpairBatch,
+    copyUnpairBatchJson,
     abort,
     txStates,
     currentIndex,
@@ -408,6 +536,10 @@ export function useMultiLockUnpairing(): UseMultiLockUnpairingReturn {
     hasErrors: errorCount > 0,
     executionMode,
     batchSupport,
+    canExportSafeBatch: safeBatch.canExportSafeBatch,
+    canCopyBatchJson: safeBatch.canCopyBatchJson,
+    copiedBatchJson: safeBatch.copiedBatchJson,
+    safeBatchError: safeBatch.error,
     clear,
   }
 }

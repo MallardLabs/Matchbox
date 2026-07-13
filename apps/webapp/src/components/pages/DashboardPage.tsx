@@ -14,6 +14,7 @@ import {
 } from "@/hooks/useAPY"
 import { useBtcPrice } from "@/hooks/useBtcPrice"
 import { useAllGaugeProfiles } from "@/hooks/useGaugeProfiles"
+import { useGaugeWatchlist } from "@/hooks/useGaugeWatchlist"
 import { useBatchGaugeData, useBoostGauges } from "@/hooks/useGauges"
 import { useVeBTCLocks, useVeMEZOLocks } from "@/hooks/useLocks"
 import { useMezoPrice } from "@/hooks/useMezoPrice"
@@ -32,7 +33,6 @@ import {
   useClaimableBribes,
   usePokeBoost,
 } from "@/hooks/useVoting"
-import { getAtomicBatchFallbackMessage } from "@/utils/eip5792"
 import {
   Button,
   Card,
@@ -92,7 +92,7 @@ type GaugeSortColumn =
   | "apy"
   | null
 type SortDirection = "asc" | "desc"
-type StatusFilter = "all" | "active" | "inactive"
+type StatusFilter = "all" | "active" | "inactive" | "watching"
 const GAUGES_PER_PAGE = 9
 
 function VeBTCLockCard({
@@ -856,6 +856,7 @@ export default function DashboardPage(): JSX.Element {
   const [gaugeStatusFilter, setGaugeStatusFilter] =
     useState<StatusFilter>("active")
   const [showNeedsBoostOnly, setShowNeedsBoostOnly] = useState(false)
+  const { isWatching, watchedGaugeAddresses } = useGaugeWatchlist()
   const [hasAnimatedGaugeCards, setHasAnimatedGaugeCards] = useState(false)
   const [gaugeSearchQuery, setGaugeSearchQuery] = useState("")
   const deferredGaugeSearchQuery = useDeferredValue(gaugeSearchQuery)
@@ -893,6 +894,8 @@ export default function DashboardPage(): JSX.Element {
   )
   const {
     claimAll,
+    exportClaimBatch,
+    copyClaimBatchJson,
     lockStates: multiClaimLockStates,
     currentIndex: multiClaimCurrentIndex,
     totalLocks: multiClaimTotalLocks,
@@ -902,7 +905,10 @@ export default function DashboardPage(): JSX.Element {
     isDone: isMultiClaimDone,
     hasErrors: multiClaimHasErrors,
     executionMode: multiClaimExecutionMode,
-    batchSupport: multiClaimBatchSupport,
+    canExportSafeBatch: canExportClaimSafeBatch,
+    canCopyBatchJson: canCopyClaimBatchJson,
+    copiedBatchJson: copiedClaimBatchJson,
+    safeBatchError: claimSafeBatchError,
     clear: clearMultiClaim,
   } = useMultiLockClaimBribes()
 
@@ -1016,6 +1022,13 @@ export default function DashboardPage(): JSX.Element {
     setClaimAllSnapshot(claimAllRequests)
     claimAll(claimAllRequests)
   }, [claimAll, claimAllRequests])
+
+  const handleExportClaimBatch = useCallback(() => {
+    if (claimAllRequests.length < 2) return
+
+    setClaimAllSnapshot(claimAllRequests)
+    void exportClaimBatch(claimAllRequests)
+  }, [claimAllRequests, exportClaimBatch])
 
   const handleCloseMultiClaim = useCallback(() => {
     clearMultiClaim()
@@ -1210,6 +1223,8 @@ export default function DashboardPage(): JSX.Element {
       result = result.filter((g) => g.isAlive)
     } else if (gaugeStatusFilter === "inactive") {
       result = result.filter((g) => !g.isAlive)
+    } else if (gaugeStatusFilter === "watching") {
+      result = result.filter((g) => isWatching(g.address))
     }
 
     if (showNeedsBoostOnly) {
@@ -1298,6 +1313,7 @@ export default function DashboardPage(): JSX.Element {
     gaugeSortColumn,
     gaugeSortDirection,
     apyMap,
+    isWatching,
   ])
 
   const {
@@ -1316,6 +1332,7 @@ export default function DashboardPage(): JSX.Element {
       gaugeSortColumn,
       gaugeSortDirection,
       deferredGaugeSearchQuery,
+      watchedGaugeAddresses,
     ],
   })
 
@@ -1468,20 +1485,52 @@ export default function DashboardPage(): JSX.Element {
                       {hasClaimableRewards &&
                         !isMultiClaimInProgress &&
                         !isMultiClaimDone && (
-                          <Button
-                            kind="primary"
-                            onClick={handleClaimAll}
-                            disabled={
-                              claimAllRequests.length === 0 ||
-                              isClaimPending ||
-                              isClaimConfirming ||
-                              isRefreshingClaimableBribes
-                            }
-                          >
-                            Claim all
-                          </Button>
+                          <div className="flex flex-wrap gap-2">
+                            {canExportClaimSafeBatch &&
+                              claimAllRequests.length > 1 && (
+                                <Button
+                                  kind="secondary"
+                                  onClick={handleExportClaimBatch}
+                                  disabled={isRefreshingClaimableBribes}
+                                >
+                                  Export Safe batch
+                                </Button>
+                              )}
+                            {canCopyClaimBatchJson &&
+                              claimAllRequests.length > 1 && (
+                                <Button
+                                  kind="tertiary"
+                                  size="small"
+                                  onClick={() =>
+                                    void copyClaimBatchJson(claimAllRequests)
+                                  }
+                                >
+                                  {copiedClaimBatchJson
+                                    ? "Copied"
+                                    : "Copy tx JSON"}
+                                </Button>
+                              )}
+                            <Button
+                              kind="primary"
+                              onClick={handleClaimAll}
+                              disabled={
+                                claimAllRequests.length === 0 ||
+                                isClaimPending ||
+                                isClaimConfirming ||
+                                isRefreshingClaimableBribes
+                              }
+                            >
+                              Claim all
+                            </Button>
+                          </div>
                         )}
                     </div>
+
+                    {claimSafeBatchError && (
+                      <p className="mt-3 text-pretty text-xs text-[var(--negative)]">
+                        {claimSafeBatchError.message}
+                      </p>
+                    )}
 
                     {(isMultiClaimInProgress || isMultiClaimDone) && (
                       <div className="mt-5 border-t border-[var(--border)] pt-5">
@@ -1493,14 +1542,18 @@ export default function DashboardPage(): JSX.Element {
                               </p>
                               <p className="text-sm font-medium text-[var(--content-primary)]">
                                 {isMultiClaimInProgress
-                                  ? multiClaimExecutionMode === "batched"
-                                    ? "Confirm batch in wallet"
-                                    : `Signing transactions (${multiClaimCurrentIndex + 1}/${multiClaimTotalLocks})`
+                                  ? multiClaimExecutionMode === "safe-export"
+                                    ? "Waiting for execution in Safe"
+                                    : multiClaimExecutionMode === "batched"
+                                      ? "Confirm batch in wallet"
+                                      : `Signing transactions (${multiClaimCurrentIndex + 1}/${multiClaimTotalLocks})`
                                   : multiClaimHasErrors
                                     ? `${multiClaimSuccessCount} of ${multiClaimTotalLocks} succeeded`
-                                    : multiClaimExecutionMode === "batched"
-                                      ? "Batch confirmed"
-                                      : "All transactions confirmed"}
+                                    : multiClaimExecutionMode === "safe-export"
+                                      ? "Safe batch executed"
+                                      : multiClaimExecutionMode === "batched"
+                                        ? "Batch confirmed"
+                                        : "All transactions confirmed"}
                               </p>
                             </div>
                             {isMultiClaimDone && !multiClaimHasErrors && (
@@ -1509,16 +1562,6 @@ export default function DashboardPage(): JSX.Element {
                               </Tag>
                             )}
                           </div>
-                          {multiClaimExecutionMode === "sequential" &&
-                            getAtomicBatchFallbackMessage(
-                              multiClaimBatchSupport,
-                            ) && (
-                              <p className="mb-3 text-xs text-[var(--content-secondary)]">
-                                {getAtomicBatchFallbackMessage(
-                                  multiClaimBatchSupport,
-                                )}
-                              </p>
-                            )}
 
                           <div className="mb-3 flex h-2 gap-0.5 overflow-hidden rounded-full">
                             {multiClaimLockStates.map((state) => (
@@ -1566,7 +1609,10 @@ export default function DashboardPage(): JSX.Element {
                                       : state.status === "signing"
                                         ? "Awaiting signature"
                                         : state.status === "confirming"
-                                          ? "Confirming"
+                                          ? multiClaimExecutionMode ===
+                                            "safe-export"
+                                            ? "Waiting for Safe"
+                                            : "Confirming"
                                           : "Pending"}
                                 </span>
                               </li>
@@ -1918,6 +1964,17 @@ export default function DashboardPage(): JSX.Element {
                   >
                     Inactive
                   </Tag>
+                  {watchedGaugeAddresses.size > 0 && (
+                    <Tag
+                      closeable={false}
+                      onClick={() => setGaugeStatusFilter("watching")}
+                      color={
+                        gaugeStatusFilter === "watching" ? "yellow" : "gray"
+                      }
+                    >
+                      ★ Watching
+                    </Tag>
+                  )}
                 </div>
 
                 <div>
