@@ -70,6 +70,29 @@ async function embedImages(clone: Element) {
   )
 }
 
+function applyExportOverrides(clone: Element) {
+  for (const removable of clone.querySelectorAll("[data-svg-export-remove]")) {
+    removable.remove()
+  }
+
+  for (const container of clone.querySelectorAll<HTMLElement>(
+    "[data-svg-export-nowrap]",
+  )) {
+    const elements = [
+      container,
+      ...container.querySelectorAll<HTMLElement>("*"),
+    ]
+    for (const element of elements) {
+      element.style.width = "max-content"
+      element.style.maxWidth = "none"
+      element.style.overflow = "visible"
+      element.style.textOverflow = "clip"
+      element.style.whiteSpace = "nowrap"
+      element.style.flexShrink = "0"
+    }
+  }
+}
+
 export async function exportElementAsSvg(
   element: HTMLElement,
   filename: string,
@@ -94,6 +117,7 @@ export async function exportElementAsSvg(
     clone = element.cloneNode(true) as HTMLElement
     copyComputedStyles(element, clone)
     preserveFormValues(element, clone)
+    applyExportOverrides(clone)
   } finally {
     for (const [index, ignoredElement] of ignoredElements.entries()) {
       ignoredElement.style.display = previousDisplayValues[index] ?? ""

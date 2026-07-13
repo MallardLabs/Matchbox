@@ -4,12 +4,11 @@ import type { BoostGauge } from "@/hooks/useGauges"
 import useShiftKeyHeld from "@/hooks/useShiftKeyHeld"
 import { formatUsdValue } from "@/hooks/useTokenPrices"
 import { exportElementAsSvg } from "@/utils/exportElementAsSvg"
-import { formatMultiplier } from "@/utils/format"
+import { formatFixedPoint, formatMultiplier } from "@/utils/format"
 import { Button, Tag } from "@mezo-org/mezo-clay"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import Link from "next/link"
 import { type ReactNode, useRef, useState } from "react"
-import { formatUnits } from "viem"
 import MarqueeText from "./MarqueeText"
 import OptimalVeMEZOProgress from "./OptimalVeMEZOProgress"
 import { TokenIcon } from "./TokenIcon"
@@ -146,7 +145,10 @@ export default function GaugeCard({
             )}
           </div>
         </Link>
-        <div className="flex items-center gap-2 self-start">
+        <div
+          data-svg-export-nowrap="true"
+          className="flex shrink-0 items-center gap-2 self-start"
+        >
           <WatchGaugeButton gaugeAddress={gauge.address} compact />
           <Tag color={gauge.isAlive ? "green" : "red"} closeable={false}>
             {gauge.isAlive ? "Active" : "Inactive"}
@@ -158,14 +160,14 @@ export default function GaugeCard({
           <dt className="text-[var(--content-tertiary)]">veBTC Weight</dt>
           <dd className="font-mono text-[var(--content-primary)]">
             {gauge.veBTCWeight !== undefined
-              ? formatUnits(gauge.veBTCWeight, 18).slice(0, 10)
+              ? formatFixedPoint(gauge.veBTCWeight)
               : "-"}
           </dd>
         </div>
         <div>
           <dt className="text-[var(--content-tertiary)]">veMEZO Weight</dt>
           <dd className="font-mono text-[var(--content-primary)]">
-            {formatUnits(gauge.totalWeight, 18).slice(0, 10)}
+            {formatFixedPoint(gauge.totalWeight)}
           </dd>
           <div
             className="grid transition-[grid-template-rows] duration-300 ease-out"
@@ -176,7 +178,7 @@ export default function GaugeCard({
             <div className="overflow-hidden">
               {hasProjection && (
                 <p className="pt-0.5 font-mono text-2xs font-medium tabular-nums text-[#F7931A]">
-                  +{formatUnits(projectedVoteWeight ?? 0n, 18).slice(0, 10)}
+                  +{formatFixedPoint(projectedVoteWeight ?? 0n)}
                 </p>
               )}
             </div>

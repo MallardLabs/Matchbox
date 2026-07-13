@@ -39,22 +39,27 @@ export default function OptimalVeMEZOProgress({
 
   const targetClass =
     size === "md"
-      ? "min-w-0 font-mono text-base leading-snug tracking-tight text-[var(--content-primary)] tabular-nums [overflow-wrap:anywhere]"
-      : "min-w-0 font-mono text-sm leading-snug tracking-tight text-[var(--content-primary)] [overflow-wrap:anywhere]"
+      ? "min-w-0 whitespace-nowrap font-mono text-base leading-snug tracking-tight text-[var(--content-primary)] tabular-nums"
+      : "min-w-0 whitespace-nowrap font-mono text-sm leading-snug tracking-tight text-[var(--content-primary)] tabular-nums"
   const sideTextClass =
     size === "md"
-      ? "font-mono text-xs tabular-nums"
-      : "font-mono text-2xs tabular-nums"
+      ? "whitespace-nowrap font-mono text-xs tabular-nums"
+      : "whitespace-nowrap font-mono text-2xs tabular-nums"
   const barHeightClass = size === "md" ? "h-2" : "h-1.5"
 
   return (
     <div className="space-y-1.5">
       <div className="flex min-w-0 flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5">
-        <span className={targetClass} title={formatFixedPoint(optimalTarget)}>
+        <span
+          data-svg-export-nowrap="true"
+          className={targetClass}
+          title={formatFixedPoint(optimalTarget)}
+        >
           {formatFixedPoint(optimalTarget)}
         </span>
         {hasShortfall && (
           <span
+            data-svg-export-nowrap="true"
             className={`${sideTextClass} text-[var(--content-secondary)]`}
             title="veMEZO still needed to reach 5x boost on this gauge"
           >
@@ -63,6 +68,7 @@ export default function OptimalVeMEZOProgress({
         )}
         {pastOptimal && (
           <span
+            data-svg-export-nowrap="true"
             className={`${sideTextClass} text-[var(--negative)]`}
             title={`${weightVsOptimalRatio.toFixed(2)}x optimal weight - oversubscribed.`}
           >
