@@ -198,6 +198,9 @@ importers:
       baseui:
         specifier: 0.0.0-next-18f01efe0
         version: 0.0.0-next-18f01efe0(@types/react@18.3.27)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styletron-react@6.1.1(react@18.3.1))
+      motion:
+        specifier: ^12.29.2
+        version: 12.29.2(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       next:
         specifier: ^14.2.18
         version: 14.2.33(@babel/core@7.28.5)(@opentelemetry/api@1.9.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)

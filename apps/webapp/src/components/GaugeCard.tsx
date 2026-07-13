@@ -6,6 +6,7 @@ import { formatUsdValue } from "@/hooks/useTokenPrices"
 import { exportElementAsSvg } from "@/utils/exportElementAsSvg"
 import { formatMultiplier } from "@/utils/format"
 import { Button, Tag } from "@mezo-org/mezo-clay"
+import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import Link from "next/link"
 import { type ReactNode, useRef, useState } from "react"
 import { formatUnits } from "viem"
@@ -42,6 +43,8 @@ export default function GaugeCard({
 }: GaugeCardProps) {
   const cardRef = useRef<HTMLElement>(null)
   const isShiftKeyHeld = useShiftKeyHeld()
+  const prefersReducedMotion = useReducedMotion()
+  const [isHovered, setIsHovered] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
   const displayAPY =
@@ -89,6 +92,8 @@ export default function GaugeCard({
   return (
     <article
       ref={cardRef}
+      onPointerEnter={() => setIsHovered(true)}
+      onPointerLeave={() => setIsHovered(false)}
       className={`flex min-w-0 flex-col gap-3 overflow-hidden rounded-xl border bg-[var(--surface)] p-3 sm:p-4 ${
         isSelected ? "border-[var(--positive)]" : "border-[var(--border)]"
       }`}
@@ -249,49 +254,63 @@ export default function GaugeCard({
             </div>
           )}
       </dl>
-      <dl className="mt-auto text-xs">
-        <div>
-          <dt className="flex flex-wrap items-center gap-1.5 text-[var(--content-tertiary)]">
-            Optimal veMEZO
-            <Tooltip
-              id={`gc-optimal-${gauge.address}`}
-              content="veMEZO voting weight on this gauge that reaches maximum (5x) boost. System totals use veBTC unboostedTotalVotingPower() and veMEZO totalVotingPower() from escrow—the same bases as the Boost calculator. Below that, the bar fills in orange toward the goal. At the target the bar is green. If oversubscribed, a red layer grows over the green from 0% at 1× to 100% at 2× the optimal weight (full red); beyond 2× the bar stays full red—more veMEZO dilutes rewards per voter."
-            />
-          </dt>
-          <dd className="min-w-0 text-[var(--content-primary)]">
-            <OptimalVeMEZOProgress
-              optimalTarget={gauge.optimalVeMEZO}
-              effectiveWeight={effectiveWeight}
-              size="sm"
-            />
-          </dd>
-        </div>
-      </dl>
-      {children}
-      {isShiftKeyHeld && (
-        <div data-svg-export-ignore="true" className="flex flex-col gap-1.5">
-          <Button
-            kind="secondary"
-            size="small"
-            onClick={handleExport}
-            disabled={isExporting}
-            overrides={{
-              BaseButton: {
-                style: {
-                  width: "100%",
-                },
-              },
-            }}
-          >
-            {isExporting ? "Exporting…" : "Export SVG"}
-          </Button>
-          {exportError && (
-            <p className="text-pretty text-2xs text-[var(--negative)]">
-              {exportError}
-            </p>
+      <div className="relative mt-auto">
+        <dl className="text-xs">
+          <div>
+            <dt className="flex flex-wrap items-center gap-1.5 text-[var(--content-tertiary)]">
+              Optimal veMEZO
+              <Tooltip
+                id={`gc-optimal-${gauge.address}`}
+                content="veMEZO voting weight on this gauge that reaches maximum (5x) boost. System totals use veBTC unboostedTotalVotingPower() and veMEZO totalVotingPower() from escrow—the same bases as the Boost calculator. Below that, the bar fills in orange toward the goal. At the target the bar is green. If oversubscribed, a red layer grows over the green from 0% at 1× to 100% at 2× the optimal weight (full red); beyond 2× the bar stays full red—more veMEZO dilutes rewards per voter."
+              />
+            </dt>
+            <dd className="min-w-0 text-[var(--content-primary)]">
+              <OptimalVeMEZOProgress
+                optimalTarget={gauge.optimalVeMEZO}
+                effectiveWeight={effectiveWeight}
+                size="sm"
+              />
+            </dd>
+          </div>
+        </dl>
+        <AnimatePresence>
+          {isShiftKeyHeld && isHovered && (
+            <motion.div
+              data-svg-export-ignore="true"
+              className="absolute inset-0 z-10 flex flex-col justify-end gap-1 bg-[var(--surface)]"
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 12 }}
+              transition={{
+                duration: prefersReducedMotion ? 0 : 0.16,
+                ease: "easeOut",
+              }}
+            >
+              <Button
+                kind="secondary"
+                size="small"
+                onClick={handleExport}
+                disabled={isExporting}
+                overrides={{
+                  BaseButton: {
+                    style: {
+                      width: "100%",
+                    },
+                  },
+                }}
+              >
+                {isExporting ? "Exporting…" : "Export SVG"}
+              </Button>
+              {exportError && (
+                <p className="text-pretty text-2xs text-[var(--negative)]">
+                  {exportError}
+                </p>
+              )}
+            </motion.div>
           )}
-        </div>
-      )}
+        </AnimatePresence>
+      </div>
+      {children}
     </article>
   )
 }
