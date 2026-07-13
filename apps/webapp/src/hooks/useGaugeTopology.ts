@@ -100,6 +100,11 @@ export function useGaugeTopology(options: UseGaugeTopologyOptions = {}) {
     queryFn: ({ signal }) => fetchGaugeTopology(chainId, signal, rpcPreference),
     enabled: enabled && epochStart !== undefined,
     ...QUERY_PROFILES.SHORT_CACHE,
+    // Gauge topology (gauges/bribes/reward tokens) only changes at epoch
+    // boundaries, so a much longer staleTime avoids refetching on every
+    // page navigation while still refreshing well within an epoch.
+    staleTime: 20 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
   })
 
   const gaugeToBribe = useMemo(() => {
