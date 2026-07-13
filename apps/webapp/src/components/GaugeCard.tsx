@@ -99,6 +99,7 @@ export default function GaugeCard({
     >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <Link
+          data-svg-export-fill="true"
           href={`/gauges/${gauge.address}`}
           className="flex min-w-0 items-center gap-3 text-inherit no-underline"
         >
@@ -146,7 +147,7 @@ export default function GaugeCard({
           </div>
         </Link>
         <div
-          data-svg-export-nowrap="true"
+          data-svg-export-remove="true"
           className="flex shrink-0 items-center gap-2 self-start"
         >
           <WatchGaugeButton gaugeAddress={gauge.address} compact />
