@@ -98,7 +98,7 @@ export function useGaugeTopology(options: UseGaugeTopologyOptions = {}) {
   const query = useQuery({
     queryKey: ["gauge-topology", chainId, epochKey, rpcPreference],
     queryFn: ({ signal }) => fetchGaugeTopology(chainId, signal, rpcPreference),
-    enabled,
+    enabled: enabled && epochStart !== undefined,
     ...QUERY_PROFILES.SHORT_CACHE,
   })
 
