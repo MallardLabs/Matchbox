@@ -4,10 +4,14 @@
   "name": "matchbox-developer-platform",
   "compatibility_date": "2026-06-20",
   "compatibility_flags": ["nodejs_compat"],
-  "routes": [
-    { "pattern": "id.matchbox.markets", "custom_domain": true },
-    { "pattern": "developer.matchbox.markets", "custom_domain": true },
-  ],
+  // Custom-domain routes require the matchbox.markets zone to live on Cloudflare.
+  // Kept disabled until the DNS migration completes (see
+  // docs/netlify-to-cloudflare-migration.md, Phase 3/4). Until then this Worker
+  // deploys to its *.workers.dev URL; re-enable at cutover.
+  // "routes": [
+  //   { "pattern": "id.matchbox.markets", "custom_domain": true },
+  //   { "pattern": "developer.matchbox.markets", "custom_domain": true },
+  // ],
   "assets": { "directory": ".open-next/assets", "binding": "ASSETS" },
   "observability": { "enabled": true, "head_sampling_rate": 1 },
   "vars": {
