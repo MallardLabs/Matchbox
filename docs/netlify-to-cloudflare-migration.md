@@ -173,9 +173,12 @@ Developer API is unchanged.
   `config = { runtime: "edge" }` and were migrated to App Router route handlers
   (`app/api/*/route.ts`, default Node runtime); their Web `Request`/`Response`
   bodies carried over unchanged. Do not reintroduce `runtime: "edge"`. The 3 OG
-  routes (`@vercel/og`, already broken) were deleted and the dep dropped;
-  `/api/og/academy` references in the academy share card are now dangling and
-  should be cleaned up.
+  routes were migrated too: `/api/og/academy` (a working share card) was kept,
+  now an App Router handler importing `ImageResponse` from `next/og` (Node
+  runtime; fonts load from an external CDN with a fallback). The two generic OG
+  routes (`og/index`, `og/gauge`) were unused and removed; the direct
+  `@vercel/og` dependency was dropped in favour of `next/og`. Watch worker gzip
+  size — `next/og` pulls in resvg.wasm and can approach the 3 MiB free-tier cap.
 
 ## 5. Rollback
 
