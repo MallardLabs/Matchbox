@@ -1,6 +1,4 @@
-export const config = {
-  runtime: "edge",
-}
+export { handler as GET, handler as OPTIONS }
 
 // Per-network edge proxy for the Mezo votables API.
 //
@@ -23,7 +21,7 @@ const SPOOF_ORIGIN: Record<string, string> = {
   testnet: "https://testnet.mezo.org",
 }
 
-export default async function handler(request: Request) {
+async function handler(request: Request) {
   if (request.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: CORS_HEADERS })
   }

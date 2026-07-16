@@ -15,9 +15,7 @@ import {
 import type { NextRequest } from "next/server"
 import { http, type Address, createPublicClient, fallback } from "viem"
 
-export const config = {
-  runtime: "edge",
-}
+export { handler as GET }
 
 const MULTICALL3_ADDRESS = "0xcA11bde05977b3631167028862bE2a173976CA11"
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
@@ -252,8 +250,7 @@ async function computeGaugeTopology(
     rewardLengthContracts,
   )
 
-  const rewardTokenQueries: Array<{ bribeAddress: Address; index: number }> =
-    []
+  const rewardTokenQueries: Array<{ bribeAddress: Address; index: number }> = []
   bribeAddresses.forEach((bribeAddress, index) => {
     const rewardsLength =
       rewardLengthResults[index]?.status === "success"
@@ -303,20 +300,18 @@ async function computeGaugeTopology(
     ),
   )
 
-  const tokenMetadataContracts = uniqueRewardTokens.flatMap(
-    (tokenAddress) => [
-      {
-        address: tokenAddress,
-        abi: ERC20_METADATA_ABI,
-        functionName: "symbol" as const,
-      },
-      {
-        address: tokenAddress,
-        abi: ERC20_METADATA_ABI,
-        functionName: "decimals" as const,
-      },
-    ],
-  )
+  const tokenMetadataContracts = uniqueRewardTokens.flatMap((tokenAddress) => [
+    {
+      address: tokenAddress,
+      abi: ERC20_METADATA_ABI,
+      functionName: "symbol" as const,
+    },
+    {
+      address: tokenAddress,
+      abi: ERC20_METADATA_ABI,
+      functionName: "decimals" as const,
+    },
+  ])
 
   const tokenMetadataResults = await multicallInChunks(
     client,
@@ -441,7 +436,7 @@ function getCachedGaugeTopology(
   return promise
 }
 
-export default async function handler(req: NextRequest) {
+async function handler(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const rawChainId = Number(searchParams.get("chainId") ?? CHAIN_ID.testnet)
   const rpcEndpointId = searchParams.get("rpc")

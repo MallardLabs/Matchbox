@@ -3,9 +3,7 @@ import { fetchMezoActivity } from "@/lib/mezoActivity/dataSources"
 import { serializeActivityItem } from "@/lib/mezoActivity/normalize"
 import { CHAIN_ID, type SupportedChainId } from "@repo/shared/contracts"
 
-export const config = {
-  runtime: "edge",
-}
+export { handler as GET, handler as OPTIONS }
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -25,7 +23,7 @@ function parseChainId(network: string | null): SupportedChainId {
     : CHAIN_ID.mainnet
 }
 
-export default async function handler(request: Request): Promise<Response> {
+async function handler(request: Request): Promise<Response> {
   if (request.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: CORS_HEADERS })
   }

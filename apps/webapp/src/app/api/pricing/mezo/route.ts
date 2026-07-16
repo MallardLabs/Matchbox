@@ -1,9 +1,7 @@
 import { http, createPublicClient, getAddress } from "viem"
 import { base } from "viem/chains"
 
-export const config = {
-  runtime: "edge",
-}
+export { handler as GET, handler as OPTIONS }
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -77,7 +75,7 @@ function json(data: unknown, init?: ResponseInit): Response {
   })
 }
 
-export default async function handler(request: Request) {
+async function handler(request: Request) {
   if (request.method === "OPTIONS") {
     return new Response(null, {
       status: 204,

@@ -12,9 +12,7 @@ import type { MezoActivityItem } from "@/types/mezoActivity"
 import { CHAIN_ID, type SupportedChainId } from "@repo/shared/contracts"
 import { type Address, getAddress } from "viem"
 
-export const config = {
-  runtime: "edge",
-}
+export { handler as GET, handler as OPTIONS }
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -138,7 +136,7 @@ function serializeProfile(profile: ActorProfile) {
   }
 }
 
-export default async function handler(request: Request): Promise<Response> {
+async function handler(request: Request): Promise<Response> {
   if (request.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: CORS_HEADERS })
   }

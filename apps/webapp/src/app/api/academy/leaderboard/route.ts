@@ -6,9 +6,7 @@ import { fetchMezoActivity } from "@/lib/mezoActivity/dataSources"
 import type { MezoActivityItem } from "@/types/mezoActivity"
 import { CHAIN_ID, type SupportedChainId } from "@repo/shared/contracts"
 
-export const config = {
-  runtime: "edge",
-}
+export { handler as GET, handler as OPTIONS }
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -75,7 +73,7 @@ async function fetchAllChunks(args: {
   return out
 }
 
-export default async function handler(request: Request): Promise<Response> {
+async function handler(request: Request): Promise<Response> {
   if (request.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: CORS_HEADERS })
   }

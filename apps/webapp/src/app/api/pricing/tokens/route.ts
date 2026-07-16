@@ -1,8 +1,6 @@
 import { getAddress } from "viem"
 
-export const config = {
-  runtime: "edge",
-}
+export { handler as GET, handler as OPTIONS }
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -77,7 +75,7 @@ function getRequestedAddresses(request: Request): string[] {
   return normalizeAddresses(rawAddresses)
 }
 
-export default async function handler(request: Request) {
+async function handler(request: Request) {
   if (request.method === "OPTIONS") {
     return new Response(null, {
       status: 204,
