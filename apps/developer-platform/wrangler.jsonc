@@ -15,8 +15,11 @@
   "assets": { "directory": ".open-next/assets", "binding": "ASSETS" },
   "observability": { "enabled": true, "head_sampling_rate": 1 },
   "vars": {
-    "DEVELOPER_PLATFORM_ENABLED": "false",
+    "DEVELOPER_PLATFORM_ENABLED": "true",
     "DEVELOPER_PROFILE_API_ENABLED": "false",
+    // Points at the Developer API Worker. Uses its *.workers.dev URL until the
+    // DNS migration, then switch to https://api.matchbox.markets (see runbook).
+    "DEVELOPER_API_ORIGIN": "https://matchbox-developer-api.mallard.workers.dev",
     "NEXT_PUBLIC_ID_URL": "https://id.matchbox.markets",
     "NEXT_PUBLIC_DEVELOPER_URL": "https://developer.matchbox.markets",
   },
