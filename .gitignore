@@ -13,6 +13,8 @@ build
 .env
 .env.local
 .env.*.local
+# Local env dumps (e.g. matchb0x.env pulled from Netlify)
+*.env
 
 # IDE
 .claude/
@@ -40,3 +42,6 @@ yarn-error.log*
 *.tsbuildinfo
 # Supabase
 supabase/.temp/
+
+# Local Netlify folder
+.netlify
