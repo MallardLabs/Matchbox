@@ -167,6 +167,15 @@ Developer API is unchanged.
   `agent-instructions/server.md` (log details, return high-level errors, use
   `@repo/logger`).
 - Docs stay on Netlify; simplest path is rewrite-to-Netlify, no Astro move.
+- **Edge runtime is unsupported (resolved 2026-07-15).** OpenNext-on-Cloudflare
+  runs on the Node.js runtime and rejects Next.js edge functions
+  (`X cannot use the edge runtime`). The webapp's 8 `pages/api` routes used
+  `config = { runtime: "edge" }` and were migrated to App Router route handlers
+  (`app/api/*/route.ts`, default Node runtime); their Web `Request`/`Response`
+  bodies carried over unchanged. Do not reintroduce `runtime: "edge"`. The 3 OG
+  routes (`@vercel/og`, already broken) were deleted and the dep dropped;
+  `/api/og/academy` references in the academy share card are now dangling and
+  should be cleaned up.
 
 ## 5. Rollback
 
