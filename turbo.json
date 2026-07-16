@@ -19,6 +19,10 @@
       "dependsOn": ["^build"],
       "outputs": [".next/**", "!.next/cache/**", "dist/**"]
     },
+    "cloudflare:build": {
+      "dependsOn": ["^build"],
+      "outputs": [".open-next/**"]
+    },
     "dev": {
       "cache": false,
       "persistent": true

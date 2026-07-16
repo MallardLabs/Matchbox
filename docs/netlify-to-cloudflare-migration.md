@@ -105,7 +105,7 @@ below.
 | Worker name | `matchbox` | `matchbox-developer-platform` |
 | Git repo / branch | `MallardLabs/MatchBox` / `main` | same |
 | Root directory | repo root | repo root |
-| Build command | `pnpm --filter @repo/shared build && pnpm --filter @repo/webapp cloudflare:build` | `pnpm --filter @repo/shared build && pnpm --filter @repo/developer-platform cloudflare:build` |
+| Build command | `pnpm turbo run cloudflare:build --filter @repo/webapp` | `pnpm turbo run cloudflare:build --filter @repo/developer-platform` |
 | Deploy command | `pnpm --filter @repo/webapp exec opennextjs-cloudflare deploy` | `pnpm --filter @repo/developer-platform exec opennextjs-cloudflare deploy` |
 
 **Environment split** — get the exact values from the Netlify sites (Phase 0):
