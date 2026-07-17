@@ -18,3 +18,21 @@ export function allocationTotalBasisPoints(
   }
   return total
 }
+
+export function basisPointsToPercentage(value: bigint): string {
+  const whole = value / 100n
+  const fraction = (value % 100n).toString().padStart(2, "0")
+  return fraction === "00" ? whole.toString() : `${whole}.${fraction}`
+}
+
+export function equalVoteBasisPoints(itemCount: number): bigint[] {
+  if (!Number.isSafeInteger(itemCount) || itemCount <= 0) return []
+
+  const count = BigInt(itemCount)
+  const base = 10_000n / count
+  const remainder = 10_000n % count
+
+  return Array.from({ length: itemCount }, (_, index) =>
+    BigInt(index) < remainder ? base + 1n : base,
+  )
+}
