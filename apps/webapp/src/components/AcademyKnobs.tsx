@@ -397,7 +397,7 @@ export default function AcademyKnobs({
             min={1}
             max={5}
             onChange={(n) => update({ participationMultiplier: n })}
-            hint="Multiplier on total earned points if actor voted in every epoch of the range"
+            hint="Multiplier on boost points if actor voted in every epoch of the range; new locks and extensions are unaffected"
           />
         </div>
       </Section>

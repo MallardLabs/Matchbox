@@ -91,12 +91,11 @@ import { type Address, getAddress, isAddressEqual } from "viem"
 //   gauge with different weights earn proportionally different points.
 //
 //   Full-participation bonus: if an actor had at least one active vote in
-//   EVERY epoch of the range, their TOTAL earned points (lock + extension +
-//   vote) are multiplied by (participationMultiplier − 1) and added as a
-//   bonus. The bonus is stored in its own `participationBonusWad` bucket so
-//   the UI never confuses it for real lock activity. The eligible base
-//   spans every track — otherwise a pure voter who satisfies the
-//   participation condition would get nothing for it.
+//   EVERY epoch of the range, their boost points are multiplied by
+//   (participationMultiplier − 1) and added as a bonus. New-lock and
+//   extension points are unaffected. The bonus is stored in its own
+//   `participationBonusWad` bucket so the UI never confuses it for real
+//   activity on another track.
 //
 //   The CRON address `0xf8176Df5…` (Tigris maintainer) is hard-filtered out
 //   client-side as defense-in-depth. The subgraph already re-attributes
@@ -260,8 +259,6 @@ type ActorAccumulator = {
   lockPointsWad: bigint
   extensionPointsWad: bigint
   votePointsWad: bigint
-  openEpochLockPointsWad: bigint
-  openEpochExtensionPointsWad: bigint
   openEpochVotePointsWad: bigint
   participationBonusWad: bigint
   vePowerWad: bigint
@@ -282,8 +279,6 @@ function emptyActor(actor: Address): ActorAccumulator {
     lockPointsWad: 0n,
     extensionPointsWad: 0n,
     votePointsWad: 0n,
-    openEpochLockPointsWad: 0n,
-    openEpochExtensionPointsWad: 0n,
     openEpochVotePointsWad: 0n,
     participationBonusWad: 0n,
     vePowerWad: 0n,
@@ -410,10 +405,6 @@ export function simulate(
     const extPts = scaleWad(delta.durationExtendedVeWad, weights.weightExt)
     acc.lockPointsWad += newPts
     acc.extensionPointsWad += extPts
-    if (hasOpenEpoch && epochStartFor(ev.timestamp) === openEpochStart) {
-      acc.openEpochLockPointsWad += newPts
-      acc.openEpochExtensionPointsWad += extPts
-    }
     acc.vePowerWad += delta.amountAddedVeWad + delta.durationExtendedVeWad
 
     if (actionType === "lockCreated" || actionType === "lockAmountIncreased") {
@@ -591,11 +582,9 @@ export function simulate(
 
   const allActors = [...accs.values()]
 
-  // Full-participation bonus across every earned track. Stored in its own
-  // bucket so the UI doesn't have to disambiguate it from real lock points
-  // (a pure voter would otherwise appear to have phantom lock activity).
-  // The eligible base sums lock + extension + vote so a pure voter who
-  // participated in every epoch actually gets rewarded for it.
+  // Full-participation bonus applies only to boost points. New-lock and
+  // extension points remain unchanged. Exclude boost points earned in an
+  // open epoch because only closed epochs determine full participation.
   for (const acc of allActors) {
     const closedParticipatedEpochs = participationEpochs.filter((epoch) =>
       acc.participatedEpochs.has(epoch),
@@ -605,13 +594,7 @@ export function simulate(
       closedParticipatedEpochs >= participationEpochCount &&
       params.participationMultiplier > 1
     ) {
-      const eligible =
-        acc.lockPointsWad +
-        acc.extensionPointsWad +
-        acc.votePointsWad -
-        acc.openEpochLockPointsWad -
-        acc.openEpochExtensionPointsWad -
-        acc.openEpochVotePointsWad
+      const eligible = acc.votePointsWad - acc.openEpochVotePointsWad
       acc.participationBonusWad = scaleWad(
         eligible,
         params.participationMultiplier - 1,

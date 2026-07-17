@@ -579,6 +579,51 @@ test("participation bonus rewards a pure voter with no lock activity", () => {
   assert.equal(baseline.rows[0]?.participationBonusWad, 0n)
 })
 
+test("participation bonus doubles only boost points", () => {
+  const oneYear = BigInt(365 * 86_400)
+  const fourYears = 4n * oneYear
+  const lockEvents = [
+    lockEvent(REGULAR, FROM_TS + 30, {
+      duration: oneYear,
+      prevAmount: 0n,
+      prevDuration: 0n,
+      postAmount: parseUnits("100", 18),
+      postDuration: oneYear,
+    }),
+    lockEvent(REGULAR, FROM_TS + 45, {
+      id: "extension-1",
+      actionType: "lockExtended",
+      duration: fourYears,
+      prevAmount: parseUnits("100", 18),
+      prevDuration: oneYear,
+      postAmount: parseUnits("100", 18),
+      postDuration: fourYears,
+    }),
+  ]
+  const input: SimInput = {
+    lockEvents,
+    voteEvents: [voteEvent(REGULAR, FROM_TS + 60)],
+  }
+
+  const baseline = simulate(input, PARAMS, FROM_TS, TO_TS)
+  const boosted = simulate(
+    input,
+    { ...PARAMS, participationMultiplier: 2 },
+    FROM_TS,
+    TO_TS,
+  )
+
+  assert.equal(baseline.rows[0]?.lockPointsWad, parseUnits("50", 18))
+  assert.equal(baseline.rows[0]?.extensionPointsWad, parseUnits("75", 18))
+  assert.equal(baseline.rows[0]?.votePointsWad, parseUnits("200", 18))
+  assert.equal(baseline.rows[0]?.pointsWad, parseUnits("325", 18))
+  assert.equal(boosted.rows[0]?.lockPointsWad, parseUnits("50", 18))
+  assert.equal(boosted.rows[0]?.extensionPointsWad, parseUnits("75", 18))
+  assert.equal(boosted.rows[0]?.votePointsWad, parseUnits("200", 18))
+  assert.equal(boosted.rows[0]?.participationBonusWad, parseUnits("200", 18))
+  assert.equal(boosted.rows[0]?.pointsWad, parseUnits("525", 18))
+})
+
 test("cron poke without transfer leaves sticky vote intact and does not bump boostCount", () => {
   // Alice votes mid-range (so a poke would have a different timestamp than
   // her manual vote). Verify the cron poke is a no-op for both state and
