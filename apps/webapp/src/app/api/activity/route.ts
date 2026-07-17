@@ -2,6 +2,7 @@ import { getExplorerTransactionUrl } from "@/config/explorer"
 import { fetchMezoActivity } from "@/lib/mezoActivity/dataSources"
 import { serializeActivityItem } from "@/lib/mezoActivity/normalize"
 import { CHAIN_ID, type SupportedChainId } from "@repo/shared/contracts"
+import { isAddress } from "viem"
 
 export { handler as GET, handler as OPTIONS }
 
@@ -50,6 +51,11 @@ async function handler(request: Request): Promise<Response> {
     : undefined
   const rawOrder = url.searchParams.get("order")
   const orderDirection: "asc" | "desc" = rawOrder === "asc" ? "asc" : "desc"
+  const rawGauge = url.searchParams.get("gauge")
+  const gauge = rawGauge && isAddress(rawGauge) ? rawGauge : undefined
+  const rawContract = url.searchParams.get("contract")
+  const source =
+    rawContract === "validatorsVoter" ? "VALIDATORS_VOTER" : undefined
 
   const result = await fetchMezoActivity({
     chainId,
@@ -59,6 +65,8 @@ async function handler(request: Request): Promise<Response> {
     page,
     orderDirection,
     actor: url.searchParams.get("actor") ?? undefined,
+    gauge,
+    source,
     ...(actionTypes && actionTypes.length > 0 ? { actionTypes } : {}),
   })
 

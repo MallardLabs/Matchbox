@@ -31,6 +31,8 @@ type SourceOptions = {
   orderDirection?: "asc" | "desc"
   actor?: string | undefined
   recipient?: string | undefined
+  gauge?: string | undefined
+  source?: string | undefined
 }
 
 type ExplorerActivityEvent = {
@@ -186,6 +188,12 @@ function buildWhereClause(options: SourceOptions): string {
   }
   if (options.recipient) {
     parts.push(`recipient: "${options.recipient.toLowerCase()}"`)
+  }
+  if (options.gauge) {
+    parts.push(`gauge: "${options.gauge.toLowerCase()}"`)
+  }
+  if (options.source) {
+    parts.push(`source: ${options.source}`)
   }
   return `{ ${parts.join(", ")} }`
 }
