@@ -15,10 +15,10 @@ type EditGaugeProfileModalProps = {
   isOpen: boolean
   onClose: () => void
   gaugeAddress: Address
-  veBTCTokenId?: bigint
+  veBTCTokenId?: bigint | undefined
   ownerAddress: Address
-  currentProfile?: GaugeProfile | null
-  onProfileUpdated?: () => void
+  currentProfile?: GaugeProfile | null | undefined
+  onProfileUpdated?: (() => void) | undefined
 }
 
 export function EditGaugeProfileModal({
