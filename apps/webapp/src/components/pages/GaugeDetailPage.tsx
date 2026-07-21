@@ -340,6 +340,18 @@ export default function GaugeDetailPage({
       ? (resolvedProfile.owner_address as Address)
       : undefined)
 
+  const { address: connectedAddress } = useAccount()
+  const [isAddIncentiveModalOpen, setIsAddIncentiveModalOpen] = useState(false)
+  const [isEditProfileModalOpen, setIsEditProfileModalOpen] = useState(false)
+  const isOperatorOrBeneficiary = useMemo(() => {
+    if (!connectedAddress) return false
+    const lowerConnected = connectedAddress.toLowerCase()
+    return (
+      resolvedBeneficiary?.toLowerCase() === lowerConnected ||
+      resolvedProfile?.owner_address?.toLowerCase() === lowerConnected
+    )
+  }, [connectedAddress, resolvedBeneficiary, resolvedProfile?.owner_address])
+
   // Get veBTC token ID for this gauge
   const { data: veBTCBalance } = useReadContract({
     ...contracts.veBTC,
@@ -470,7 +482,6 @@ export default function GaugeDetailPage({
 
   // Fetch gauge history
   const { history, isLoading: isLoadingHistory } = useGaugeHistory(gaugeAddress)
-  const [isAddIncentiveModalOpen, setIsAddIncentiveModalOpen] = useState(false)
   const [expandedEpoch, setExpandedEpoch] = useState<number | null>(null)
   const { refetch: refetchTopology } = useGaugeTopology({
     enabled: !!gaugeAddress,
