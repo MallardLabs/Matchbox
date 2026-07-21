@@ -666,6 +666,21 @@ export default function GaugeDetailPage({
                           Add Incentives
                         </Button>
                       )}
+                      {isOperatorOrBeneficiary && (
+                        <Button
+                          kind="primary"
+                          onClick={() => setIsEditProfileModalOpen(true)}
+                          overrides={{
+                            BaseButton: {
+                              style: {
+                                width: "100%",
+                              },
+                            },
+                          }}
+                        >
+                          Edit Profile
+                        </Button>
+                      )}
                     </div>
                   </div>
 
