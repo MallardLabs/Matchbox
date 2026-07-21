@@ -4,11 +4,11 @@ import { useState } from "react"
 
 type AnimatedApyValueProps = {
   apy: number | null
-  totalIncentivesUSD?: number
-  totalWeight?: bigint
-  isLoading?: boolean
-  className?: string
-  title?: string
+  totalIncentivesUSD?: number | undefined
+  totalWeight?: bigint | undefined
+  isLoading?: boolean | undefined
+  className?: string | undefined
+  title?: string | undefined
 }
 
 export function AnimatedApyValue({
