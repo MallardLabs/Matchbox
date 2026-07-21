@@ -33,7 +33,7 @@ import Link from "next/link"
 import { useRouter } from "next/router"
 import { Fragment, useEffect, useMemo, useState } from "react"
 import type { Address } from "viem"
-import { useReadContract, useReadContracts } from "wagmi"
+import { useAccount, useReadContract, useReadContracts } from "wagmi"
 
 type IncentiveWithUSD = {
   tokenAddress: string
