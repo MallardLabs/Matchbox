@@ -277,6 +277,32 @@ export function formatAPY(apy: number | null): string {
 }
 
 /**
+ * Calculate estimated USD reward per 10k veMEZO votes applied to a gauge
+ */
+export function calculateRewardPer10kVeMEZO(
+  totalIncentivesUSD: number,
+  totalWeight: bigint | undefined,
+): number | null {
+  if (!totalIncentivesUSD || totalIncentivesUSD <= 0) return 0
+  if (totalWeight === undefined) return null
+  const currentVeMEZO = Number(totalWeight) / 1e18
+  if (currentVeMEZO === 0) return totalIncentivesUSD
+  return (10000 / currentVeMEZO) * totalIncentivesUSD
+}
+
+export function formatRewardPer10kVeMEZO(
+  totalIncentivesUSD: number,
+  totalWeight: bigint | undefined,
+): string {
+  const val = calculateRewardPer10kVeMEZO(totalIncentivesUSD, totalWeight)
+  if (val === null) return "—"
+  if (val === 0) return "$0 / 10k veMEZO"
+  if (val >= 1000)
+    return `$${val.toLocaleString(undefined, { maximumFractionDigits: 0 })} / 10k veMEZO`
+  return `$${val.toFixed(2)} / 10k veMEZO`
+}
+
+/**
  * Calculate projected APY for a gauge after adding a user's vote
  */
 export function calculateProjectedAPY(

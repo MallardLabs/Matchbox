@@ -679,8 +679,16 @@ export default function IncentivesPage(): JSX.Element {
           <Card withBorder overrides={{}}>
             <div className="p-12 text-center">
               <ParagraphMedium color="var(--content-secondary)">
-                You don&apos;t have any veBTC locks. Lock BTC to get veBTC and
-                create a gauge.
+                You don&apos;t have any veBTC locks.{" "}
+                <a
+                  href="https://mezo.org/earn/lock"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[#F7931A] underline"
+                >
+                  Lock BTC on Mezo Earn
+                </a>{" "}
+                to get veBTC and create a gauge.
               </ParagraphMedium>
             </div>
           </Card>

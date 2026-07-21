@@ -1,5 +1,7 @@
 import { AddGaugeIncentiveModal } from "@/components/AddGaugeIncentiveModal"
 import { AddressLink } from "@/components/AddressLink"
+import AnimatedApyValue from "@/components/AnimatedApyValue"
+import EditGaugeProfileModal from "@/components/EditGaugeProfileModal"
 import OptimalVeMEZOProgress from "@/components/OptimalVeMEZOProgress"
 import { SpringIn } from "@/components/SpringIn"
 import { TokenIcon } from "@/components/TokenIcon"
@@ -740,7 +742,7 @@ export default function GaugeDetailPage({
               >
                 <div className="py-2">
                   <p className="mb-1 text-2xs uppercase tracking-wider text-[var(--content-tertiary)]">
-                    veBTC Weight
+                    BTC Weight
                   </p>
                   <h3 className="font-mono text-lg font-semibold tabular-nums text-[var(--content-primary)] md:text-xl">
                     {veBTCVotingPower !== undefined
@@ -802,15 +804,20 @@ export default function GaugeDetailPage({
                   <p className="mb-1 text-2xs uppercase tracking-wider text-[var(--content-tertiary)]">
                     Voting APY
                   </p>
-                  <h3
+                  <div
                     className={`font-mono text-lg font-semibold tabular-nums md:text-xl ${
                       apy && apy > 0
                         ? "text-[var(--positive)]"
                         : "text-[var(--content-primary)]"
                     }`}
                   >
-                    {isLoadingAPY ? "..." : formatAPY(apy)}
-                  </h3>
+                    <AnimatedApyValue
+                      apy={apy}
+                      totalIncentivesUSD={totalIncentivesUSD}
+                      totalWeight={totalWeight}
+                      isLoading={isLoadingAPY}
+                    />
+                  </div>
                 </div>
               </Card>
             </SpringIn>
@@ -1294,6 +1301,20 @@ export default function GaugeDetailPage({
           totalIncentivesUsd={totalIncentivesUSD}
           gaugeHasNoVotes={gaugeHasNoVotes}
           onIncentivesAdded={() => {
+            void refetchTopology()
+          }}
+        />
+      )}
+
+      {gaugeAddress && resolvedBeneficiary && (
+        <EditGaugeProfileModal
+          isOpen={isEditProfileModalOpen}
+          onClose={() => setIsEditProfileModalOpen(false)}
+          gaugeAddress={gaugeAddress}
+          veBTCTokenId={resolvedVeBTCTokenId}
+          ownerAddress={resolvedBeneficiary}
+          currentProfile={resolvedProfile}
+          onProfileUpdated={() => {
             void refetchTopology()
           }}
         />
