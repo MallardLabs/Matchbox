@@ -161,7 +161,7 @@ const veMEZOSteps: StepProps[] = [
     number: 1,
     title: "Acquire veMEZO",
     description:
-      "Lock MEZO tokens at mezo.org/earn. Each lock creates a veMEZO NFT. Longer lock durations grant more voting power. Locks are non-transferable and decay linearly toward their unlock date (permanent locks never decay).",
+      "Lock MEZO tokens at mezo.org/earn/lock. Each lock creates a veMEZO NFT. Longer lock durations grant more voting power. Locks are non-transferable and decay linearly toward their unlock date (permanent locks never decay).",
   },
   {
     number: 2,
@@ -200,7 +200,7 @@ const veBTCSteps: StepProps[] = [
     number: 1,
     title: "Acquire veBTC",
     description:
-      "Lock BTC at mezo.org/earn to receive a veBTC NFT. Each veBTC lock can own exactly one gauge on Matchbox.",
+      "Lock BTC at mezo.org/earn/lock to receive a veBTC NFT. Each veBTC lock can own exactly one gauge on Matchbox.",
   },
   {
     number: 2,

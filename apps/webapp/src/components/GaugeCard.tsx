@@ -1,5 +1,5 @@
 import type { GaugeProfile } from "@/config/supabase"
-import { type GaugeAPYData, formatAPY } from "@/hooks/useAPY"
+import type { GaugeAPYData } from "@/hooks/useAPY"
 import type { BoostGauge } from "@/hooks/useGauges"
 import useShiftKeyHeld from "@/hooks/useShiftKeyHeld"
 import { formatUsdValue } from "@/hooks/useTokenPrices"
@@ -9,6 +9,7 @@ import { Button, Tag } from "@mezo-org/mezo-clay"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import Link from "next/link"
 import { type ReactNode, useRef, useState } from "react"
+import AnimatedApyValue from "./AnimatedApyValue"
 import MarqueeText from "./MarqueeText"
 import OptimalVeMEZOProgress from "./OptimalVeMEZOProgress"
 import { TokenIcon } from "./TokenIcon"
@@ -158,7 +159,7 @@ export default function GaugeCard({
       </div>
       <dl className="grid grid-cols-1 gap-3 text-xs min-[420px]:grid-cols-2">
         <div>
-          <dt className="text-[var(--content-tertiary)]">veBTC Weight</dt>
+          <dt className="text-[var(--content-tertiary)]">BTC Weight</dt>
           <dd className="font-mono text-[var(--content-primary)]">
             {gauge.veBTCWeight !== undefined
               ? formatFixedPoint(gauge.veBTCWeight)
@@ -209,7 +210,7 @@ export default function GaugeCard({
             APY
             <Tooltip
               id={`gc-apy-${gauge.address}`}
-              content="Estimated annualized yield from this gauge's bribe pool divided by total veMEZO voting weight. Higher incentives or fewer voters means higher APY."
+              content="Estimated annualized yield from this gauge's bribe pool divided by total veMEZO voting weight. Hover to see estimated reward per 10k veMEZO."
             />
           </dt>
           <dd
@@ -220,7 +221,12 @@ export default function GaugeCard({
             }`}
             title={isProjected ? "Projected APY after your vote" : undefined}
           >
-            {isLoadingAPY ? "..." : formatAPY(displayAPY)}
+            <AnimatedApyValue
+              apy={displayAPY}
+              totalIncentivesUSD={apyData?.totalIncentivesUSD ?? 0}
+              totalWeight={effectiveWeight}
+              isLoading={isLoadingAPY}
+            />
             {isProjected && " \u2193"}
           </dd>
         </div>
