@@ -6,6 +6,7 @@ import {
   ERC20_ABI,
   POOLS_VOTER_ABI,
   type SupportedChainId,
+  VALIDATORS_VOTER_ABI,
   VOTING_ESCROW_ABI,
 } from "@repo/shared/contracts"
 
@@ -39,6 +40,11 @@ export function getContractConfig(
     poolsVoter: {
       address: addresses.poolsVoter,
       abi: POOLS_VOTER_ABI,
+      chainId,
+    },
+    validatorsVoter: {
+      address: addresses.validatorsVoter,
+      abi: VALIDATORS_VOTER_ABI,
       chainId,
     },
     bribe: {

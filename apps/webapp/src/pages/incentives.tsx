@@ -3,13 +3,10 @@ import { getAppUrl, getOgImageUrl } from "@/utils/seo"
 import dynamic from "next/dynamic"
 import Head from "next/head"
 
-const IncentivesPage = dynamic(
-  () => import("@/components/pages/IncentivesPage"),
-  {
-    ssr: false,
-    loading: () => <InitialLoader />,
-  },
-)
+const VeBTCHubPage = dynamic(() => import("@/components/pages/VeBTCHubPage"), {
+  ssr: false,
+  loading: () => <InitialLoader />,
+})
 
 export default function Incentives() {
   const ogImageUrl = getOgImageUrl()
@@ -40,7 +37,7 @@ export default function Incentives() {
         <meta name="twitter:description" content={description} />
         <meta name="twitter:image" content={ogImageUrl} />
       </Head>
-      <IncentivesPage />
+      <VeBTCHubPage />
     </>
   )
 }

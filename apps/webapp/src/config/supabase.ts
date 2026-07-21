@@ -20,6 +20,7 @@ export type SocialLinks = {
   github?: string
   medium?: string
   website?: string
+  other?: string
 }
 
 export type GaugeProfile = {
@@ -35,6 +36,23 @@ export type GaugeProfile = {
   voting_strategy: string | null
   tags: string[] | null
   is_featured: boolean
+  created_at: string
+  updated_at: string
+}
+
+export type ValidatorProfile = {
+  chain_id: number
+  gauge_address: string
+  operator_address: string
+  last_editor_address: string
+  profile_picture_url: string | null
+  display_name: string | null
+  description: string | null
+  website_url: string | null
+  social_links: SocialLinks | null
+  incentive_strategy: string | null
+  voting_strategy: string | null
+  tags: string[] | null
   created_at: string
   updated_at: string
 }

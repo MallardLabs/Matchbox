@@ -16,6 +16,10 @@ const sourceFiles = [
   "src/utils/votingApr.test.ts",
   "src/utils/safeBatch.ts",
   "src/utils/safeBatch.test.ts",
+  "src/utils/validatorVoting.ts",
+  "src/utils/validatorVoting.test.ts",
+  "src/utils/validatorApy.ts",
+  "src/utils/validatorApy.test.ts",
   "src/lib/academy/simulate.ts",
   "src/lib/academy/simulate.test.ts",
   "src/lib/academy/epoch.ts",
@@ -28,6 +32,8 @@ const sourceFiles = [
 const testEntries = [
   "utils/votingApr.test.js",
   "utils/safeBatch.test.js",
+  "utils/validatorVoting.test.js",
+  "utils/validatorApy.test.js",
   "lib/academy/simulate.test.js",
 ]
 
