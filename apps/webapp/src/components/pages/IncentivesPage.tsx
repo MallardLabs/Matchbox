@@ -1,3 +1,4 @@
+import GaugeCard from "@/components/GaugeCard"
 import IncentiveWarningModal from "@/components/IncentiveWarningModal"
 import {
   LockCarouselSelector,
@@ -7,9 +8,8 @@ import OnboardingCard from "@/components/OnboardingCard"
 import { SpringIn } from "@/components/SpringIn"
 import { TokenIcon } from "@/components/TokenIcon"
 import { TokenSelector } from "@/components/TokenSelector"
-import type { SocialLinks } from "@/config/supabase"
-import type { SavedProfile } from "@/config/supabase"
-import { formatAPY, useGaugeAPY } from "@/hooks/useAPY"
+import type { SavedProfile, SocialLinks } from "@/config/supabase"
+import { formatAPY, useGaugeAPY, useGaugesAPY } from "@/hooks/useAPY"
 import { useBtcPrice } from "@/hooks/useBtcPrice"
 import {
   useAllGaugeProfiles,
@@ -23,6 +23,7 @@ import {
 import {
   useBatchGaugeData,
   useBoostGaugeForToken,
+  useBoostGauges,
   useBoostInfo,
   useGaugeWeight,
 } from "@/hooks/useGauges"
@@ -206,6 +207,11 @@ export default function IncentivesPage(): JSX.Element {
 
   // Fetch all gauge profiles (for rich carousel cards)
   const { profiles: allProfiles } = useAllGaugeProfiles()
+
+  // Fetch all boost gauges for display when no veBTC lock is owned
+  const { gauges: allGauges, isLoading: isLoadingAllGauges } = useBoostGauges()
+  const { apyMap: allGaugesApyMap, isLoading: isLoadingAllGaugesAPY } =
+    useGaugesAPY(allGauges)
 
   const {
     gaugeAddress,
@@ -675,24 +681,71 @@ export default function IncentivesPage(): JSX.Element {
           <Skeleton width="100%" height="150px" animation />
         </div>
       ) : veBTCLocks.length === 0 ? (
-        <SpringIn delay={0} variant="card">
-          <Card withBorder overrides={{}}>
-            <div className="p-12 text-center">
-              <ParagraphMedium color="var(--content-secondary)">
-                You don&apos;t have any veBTC locks.{" "}
-                <a
-                  href="https://mezo.org/earn/lock"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-[#F7931A] underline"
-                >
-                  Lock BTC on Mezo Earn
-                </a>{" "}
-                to get veBTC and create a gauge.
-              </ParagraphMedium>
+        <div className="flex flex-col gap-6">
+          <SpringIn delay={0} variant="card">
+            <Card withBorder overrides={{}}>
+              <div className="p-8 text-center">
+                <ParagraphMedium color="var(--content-secondary)">
+                  You don&apos;t have any veBTC locks.{" "}
+                  <a
+                    href="https://mezo.org/earn/lock"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[#F7931A] underline"
+                  >
+                    Lock BTC on Mezo Earn
+                  </a>{" "}
+                  to get veBTC and create a gauge position.
+                </ParagraphMedium>
+              </div>
+            </Card>
+          </SpringIn>
+
+          {/* All Validator Gauges */}
+          <SpringIn delay={1} variant="card">
+            <div className="flex flex-col gap-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-semibold text-[var(--content-primary)]">
+                  All Validator Gauges
+                </h2>
+                <span className="text-xs text-[var(--content-secondary)]">
+                  {allGauges.length} active gauge
+                  {allGauges.length === 1 ? "" : "s"}
+                </span>
+              </div>
+
+              {isLoadingAllGauges ? (
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  <Skeleton width="100%" height="220px" animation />
+                  <Skeleton width="100%" height="220px" animation />
+                  <Skeleton width="100%" height="220px" animation />
+                </div>
+              ) : allGauges.length === 0 ? (
+                <Card withBorder overrides={{}}>
+                  <div className="py-8 text-center">
+                    <ParagraphMedium color="var(--content-secondary)">
+                      No validator gauges found
+                    </ParagraphMedium>
+                  </div>
+                </Card>
+              ) : (
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  {allGauges.map((gauge) => (
+                    <GaugeCard
+                      key={gauge.address}
+                      gauge={gauge}
+                      profile={
+                        allProfiles.get(gauge.address.toLowerCase()) ?? null
+                      }
+                      apyData={allGaugesApyMap.get(gauge.address.toLowerCase())}
+                      isLoadingAPY={isLoadingAllGaugesAPY}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
-          </Card>
-        </SpringIn>
+          </SpringIn>
+        </div>
       ) : (
         <>
           {/* veBTC Lock Selector Carousel */}
