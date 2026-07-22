@@ -171,7 +171,7 @@ export default function AddValidatorIncentiveModal({
               ? "Confirming..."
               : needsApproval
                 ? `Approve ${token?.symbol ?? "token"}`
-                : "Add incentives"}
+                : "Add Incentives"}
           </Button>
         </div>
       </ModalBody>

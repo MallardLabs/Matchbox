@@ -1,7 +1,11 @@
 import MarqueeText from "@/components/MarqueeText"
-import { usePoolBribeIncentives } from "@/hooks/usePoolIncentives"
+import { TokenIcon } from "@/components/TokenIcon"
+import WatchGaugeButton from "@/components/WatchGaugeButton"
+import type { ValidatorMetric } from "@/hooks/useValidatorMetrics"
 import { useValidatorProfile } from "@/hooks/useValidatorProfiles"
 import type { Validator } from "@/lib/validators"
+import { cn } from "@/utils/cn"
+import { formatMicroUsd, formatValidatorApy } from "@/utils/validatorApy"
 import { percentageToBasisPoints } from "@/utils/validatorVoting"
 import { Button, Input, Skeleton, Tag } from "@mezo-org/mezo-clay"
 import Link from "next/link"
@@ -11,8 +15,11 @@ import { formatUnits } from "viem"
 type ValidatorGaugeVotingCardProps = {
   validator: Validator
   totalWeight: bigint
+  metric: ValidatorMetric | undefined
+  isLoadingMetrics: boolean
   allocation: string
-  currentAllocation?: bigint | undefined
+  currentAllocation: bigint
+  projectedApyBasisPoints: bigint | null
   isSelected: boolean
   onAllocationChange: (value: string) => void
   onToggleSelection: () => void
@@ -34,8 +41,11 @@ function formatBasisPoints(value: bigint): string {
 export default function ValidatorGaugeVotingCard({
   validator,
   totalWeight,
+  metric,
+  isLoadingMetrics,
   allocation,
   currentAllocation,
+  projectedApyBasisPoints,
   isSelected,
   onAllocationChange,
   onToggleSelection,
@@ -43,20 +53,26 @@ export default function ValidatorGaugeVotingCard({
   const { profile, isLoading: isLoadingProfile } = useValidatorProfile(
     validator.gauge,
   )
-  const { incentives, isLoading: isLoadingIncentives } = usePoolBribeIncentives(
-    validator.bribe,
-  )
-  const activeIncentives = incentives.filter(
-    (incentive) => incentive.amount > 0n,
-  )
   const weight = BigInt(validator.weight)
   const shareBasisPoints =
     totalWeight > 0n ? (weight * 10_000n) / totalWeight : 0n
   const displayName =
     profile?.display_name || validator.moniker || validator.operator
-  const description =
-    profile?.description || validator.details || "Mezo validator"
+  const description = profile?.description || validator.details || null
   const allocationBasisPoints = percentageToBasisPoints(allocation)
+  const currentApy = metric?.apyBasisPoints ?? null
+  const apyChanged =
+    allocationBasisPoints !== null && projectedApyBasisPoints !== currentApy
+  const apyDirection =
+    currentApy === -1n && projectedApyBasisPoints !== -1n
+      ? "down"
+      : projectedApyBasisPoints === -1n
+        ? "up"
+        : projectedApyBasisPoints !== null &&
+            currentApy !== null &&
+            projectedApyBasisPoints > currentApy
+          ? "up"
+          : "down"
 
   function handleAllocationChange(
     event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
@@ -66,23 +82,24 @@ export default function ValidatorGaugeVotingCard({
 
   return (
     <article
-      className={`flex min-w-0 flex-col gap-3 overflow-hidden rounded-xl border bg-[var(--surface)] p-3 sm:p-4 ${
-        isSelected ? "border-[var(--positive)]" : "border-[var(--border)]"
-      }`}
+      className={cn(
+        "flex h-full min-w-0 flex-col gap-4 overflow-hidden rounded-xl border bg-[var(--surface)] p-4",
+        isSelected ? "border-[var(--positive)]" : "border-[var(--border)]",
+      )}
     >
-      <div className="flex items-start justify-between gap-3">
+      <header className="flex items-start justify-between gap-3">
         <Link
           href={`/validator-gauges/${validator.gauge}`}
           className="flex min-w-0 items-center gap-3 text-inherit no-underline"
         >
-          <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center overflow-hidden rounded-full border border-[var(--border)] bg-[var(--surface-secondary)]">
+          <div className="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[var(--border)] bg-[var(--surface-secondary)]">
             {isLoadingProfile ? (
               <Skeleton width="44px" height="44px" animation />
             ) : profile?.profile_picture_url ? (
               <img
                 src={profile.profile_picture_url}
                 alt={`${displayName} profile`}
-                className="h-full w-full object-cover"
+                className="size-full object-cover"
               />
             ) : (
               <span className="font-mono text-xs font-semibold text-[var(--content-secondary)]">
@@ -94,73 +111,93 @@ export default function ValidatorGaugeVotingCard({
             <MarqueeText className="text-sm font-semibold text-[var(--content-primary)]">
               {displayName}
             </MarqueeText>
-            <p className="truncate text-2xs text-[var(--content-secondary)]">
-              {description}
-            </p>
+            {description && (
+              <p className="line-clamp-2 text-pretty text-2xs text-[var(--content-secondary)]">
+                {description}
+              </p>
+            )}
           </div>
         </Link>
-        <Tag color="green" closeable={false}>
-          Active
-        </Tag>
-      </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <Tag color={validator.isAlive ? "green" : "gray"} closeable={false}>
+            {validator.isAlive ? "Active" : "Inactive"}
+          </Tag>
+          <WatchGaugeButton gaugeAddress={validator.gauge} compact />
+        </div>
+      </header>
 
-      <dl className="grid grid-cols-2 gap-3 text-xs">
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-xs">
         <div>
-          <dt className="text-[var(--content-tertiary)]">BTC weight</dt>
+          <dt className="text-[var(--content-tertiary)]">BTC Weight</dt>
           <dd className="font-mono tabular-nums text-[var(--content-primary)]">
             {formatAmount(weight)} veBTC
           </dd>
         </div>
         <div>
-          <dt className="text-[var(--content-tertiary)]">Weight share</dt>
+          <dt className="text-[var(--content-tertiary)]">Share</dt>
           <dd className="font-mono tabular-nums text-[var(--content-primary)]">
             {formatBasisPoints(shareBasisPoints)}%
           </dd>
         </div>
-        <div className="col-span-2">
-          <dt className="text-[var(--content-tertiary)]">Current incentives</dt>
-          <dd className="mt-0.5 flex min-h-5 flex-wrap items-center gap-1.5">
-            {isLoadingIncentives ? (
-              <Skeleton width="92px" height="16px" animation />
-            ) : activeIncentives.length === 0 ? (
-              <span className="text-[var(--content-secondary)]">—</span>
-            ) : (
-              <>
-                {activeIncentives.slice(0, 2).map((incentive) => (
-                  <span
-                    key={incentive.tokenAddress}
-                    className="rounded-full border border-[var(--border)] bg-[var(--surface-secondary)] px-2 py-0.5 font-mono text-2xs tabular-nums text-[var(--content-primary)]"
-                  >
-                    {formatAmount(incentive.amount, incentive.decimals)}{" "}
-                    {incentive.symbol}
-                  </span>
-                ))}
-                {activeIncentives.length > 2 && (
-                  <span className="text-2xs text-[var(--content-tertiary)]">
-                    +{activeIncentives.length - 2}
-                  </span>
-                )}
-              </>
+        <div>
+          <dt className="text-[var(--content-tertiary)]">APY</dt>
+          <dd
+            className={cn(
+              "font-mono tabular-nums",
+              apyChanged
+                ? "text-[var(--positive)]"
+                : "text-[var(--content-primary)]",
             )}
+            title={apyChanged ? "Projected APY after this ballot" : undefined}
+          >
+            {isLoadingMetrics
+              ? "…"
+              : formatValidatorApy(
+                  apyChanged ? projectedApyBasisPoints : currentApy,
+                )}
+            {apyChanged && (apyDirection === "up" ? " ↑" : " ↓")}
           </dd>
         </div>
+        <div>
+          <dt className="text-[var(--content-tertiary)]">Incentives</dt>
+          <dd className="font-mono tabular-nums text-[var(--content-primary)]">
+            {isLoadingMetrics
+              ? "…"
+              : formatMicroUsd(metric?.totalIncentivesMicroUsd ?? 0n)}
+          </dd>
+        </div>
+        {metric && metric.incentives.length > 0 && (
+          <div className="col-span-2 flex min-w-0 flex-wrap gap-1.5">
+            {metric.incentives.map((incentive) => (
+              <span
+                key={incentive.tokenAddress}
+                className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface-secondary)] px-2 py-1 text-2xs text-[var(--content-secondary)]"
+                title={`${formatAmount(incentive.amount, incentive.decimals)} ${incentive.symbol}`}
+              >
+                <TokenIcon symbol={incentive.symbol} size={14} />
+                <span>{incentive.symbol}</span>
+                <span className="font-mono tabular-nums text-[var(--content-primary)]">
+                  {formatMicroUsd(incentive.valueMicroUsd)}
+                </span>
+              </span>
+            ))}
+          </div>
+        )}
       </dl>
 
-      {currentAllocation !== undefined && currentAllocation > 0n && (
-        <p className="text-2xs text-[var(--content-secondary)]">
-          Current primary NFT vote: {formatBasisPoints(currentAllocation)}%
-        </p>
-      )}
+      <p className="text-2xs text-[var(--content-secondary)]">
+        Current selected vote: {formatBasisPoints(currentAllocation)}%
+      </p>
 
-      <fieldset className="mt-auto flex flex-col gap-3 rounded-lg bg-[var(--surface-secondary)] p-3">
-        <legend className="text-2xs uppercase tracking-wider text-[var(--content-tertiary)]">
-          Vote setup
+      <fieldset className="mt-auto rounded-lg border border-[var(--border)] bg-[var(--surface-secondary)] p-3">
+        <legend className="px-1 text-2xs font-medium text-[var(--content-tertiary)]">
+          Vote Setup
         </legend>
-        <ol className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
-          <li className="flex min-w-0 flex-1 items-center justify-between gap-3 sm:justify-start">
+        <ol className="mt-1 flex flex-col gap-3 sm:flex-row sm:items-end">
+          <li className="min-w-0 flex-1">
             <label
               htmlFor={`validator-vote-${validator.gauge}`}
-              className="shrink-0 text-2xs text-[var(--content-secondary)]"
+              className="mb-1 block text-2xs text-[var(--content-secondary)]"
             >
               Vote %
             </label>
@@ -175,11 +212,7 @@ export default function ValidatorGaugeVotingCard({
               placeholder="0"
               size="small"
               positive={allocation.trim() !== "" && allocation !== "0"}
-              overrides={{
-                Root: {
-                  style: { width: "100%", maxWidth: "140px", minWidth: "0" },
-                },
-              }}
+              overrides={{ Root: { style: { width: "100%" } } }}
             />
           </li>
           <li>
@@ -193,7 +226,7 @@ export default function ValidatorGaugeVotingCard({
               }
               overrides={{ BaseButton: { style: { width: "100%" } } }}
             >
-              {isSelected ? "Remove" : "Add to cart"}
+              {isSelected ? "Remove" : "Add to Ballot"}
             </Button>
           </li>
         </ol>

@@ -4,10 +4,8 @@ import { TokenIcon } from "@/components/TokenIcon"
 import ValidatorProfileEditor from "@/components/ValidatorProfileEditor"
 import { useNetwork } from "@/contexts/NetworkContext"
 import { useBtcPrice } from "@/hooks/useBtcPrice"
-import { useEpochCountdown } from "@/hooks/useEpochCountdown"
 import { useMezoPrice } from "@/hooks/useMezoPrice"
 import { usePoolBribeIncentives } from "@/hooks/usePoolIncentives"
-import useShiftKeyHeld from "@/hooks/useShiftKeyHeld"
 import {
   useClaimValidatorRewards,
   useSwitchValidatorBeneficiary,
@@ -18,6 +16,7 @@ import { useValidatorProfile } from "@/hooks/useValidatorProfiles"
 import { useValidatorByGauge } from "@/hooks/useValidators"
 import {
   calculateValidatorApyBasisPoints,
+  formatMicroUsd,
   formatValidatorApy,
   tokenUsdMicroValue,
 } from "@/utils/validatorApy"
@@ -58,12 +57,6 @@ function formatTokenAmount(value: bigint, decimals: number): string {
   return trimmed ? `${whole}.${trimmed}` : whole
 }
 
-function formatMicroUsd(value: bigint): string {
-  const whole = value / 1_000_000n
-  const cents = ((value % 1_000_000n) / 10_000n).toString().padStart(2, "0")
-  return `$${whole.toLocaleString()}.${cents}`
-}
-
 function Stat({ label, value }: { label: string; value: string }): JSX.Element {
   return (
     <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
@@ -77,13 +70,31 @@ function Stat({ label, value }: { label: string; value: string }): JSX.Element {
   )
 }
 
+function ExternalLinkIcon(): JSX.Element {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="size-4"
+      aria-hidden="true"
+    >
+      <path d="M15 3h6v6" />
+      <path d="M10 14 21 3" />
+      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+    </svg>
+  )
+}
+
 export default function ValidatorGaugeDetailPage({
   address,
 }: Props): JSX.Element {
   const gaugeAddress = isAddress(address) ? getAddress(address) : undefined
   const { chainId, switchNetwork } = useNetwork()
   const { address: connectedAddress, chainId: walletChainId } = useAccount()
-  const shiftHeld = useShiftKeyHeld()
   const validatorState = useValidatorByGauge(gaugeAddress)
   const validator = validatorState.validator
   const profileState = useValidatorProfile(gaugeAddress)
@@ -93,23 +104,16 @@ export default function ValidatorGaugeDetailPage({
   const [switchConfirmOpen, setSwitchConfirmOpen] = useState(false)
 
   const registryBeneficiary = validator?.beneficiary
-  const gaugeState = useValidatorGaugeState(
-    gaugeAddress,
-    shiftHeld,
-    validator?.operator,
-  )
+  const gaugeState = useValidatorGaugeState(gaugeAddress)
   const beneficiary = gaugeState.beneficiary ?? registryBeneficiary
   const isOperator = sameAddress(connectedAddress, validator?.operator)
   const isBeneficiary = sameAddress(connectedAddress, beneficiary)
-  const isPrivileged = isOperator || isBeneficiary
-  const showRewards = isPrivileged || shiftHeld
-  const rewardHistory = useValidatorRewardHistory(gaugeAddress, showRewards)
+  const rewardHistory = useValidatorRewardHistory(gaugeAddress, true)
   const claim = useClaimValidatorRewards()
   const beneficiarySwitch = useSwitchValidatorBeneficiary(gaugeAddress)
   const incentivesState = usePoolBribeIncentives(validator?.bribe)
   const { price: btcPrice } = useBtcPrice()
   const { price: mezoPrice } = useMezoPrice()
-  const { timeRemaining } = useEpochCountdown()
 
   useEffect(() => {
     if (claim.isSuccess) {
@@ -215,8 +219,8 @@ export default function ValidatorGaugeDetailPage({
     validator.moniker ||
     validator.operator
   const description =
-    profileState.profile?.description || validator.details || "Mezo validator"
-  const claimable = gaugeState.claimable ?? 0n
+    profileState.profile?.description || validator.details || null
+  const earned = gaugeState.earned ?? 0n
 
   return (
     <div className="flex flex-col gap-6">
@@ -255,18 +259,60 @@ export default function ValidatorGaugeDetailPage({
                   {validator.isAlive ? "Live" : "Inactive"}
                 </Tag>
               </div>
-              <p className="mt-1 max-w-3xl text-pretty text-sm text-[var(--content-secondary)]">
-                {description}
-              </p>
+              {description && (
+                <p className="mt-1 max-w-3xl text-pretty text-sm text-[var(--content-secondary)]">
+                  {description}
+                </p>
+              )}
+              {(profileState.profile?.website_url ||
+                validator.website ||
+                profileState.profile?.social_links) && (
+                <nav aria-label="Validator links" className="mt-3">
+                  <ul className="flex flex-wrap gap-x-4 gap-y-2">
+                    {(profileState.profile?.website_url ||
+                      validator.website) && (
+                      <li>
+                        <a
+                          href={
+                            profileState.profile?.website_url ||
+                            validator.website
+                          }
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-xs text-[#F7931A]"
+                        >
+                          Website
+                        </a>
+                      </li>
+                    )}
+                    {Object.entries(
+                      profileState.profile?.social_links ?? {},
+                    ).map(([network, url]) =>
+                      url ? (
+                        <li key={network}>
+                          <a
+                            href={url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-xs capitalize text-[#F7931A]"
+                          >
+                            {network}
+                          </a>
+                        </li>
+                      ) : null,
+                    )}
+                  </ul>
+                </nav>
+              )}
             </div>
           </div>
           <div className="flex shrink-0 gap-2">
             {(isOperator || isBeneficiary) && (
               <Button kind="secondary" onClick={() => setEditingProfile(true)}>
-                Edit profile
+                Edit Profile
               </Button>
             )}
-            <Button onClick={() => setAddOpen(true)}>Add incentives</Button>
+            <Button onClick={() => setAddOpen(true)}>Add Incentives</Button>
           </div>
         </div>
       </header>
@@ -289,15 +335,14 @@ export default function ValidatorGaugeDetailPage({
 
       <section
         aria-label="Gauge statistics"
-        className="grid grid-cols-2 gap-3 lg:grid-cols-4"
+        className="grid gap-3 sm:grid-cols-3"
       >
         <Stat
-          label="Gauge weight"
+          label="BTC Weight"
           value={`${formatTokenAmount(weight, 18)} veBTC`}
         />
-        <Stat label="Vote share" value={share} />
-        <Stat label="Expected voter APY" value={formatValidatorApy(apy)} />
-        <Stat label="Epoch ends" value={timeRemaining} />
+        <Stat label="Share" value={share} />
+        <Stat label="APY" value={formatValidatorApy(apy)} />
       </section>
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1.3fr)_minmax(300px,0.7fr)]">
@@ -312,9 +357,11 @@ export default function ValidatorGaugeDetailPage({
               </p>
             </div>
             <p className="font-mono text-sm tabular-nums text-[#F7931A]">
-              {currentIncentives.length === 0 || !incentivePricing.allPriced
+              {currentIncentives.length === 0
                 ? "—"
-                : formatMicroUsd(incentivePricing.totalMicroUsd)}
+                : incentivePricing.allPriced
+                  ? formatMicroUsd(incentivePricing.totalMicroUsd)
+                  : "Price unavailable"}
             </p>
           </div>
           <div className="mt-5 grid gap-4 md:grid-cols-2">
@@ -375,10 +422,13 @@ export default function ValidatorGaugeDetailPage({
           </div>
         </section>
 
-        <section className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5">
-          <h2 className="text-lg font-semibold text-[var(--content-primary)]">
-            Addresses
-          </h2>
+        <details className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5">
+          <summary className="cursor-pointer text-lg font-semibold text-[var(--content-primary)]">
+            More info
+          </summary>
+          <p className="mt-1 text-pretty text-xs text-[var(--content-secondary)]">
+            Contract addresses and ownership.
+          </p>
           <dl className="mt-4 flex flex-col gap-3">
             {[
               ["Gauge", gaugeAddress],
@@ -398,43 +448,14 @@ export default function ValidatorGaugeDetailPage({
               ) : null,
             )}
           </dl>
-          {(profileState.profile?.website_url || validator.website) && (
-            <a
-              href={profileState.profile?.website_url || validator.website}
-              target="_blank"
-              rel="noreferrer"
-              className="mt-4 inline-block text-sm text-[#F7931A]"
-            >
-              Validator website
-            </a>
-          )}
-          {profileState.profile?.social_links && (
-            <ul className="mt-3 flex flex-wrap gap-x-3 gap-y-2">
-              {Object.entries(profileState.profile.social_links).map(
-                ([network, url]) =>
-                  url ? (
-                    <li key={network}>
-                      <a
-                        href={url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-xs capitalize text-[#F7931A]"
-                      >
-                        {network}
-                      </a>
-                    </li>
-                  ) : null,
-              )}
-            </ul>
-          )}
-        </section>
+        </details>
       </div>
 
-      <section className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-lg font-semibold text-[var(--content-primary)]">
-            PoA registry metadata
-          </h2>
+      <details className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5">
+        <summary className="cursor-pointer text-lg font-semibold text-[var(--content-primary)]">
+          PoA registry metadata
+        </summary>
+        <div className="mt-4">
           <Tag color="gray" closeable={false}>
             Immutable on Matchbox
           </Tag>
@@ -464,7 +485,7 @@ export default function ValidatorGaugeDetailPage({
             </dd>
           </div>
         </dl>
-      </section>
+      </details>
 
       {(profileState.profile?.incentive_strategy ||
         profileState.profile?.voting_strategy ||
@@ -507,100 +528,101 @@ export default function ValidatorGaugeDetailPage({
         </section>
       )}
 
-      {showRewards && (
-        <section className="grid gap-5 lg:grid-cols-2">
-          <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5">
-            <h2 className="text-lg font-semibold text-[var(--content-primary)]">
-              Validator rewards
-            </h2>
-            <p className="mt-4 font-mono text-2xl font-semibold tabular-nums text-[#F7931A]">
-              {formatTokenAmount(claimable, 18)} MEZO
+      <section className="grid gap-5 lg:grid-cols-2">
+        <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5">
+          <h2 className="text-lg font-semibold text-[var(--content-primary)]">
+            Unclaimed MEZO rewards
+          </h2>
+          <p className="mt-4 font-mono text-2xl font-semibold tabular-nums text-[#F7931A]">
+            {formatTokenAmount(earned, 18)} MEZO
+          </p>
+          {isBeneficiary && (
+            <div className="mt-4">
+              <Button
+                onClick={() => claim.claim(gaugeAddress)}
+                disabled={
+                  earned === 0n || claim.isPending || claim.isConfirming
+                }
+              >
+                {claim.isPending || claim.isConfirming
+                  ? "Claiming..."
+                  : "Claim Rewards"}
+              </Button>
+            </div>
+          )}
+          {claim.error && (
+            <p className="mt-3 text-pretty text-xs text-[var(--negative)]">
+              {claim.error.message}
             </p>
-            {isBeneficiary && (
-              <div className="mt-4">
-                <Button
-                  onClick={() => claim.claim(gaugeAddress)}
-                  disabled={
-                    claimable === 0n || claim.isPending || claim.isConfirming
-                  }
+          )}
+        </div>
+        <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5">
+          <h2 className="text-lg font-semibold text-[var(--content-primary)]">
+            Distribution history
+          </h2>
+          {rewardHistory.items.length === 0 ? (
+            <p className="mt-4 text-sm text-[var(--content-secondary)]">
+              No indexed reward distributions.
+            </p>
+          ) : (
+            <ol className="mt-4 flex flex-col divide-y divide-[var(--border)]">
+              {rewardHistory.items.map((item) => (
+                <li
+                  key={item.id}
+                  className="relative flex items-center justify-between gap-3 py-3"
                 >
-                  {claim.isPending || claim.isConfirming
-                    ? "Claiming..."
-                    : "Claim rewards"}
-                </Button>
-              </div>
-            )}
-            {claim.error && (
-              <p className="mt-3 text-pretty text-xs text-[var(--negative)]">
-                {claim.error.message}
-              </p>
-            )}
-          </div>
-          <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5">
-            <h2 className="text-lg font-semibold text-[var(--content-primary)]">
-              Distribution history
-            </h2>
-            {rewardHistory.items.length === 0 ? (
-              <p className="mt-4 text-sm text-[var(--content-secondary)]">
-                No indexed reward distributions.
-              </p>
-            ) : (
-              <ol className="mt-4 flex flex-col divide-y divide-[var(--border)]">
-                {rewardHistory.items.map((item) => (
-                  <li
-                    key={item.id}
-                    className="flex items-center justify-between gap-3 py-3"
-                  >
-                    <div>
-                      <p className="text-sm">
-                        {new Date(item.timestamp * 1000).toLocaleDateString()}
-                      </p>
-                      <p className="font-mono text-xs text-[var(--content-secondary)]">
-                        {item.amount
-                          ? formatTokenAmount(BigInt(item.amount), 18)
-                          : "—"}{" "}
-                        MEZO
-                      </p>
-                    </div>
-                    {item.explorerUrl && (
-                      <a
-                        href={item.explorerUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-xs text-[#F7931A]"
-                      >
-                        Transaction
-                      </a>
-                    )}
-                  </li>
-                ))}
-              </ol>
-            )}
-            {rewardHistory.hasNextPage && (
-              <div className="mt-3">
-                <Button
-                  kind="secondary"
-                  onClick={() => void rewardHistory.fetchNextPage()}
-                  disabled={rewardHistory.isFetchingNextPage}
-                >
-                  {rewardHistory.isFetchingNextPage
-                    ? "Loading..."
-                    : "Load more"}
-                </Button>
-              </div>
-            )}
-          </div>
-        </section>
-      )}
+                  <div>
+                    <p className="text-sm">
+                      {new Date(item.timestamp * 1000).toLocaleDateString()}
+                    </p>
+                    <p className="font-mono text-xs text-[var(--content-secondary)]">
+                      {item.amount
+                        ? formatTokenAmount(BigInt(item.amount), 18)
+                        : "—"}{" "}
+                      MEZO
+                    </p>
+                  </div>
+                  {item.explorerUrl && (
+                    <a
+                      href={item.explorerUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      aria-label="Open reward distribution in explorer"
+                      className="absolute inset-0 flex items-center justify-end text-[#F7931A]"
+                    >
+                      <span className="sr-only">
+                        Open reward distribution in explorer
+                      </span>
+                      <ExternalLinkIcon />
+                    </a>
+                  )}
+                </li>
+              ))}
+            </ol>
+          )}
+          {rewardHistory.hasNextPage && (
+            <div className="mt-3">
+              <Button
+                kind="secondary"
+                onClick={() => void rewardHistory.fetchNextPage()}
+                disabled={rewardHistory.isFetchingNextPage}
+              >
+                {rewardHistory.isFetchingNextPage ? "Loading..." : "Load More"}
+              </Button>
+            </div>
+          )}
+        </div>
+      </section>
 
-      {isOperator && (
+      {isBeneficiary && (
         <section className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5">
           <h2 className="text-lg font-semibold text-[var(--content-primary)]">
             Rewards beneficiary
           </h2>
           <p className="mt-1 text-pretty text-sm text-[var(--content-secondary)]">
-            Only the PoA operator can change the beneficiary. Profile and claim
-            permissions update from the live gauge value after confirmation.
+            Only the current rewards beneficiary can assign the next
+            beneficiary. Profile and claim permissions update from the live
+            gauge value after confirmation.
           </p>
           <div className="mt-4 flex max-w-2xl flex-col gap-2 sm:flex-row">
             <Input
@@ -618,8 +640,8 @@ export default function ValidatorGaugeDetailPage({
               disabled={walletOnSelectedNetwork && !validNextBeneficiary}
             >
               {walletOnSelectedNetwork
-                ? "Switch beneficiary"
-                : "Switch network"}
+                ? "Switch Beneficiary"
+                : "Switch Network"}
             </Button>
           </div>
           {beneficiaryInput && !validNextBeneficiary && (
@@ -657,11 +679,11 @@ export default function ValidatorGaugeDetailPage({
               The new beneficiary will receive claim and profile-edit
               permissions as soon as the transaction confirms.
             </p>
-            {claimable > 0n && (
+            {earned > 0n && (
               <p className="rounded-lg border border-[var(--warning)] p-3 text-pretty text-xs text-[var(--warning)]">
-                {formatTokenAmount(claimable, 18)} MEZO remains claimable. It
-                stays associated with the previous beneficiary and must be
-                claimed separately.
+                {formatTokenAmount(earned, 18)} MEZO remains claimable. It stays
+                associated with the previous beneficiary and must be claimed
+                separately.
               </p>
             )}
             <div className="flex justify-end gap-2">
@@ -684,7 +706,7 @@ export default function ValidatorGaugeDetailPage({
               >
                 {beneficiarySwitch.isPending || beneficiarySwitch.isConfirming
                   ? "Switching..."
-                  : "Confirm switch"}
+                  : "Confirm Switch"}
               </Button>
             </div>
           </div>

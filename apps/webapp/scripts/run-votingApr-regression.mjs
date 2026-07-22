@@ -20,6 +20,8 @@ const sourceFiles = [
   "src/utils/validatorVoting.test.ts",
   "src/utils/validatorApy.ts",
   "src/utils/validatorApy.test.ts",
+  "src/utils/rewardPerVeMezo.ts",
+  "src/utils/rewardPerVeMezo.test.ts",
   "src/lib/academy/simulate.ts",
   "src/lib/academy/simulate.test.ts",
   "src/lib/academy/epoch.ts",
@@ -34,6 +36,7 @@ const testEntries = [
   "utils/safeBatch.test.js",
   "utils/validatorVoting.test.js",
   "utils/validatorApy.test.js",
+  "utils/rewardPerVeMezo.test.js",
   "lib/academy/simulate.test.js",
 ]
 

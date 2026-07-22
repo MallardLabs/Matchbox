@@ -1,8 +1,11 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 import {
+  aggregateSelectedVoteBasisPoints,
   allocationTotalBasisPoints,
   basisPointsToPercentage,
+  calculateProjectedValidatorWeight,
+  compareValidatorSortEntries,
   equalVoteBasisPoints,
   percentageToBasisPoints,
 } from "./validatorVoting"
@@ -38,4 +41,76 @@ test("splits an equal vote across every validator without losing basis points", 
 test("formats basis points as valid two-decimal percentage input", () => {
   assert.equal(basisPointsToPercentage(3334n), "33.34")
   assert.equal(basisPointsToPercentage(5000n), "50")
+})
+
+test("aggregates current allocation across every selected NFT", () => {
+  assert.equal(
+    aggregateSelectedVoteBasisPoints([
+      { vote: 20n, usedWeight: 100n },
+      { vote: 60n, usedWeight: 100n },
+    ]),
+    4000n,
+  )
+  assert.equal(
+    aggregateSelectedVoteBasisPoints([{ vote: 0n, usedWeight: 0n }]),
+    0n,
+  )
+})
+
+test("projects new votes and reallocations without double-counting", () => {
+  assert.equal(
+    calculateProjectedValidatorWeight(
+      1_000n,
+      [
+        { vote: 200n, usedWeight: 1_000n, votingPower: 1_000n, eligible: true },
+        { vote: 100n, usedWeight: 500n, votingPower: 500n, eligible: true },
+      ],
+      5_000n,
+    ),
+    1_450n,
+  )
+  assert.equal(
+    calculateProjectedValidatorWeight(
+      1_000n,
+      [{ vote: 400n, usedWeight: 500n, votingPower: 500n, eligible: false }],
+      0n,
+    ),
+    1_000n,
+  )
+})
+
+test("sorts validator metrics deterministically", () => {
+  const entries = [
+    {
+      gauge: "0x02",
+      name: "Backbone",
+      weight: 100n,
+      shareBasisPoints: 1_000n,
+      incentivesMicroUsd: 10n,
+      apyBasisPoints: 20n,
+    },
+    {
+      gauge: "0x01",
+      name: "Backbone",
+      weight: 100n,
+      shareBasisPoints: 1_000n,
+      incentivesMicroUsd: 10n,
+      apyBasisPoints: 20n,
+    },
+    {
+      gauge: "0x03",
+      name: "Millennium",
+      weight: 50n,
+      shareBasisPoints: 500n,
+      incentivesMicroUsd: null,
+      apyBasisPoints: null,
+    },
+  ]
+  entries.sort((a, b) =>
+    compareValidatorSortEntries(a, b, "incentives", "desc"),
+  )
+  assert.deepEqual(
+    entries.map((entry) => entry.gauge),
+    ["0x01", "0x02", "0x03"],
+  )
 })

@@ -4,6 +4,7 @@ import {
   CHAIN_ID,
   CONTRACTS,
   ERC20_ABI,
+  NON_STAKING_GAUGE_ABI,
   POOLS_VOTER_ABI,
   type SupportedChainId,
   VALIDATORS_VOTER_ABI,
@@ -45,6 +46,10 @@ export function getContractConfig(
     validatorsVoter: {
       address: addresses.validatorsVoter,
       abi: VALIDATORS_VOTER_ABI,
+      chainId,
+    },
+    nonStakingGauge: {
+      abi: NON_STAKING_GAUGE_ABI,
       chainId,
     },
     bribe: {
