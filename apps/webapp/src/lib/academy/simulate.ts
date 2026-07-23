@@ -171,6 +171,13 @@ export type SimTotals = {
   boostCount: number
   newLockCount: number
   extensionCount: number
+  newLockMezoWad: bigint
+  newLockVeMezoWad: bigint
+  extensionMezoWad: bigint
+  extensionVeMezoWad: bigint
+  // Sum of active veMEZO vote weight at every epoch-end snapshot. Its unit is
+  // veMEZO-epochs, not a point-in-time balance or a sum of vote transactions.
+  voteWeightEpochAggregateWad: bigint
   medianApr: number
   totalEpochs: number
   fullParticipationCount: number
@@ -354,6 +361,10 @@ export function simulate(
 
   let droppedCronEvents = 0
   let droppedBlacklistEvents = 0
+  let newLockMezoWad = 0n
+  let newLockVeMezoWad = 0n
+  let extensionMezoWad = 0n
+  let extensionVeMezoWad = 0n
   const blacklist = input.blacklist
 
   // ───────────────────────────────
@@ -409,12 +420,16 @@ export function simulate(
 
     if (actionType === "lockCreated" || actionType === "lockAmountIncreased") {
       acc.newLockCount += 1
+      newLockMezoWad += delta.amountAddedMezoWad
+      newLockVeMezoWad += delta.amountAddedVeWad
     } else if (
       actionType === "lockExtended" ||
       actionType === "lockPermanent" ||
       actionType === "lockMerged"
     ) {
       acc.extensionCount += 1
+      extensionMezoWad += delta.durationExtendedMezoWad
+      extensionVeMezoWad += delta.amountAddedVeWad + delta.durationExtendedVeWad
     }
 
     if (tokenKey) {
@@ -748,10 +763,12 @@ export function simulate(
   let totalBoostCount = 0
   let totalNewLockCount = 0
   let totalExtensionCount = 0
+  let voteWeightEpochAggregateWad = 0n
   for (const acc of allActors) {
     totalBoostCount += acc.boostTokenEpochs.size
     totalNewLockCount += acc.newLockCount
     totalExtensionCount += acc.extensionCount
+    voteWeightEpochAggregateWad += acc.voteWeightEpochSumWad
   }
 
   const totals: SimTotals = {
@@ -760,6 +777,11 @@ export function simulate(
     boostCount: totalBoostCount,
     newLockCount: totalNewLockCount,
     extensionCount: totalExtensionCount,
+    newLockMezoWad,
+    newLockVeMezoWad,
+    extensionMezoWad,
+    extensionVeMezoWad,
+    voteWeightEpochAggregateWad,
     medianApr,
     totalEpochs,
     fullParticipationCount: rows.filter((r) => r.fullyParticipated).length,

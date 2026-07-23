@@ -29,6 +29,12 @@ export type LockSnapshot = {
 }
 
 export type LockTrackDelta = {
+  // Raw MEZO principal associated with each credited veMEZO component.
+  // `amountAddedMezoWad` is newly deposited capital. The extension principal
+  // can count the same capital again across multiple extension events because
+  // this is event volume, not unique TVL.
+  amountAddedMezoWad: bigint
+  durationExtendedMezoWad: bigint
   // Sub-components in wad. Multiply by weightNew / weightExt respectively
   // and sum for total points (lock-track + extension-track).
   amountAddedVeWad: bigint
@@ -145,6 +151,8 @@ export function computeLockTrackDelta(
 
   let amountAddedVe = ZERO
   let durationExtendedVe = sourceExtension
+  let amountAddedMezo = ZERO
+  let durationExtendedMezo = sourceExtension > ZERO ? sourceAmount : ZERO
 
   if (ev.actionType === "lockMerged") {
     // Dest-side extension: if dest.unlockAt was earlier than the new
@@ -155,6 +163,7 @@ export function computeLockTrackDelta(
       const destExtension =
         destPostVe > destPrevVe ? destPostVe - destPrevVe : ZERO
       durationExtendedVe += destExtension
+      if (destExtension > ZERO) durationExtendedMezo += destPrev.amount
     }
     // Merges don't add new capital — the source's amount was already locked.
     amountAddedVe = ZERO
@@ -164,10 +173,13 @@ export function computeLockTrackDelta(
     // (we only ever credit positive ve gains here; withdrawals don't earn).
     const amountAdded =
       post.amount > prev.amount ? post.amount - prev.amount : ZERO
+    amountAddedMezo = amountAdded
     amountAddedVe = vePowerWad(amountAdded, post.durationEff)
   }
 
   return {
+    amountAddedMezoWad: amountAddedMezo,
+    durationExtendedMezoWad: durationExtendedMezo,
     amountAddedVeWad: amountAddedVe,
     durationExtendedVeWad: durationExtendedVe,
     flagged,
@@ -190,7 +202,10 @@ function legacyLockTrackDelta(
     ev.actionType === "lockAmountIncreased" ||
     ev.actionType === "lockPermanent"
   ) {
+    const isExtension = ev.actionType === "lockPermanent"
     return {
+      amountAddedMezoWad: isExtension ? ZERO : amount,
+      durationExtendedMezoWad: isExtension ? amount : ZERO,
       amountAddedVeWad: vePowerWad(amount, duration),
       durationExtendedVeWad: ZERO,
       flagged: false,
@@ -205,6 +220,8 @@ function legacyLockTrackDelta(
       )
       const newPower = vePowerWad(newAmount, duration)
       return {
+        amountAddedMezoWad: ZERO,
+        durationExtendedMezoWad: newPower > prevPower ? newAmount : ZERO,
         amountAddedVeWad: ZERO,
         durationExtendedVeWad:
           newPower > prevPower ? newPower - prevPower : ZERO,
@@ -212,12 +229,16 @@ function legacyLockTrackDelta(
       }
     }
     return {
+      amountAddedMezoWad: ZERO,
+      durationExtendedMezoWad: amount,
       amountAddedVeWad: ZERO,
       durationExtendedVeWad: vePowerWad(amount, duration) / 4n,
       flagged: true,
     }
   }
   return {
+    amountAddedMezoWad: ZERO,
+    durationExtendedMezoWad: ZERO,
     amountAddedVeWad: ZERO,
     durationExtendedVeWad: ZERO,
     flagged: false,

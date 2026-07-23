@@ -45,6 +45,11 @@ interface SerializedTotals {
   boostCount: number
   newLockCount: number
   extensionCount: number
+  newLockMezoWad?: string
+  newLockVeMezoWad?: string
+  extensionMezoWad?: string
+  extensionVeMezoWad?: string
+  voteWeightEpochAggregateWad?: string
   totalEpochs: number
   fullParticipationCount: number
   activeVoteAggregateWad: string
@@ -87,6 +92,13 @@ function deserializeTotals(totals: SerializedTotals): SimTotals {
     boostCount: totals.boostCount,
     newLockCount: totals.newLockCount,
     extensionCount: totals.extensionCount,
+    newLockMezoWad: BigInt(totals.newLockMezoWad ?? "0"),
+    newLockVeMezoWad: BigInt(totals.newLockVeMezoWad ?? "0"),
+    extensionMezoWad: BigInt(totals.extensionMezoWad ?? "0"),
+    extensionVeMezoWad: BigInt(totals.extensionVeMezoWad ?? "0"),
+    voteWeightEpochAggregateWad: BigInt(
+      totals.voteWeightEpochAggregateWad ?? "0",
+    ),
     totalEpochs: totals.totalEpochs,
     fullParticipationCount: totals.fullParticipationCount,
     activeVoteAggregateWad: BigInt(totals.activeVoteAggregateWad),

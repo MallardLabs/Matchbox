@@ -31,6 +31,111 @@ const RANGE_PRESETS: Array<{ label: string; weeks: number }> = [
   { label: "26 weeks", weeks: 26 },
 ]
 
+function formatAcademyAmount(wad: bigint): string {
+  const wadScale = 10n ** 18n
+  const integerPart = wad / wadScale
+  const fractionalPart = wad % wadScale
+  const groupedInteger = integerPart.toLocaleString()
+  const fraction = fractionalPart
+    .toString()
+    .padStart(18, "0")
+    .slice(0, 2)
+    .replace(/0+$/, "")
+  return fraction ? `${groupedInteger}.${fraction}` : groupedInteger
+}
+
+function AcademyActivityTotals({
+  totals,
+}: {
+  totals: SimResult["totals"]
+}): JSX.Element {
+  return (
+    <div className="overflow-x-auto rounded border border-[var(--border)] bg-[var(--surface-tertiary)]">
+      <table className="w-full min-w-max text-xs">
+        <caption className="sr-only">
+          Academy activity totals by count, MEZO principal, and veMEZO voting
+          power
+        </caption>
+        <thead className="border-b border-[var(--border)] text-[10px] uppercase text-[var(--content-secondary)]">
+          <tr>
+            <th scope="col" className="px-3 py-2 text-left">
+              Measure
+            </th>
+            <th scope="col" className="px-3 py-2 text-right">
+              Total locks created
+            </th>
+            <th scope="col" className="px-3 py-2 text-right">
+              Total extensions
+            </th>
+            <th scope="col" className="px-3 py-2 text-right">
+              Total votes
+            </th>
+          </tr>
+        </thead>
+        <tbody className="font-mono tabular-nums text-[var(--content-primary)]">
+          <tr className="border-b border-[var(--border)]">
+            <th
+              scope="row"
+              className="px-3 py-2 text-left font-sans font-medium"
+            >
+              Number
+            </th>
+            <td className="px-3 py-2 text-right">
+              {totals.newLockCount.toLocaleString()}
+            </td>
+            <td className="px-3 py-2 text-right">
+              {totals.extensionCount.toLocaleString()}
+            </td>
+            <td className="px-3 py-2 text-right">
+              {totals.boostCount.toLocaleString()}
+            </td>
+          </tr>
+          <tr className="border-b border-[var(--border)]">
+            <th
+              scope="row"
+              className="px-3 py-2 text-left font-sans font-medium"
+            >
+              MEZO
+            </th>
+            <td className="px-3 py-2 text-right">
+              {formatAcademyAmount(totals.newLockMezoWad)}
+            </td>
+            <td className="px-3 py-2 text-right">
+              {formatAcademyAmount(totals.extensionMezoWad)}
+            </td>
+            <td className="px-3 py-2 text-right text-[var(--content-tertiary)]">
+              n/a
+            </td>
+          </tr>
+          <tr>
+            <th
+              scope="row"
+              className="px-3 py-2 text-left font-sans font-medium"
+            >
+              veMEZO
+            </th>
+            <td className="px-3 py-2 text-right">
+              {formatAcademyAmount(totals.newLockVeMezoWad)}
+            </td>
+            <td className="px-3 py-2 text-right">
+              {formatAcademyAmount(totals.extensionVeMezoWad)}
+            </td>
+            <td className="px-3 py-2 text-right">
+              {formatAcademyAmount(totals.voteWeightEpochAggregateWad)}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <p className="border-t border-[var(--border)] px-3 py-2 text-pretty text-[10px] leading-relaxed text-[var(--content-tertiary)]">
+        Locks include new deposits and amount increases. Extension MEZO is
+        principal affected per event, so the same principal may appear more than
+        once. Vote veMEZO is the cumulative active weight across epoch-end
+        snapshots (veMEZO-epochs).
+      </p>
+    </div>
+  )
+}
+
 export default function AcademyPage() {
   const sim = useAcademySim({ enabled: true })
   const {
@@ -259,7 +364,8 @@ function ProView({
             <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-[var(--content-primary)]">
               Totals
             </h3>
-            <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+            <AcademyActivityTotals totals={simResult.totals} />
+            <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-3">
               <Stat
                 label="Participants"
                 value={String(simResult.totals.participants)}
@@ -267,14 +373,6 @@ function ProView({
               <Stat
                 label="Median APR"
                 value={fmtPct(simResult.totals.medianApr)}
-              />
-              <Stat
-                label="Boost actions"
-                value={simResult.totals.boostCount.toLocaleString()}
-              />
-              <Stat
-                label="New / Ext locks"
-                value={`${simResult.totals.newLockCount} / ${simResult.totals.extensionCount}`}
               />
               <Stat
                 label="Full participation ★"

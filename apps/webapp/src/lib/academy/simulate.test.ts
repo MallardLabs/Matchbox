@@ -617,6 +617,16 @@ test("participation bonus doubles only boost points", () => {
   assert.equal(baseline.rows[0]?.extensionPointsWad, parseUnits("75", 18))
   assert.equal(baseline.rows[0]?.votePointsWad, parseUnits("200", 18))
   assert.equal(baseline.rows[0]?.pointsWad, parseUnits("325", 18))
+  assert.equal(baseline.totals.newLockCount, 1)
+  assert.equal(baseline.totals.newLockMezoWad, parseUnits("100", 18))
+  assert.equal(baseline.totals.newLockVeMezoWad, parseUnits("25", 18))
+  assert.equal(baseline.totals.extensionCount, 1)
+  assert.equal(baseline.totals.extensionMezoWad, parseUnits("100", 18))
+  assert.equal(baseline.totals.extensionVeMezoWad, parseUnits("75", 18))
+  assert.equal(
+    baseline.totals.voteWeightEpochAggregateWad,
+    parseUnits("200", 18),
+  )
   assert.equal(boosted.rows[0]?.lockPointsWad, parseUnits("50", 18))
   assert.equal(boosted.rows[0]?.extensionPointsWad, parseUnits("75", 18))
   assert.equal(boosted.rows[0]?.votePointsWad, parseUnits("200", 18))
