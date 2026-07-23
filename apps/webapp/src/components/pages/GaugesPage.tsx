@@ -1,8 +1,9 @@
+import ApyMetric from "@/components/ApyMetric"
 import GaugeCard from "@/components/GaugeCard"
 import MarqueeText from "@/components/MarqueeText"
 import { SpringIn } from "@/components/SpringIn"
 import WatchGaugeButton from "@/components/WatchGaugeButton"
-import { formatAPY, useGaugesAPY } from "@/hooks/useAPY"
+import { useGaugesAPY } from "@/hooks/useAPY"
 import { useAllGaugeProfiles } from "@/hooks/useGaugeProfiles"
 import { useGaugeWatchlist } from "@/hooks/useGaugeWatchlist"
 import { useBoostGauges, useVoterTotals } from "@/hooks/useGauges"
@@ -597,15 +598,17 @@ export default function GaugesPage(): JSX.Element {
                         )
                       }
                       return (
-                        <span
+                        <ApyMetric
+                          apy={apyData?.apy ?? null}
+                          totalIncentivesUsd={apyData?.totalIncentivesUSD ?? 0}
+                          currentVeMezoWeight={gauge.totalWeight}
+                          isLoading={isLoadingAPY}
                           className={`font-mono text-sm font-medium ${
                             apyData?.apy && apyData.apy > 0
                               ? "text-[var(--positive)]"
                               : "text-[var(--content-secondary)]"
                           }`}
-                        >
-                          {formatAPY(apyData?.apy ?? null)}
-                        </span>
+                        />
                       )
                     }}
                   </TableBuilderColumn>

@@ -54,3 +54,15 @@ export function formatValidatorApy(value: bigint | null): string {
   if (whole >= 10_000n) return `${whole / 1_000n}k%`
   return `${whole}.${fraction}%`
 }
+
+function groupThousands(value: bigint): string {
+  return value.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",")
+}
+
+export function formatMicroUsd(value: bigint | null): string {
+  if (value === null) return "Price unavailable"
+  const roundedCents = (value + 5_000n) / 10_000n
+  const whole = roundedCents / 100n
+  const fraction = (roundedCents % 100n).toString().padStart(2, "0")
+  return `~$${groupThousands(whole)}.${fraction}`
+}

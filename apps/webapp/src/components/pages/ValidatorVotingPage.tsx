@@ -6,12 +6,19 @@ import { useNetwork } from "@/contexts/NetworkContext"
 import { useVeBTCLocks } from "@/hooks/useLocks"
 import useMultiValidatorVoting from "@/hooks/useMultiValidatorVoting"
 import { usePagination } from "@/hooks/usePagination"
+import { useValidatorMetrics } from "@/hooks/useValidatorMetrics"
 import { useValidatorProfile } from "@/hooks/useValidatorProfiles"
 import useValidators from "@/hooks/useValidators"
 import type { Validator } from "@/lib/validators"
+import { calculateValidatorApyBasisPoints } from "@/utils/validatorApy"
 import {
+  type ValidatorSortEntry,
+  type ValidatorSortMode,
+  aggregateSelectedVoteBasisPoints,
   allocationTotalBasisPoints,
   basisPointsToPercentage,
+  calculateProjectedValidatorWeight,
+  compareValidatorSortEntries,
   equalVoteBasisPoints,
   percentageToBasisPoints,
 } from "@/utils/validatorVoting"
@@ -28,8 +35,6 @@ import Link from "next/link"
 import { useDeferredValue, useEffect, useMemo, useState } from "react"
 import { useAccount, useReadContract, useReadContracts } from "wagmi"
 
-type ValidatorFilter = "all" | "weighted" | "zero" | "selected"
-type ValidatorSort = "weight" | "name"
 type SortDirection = "asc" | "desc"
 
 const VALIDATORS_PER_PAGE = 9
@@ -144,6 +149,11 @@ export default function ValidatorVotingPage(): JSX.Element {
     error: validatorsError,
     refetch: refetchValidators,
   } = useValidators()
+  const {
+    map: validatorMetrics,
+    btcPriceUsd,
+    isLoading: isLoadingValidatorMetrics,
+  } = useValidatorMetrics(votableValidators)
   const [selectedLockIndexes, setSelectedLockIndexes] = useState<Set<number>>(
     new Set(),
   )
@@ -153,8 +163,7 @@ export default function ValidatorVotingPage(): JSX.Element {
   const [allocations, setAllocations] = useState<Record<string, string>>({})
   const [search, setSearch] = useState("")
   const deferredSearch = useDeferredValue(search)
-  const [filter, setFilter] = useState<ValidatorFilter>("all")
-  const [sortMode, setSortMode] = useState<ValidatorSort>("weight")
+  const [sortMode, setSortMode] = useState<ValidatorSortMode>("incentives")
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc")
   const [cartOpen, setCartOpen] = useState(false)
   const multiVote = useMultiValidatorVoting()
@@ -183,51 +192,93 @@ export default function ValidatorVotingPage(): JSX.Element {
     })),
     query: { enabled: selectedLocks.length > 0 },
   })
-  const eligibleLocks = selectedLocks.filter((_, index) => {
+  const selectedLockStates = selectedLocks.map((lock, index) => {
     const lastVoted = lastVotedResults?.[index]?.result as bigint | undefined
-    return (
-      epochStart === undefined ||
-      lastVoted === undefined ||
-      lastVoted < epochStart
-    )
+    return {
+      lock,
+      eligible:
+        epochStart === undefined ||
+        lastVoted === undefined ||
+        lastVoted < epochStart,
+    }
   })
-  const primaryLock = selectedLocks[0]
-  const { data: primaryUsedWeight } = useReadContract({
-    ...contracts.validatorsVoter,
-    functionName: "usedWeights",
-    args: primaryLock ? [primaryLock.tokenId] : undefined,
-    query: { enabled: !!primaryLock },
-  })
-  const { data: primaryVoteResults } = useReadContracts({
-    contracts: votableValidators.map((validator) => ({
+  const eligibleLocks = selectedLockStates.flatMap((state) =>
+    state.eligible ? [state.lock] : [],
+  )
+  const { data: selectedUsedWeightResults } = useReadContracts({
+    contracts: selectedLocks.map((lock) => ({
       ...contracts.validatorsVoter,
-      functionName: "votes" as const,
-      args: [primaryLock?.tokenId ?? 0n, validator.gauge] as const,
+      functionName: "usedWeights" as const,
+      args: [lock.tokenId] as const,
     })),
-    query: { enabled: !!primaryLock && votableValidators.length > 0 },
+    query: { enabled: selectedLocks.length > 0 },
+  })
+  const { data: selectedVoteResults } = useReadContracts({
+    contracts: selectedLocks.flatMap((lock) =>
+      votableValidators.map((validator) => ({
+        ...contracts.validatorsVoter,
+        functionName: "votes" as const,
+        args: [lock.tokenId, validator.gauge] as const,
+      })),
+    ),
+    query: {
+      enabled: selectedLocks.length > 0 && votableValidators.length > 0,
+    },
   })
 
-  const primaryCurrentAllocations = useMemo(() => {
-    const used = primaryUsedWeight as bigint | undefined
-    if (!used || used === 0n) return new Map<string, bigint>()
-    return new Map(
-      votableValidators.flatMap((validator, index) => {
-        const vote = primaryVoteResults?.[index]?.result as bigint | undefined
-        return vote && vote > 0n
-          ? [[validator.gauge, (vote * 10_000n) / used] as const]
-          : []
-      }),
-    )
-  }, [primaryUsedWeight, primaryVoteResults, votableValidators])
+  const selectedVotesByGauge = useMemo(() => {
+    const result = new Map<
+      string,
+      {
+        vote: bigint
+        usedWeight: bigint
+        votingPower: bigint
+        eligible: boolean
+      }[]
+    >()
+    votableValidators.forEach((validator, validatorIndex) => {
+      result.set(
+        validator.gauge.toLowerCase(),
+        selectedLockStates.map((state, lockIndex) => ({
+          vote:
+            (selectedVoteResults?.[
+              lockIndex * votableValidators.length + validatorIndex
+            ]?.result as bigint | undefined) ?? 0n,
+          usedWeight:
+            (selectedUsedWeightResults?.[lockIndex]?.result as
+              | bigint
+              | undefined) ?? 0n,
+          votingPower: state.lock.votingPower,
+          eligible: state.eligible,
+        })),
+      )
+    })
+    return result
+  }, [
+    selectedLockStates,
+    selectedUsedWeightResults,
+    selectedVoteResults,
+    votableValidators,
+  ])
+
+  const currentAllocations = useMemo(
+    () =>
+      new Map(
+        votableValidators.map((validator) => {
+          const votes =
+            selectedVotesByGauge.get(validator.gauge.toLowerCase()) ?? []
+          return [
+            validator.gauge.toLowerCase(),
+            aggregateSelectedVoteBasisPoints(votes),
+          ] as const
+        }),
+      ),
+    [selectedVotesByGauge, votableValidators],
+  )
 
   const filteredValidators = useMemo(() => {
     const query = deferredSearch.trim().toLowerCase()
     const result = votableValidators.filter((validator) => {
-      const weight = BigInt(validator.weight)
-      if (filter === "weighted" && weight === 0n) return false
-      if (filter === "zero" && weight > 0n) return false
-      if (filter === "selected" && !selectedGaugeAddresses.has(validator.gauge))
-        return false
       return (
         !query ||
         validator.moniker.toLowerCase().includes(query) ||
@@ -237,25 +288,33 @@ export default function ValidatorVotingPage(): JSX.Element {
       )
     })
 
-    return [...result].sort((a, b) => {
-      let comparison = 0
-      if (sortMode === "name") {
-        comparison = (a.moniker || a.operator).localeCompare(
-          b.moniker || b.operator,
-        )
-      } else {
-        const aWeight = BigInt(a.weight)
-        const bWeight = BigInt(b.weight)
-        comparison = aWeight < bWeight ? -1 : aWeight > bWeight ? 1 : 0
+    const toSortEntry = (validator: Validator): ValidatorSortEntry => {
+      const weight = BigInt(validator.weight)
+      const metric = validatorMetrics.get(validator.gauge.toLowerCase())
+      return {
+        gauge: validator.gauge,
+        name: validator.moniker || validator.operator,
+        weight,
+        shareBasisPoints:
+          totalWeight > 0n ? (weight * 10_000n) / totalWeight : 0n,
+        incentivesMicroUsd: metric?.totalIncentivesMicroUsd ?? null,
+        apyBasisPoints: metric?.apyBasisPoints ?? null,
       }
-      return sortDirection === "asc" ? comparison : -comparison
-    })
+    }
+    return [...result].sort((a, b) =>
+      compareValidatorSortEntries(
+        toSortEntry(a),
+        toSortEntry(b),
+        sortMode,
+        sortDirection,
+      ),
+    )
   }, [
     deferredSearch,
-    filter,
-    selectedGaugeAddresses,
     sortDirection,
     sortMode,
+    totalWeight,
+    validatorMetrics,
     votableValidators,
   ])
 
@@ -269,7 +328,7 @@ export default function ValidatorVotingPage(): JSX.Element {
     goToNextPage,
   } = usePagination(filteredValidators, {
     pageSize: VALIDATORS_PER_PAGE,
-    resetDeps: [deferredSearch, filter, sortMode, sortDirection],
+    resetDeps: [deferredSearch, sortMode, sortDirection],
   })
 
   const selectedValidators = useMemo(
@@ -356,7 +415,7 @@ export default function ValidatorVotingPage(): JSX.Element {
     setSelectedGaugeAddresses(nextSelected)
   }
 
-  function handleSort(nextSort: ValidatorSort) {
+  function handleSort(nextSort: ValidatorSortMode) {
     if (sortMode === nextSort) {
       setSortDirection((current) => (current === "asc" ? "desc" : "asc"))
       return
@@ -420,7 +479,7 @@ export default function ValidatorVotingPage(): JSX.Element {
               You do not own a veBTC NFT yet.
             </p>
             <a
-              href="https://mezo.org/earn"
+              href="https://mezo.org/earn/lock"
               target="_blank"
               rel="noreferrer"
               className="mt-3 inline-block text-sm text-[#F7931A]"
@@ -493,42 +552,6 @@ export default function ValidatorVotingPage(): JSX.Element {
                 </div>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs text-[var(--content-secondary)]">
-                  Filter:
-                </span>
-                <Tag
-                  closeable={false}
-                  onClick={() => setFilter("all")}
-                  color={filter === "all" ? "blue" : "gray"}
-                >
-                  All
-                </Tag>
-                <Tag
-                  closeable={false}
-                  onClick={() => setFilter("weighted")}
-                  color={filter === "weighted" ? "green" : "gray"}
-                >
-                  With votes
-                </Tag>
-                <Tag
-                  closeable={false}
-                  onClick={() => setFilter("zero")}
-                  color={filter === "zero" ? "yellow" : "gray"}
-                >
-                  Zero weight
-                </Tag>
-                {selectedGaugeAddresses.size > 0 && (
-                  <Tag
-                    closeable={false}
-                    onClick={() => setFilter("selected")}
-                    color={filter === "selected" ? "blue" : "gray"}
-                  >
-                    In cart
-                  </Tag>
-                )}
-              </div>
-
               <Input
                 id="validator-search"
                 value={search}
@@ -543,6 +566,9 @@ export default function ValidatorVotingPage(): JSX.Element {
                 </span>
                 {(
                   [
+                    { id: "incentives", label: "Incentives" },
+                    { id: "apy", label: "APY" },
+                    { id: "share", label: "Share" },
                     { id: "weight", label: "BTC Weight" },
                     { id: "name", label: "Name" },
                   ] as const
@@ -586,10 +612,44 @@ export default function ValidatorVotingPage(): JSX.Element {
                           <ValidatorGaugeVotingCard
                             validator={validator}
                             totalWeight={totalWeight}
-                            allocation={allocations[validator.gauge] ?? ""}
-                            currentAllocation={primaryCurrentAllocations.get(
-                              validator.gauge,
+                            metric={validatorMetrics.get(
+                              validator.gauge.toLowerCase(),
                             )}
+                            isLoadingMetrics={isLoadingValidatorMetrics}
+                            allocation={allocations[validator.gauge] ?? ""}
+                            currentAllocation={
+                              currentAllocations.get(
+                                validator.gauge.toLowerCase(),
+                              ) ?? 0n
+                            }
+                            projectedApyBasisPoints={(() => {
+                              const metric = validatorMetrics.get(
+                                validator.gauge.toLowerCase(),
+                              )
+                              const allocationBasisPoints =
+                                percentageToBasisPoints(
+                                  allocations[validator.gauge] ?? "",
+                                )
+                              if (
+                                metric?.totalIncentivesMicroUsd === null ||
+                                metric?.totalIncentivesMicroUsd === undefined ||
+                                btcPriceUsd === null ||
+                                allocationBasisPoints === null
+                              ) {
+                                return metric?.apyBasisPoints ?? null
+                              }
+                              return calculateValidatorApyBasisPoints(
+                                metric.totalIncentivesMicroUsd,
+                                calculateProjectedValidatorWeight(
+                                  BigInt(validator.weight),
+                                  selectedVotesByGauge.get(
+                                    validator.gauge.toLowerCase(),
+                                  ) ?? [],
+                                  allocationBasisPoints,
+                                ),
+                                btcPriceUsd,
+                              )
+                            })()}
                             isSelected={selectedGaugeAddresses.has(
                               validator.gauge,
                             )}

@@ -591,6 +591,13 @@ export const NON_STAKING_GAUGE_ABI = [
     type: "function",
   },
   {
+    inputs: [{ internalType: "address", name: "_account", type: "address" }],
+    name: "earned",
+    outputs: [{ internalType: "uint256", name: "_earned", type: "uint256" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
     inputs: [
       { internalType: "address", name: "newBeneficiary", type: "address" },
     ],
@@ -754,7 +761,7 @@ export const VALIDATORS_VOTER_ABI = [
     type: "function",
   },
   {
-    inputs: [{ internalType: "address", name: "gauge", type: "address" }],
+    inputs: [{ internalType: "address[]", name: "_gauges", type: "address[]" }],
     name: "claimRewards",
     outputs: [],
     stateMutability: "nonpayable",

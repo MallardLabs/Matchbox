@@ -12,13 +12,8 @@ import {
 } from "wagmi"
 import { z } from "zod"
 
-export function useValidatorGaugeState(
-  gaugeAddress: Address | undefined,
-  rewardsEnabled = true,
-  operatorAddress?: Address,
-) {
+export function useValidatorGaugeState(gaugeAddress: Address | undefined) {
   const { chainId, isNetworkReady } = useNetwork()
-  const { address: viewerAddress } = useAccount()
   const contracts = getContractConfig(chainId)
   const beneficiary = useReadContract({
     address: gaugeAddress,
@@ -38,29 +33,25 @@ export function useValidatorGaugeState(
       enabled: isNetworkReady && !!gaugeAddress,
     },
   })
-  const isPrivilegedViewer =
-    !!viewerAddress &&
-    (viewerAddress.toLowerCase() === operatorAddress?.toLowerCase() ||
-      viewerAddress.toLowerCase() ===
-        (beneficiary.data as Address | undefined)?.toLowerCase())
-  const shouldReadRewards = rewardsEnabled || isPrivilegedViewer
-  const claimable = useReadContract({
-    ...contracts.validatorsVoter,
-    functionName: "claimable",
-    args: gaugeAddress ? [gaugeAddress] : undefined,
+  const resolvedBeneficiary = beneficiary.data as Address | undefined
+  const earned = useReadContract({
+    ...contracts.nonStakingGauge,
+    address: gaugeAddress,
+    functionName: "earned",
+    args: resolvedBeneficiary ? [resolvedBeneficiary] : undefined,
     query: {
       ...QUERY_PROFILES.REALTIME,
-      enabled: isNetworkReady && !!gaugeAddress && shouldReadRewards,
+      enabled:
+        isNetworkReady && !!gaugeAddress && resolvedBeneficiary !== undefined,
     },
   })
   const refetch = useCallback(async () => {
-    await Promise.all([beneficiary.refetch(), claimable.refetch()])
-  }, [beneficiary.refetch, claimable.refetch])
+    await Promise.all([beneficiary.refetch(), earned.refetch()])
+  }, [beneficiary.refetch, earned.refetch])
   return {
-    beneficiary: beneficiary.data as Address | undefined,
-    claimable: claimable.data as bigint | undefined,
-    isLoading:
-      beneficiary.isLoading || (shouldReadRewards && claimable.isLoading),
+    beneficiary: resolvedBeneficiary,
+    earned: earned.data as bigint | undefined,
+    isLoading: beneficiary.isLoading || earned.isLoading,
     refetch,
   }
 }
@@ -127,7 +118,7 @@ export function useClaimValidatorRewards(): ValidatorWriteState & {
       write.writeContract({
         ...contracts.validatorsVoter,
         functionName: "claimRewards",
-        args: [gauge],
+        args: [[gauge]],
       }),
     hash: write.data as Hex | undefined,
     isPending: write.isPending,

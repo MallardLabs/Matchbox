@@ -1,5 +1,5 @@
 import type { GaugeProfile } from "@/config/supabase"
-import { type GaugeAPYData, formatAPY } from "@/hooks/useAPY"
+import type { GaugeAPYData } from "@/hooks/useAPY"
 import type { BoostGauge } from "@/hooks/useGauges"
 import useShiftKeyHeld from "@/hooks/useShiftKeyHeld"
 import { formatUsdValue } from "@/hooks/useTokenPrices"
@@ -9,6 +9,7 @@ import { Button, Tag } from "@mezo-org/mezo-clay"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import Link from "next/link"
 import { type ReactNode, useRef, useState } from "react"
+import ApyMetric from "./ApyMetric"
 import MarqueeText from "./MarqueeText"
 import OptimalVeMEZOProgress from "./OptimalVeMEZOProgress"
 import { TokenIcon } from "./TokenIcon"
@@ -209,7 +210,7 @@ export default function GaugeCard({
             APY
             <Tooltip
               id={`gc-apy-${gauge.address}`}
-              content="Estimated annualized yield from this gauge's bribe pool divided by total veMEZO voting weight. Higher incentives or fewer voters means higher APY."
+              content="Estimated annualized yield from this gauge's bribe pool. Hover or focus the value to estimate rewards for a new 10k veMEZO vote."
             />
           </dt>
           <dd
@@ -220,8 +221,14 @@ export default function GaugeCard({
             }`}
             title={isProjected ? "Projected APY after your vote" : undefined}
           >
-            {isLoadingAPY ? "..." : formatAPY(displayAPY)}
-            {isProjected && " \u2193"}
+            <ApyMetric
+              apy={displayAPY}
+              totalIncentivesUsd={apyData?.totalIncentivesUSD ?? 0}
+              currentVeMezoWeight={gauge.totalWeight}
+              isLoading={isLoadingAPY}
+              className="font-mono"
+            />
+            {isProjected && " ↓"}
           </dd>
         </div>
         {apyData &&

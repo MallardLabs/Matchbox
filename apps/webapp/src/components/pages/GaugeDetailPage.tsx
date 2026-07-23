@@ -1,5 +1,6 @@
 import { AddGaugeIncentiveModal } from "@/components/AddGaugeIncentiveModal"
 import { AddressLink } from "@/components/AddressLink"
+import ApyMetric from "@/components/ApyMetric"
 import OptimalVeMEZOProgress from "@/components/OptimalVeMEZOProgress"
 import { SpringIn } from "@/components/SpringIn"
 import { TokenIcon } from "@/components/TokenIcon"
@@ -809,7 +810,13 @@ export default function GaugeDetailPage({
                         : "text-[var(--content-primary)]"
                     }`}
                   >
-                    {isLoadingAPY ? "..." : formatAPY(apy)}
+                    <ApyMetric
+                      apy={apy}
+                      totalIncentivesUsd={totalIncentivesUSD}
+                      currentVeMezoWeight={totalWeight}
+                      isLoading={isLoadingAPY}
+                      className="text-lg font-semibold md:text-xl"
+                    />
                   </h3>
                 </div>
               </Card>
