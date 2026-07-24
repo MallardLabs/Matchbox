@@ -3,6 +3,34 @@ schema:
   file: ./schema.graphql
 dataSources:
   - kind: ethereum
+    name: VeBTC
+    network: mezo
+    source:
+      address: "0x3D4b1b884A7a1E59fE8589a3296EC8f8cBB6f279"
+      abi: VotingEscrow
+      startBlock: 7739500
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - LockPosition
+      abis:
+        - name: VotingEscrow
+          file: ./abis/VotingEscrow.json
+      eventHandlers:
+        - event: Deposit(indexed address,indexed uint256,indexed uint8,uint256,uint256,uint256)
+          handler: handleVeBTCDeposit
+        - event: LockPermanent(indexed address,indexed uint256,uint256,uint256)
+          handler: handleVeBTCLockPermanent
+        - event: Merge(indexed address,indexed uint256,indexed uint256,uint256,uint256,uint256,uint256,uint256)
+          handler: handleVeBTCMerge
+        - event: UnlockPermanent(indexed address,indexed uint256,uint256,uint256)
+          handler: handleVeBTCUnlockPermanent
+        - event: UpdateBoost(indexed uint256,uint256)
+          handler: handleVeBTCUpdateBoost
+      file: ./src/vebtc.ts
+  - kind: ethereum
     name: VeMEZO
     network: mezo
     source:
@@ -393,4 +421,3 @@ templates:
         - event: NotifyReward(indexed address,indexed address,indexed uint256,uint256)
           handler: handleBribeNotifyReward
       file: ./src/bribes.ts
-

@@ -1263,6 +1263,23 @@ export class LockPosition extends Entity {
     }
   }
 
+  get lastVotingPowerChangeAt(): BigInt | null {
+    let value = this.get("lastVotingPowerChangeAt");
+    if (!value || value.kind == ValueKind.NULL) {
+      return null;
+    } else {
+      return value.toBigInt();
+    }
+  }
+
+  set lastVotingPowerChangeAt(value: BigInt | null) {
+    if (!value) {
+      this.unset("lastVotingPowerChangeAt");
+    } else {
+      this.set("lastVotingPowerChangeAt", Value.fromBigInt(<BigInt>value));
+    }
+  }
+
   get activityCount(): BigInt {
     let value = this.get("activityCount");
     if (!value || value.kind == ValueKind.NULL) {

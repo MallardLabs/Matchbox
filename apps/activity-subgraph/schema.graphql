@@ -159,6 +159,7 @@ type LockPosition @entity(immutable: false) {
   mergedIntoTokenId: BigInt
   mergedAt: BigInt
   boost: BigInt
+  lastVotingPowerChangeAt: BigInt
   activityCount: BigInt!
 }
 

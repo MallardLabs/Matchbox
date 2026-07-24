@@ -78,6 +78,17 @@ export function calculateProjectedValidatorWeight(
   return baseWeight + proposedVotes
 }
 
+export function voteNeedsPoke(
+  votingPowerChangedAt: bigint | undefined,
+  oldestActiveVoteUpdatedAt: bigint | undefined,
+): boolean {
+  return (
+    votingPowerChangedAt !== undefined &&
+    oldestActiveVoteUpdatedAt !== undefined &&
+    votingPowerChangedAt > oldestActiveVoteUpdatedAt
+  )
+}
+
 export type ValidatorSortMode =
   | "incentives"
   | "apy"

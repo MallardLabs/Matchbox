@@ -19,6 +19,12 @@ const MATCHBOX_EXPLORER_SUBGRAPH_BY_CHAIN: Record<SupportedChainId, string> = {
     "https://api.goldsky.com/api/public/project_cmoiy2fc3z9sl01rk465n7poh/subgraphs/matchbox-explorer-testnet/live/gn",
 }
 
+export function getMatchboxExplorerSubgraphUrl(
+  chainId: SupportedChainId,
+): string {
+  return MATCHBOX_EXPLORER_SUBGRAPH_BY_CHAIN[chainId]
+}
+
 type SourceOptions = {
   chainId: SupportedChainId
   fromTimestamp: number

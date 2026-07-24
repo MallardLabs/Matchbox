@@ -8,6 +8,7 @@ import {
   compareValidatorSortEntries,
   equalVoteBasisPoints,
   percentageToBasisPoints,
+  voteNeedsPoke,
 } from "./validatorVoting"
 
 test("encodes two-decimal percentages as integer basis points", () => {
@@ -77,6 +78,14 @@ test("projects new votes and reallocations without double-counting", () => {
     ),
     1_000n,
   )
+})
+
+test("requires a poke only when voting power changed after an active vote", () => {
+  assert.equal(voteNeedsPoke(200n, 100n), true)
+  assert.equal(voteNeedsPoke(100n, 100n), false)
+  assert.equal(voteNeedsPoke(100n, 200n), false)
+  assert.equal(voteNeedsPoke(200n, undefined), false)
+  assert.equal(voteNeedsPoke(undefined, 100n), false)
 })
 
 test("sorts validator metrics deterministically", () => {

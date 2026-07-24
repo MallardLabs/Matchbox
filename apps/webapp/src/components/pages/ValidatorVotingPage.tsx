@@ -7,6 +7,7 @@ import { useVeBTCLocks } from "@/hooks/useLocks"
 import useMultiValidatorVoting from "@/hooks/useMultiValidatorVoting"
 import { usePagination } from "@/hooks/usePagination"
 import { useValidatorMetrics } from "@/hooks/useValidatorMetrics"
+import useValidatorPokeStatus from "@/hooks/useValidatorPokeStatus"
 import { useValidatorProfile } from "@/hooks/useValidatorProfiles"
 import useValidators from "@/hooks/useValidators"
 import type { Validator } from "@/lib/validators"
@@ -167,6 +168,18 @@ export default function ValidatorVotingPage(): JSX.Element {
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc")
   const [cartOpen, setCartOpen] = useState(false)
   const multiVote = useMultiValidatorVoting()
+  const {
+    voteNeedsPokeByToken,
+    isLoading: isLoadingPokeStatus,
+    refetch: refetchPokeStatus,
+  } = useValidatorPokeStatus(locks.map((lock) => lock.tokenId))
+  const staleVoteLocks = useMemo(
+    () =>
+      locks.filter(
+        (lock) => voteNeedsPokeByToken.get(lock.tokenId.toString()) === true,
+      ),
+    [locks, voteNeedsPokeByToken],
+  )
 
   const selectedLocks = useMemo(
     () =>
@@ -439,6 +452,13 @@ export default function ValidatorVotingPage(): JSX.Element {
     }
   }
 
+  async function handlePokeStaleVotes(): Promise<void> {
+    const result = await multiVote.pokeAll(
+      staleVoteLocks.map((lock) => lock.tokenId),
+    )
+    if (result.successCount > 0) await refetchPokeStatus()
+  }
+
   if (isLoadingValidators || (isConnected && isLoadingLocks)) {
     return (
       <div className="flex flex-col gap-4">
@@ -502,6 +522,37 @@ export default function ValidatorVotingPage(): JSX.Element {
             />
           </div>
         </Card>
+      )}
+
+      {!isLoadingPokeStatus && staleVoteLocks.length > 0 && (
+        <section
+          className="flex flex-col gap-3 rounded-lg border border-[var(--warning)] p-3 sm:flex-row sm:items-center sm:justify-between"
+          aria-live="polite"
+        >
+          <div>
+            <p className="text-sm font-semibold text-[var(--warning)]">
+              Poke to refresh voting power
+            </p>
+            <p className="mt-1 text-pretty text-xs text-[var(--content-secondary)]">
+              Voting power changed after the last validator vote for{" "}
+              {staleVoteLocks.length} veBTC NFT
+              {staleVoteLocks.length === 1 ? "" : "s"}:{" "}
+              {staleVoteLocks
+                .map((lock) => `#${lock.tokenId.toString()}`)
+                .join(", ")}
+              . Refresh their stored vote weights so the active votes use the
+              latest power.
+            </p>
+          </div>
+          <Button
+            kind="secondary"
+            size="small"
+            disabled={multiVote.isInProgress}
+            onClick={() => void handlePokeStaleVotes()}
+          >
+            Poke stale votes
+          </Button>
+        </section>
       )}
 
       {selectedLocks.length > eligibleLocks.length && (
