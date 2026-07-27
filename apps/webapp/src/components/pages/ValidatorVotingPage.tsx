@@ -7,7 +7,10 @@ import { useVeBTCLocks } from "@/hooks/useLocks"
 import useMultiValidatorVoting from "@/hooks/useMultiValidatorVoting"
 import { usePagination } from "@/hooks/usePagination"
 import { useValidatorMetrics } from "@/hooks/useValidatorMetrics"
-import { useValidatorProfile } from "@/hooks/useValidatorProfiles"
+import {
+  useAllValidatorProfiles,
+  useValidatorProfile,
+} from "@/hooks/useValidatorProfiles"
 import useValidators from "@/hooks/useValidators"
 import type { Validator } from "@/lib/validators"
 import { calculateValidatorApyBasisPoints } from "@/utils/validatorApy"
@@ -154,6 +157,7 @@ export default function ValidatorVotingPage(): JSX.Element {
     btcPriceUsd,
     isLoading: isLoadingValidatorMetrics,
   } = useValidatorMetrics(votableValidators)
+  const { profiles: validatorProfiles } = useAllValidatorProfiles()
   const [selectedLockIndexes, setSelectedLockIndexes] = useState<Set<number>>(
     new Set(),
   )
@@ -278,9 +282,14 @@ export default function ValidatorVotingPage(): JSX.Element {
 
   const filteredValidators = useMemo(() => {
     const query = deferredSearch.trim().toLowerCase()
+    const resolveName = (validator: Validator) =>
+      validatorProfiles.get(validator.gauge.toLowerCase())?.display_name ||
+      validator.moniker ||
+      validator.operator
     const result = votableValidators.filter((validator) => {
       return (
         !query ||
+        resolveName(validator).toLowerCase().includes(query) ||
         validator.moniker.toLowerCase().includes(query) ||
         validator.details.toLowerCase().includes(query) ||
         validator.operator.toLowerCase().includes(query) ||
@@ -293,7 +302,7 @@ export default function ValidatorVotingPage(): JSX.Element {
       const metric = validatorMetrics.get(validator.gauge.toLowerCase())
       return {
         gauge: validator.gauge,
-        name: validator.moniker || validator.operator,
+        name: resolveName(validator),
         weight,
         shareBasisPoints:
           totalWeight > 0n ? (weight * 10_000n) / totalWeight : 0n,
@@ -315,6 +324,7 @@ export default function ValidatorVotingPage(): JSX.Element {
     sortMode,
     totalWeight,
     validatorMetrics,
+    validatorProfiles,
     votableValidators,
   ])
 

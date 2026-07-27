@@ -1,12 +1,14 @@
 import { QUERY_PROFILES } from "@/config/queryProfiles"
 import {
+  type GaugeProfile,
   type SocialLinks,
   type ValidatorProfile,
   supabase,
 } from "@/config/supabase"
 import { useNetwork } from "@/contexts/NetworkContext"
+import { useAllGaugeProfiles } from "@/hooks/useGaugeProfiles"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
-import { useCallback, useState } from "react"
+import { useCallback, useMemo, useState } from "react"
 import type { Address } from "viem"
 import { useSignMessage } from "wagmi"
 import { z } from "zod"
@@ -58,29 +60,120 @@ type ProfileIdentity = {
   editorAddress: Address
 }
 
-export function useValidatorProfile(gaugeAddress: Address | undefined) {
+// Validator profiles live in `validator_profiles`, but the readable validator
+// names predate that table and were curated in `gauge_profiles` (keyed by gauge
+// address). Without this fallback a validator that has never saved a profile in
+// the new table renders its raw on-chain moniker instead.
+function withLegacyGaugeProfile(
+  profile: ValidatorProfile | null,
+  legacy: GaugeProfile | undefined,
+  chainId: number,
+  gaugeAddress: Address | undefined,
+): ValidatorProfile | null {
+  if (!legacy) return profile
+
+  const base: ValidatorProfile = profile ?? {
+    chain_id: chainId,
+    gauge_address: gaugeAddress?.toLowerCase() ?? legacy.gauge_address,
+    operator_address: "",
+    last_editor_address: "",
+    profile_picture_url: null,
+    display_name: null,
+    description: null,
+    website_url: null,
+    social_links: null,
+    incentive_strategy: null,
+    voting_strategy: null,
+    tags: null,
+    created_at: legacy.created_at,
+    updated_at: legacy.updated_at,
+  }
+
+  return {
+    ...base,
+    profile_picture_url: base.profile_picture_url ?? legacy.profile_picture_url,
+    display_name: base.display_name ?? legacy.display_name,
+    description: base.description ?? legacy.description,
+    website_url: base.website_url ?? legacy.website_url,
+    social_links: base.social_links ?? legacy.social_links,
+    incentive_strategy: base.incentive_strategy ?? legacy.incentive_strategy,
+    voting_strategy: base.voting_strategy ?? legacy.voting_strategy,
+    tags: base.tags ?? legacy.tags,
+  }
+}
+
+function validatorProfilesQueryKey(chainId: number) {
+  return ["validator-profiles", chainId] as const
+}
+
+/**
+ * Every validator profile for the active chain, keyed by lowercased gauge
+ * address and already merged with the legacy `gauge_profiles` rows. One request
+ * serves the whole page instead of one per validator card.
+ */
+export function useAllValidatorProfiles() {
   const { chainId, isNetworkReady } = useNetwork()
+  const { profiles: gaugeProfiles, isLoading: isLoadingGaugeProfiles } =
+    useAllGaugeProfiles()
   const query = useQuery({
-    queryKey: ["validator-profile", chainId, gaugeAddress?.toLowerCase()],
+    queryKey: validatorProfilesQueryKey(chainId),
     queryFn: async () => {
-      if (!gaugeAddress) return null
       const { data, error } = await supabase
         .from("validator_profiles")
         .select("*")
         .eq("chain_id", chainId)
-        .eq("gauge_address", gaugeAddress.toLowerCase())
-        .maybeSingle()
       if (error) throw new Error(error.message)
-      return data ? validatorProfileSchema.parse(data) : null
+      return (data ?? []).map((row) => validatorProfileSchema.parse(row))
     },
-    enabled: isNetworkReady && !!gaugeAddress,
+    enabled: isNetworkReady,
     ...QUERY_PROFILES.SHORT_CACHE,
   })
+
+  const profiles = useMemo(() => {
+    const merged = new Map<string, ValidatorProfile>()
+    for (const profile of query.data ?? []) {
+      const key = profile.gauge_address.toLowerCase()
+      merged.set(
+        key,
+        withLegacyGaugeProfile(
+          profile,
+          gaugeProfiles.get(key),
+          chainId,
+          profile.gauge_address as Address,
+        ) ?? profile,
+      )
+    }
+    // Gauges with only a legacy profile still need a readable name
+    for (const [key, legacy] of gaugeProfiles) {
+      if (merged.has(key)) continue
+      const fallback = withLegacyGaugeProfile(
+        null,
+        legacy,
+        chainId,
+        key as Address,
+      )
+      if (fallback) merged.set(key, fallback)
+    }
+    return merged
+  }, [query.data, gaugeProfiles, chainId])
+
   return {
-    profile: query.data ?? null,
-    isLoading: query.isLoading,
+    profiles,
+    isLoading: query.isLoading || isLoadingGaugeProfiles,
     error: query.error,
     refetch: query.refetch,
+  }
+}
+
+export function useValidatorProfile(gaugeAddress: Address | undefined) {
+  const { profiles, isLoading, error, refetch } = useAllValidatorProfiles()
+  return {
+    profile: gaugeAddress
+      ? (profiles.get(gaugeAddress.toLowerCase()) ?? null)
+      : null,
+    isLoading,
+    error,
+    refetch,
   }
 }
 
@@ -134,11 +227,7 @@ export function useUpsertValidatorProfile() {
           }),
         )
         await queryClient.invalidateQueries({
-          queryKey: [
-            "validator-profile",
-            chainId,
-            identity.gaugeAddress.toLowerCase(),
-          ],
+          queryKey: validatorProfilesQueryKey(chainId),
         })
         return result.profile satisfies ValidatorProfile
       } catch (caught) {
