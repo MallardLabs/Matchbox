@@ -11,6 +11,7 @@
     "lint:config": "prettier --check '**/*.{json,yaml,yml}'",
     "lint:config:fix": "prettier --write '**/*.{json,yaml,yml}'",
     "typecheck": "turbo run typecheck",
+    "backfill:validator-profiles": "node ./apps/webapp/scripts/backfill-validator-profiles.mjs",
     "check:trellium": "node ./scripts/check-trellium-boundary.mjs",
     "release:trellium:prepare": "node ./scripts/prepare-trellium-release.mjs",
     "release:trellium:publish": "node ./scripts/publish-trellium-release.mjs"

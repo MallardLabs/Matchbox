@@ -13,6 +13,8 @@
 - Extension dev: `pnpm run extension/dev`
 - Lint: `pnpm lint` (fix automatically: `pnpm lint:fix`)
 - Format config files: `pnpm lint:config` (fix: `pnpm lint:config:fix`)
+- Backfill validator profiles from curated gauge profiles (dry run by default):
+  `pnpm backfill:validator-profiles -- --network mainnet [--apply]`
 - Trellium release boundary check: `pnpm check:trellium`
 - Prepare Trellium release snapshot: `pnpm release:trellium:prepare -- --ref <ref> --out .trellium-release/<name>`
 - Publish Trellium release snapshot: `pnpm release:trellium:publish -- --dir .trellium-release/<name> --message "Release vX.Y.Z" [--tag vX.Y.Z]`
