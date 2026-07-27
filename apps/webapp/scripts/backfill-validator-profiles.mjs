@@ -1,10 +1,14 @@
-// Backfills `validator_profiles` from the curated names in `gauge_profiles`.
+// Seeds `validator_profiles` with readable validator display names.
 //
-// `validator_profiles` is keyed by (chain_id, gauge_address) and requires an
-// operator address, neither of which `gauge_profiles` carries — so this cannot
-// be a plain SQL migration. The gauge -> operator mapping only exists on chain,
-// in ValidatorsVoter.validatorToGauge, so we read the registry first and join
-// against it here.
+// The names are not derivable from anything else. `gauge_profiles` holds veBTC
+// boost gauges only — no row there corresponds to a validator gauge — so there
+// is nothing to copy from. The curated moniker -> display name mapping lives in
+// ./validator-display-names.json and is the source of truth; edit that file to
+// change a name or add a validator.
+//
+// This cannot be a plain SQL migration: `validator_profiles` is keyed by
+// (chain_id, gauge_address) and requires an operator address, and the
+// moniker/gauge/operator triple only exists on chain.
 //
 // Dry run by default; pass --apply to write.
 //
@@ -14,6 +18,9 @@
 // Requires SUPABASE_SERVICE_ROLE_KEY: the anon role has INSERT/UPDATE revoked
 // on validator_profiles.
 
+import { readFileSync } from "node:fs"
+import path from "node:path"
+import { fileURLToPath } from "node:url"
 import {
   CHAIN_ID,
   CONTRACTS,
@@ -28,19 +35,10 @@ const DEFAULT_RPC_URLS = {
   mainnet: "https://rpc-internal.mezo.org",
   testnet: "https://rpc.test.mezo.org",
 }
-// Copied fields must exist on both tables. owner_address/vebtc_token_id are
-// gauge-only, operator_address/chain_id are validator-only.
-const COPIED_FIELDS = [
-  "profile_picture_url",
-  "display_name",
-  "description",
-  "website_url",
-  "social_links",
-  "incentive_strategy",
-  "voting_strategy",
-  "tags",
-]
 const UPSERT_CHUNK_SIZE = 100
+
+const here = path.dirname(fileURLToPath(import.meta.url))
+const namesFile = path.join(here, "validator-display-names.json")
 
 const args = process.argv.slice(2)
 let network = "mainnet"
@@ -99,6 +97,13 @@ if (!serviceRoleKey) {
   process.exit(1)
 }
 
+// Monikers are compared lowercased; on-chain casing is inconsistent.
+const displayNames = new Map(
+  Object.entries(JSON.parse(readFileSync(namesFile, "utf8"))).map(
+    ([moniker, name]) => [moniker.trim().toLowerCase(), name],
+  ),
+)
+
 const chainId = CHAIN_ID[network]
 const addresses = CONTRACTS[network]
 const chain = defineChain({
@@ -151,21 +156,6 @@ async function readValidatorRegistry() {
   return entries.filter((entry) => entry.gauge !== ZERO_ADDRESS)
 }
 
-/**
- * gauge_profiles predates address normalisation, so rows may hold checksummed
- * or lowercased addresses. Key everything lowercased and match on that.
- */
-async function readGaugeProfiles() {
-  const { data, error } = await supabase.from("gauge_profiles").select("*")
-  if (error) throw new Error(`Unable to read gauge_profiles: ${error.message}`)
-
-  const byGauge = new Map()
-  for (const row of data ?? []) {
-    byGauge.set(row.gauge_address.toLowerCase(), row)
-  }
-  return byGauge
-}
-
 async function readValidatorProfiles() {
   const { data, error } = await supabase
     .from("validator_profiles")
@@ -182,103 +172,85 @@ async function readValidatorProfiles() {
   return byGauge
 }
 
-function isEmpty(value) {
-  if (value === null || value === undefined) return true
-  if (typeof value === "string") return value.trim() === ""
-  if (Array.isArray(value)) return value.length === 0
-  if (typeof value === "object") return Object.keys(value).length === 0
-  return false
-}
-
-/** Normalises a gauge_profiles value into what validator_profiles expects. */
-function normalize(field, value) {
-  if (field === "social_links") return value ?? {}
-  if (field === "tags") return value ?? []
-  return value ?? null
-}
-
-function planRow(entry, legacy, existing) {
-  const gaugeKey = entry.gauge.toLowerCase()
-  const changedFields = []
-  const row = {
-    chain_id: chainId,
-    gauge_address: gaugeKey,
-    operator_address: entry.operator.toLowerCase(),
-    // No wallet authored this row; the edge service overwrites it on first edit.
-    last_editor_address: existing?.last_editor_address ?? ZERO_ADDRESS,
-  }
-
-  for (const field of COPIED_FIELDS) {
-    const legacyValue = normalize(field, legacy[field])
-    const existingValue = existing ? existing[field] : null
-
-    // Never clobber what a validator saved themselves unless asked to.
-    const keepExisting = !overwrite && !isEmpty(existingValue)
-    if (keepExisting || isEmpty(legacyValue)) {
-      row[field] = normalize(field, existingValue)
-      continue
-    }
-
-    row[field] = legacyValue
-    if (JSON.stringify(existingValue ?? null) !== JSON.stringify(legacyValue)) {
-      changedFields.push(field)
-    }
-  }
-
-  if (
-    existing &&
-    existing.operator_address.toLowerCase() !== row.operator_address
-  ) {
-    changedFields.push("operator_address")
-  }
-
-  return { row, changedFields, isNew: !existing }
+function isBlank(value) {
+  return value === null || value === undefined || value.trim() === ""
 }
 
 async function main() {
   console.log(
-    `Backfilling validator_profiles for ${network} (chain ${chainId})${
+    `Seeding validator_profiles for ${network} (chain ${chainId})${
       apply ? "" : " — dry run, pass --apply to write"
     }`,
   )
 
-  const [registry, gaugeProfiles, validatorProfiles] = await Promise.all([
+  const [registry, existingProfiles] = await Promise.all([
     readValidatorRegistry(),
-    readGaugeProfiles(),
     readValidatorProfiles(),
   ])
 
   console.log(
-    `${registry.length} live validator gauges, ${gaugeProfiles.size} gauge profiles, ${validatorProfiles.size} existing validator profiles`,
+    `${registry.length} live validator gauges, ${displayNames.size} curated names, ${existingProfiles.size} existing validator profiles`,
   )
 
   const pending = []
-  const missing = []
+  const unmapped = []
+  const untouched = []
 
   for (const entry of registry) {
-    const gaugeKey = entry.gauge.toLowerCase()
-    const legacy = gaugeProfiles.get(gaugeKey)
-    if (!legacy) {
-      missing.push(entry)
+    const displayName = displayNames.get(entry.moniker.trim().toLowerCase())
+    if (!displayName) {
+      unmapped.push(entry)
       continue
     }
 
-    const planned = planRow(entry, legacy, validatorProfiles.get(gaugeKey))
-    if (planned.changedFields.length === 0) continue
-    pending.push({ entry, ...planned })
+    const gaugeKey = entry.gauge.toLowerCase()
+    const existing = existingProfiles.get(gaugeKey)
+
+    // Never clobber a name a validator set themselves unless asked to.
+    if (existing && !overwrite && !isBlank(existing.display_name)) {
+      untouched.push({ entry, existing })
+      continue
+    }
+    if (existing?.display_name === displayName) continue
+
+    pending.push({
+      entry,
+      displayName,
+      isNew: !existing,
+      row: {
+        ...existing,
+        chain_id: chainId,
+        gauge_address: gaugeKey,
+        operator_address: entry.operator.toLowerCase(),
+        // No wallet authored this row; the edge service overwrites it on the
+        // validator's first real edit.
+        last_editor_address: existing?.last_editor_address ?? ZERO_ADDRESS,
+        display_name: displayName,
+        social_links: existing?.social_links ?? {},
+        tags: existing?.tags ?? [],
+      },
+    })
   }
 
-  for (const { entry, row, changedFields, isNew } of pending) {
+  for (const { entry, displayName, isNew } of pending) {
     console.log(
       `  ${isNew ? "create" : "update"} ${getAddress(entry.gauge)} ` +
-        `${JSON.stringify(entry.moniker)} -> ${JSON.stringify(row.display_name)} ` +
-        `[${changedFields.join(", ")}]`,
+        `${JSON.stringify(entry.moniker)} -> ${JSON.stringify(displayName)}`,
     )
   }
 
-  if (missing.length > 0) {
-    console.log(`\n${missing.length} validator gauges have no curated profile:`)
-    for (const entry of missing) {
+  for (const { entry, existing } of untouched) {
+    console.log(
+      `  keep   ${getAddress(entry.gauge)} ${JSON.stringify(entry.moniker)} ` +
+        `already named ${JSON.stringify(existing.display_name)}`,
+    )
+  }
+
+  if (unmapped.length > 0) {
+    console.log(
+      `\n${unmapped.length} validators have no curated name — add them to ${path.basename(namesFile)}:`,
+    )
+    for (const entry of unmapped) {
       console.log(
         `  skip   ${getAddress(entry.gauge)} ${JSON.stringify(entry.moniker)}`,
       )
@@ -286,7 +258,7 @@ async function main() {
   }
 
   if (pending.length === 0) {
-    console.log("\nNothing to backfill.")
+    console.log("\nNothing to seed.")
     return
   }
 
