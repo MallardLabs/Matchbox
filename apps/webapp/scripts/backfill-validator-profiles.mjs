@@ -97,6 +97,39 @@ if (!serviceRoleKey) {
   process.exit(1)
 }
 
+/**
+ * Which Postgres role a key resolves to, or null if it cannot be determined.
+ * Legacy keys are JWTs carrying a `role` claim; the newer format encodes it in
+ * the prefix. Reads succeed under either key, so without this check a wrong key
+ * only surfaces as "permission denied for table" after the whole plan is built.
+ */
+function describeKeyRole(key) {
+  if (key.startsWith("sb_secret_")) return "service_role"
+  if (key.startsWith("sb_publishable_")) return "anon"
+
+  const segments = key.split(".")
+  if (segments.length !== 3) return null
+  try {
+    const payload = JSON.parse(
+      Buffer.from(segments[1], "base64url").toString("utf8"),
+    )
+    return typeof payload.role === "string" ? payload.role : null
+  } catch {
+    return null
+  }
+}
+
+const keyRole = describeKeyRole(serviceRoleKey)
+if (keyRole && keyRole !== "service_role") {
+  console.error(
+    `SUPABASE_SERVICE_ROLE_KEY holds a "${keyRole}" key, which has INSERT and UPDATE revoked on validator_profiles.`,
+  )
+  console.error(
+    "Copy the service_role (or secret) key from Project Settings -> API instead.",
+  )
+  process.exit(1)
+}
+
 // Monikers are compared lowercased; on-chain casing is inconsistent.
 const displayNames = new Map(
   Object.entries(JSON.parse(readFileSync(namesFile, "utf8"))).map(
