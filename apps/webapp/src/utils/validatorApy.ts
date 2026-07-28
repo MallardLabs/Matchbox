@@ -29,8 +29,12 @@ export function tokenUsdMicroValue(
   decimals: number,
   priceUsd: string,
 ): bigint {
-  const priceMicroUsd = decimalToScaledBigInt(priceUsd, 6)
-  return (amount * priceMicroUsd) / 10n ** BigInt(decimals)
+  const priceScaleDecimals = 18
+  const priceScaledUsd = decimalToScaledBigInt(priceUsd, priceScaleDecimals)
+  return (
+    (amount * priceScaledUsd * 10n ** 6n) /
+    (10n ** BigInt(decimals) * 10n ** BigInt(priceScaleDecimals))
+  )
 }
 
 export function calculateValidatorApyBasisPoints(

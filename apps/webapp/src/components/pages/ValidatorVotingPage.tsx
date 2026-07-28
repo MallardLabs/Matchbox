@@ -1,5 +1,8 @@
 import { LockCarouselSelector } from "@/components/LockCarouselSelector"
 import PaginationControls from "@/components/PaginationControls"
+import RewardOptimizerPanel, {
+  type RewardOptimizerFeedback,
+} from "@/components/RewardOptimizerPanel"
 import ValidatorGaugeVotingCard from "@/components/ValidatorGaugeVotingCard"
 import { getContractConfig } from "@/config/contracts"
 import { useNetwork } from "@/contexts/NetworkContext"
@@ -13,7 +16,15 @@ import {
 } from "@/hooks/useValidatorProfiles"
 import useValidators from "@/hooks/useValidators"
 import type { Validator } from "@/lib/validators"
-import { calculateValidatorApyBasisPoints } from "@/utils/validatorApy"
+import {
+  type RewardOptimizerResult,
+  calculateAnnualizedReturnBasisPoints,
+  optimizeRewardAllocations,
+} from "@/utils/rewardOptimizer"
+import {
+  calculateValidatorApyBasisPoints,
+  decimalToScaledBigInt,
+} from "@/utils/validatorApy"
 import {
   type ValidatorSortEntry,
   type ValidatorSortMode,
@@ -170,6 +181,8 @@ export default function ValidatorVotingPage(): JSX.Element {
   const [sortMode, setSortMode] = useState<ValidatorSortMode>("incentives")
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc")
   const [cartOpen, setCartOpen] = useState(false)
+  const [optimizerFeedback, setOptimizerFeedback] =
+    useState<RewardOptimizerFeedback | null>(null)
   const multiVote = useMultiValidatorVoting()
 
   const selectedLocks = useMemo(
@@ -183,33 +196,37 @@ export default function ValidatorVotingPage(): JSX.Element {
     () => BigInt(Math.floor(Date.now() / 60_000) * 60),
     [],
   )
-  const { data: epochStart } = useReadContract({
+  const { data: epochStart, isLoading: isLoadingEpochStart } = useReadContract({
     ...contracts.validatorsVoter,
     functionName: "epochStart",
     args: [currentEpochTimestamp],
   })
-  const { data: lastVotedResults } = useReadContracts({
-    contracts: selectedLocks.map((lock) => ({
-      ...contracts.validatorsVoter,
-      functionName: "lastVoted" as const,
-      args: [lock.tokenId] as const,
-    })),
-    query: { enabled: selectedLocks.length > 0 },
-  })
+  const { data: lastVotedResults, isLoading: isLoadingLastVoted } =
+    useReadContracts({
+      contracts: selectedLocks.map((lock) => ({
+        ...contracts.validatorsVoter,
+        functionName: "lastVoted" as const,
+        args: [lock.tokenId] as const,
+      })),
+      query: { enabled: selectedLocks.length > 0 },
+    })
   const selectedLockStates = selectedLocks.map((lock, index) => {
     const lastVoted = lastVotedResults?.[index]?.result as bigint | undefined
     return {
       lock,
       eligible:
-        epochStart === undefined ||
-        lastVoted === undefined ||
+        epochStart !== undefined &&
+        lastVoted !== undefined &&
         lastVoted < epochStart,
     }
   })
   const eligibleLocks = selectedLockStates.flatMap((state) =>
     state.eligible ? [state.lock] : [],
   )
-  const { data: selectedUsedWeightResults } = useReadContracts({
+  const {
+    data: selectedUsedWeightResults,
+    isLoading: isLoadingSelectedUsedWeights,
+  } = useReadContracts({
     contracts: selectedLocks.map((lock) => ({
       ...contracts.validatorsVoter,
       functionName: "usedWeights" as const,
@@ -217,18 +234,25 @@ export default function ValidatorVotingPage(): JSX.Element {
     })),
     query: { enabled: selectedLocks.length > 0 },
   })
-  const { data: selectedVoteResults } = useReadContracts({
-    contracts: selectedLocks.flatMap((lock) =>
-      votableValidators.map((validator) => ({
-        ...contracts.validatorsVoter,
-        functionName: "votes" as const,
-        args: [lock.tokenId, validator.gauge] as const,
-      })),
-    ),
-    query: {
-      enabled: selectedLocks.length > 0 && votableValidators.length > 0,
-    },
-  })
+  const { data: selectedVoteResults, isLoading: isLoadingSelectedVotes } =
+    useReadContracts({
+      contracts: selectedLocks.flatMap((lock) =>
+        votableValidators.map((validator) => ({
+          ...contracts.validatorsVoter,
+          functionName: "votes" as const,
+          args: [lock.tokenId, validator.gauge] as const,
+        })),
+      ),
+      query: {
+        enabled: selectedLocks.length > 0 && votableValidators.length > 0,
+      },
+    })
+  const isLoadingSelectedValidatorState =
+    selectedLocks.length > 0 &&
+    (isLoadingEpochStart ||
+      isLoadingLastVoted ||
+      isLoadingSelectedUsedWeights ||
+      isLoadingSelectedVotes)
 
   const selectedVotesByGauge = useMemo(() => {
     const result = new Map<
@@ -264,6 +288,53 @@ export default function ValidatorVotingPage(): JSX.Element {
     selectedVoteResults,
     votableValidators,
   ])
+
+  const validatorOptimizerData = useMemo(() => {
+    let unpricedIncentiveCount = 0
+    const optimizerGauges = votableValidators.map((validator) => {
+      const metric = validatorMetrics.get(validator.gauge.toLowerCase())
+      let incentiveValueMicroUsd = 0n
+      for (const incentive of metric?.incentives ?? []) {
+        if (incentive.amount <= 0n) continue
+        if (incentive.valueMicroUsd === null) {
+          unpricedIncentiveCount++
+        } else {
+          incentiveValueMicroUsd += incentive.valueMicroUsd
+        }
+      }
+
+      return {
+        id: validator.gauge.toLowerCase(),
+        existingWeight: calculateProjectedValidatorWeight(
+          BigInt(validator.weight),
+          selectedVotesByGauge.get(validator.gauge.toLowerCase()) ?? [],
+          0n,
+        ),
+        incentiveValueMicroUsd,
+      }
+    })
+
+    return { optimizerGauges, unpricedIncentiveCount }
+  }, [selectedVotesByGauge, validatorMetrics, votableValidators])
+  const validatorOptimizerInputFingerprint = useMemo(
+    () =>
+      [
+        ...eligibleLocks.map(
+          (lock) => `${lock.tokenId.toString()}:${lock.votingPower.toString()}`,
+        ),
+        ...validatorOptimizerData.optimizerGauges.map(
+          (gauge) =>
+            `${gauge.id}:${gauge.existingWeight.toString()}:${gauge.incentiveValueMicroUsd.toString()}`,
+        ),
+        btcPriceUsd ?? "unpriced",
+      ].join("|"),
+    [btcPriceUsd, eligibleLocks, validatorOptimizerData],
+  )
+
+  useEffect(() => {
+    void validatorOptimizerInputFingerprint
+    setOptimizerFeedback(null)
+  }, [validatorOptimizerInputFingerprint])
 
   const currentAllocations = useMemo(
     () =>
@@ -373,6 +444,7 @@ export default function ValidatorVotingPage(): JSX.Element {
   }, [selectedGaugeAddresses.size])
 
   function toggleLock(index: number) {
+    setOptimizerFeedback(null)
     setSelectedLockIndexes((current) => {
       const next = new Set(current)
       if (next.has(index)) next.delete(index)
@@ -382,10 +454,12 @@ export default function ValidatorVotingPage(): JSX.Element {
   }
 
   function updateAllocation(gaugeAddress: string, value: string) {
+    setOptimizerFeedback(null)
     setAllocations((current) => ({ ...current, [gaugeAddress]: value }))
   }
 
   function toggleGauge(validator: Validator) {
+    setOptimizerFeedback(null)
     setSelectedGaugeAddresses((current) => {
       const next = new Set(current)
       if (next.has(validator.gauge)) {
@@ -406,12 +480,14 @@ export default function ValidatorVotingPage(): JSX.Element {
   }
 
   function clearCart() {
+    setOptimizerFeedback(null)
     setSelectedGaugeAddresses(new Set())
     setAllocations({})
     multiVote.clear()
   }
 
   function voteEquallyAcrossAll() {
+    setOptimizerFeedback(null)
     const weights = equalVoteBasisPoints(votableValidators.length)
     const nextAllocations: Record<string, string> = {}
     const nextSelected = new Set<string>()
@@ -423,6 +499,75 @@ export default function ValidatorVotingPage(): JSX.Element {
     })
     setAllocations(nextAllocations)
     setSelectedGaugeAddresses(nextSelected)
+  }
+
+  function previewOptimizedRewards(
+    maxGaugeCount: number,
+    excludedGaugeIds: ReadonlySet<string>,
+  ) {
+    const votingPowers = eligibleLocks.map((lock) => lock.votingPower)
+    const result = optimizeRewardAllocations({
+      gauges: validatorOptimizerData.optimizerGauges.filter(
+        (gauge) => !excludedGaugeIds.has(gauge.id),
+      ),
+      votingPowers,
+      maxGaugeCount,
+    })
+    if (!result) {
+      setOptimizerFeedback({
+        result: null,
+        annualizedReturnBasisPoints: null,
+        message:
+          "No active validator gauge currently has both priced incentives and eligible selected voting power.",
+      })
+      return
+    }
+
+    const assetPriceMicroUsd =
+      btcPriceUsd === null ? 0n : decimalToScaledBigInt(btcPriceUsd, 6)
+    setOptimizerFeedback({
+      result,
+      annualizedReturnBasisPoints: calculateAnnualizedReturnBasisPoints({
+        epochRewardMicroUsd: result.projectedRewardMicroUsd,
+        votingPowers,
+        assetPriceMicroUsd,
+      }),
+      message: null,
+    })
+  }
+
+  function applyOptimizedValidatorAllocation(result: RewardOptimizerResult) {
+    const validatorByGauge = new Map(
+      votableValidators.map((validator) => [
+        validator.gauge.toLowerCase(),
+        validator,
+      ]),
+    )
+    const nextAllocations: Record<string, string> = {}
+    const nextSelected = new Set<string>()
+    for (const allocation of result.allocations) {
+      const validator = validatorByGauge.get(allocation.id)
+      if (!validator) continue
+      nextSelected.add(validator.gauge)
+      nextAllocations[validator.gauge] = basisPointsToPercentage(
+        allocation.basisPoints,
+      )
+    }
+
+    setAllocations(nextAllocations)
+    setSelectedGaugeAddresses(nextSelected)
+  }
+
+  function resolveValidatorOptimizerGaugeLabel(gaugeId: string): string {
+    const validator = votableValidators.find(
+      (candidate) => candidate.gauge.toLowerCase() === gaugeId,
+    )
+    if (!validator) return gaugeId
+    return (
+      validatorProfiles.get(gaugeId)?.display_name ||
+      validator.moniker ||
+      validator.operator
+    )
   }
 
   function handleSort(nextSort: ValidatorSortMode) {
@@ -446,6 +591,7 @@ export default function ValidatorVotingPage(): JSX.Element {
       setCartOpen(false)
       setSelectedGaugeAddresses(new Set())
       setAllocations({})
+      setOptimizerFeedback(null)
     }
   }
 
@@ -561,6 +707,28 @@ export default function ValidatorVotingPage(): JSX.Element {
                   </Button>
                 </div>
               </div>
+
+              <RewardOptimizerPanel
+                assetLabel="veBTC"
+                disabled={eligibleLocks.length === 0}
+                disabledMessage={
+                  selectedLocks.length === 0
+                    ? "Select at least one veBTC NFT to calculate an optimized ballot."
+                    : isLoadingSelectedValidatorState
+                      ? "Loading the selected NFTs and their prior allocations."
+                      : "None of the selected veBTC NFTs are eligible to vote in this epoch."
+                }
+                isLoading={
+                  isLoadingValidatorMetrics || isLoadingSelectedValidatorState
+                }
+                unpricedIncentiveCount={
+                  validatorOptimizerData.unpricedIncentiveCount
+                }
+                feedback={optimizerFeedback}
+                resolveGaugeLabel={resolveValidatorOptimizerGaugeLabel}
+                onPreview={previewOptimizedRewards}
+                onApply={applyOptimizedValidatorAllocation}
+              />
 
               <Input
                 id="validator-search"

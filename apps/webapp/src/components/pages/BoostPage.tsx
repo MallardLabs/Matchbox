@@ -8,6 +8,9 @@ import {
 import MarqueeText from "@/components/MarqueeText"
 import OnboardingCard from "@/components/OnboardingCard"
 import PaginationControls from "@/components/PaginationControls"
+import RewardOptimizerPanel, {
+  type RewardOptimizerFeedback,
+} from "@/components/RewardOptimizerPanel"
 import { SpringIn } from "@/components/SpringIn"
 import Tooltip from "@/components/Tooltip"
 import {
@@ -31,6 +34,12 @@ import { useClaimableBribes } from "@/hooks/useVoting"
 import { useAllVoteAllocations, useBatchVoteState } from "@/hooks/useVoting"
 import { boostMultiplierNumberFromCalculatorInputs } from "@/utils/boostMultiplierFromCalculatorInputs"
 import { formatTokenAmount } from "@/utils/format"
+import {
+  type RewardOptimizerResult,
+  calculateAnnualizedReturnBasisPoints,
+  optimizeRewardAllocations,
+} from "@/utils/rewardOptimizer"
+import { decimalToScaledBigInt } from "@/utils/validatorApy"
 import {
   Button,
   Card,
@@ -89,6 +98,15 @@ function getTransactionStatusLabel(status: LockTxStatus): string {
   }
 }
 
+function percentageNumberToBasisPoints(percentage: number): bigint {
+  return BigInt(Math.round(percentage * 100))
+}
+
+function hasBasisPointPrecision(percentage: number): boolean {
+  const scaled = percentage * 100
+  return Math.abs(scaled - Math.round(scaled)) < 1e-8
+}
+
 export default function BoostPage(): JSX.Element {
   const { isConnected } = useAccount()
   const { locks: veMEZOLocks, isLoading: isLoadingLocks } = useVeMEZOLocks()
@@ -134,6 +152,8 @@ export default function BoostPage(): JSX.Element {
   const [cartSnapshots, setCartSnapshots] = useState<Map<number, number>>(
     new Map(),
   )
+  const [optimizerFeedback, setOptimizerFeedback] =
+    useState<RewardOptimizerFeedback | null>(null)
   const prevSelectedLockCountRef = useRef(0)
   const multiVoteCleanupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
@@ -168,18 +188,23 @@ export default function BoostPage(): JSX.Element {
     useClaimableBribes(allVeMEZOTokenIds)
 
   // Batch fetch vote allocations for all locks to calculate APY for each
-  const { allocationsByToken, refetch: refetchVoteAllocations } =
-    useAllVoteAllocations(allVeMEZOTokenIds, gaugeAddresses)
+  const {
+    allocationsByToken,
+    isLoading: isLoadingVoteAllocations,
+    refetch: refetchVoteAllocations,
+  } = useAllVoteAllocations(allVeMEZOTokenIds, gaugeAddresses)
 
   // Derive aggregated vote state from batch data
   const {
     totalVotingPower,
+    votableVotingPower,
     votableLocks,
     anyVotedThisEpoch,
     allVotedThisEpoch,
     currentAllocations,
   } = useMemo(() => {
     let power = 0n
+    let eligiblePower = 0n
     const votable: typeof selectedLocks = []
     let anyVoted = false
     let allVoted = selectedLocks.length > 0
@@ -187,7 +212,10 @@ export default function BoostPage(): JSX.Element {
     for (const lock of selectedLocks) {
       power += lock.votingPower
       const state = voteStateMap.get(lock.tokenId.toString())
-      if (state?.canVoteInCurrentEpoch) votable.push(lock)
+      if (state?.canVoteInCurrentEpoch) {
+        votable.push(lock)
+        eligiblePower += lock.votingPower
+      }
       if (state?.hasVotedThisEpoch) anyVoted = true
       if (!state?.hasVotedThisEpoch) allVoted = false
     }
@@ -215,6 +243,7 @@ export default function BoostPage(): JSX.Element {
 
     return {
       totalVotingPower: power,
+      votableVotingPower: eligiblePower,
       votableLocks: votable,
       anyVotedThisEpoch: anyVoted,
       allVotedThisEpoch: allVoted,
@@ -223,6 +252,69 @@ export default function BoostPage(): JSX.Element {
       ),
     }
   }, [selectedLocks, voteStateMap, allocationsByToken])
+
+  const boostOptimizerData = useMemo(() => {
+    let unpricedIncentiveCount = 0
+    const priorEligibleWeightByGauge = new Map<string, bigint>()
+    for (const lock of votableLocks) {
+      const priorAllocations =
+        allocationsByToken.get(lock.tokenId.toString()) ?? []
+      for (const allocation of priorAllocations) {
+        const gaugeKey = allocation.gaugeAddress.toLowerCase()
+        priorEligibleWeightByGauge.set(
+          gaugeKey,
+          (priorEligibleWeightByGauge.get(gaugeKey) ?? 0n) + allocation.weight,
+        )
+      }
+    }
+
+    const optimizerGauges = gauges
+      .filter((gauge) => gauge.isAlive)
+      .map((gauge) => {
+        const gaugeKey = gauge.address.toLowerCase()
+        const incentiveData = apyMap.get(gaugeKey)
+        let incentiveValueMicroUsd = 0n
+        for (const incentive of incentiveData?.incentivesByToken ?? []) {
+          if (incentive.amount <= 0n) continue
+          if (incentive.valueMicroUsd === null) {
+            unpricedIncentiveCount++
+          } else {
+            incentiveValueMicroUsd += incentive.valueMicroUsd
+          }
+        }
+        const priorEligibleWeight =
+          priorEligibleWeightByGauge.get(gaugeKey) ?? 0n
+        return {
+          id: gaugeKey,
+          existingWeight:
+            gauge.totalWeight > priorEligibleWeight
+              ? gauge.totalWeight - priorEligibleWeight
+              : 0n,
+          incentiveValueMicroUsd,
+        }
+      })
+
+    return { optimizerGauges, unpricedIncentiveCount }
+  }, [allocationsByToken, apyMap, gauges, votableLocks])
+  const boostOptimizerInputFingerprint = useMemo(
+    () =>
+      [
+        ...votableLocks.map(
+          (lock) => `${lock.tokenId.toString()}:${lock.votingPower.toString()}`,
+        ),
+        ...boostOptimizerData.optimizerGauges.map(
+          (gauge) =>
+            `${gauge.id}:${gauge.existingWeight.toString()}:${gauge.incentiveValueMicroUsd.toString()}`,
+        ),
+        String(mezoPrice),
+      ].join("|"),
+    [boostOptimizerData, mezoPrice, votableLocks],
+  )
+
+  useEffect(() => {
+    void boostOptimizerInputFingerprint
+    setOptimizerFeedback(null)
+  }, [boostOptimizerInputFingerprint])
 
   // Calculate claimable USD per tokenId (same as Dashboard)
   const claimableUSDByTokenId = useMemo(() => {
@@ -494,12 +586,23 @@ export default function BoostPage(): JSX.Element {
     0,
   )
   const totalAllocation = Number(totalAllocationRaw.toFixed(2))
-  const allocationEpsilon = 0.01
+  const selectedAllocationPercentages = Array.from(selectedGaugeIndexes).map(
+    (index) => gaugeAllocations.get(index) ?? 0,
+  )
+  const hasValidAllocationEntries = selectedAllocationPercentages.every(
+    (percentage) => percentage > 0 && hasBasisPointPrecision(percentage),
+  )
+  const totalAllocationBasisPoints = selectedAllocationPercentages.reduce(
+    (total, percentage) => total + percentageNumberToBasisPoints(percentage),
+    0n,
+  )
   const isAllocationValid =
-    Math.abs(totalAllocationRaw - 100) <= allocationEpsilon
-  const isOverAllocated = totalAllocationRaw > 100 + allocationEpsilon
+    selectedAllocationPercentages.length > 0 &&
+    hasValidAllocationEntries &&
+    totalAllocationBasisPoints === 10_000n
+  const isOverAllocated = totalAllocationBasisPoints > 10_000n
   const isUnderAllocated =
-    totalAllocationRaw > 0 && totalAllocationRaw < 100 - allocationEpsilon
+    totalAllocationBasisPoints > 0n && totalAllocationBasisPoints < 10_000n
 
   const cartStatusMessage = useMemo(() => {
     if (selectedLocks.length === 0)
@@ -508,6 +611,9 @@ export default function BoostPage(): JSX.Element {
       return "All selected locks have already voted this epoch."
     if (gaugeAllocations.size === 0 || totalAllocationRaw === 0) {
       return "Add vote allocations to continue."
+    }
+    if (!hasValidAllocationEntries) {
+      return "Use allocations of at least 0.01% with no more than two decimal places."
     }
     if (!isAllocationValid) {
       return "Total allocation must equal 100% to vote."
@@ -520,6 +626,7 @@ export default function BoostPage(): JSX.Element {
     selectedLocks.length,
     votableLocks.length,
     gaugeAllocations.size,
+    hasValidAllocationEntries,
     totalAllocationRaw,
     isAllocationValid,
     isLoadingVoteState,
@@ -660,6 +767,7 @@ export default function BoostPage(): JSX.Element {
     prevSelectedLockCountRef.current = selectedLockIndexes.size
 
     if (selectedLockIndexes.size === 0 && prevCount > 0) {
+      setOptimizerFeedback(null)
       setGaugeAllocations(new Map())
       setSelectedGaugeIndexes(new Set())
       setCartSnapshots(new Map())
@@ -794,7 +902,75 @@ export default function BoostPage(): JSX.Element {
     ],
   })
 
+  function handlePreviewOptimizedRewards(
+    maxGaugeCount: number,
+    excludedGaugeIds: ReadonlySet<string>,
+  ) {
+    const votingPowers = votableLocks.map((lock) => lock.votingPower)
+    const result = optimizeRewardAllocations({
+      gauges: boostOptimizerData.optimizerGauges.filter(
+        (gauge) => !excludedGaugeIds.has(gauge.id),
+      ),
+      votingPowers,
+      maxGaugeCount,
+    })
+    if (!result) {
+      setOptimizerFeedback({
+        result: null,
+        annualizedReturnBasisPoints: null,
+        message:
+          "No active gauge currently has both priced incentives and eligible selected voting power.",
+      })
+      return
+    }
+
+    const assetPriceMicroUsd =
+      mezoPrice === null ? 0n : decimalToScaledBigInt(String(mezoPrice), 6)
+    setOptimizerFeedback({
+      result,
+      annualizedReturnBasisPoints: calculateAnnualizedReturnBasisPoints({
+        epochRewardMicroUsd: result.projectedRewardMicroUsd,
+        votingPowers,
+        assetPriceMicroUsd,
+      }),
+      message: null,
+    })
+  }
+
+  function applyOptimizedBoostAllocation(result: RewardOptimizerResult) {
+    const gaugeIndexByAddress = new Map(
+      gauges.map((gauge, index) => [gauge.address.toLowerCase(), index]),
+    )
+    const nextAllocations = new Map<number, number>()
+    const nextSelected = new Set<number>()
+    for (const allocation of result.allocations) {
+      const gaugeIndex = gaugeIndexByAddress.get(allocation.id)
+      if (gaugeIndex === undefined) continue
+      const percentage =
+        Number.parseInt(allocation.basisPoints.toString(), 10) / 100
+      nextAllocations.set(gaugeIndex, percentage)
+      nextSelected.add(gaugeIndex)
+    }
+
+    setGaugeAllocations(nextAllocations)
+    setSelectedGaugeIndexes(nextSelected)
+    setCartSnapshots(new Map(nextAllocations))
+  }
+
+  function resolveBoostOptimizerGaugeLabel(gaugeId: string): string {
+    const gauge = gauges.find(
+      (candidate) => candidate.address.toLowerCase() === gaugeId,
+    )
+    if (!gauge) return gaugeId
+    const profile = gaugeProfiles.get(gaugeId)
+    if (profile?.display_name) return profile.display_name
+    if (gauge.veBTCTokenId > 0n)
+      return `veBTC #${gauge.veBTCTokenId.toString()}`
+    return `${gauge.address.slice(0, 6)}…${gauge.address.slice(-4)}`
+  }
+
   const handleAllocationChange = (gaugeIndex: number, percentage: number) => {
+    setOptimizerFeedback(null)
     setGaugeAllocations((prev) => {
       const next = new Map(prev)
       if (percentage <= 0) {
@@ -820,6 +996,7 @@ export default function BoostPage(): JSX.Element {
 
   const handleToggleGaugeSelection = useCallback(
     function handleToggleGaugeSelection(gaugeIndex: number) {
+      setOptimizerFeedback(null)
       setSelectedGaugeIndexes((prev) => {
         const next = new Set(prev)
         if (next.has(gaugeIndex)) {
@@ -845,6 +1022,7 @@ export default function BoostPage(): JSX.Element {
 
   const handleAddGaugeToCart = useCallback(
     function handleAddGaugeToCart(gaugeIndex: number) {
+      setOptimizerFeedback(null)
       setSelectedGaugeIndexes((prev) => {
         const next = new Set(prev)
         next.add(gaugeIndex)
@@ -861,13 +1039,19 @@ export default function BoostPage(): JSX.Element {
   )
 
   const handleClearSelections = useCallback(function handleClearSelections() {
+    setOptimizerFeedback(null)
     setSelectedGaugeIndexes(new Set())
     setGaugeAllocations(new Map())
     setCartSnapshots(new Map())
   }, [])
 
   const handleVote = async () => {
-    if (votableLocks.length === 0 || selectedGaugeIndexes.size === 0) return
+    if (
+      votableLocks.length === 0 ||
+      selectedGaugeIndexes.size === 0 ||
+      !isAllocationValid
+    )
+      return
 
     const selectedGauges = Array.from(selectedGaugeIndexes)
       .map((idx) => ({
@@ -879,7 +1063,9 @@ export default function BoostPage(): JSX.Element {
     const gaugeAddrs = selectedGauges.map(
       (entry) => entry.gauge?.address as Address,
     )
-    const weights = selectedGauges.map((entry) => BigInt(entry.weight))
+    const weights = selectedGauges.map((entry) =>
+      percentageNumberToBasisPoints(entry.weight),
+    )
     const tokenIds = votableLocks.map((l) => l.tokenId)
 
     const result = await voteAll(tokenIds, gaugeAddrs, weights)
@@ -896,7 +1082,12 @@ export default function BoostPage(): JSX.Element {
   }
 
   const handleExportVoteBatch = async () => {
-    if (votableLocks.length < 2 || selectedGaugeIndexes.size === 0) return
+    if (
+      votableLocks.length < 2 ||
+      selectedGaugeIndexes.size === 0 ||
+      !isAllocationValid
+    )
+      return
 
     const selectedGauges = Array.from(selectedGaugeIndexes)
       .map((idx) => ({
@@ -908,12 +1099,19 @@ export default function BoostPage(): JSX.Element {
     await exportVoteBatch(
       votableLocks.map((lock) => lock.tokenId),
       selectedGauges.map((entry) => entry.gauge?.address as Address),
-      selectedGauges.map((entry) => BigInt(entry.weight)),
+      selectedGauges.map((entry) =>
+        percentageNumberToBasisPoints(entry.weight),
+      ),
     )
   }
 
   const handleCopyVoteBatchJson = async () => {
-    if (votableLocks.length < 2 || selectedGaugeIndexes.size === 0) return
+    if (
+      votableLocks.length < 2 ||
+      selectedGaugeIndexes.size === 0 ||
+      !isAllocationValid
+    )
+      return
     const selectedGauges = Array.from(selectedGaugeIndexes)
       .map((idx) => ({
         gauge: gauges[idx],
@@ -923,7 +1121,9 @@ export default function BoostPage(): JSX.Element {
     await copyVoteBatchJson(
       votableLocks.map((lock) => lock.tokenId),
       selectedGauges.map((entry) => entry.gauge?.address as Address),
-      selectedGauges.map((entry) => BigInt(entry.weight)),
+      selectedGauges.map((entry) =>
+        percentageNumberToBasisPoints(entry.weight),
+      ),
     )
   }
 
@@ -999,6 +1199,7 @@ export default function BoostPage(): JSX.Element {
   ])
 
   const handleToggleLock = useCallback((index: number) => {
+    setOptimizerFeedback(null)
     setSelectedLockIndexes((prev) => {
       const next = new Set(prev)
       if (next.has(index)) next.delete(index)
@@ -1183,7 +1384,7 @@ export default function BoostPage(): JSX.Element {
                     Select veMEZO locks to finalize your votes.
                   </p>
                 )}
-                <ol className="mt-4 flex flex-col gap-3">
+                <ol className="mt-4 flex max-h-[42dvh] flex-col gap-3 overflow-y-auto pr-1">
                   {selectedGaugeList.map((gaugeIndex) => {
                     const gauge = gauges[gaugeIndex]
                     if (!gauge) return null
@@ -1200,7 +1401,7 @@ export default function BoostPage(): JSX.Element {
                       ? calculateProjectedAPY(
                           apyData,
                           currentVote,
-                          totalVotingPower,
+                          votableVotingPower,
                           mezoPrice,
                         )
                       : (apyData?.apy ?? null)
@@ -1292,6 +1493,9 @@ export default function BoostPage(): JSX.Element {
                               }
                               placeholder="0"
                               type="number"
+                              min={0}
+                              max={100}
+                              step={0.01}
                               size="small"
                               positive={currentVote > 0}
                               overrides={{
@@ -1360,7 +1564,7 @@ export default function BoostPage(): JSX.Element {
                               ~
                               {formatTokenAmount(
                                 (BigInt(Math.floor(currentVote * 100)) *
-                                  totalVotingPower) /
+                                  votableVotingPower) /
                                   10000n,
                                 18,
                               )}{" "}
@@ -1561,7 +1765,7 @@ export default function BoostPage(): JSX.Element {
                             (entry) => entry.gauge?.address as Address,
                           )
                           const weights = selectedGauges.map((entry) =>
-                            BigInt(entry.weight),
+                            percentageNumberToBasisPoints(entry.weight),
                           )
                           voteAll(failedTokenIds, gaugeAddrs, weights)
                         }}
@@ -1984,10 +2188,37 @@ export default function BoostPage(): JSX.Element {
                         }`}
                       >
                         Total: {totalAllocation}%
+                        {!hasValidAllocationEntries &&
+                          selectedGaugeIndexes.size > 0 &&
+                          " (use 0.01% increments)"}
                         {isOverAllocated && " (exceeds 100%)"}
                         {isUnderAllocated ? " (must be 100%)" : ""}
                       </p>
                     </div>
+
+                    <RewardOptimizerPanel
+                      assetLabel="veMEZO"
+                      disabled={votableLocks.length === 0}
+                      disabledMessage={
+                        selectedLocks.length === 0
+                          ? "Select at least one veMEZO lock to calculate an optimized ballot."
+                          : isLoadingVoteState || isLoadingVoteAllocations
+                            ? "Loading the selected locks and their prior allocations."
+                            : "None of the selected veMEZO locks are eligible to vote in this epoch."
+                      }
+                      isLoading={
+                        isLoadingAPY ||
+                        isLoadingVoteState ||
+                        isLoadingVoteAllocations
+                      }
+                      unpricedIncentiveCount={
+                        boostOptimizerData.unpricedIncentiveCount
+                      }
+                      feedback={optimizerFeedback}
+                      resolveGaugeLabel={resolveBoostOptimizerGaugeLabel}
+                      onPreview={handlePreviewOptimizedRewards}
+                      onApply={applyOptimizedBoostAllocation}
+                    />
 
                     {/* Status filter */}
                     <div className="flex flex-wrap items-center gap-2">
@@ -2129,7 +2360,7 @@ export default function BoostPage(): JSX.Element {
                                   ? calculateProjectedAPY(
                                       apyData,
                                       userVotePercentage,
-                                      totalVotingPower,
+                                      votableVotingPower,
                                       mezoPrice,
                                     )
                                   : (apyData?.apy ?? null)
@@ -2142,7 +2373,7 @@ export default function BoostPage(): JSX.Element {
                                   ? (BigInt(
                                       Math.floor(userVotePercentage * 100),
                                     ) *
-                                      totalVotingPower) /
+                                      votableVotingPower) /
                                     10000n
                                   : 0n
                                 const projectedBoost =
@@ -2208,6 +2439,9 @@ export default function BoostPage(): JSX.Element {
                                             }
                                             placeholder="0"
                                             type="number"
+                                            min={0}
+                                            max={100}
+                                            step={0.01}
                                             size="small"
                                             positive={votePercentage > 0}
                                             overrides={{

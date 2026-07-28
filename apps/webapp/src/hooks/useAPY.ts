@@ -1,5 +1,6 @@
 import { useGaugeTopology } from "@/hooks/useGaugeTopology"
 import type { GaugeTopologyResponse } from "@/types/gaugeTopology"
+import { tokenUsdMicroValue } from "@/utils/validatorApy"
 import { getTokenPriceType, getTokenUsdPrice } from "@repo/shared"
 import { useMemo } from "react"
 import type { Address } from "viem"
@@ -15,6 +16,7 @@ export type TokenIncentive = {
   amount: bigint
   decimals: number
   usdValue: number
+  valueMicroUsd: bigint | null
 }
 
 export type GaugeAPYData = {
@@ -124,6 +126,10 @@ export function useGaugeAPY(
           dexPrices.get(token.tokenAddress.toLowerCase()) ??
           null
         const usdValue = price !== null ? tokenAmount * price : 0
+        const valueMicroUsd =
+          price === null
+            ? null
+            : tokenUsdMicroValue(amount, token.decimals, String(price))
 
         return {
           tokenAddress: token.tokenAddress.toLowerCase(),
@@ -131,6 +137,7 @@ export function useGaugeAPY(
           amount,
           decimals: token.decimals,
           usdValue,
+          valueMicroUsd,
         }
       })
       .filter((token) => token.amount > 0n)
@@ -227,6 +234,10 @@ export function useGaugesAPY(
           dexPrices.get(rewardToken.tokenAddress.toLowerCase()) ??
           null
         const usdValue = price !== null ? tokenAmount * price : 0
+        const valueMicroUsd =
+          price === null
+            ? null
+            : tokenUsdMicroValue(amount, rewardToken.decimals, String(price))
         totalIncentivesUSD += usdValue
 
         incentivesByToken.push({
@@ -235,6 +246,7 @@ export function useGaugesAPY(
           amount,
           decimals: rewardToken.decimals,
           usdValue,
+          valueMicroUsd,
         })
       }
 

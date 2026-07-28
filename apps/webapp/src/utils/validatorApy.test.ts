@@ -19,6 +19,10 @@ test("formats micro-dollar values and preserves unavailable pricing", () => {
   assert.equal(formatMicroUsd(null), "Price unavailable")
 })
 
+test("preserves sub-micro-dollar token prices before valuing the full amount", () => {
+  assert.equal(tokenUsdMicroValue(10n ** 27n, 18, "0.0000005"), 500_000_000n)
+})
+
 test("annualizes weekly incentives over validator veBTC weight", () => {
   const incentives = 100n * 1_000_000n
   const weight = 2n * 10n ** 18n
