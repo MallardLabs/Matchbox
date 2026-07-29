@@ -12,6 +12,9 @@ import type { EIP1193RequestFn } from "viem"
 import { http, type Transport } from "wagmi"
 
 const RATE_LIMIT_COOLDOWN_MS = 30_000
+// Keep a failed provider response from rejecting hundreds of logical requests
+// at once when a large Multicall3 read is split into several RPC calls.
+const JSON_RPC_BATCH_SIZE = 20
 
 let activeAutoRpcIndex = 0
 
@@ -97,7 +100,7 @@ function getEndpointLabel(endpointIndex: number): string {
 export function createMezoMainnetTransport(): Transport {
   const transports = MEZO_MAINNET_RPC_ENDPOINTS.map((endpoint) =>
     http(endpoint.url, {
-      batch: true,
+      batch: { batchSize: JSON_RPC_BATCH_SIZE },
       fetchOptions: { cache: "no-store" },
       retryCount: 0,
     }),
@@ -120,7 +123,7 @@ export function createMezoMainnetTransport(): Transport {
       }
 
       customRuntimeTransport = http(url, {
-        batch: true,
+        batch: { batchSize: JSON_RPC_BATCH_SIZE },
         fetchOptions: { cache: "no-store" },
         retryCount: 0,
       })({

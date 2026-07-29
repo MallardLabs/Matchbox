@@ -48,6 +48,11 @@ const WALLET_CONNECT_PROJECT_ID =
 
 const MEZO_MAINNET_RPC_URL = getInitialMezoMainnetRpcUrl()
 const MEZO_TESTNET_RPC_URL = DEFAULT_MEZO_TESTNET_RPC_URL
+// Viem otherwise splits Multicall3 payloads at 1 KiB and launches every chunk
+// concurrently. Account-wide reads can contain thousands of lock × gauge calls,
+// so use provider-safe 16 KiB chunks to avoid a large burst of RPC requests.
+const MULTICALL_BATCH_SIZE_BYTES = 16_384
+const JSON_RPC_BATCH_SIZE = 20
 
 function withHttpRpc(
   chain: typeof passportMezoMainnet,
@@ -122,17 +127,22 @@ export const wagmiConfig: Config = getDefaultConfig({
   // support for eip155:1. Mezo-only sessions hide most of the directory; connection still
   // targets the selected Mezo chain via ConnectWalletDrawer + switch after connect.
   chains: [mezoTestnet, mezoMainnet, mainnet],
+  batch: {
+    multicall: {
+      batchSize: MULTICALL_BATCH_SIZE_BYTES,
+    },
+  },
   transports: {
     [mezoMainnet.id]: createMezoMainnetTransport(),
     [mezoTestnet.id]: http(MEZO_TESTNET_RPC_URL, {
-      batch: true,
+      batch: { batchSize: JSON_RPC_BATCH_SIZE },
       fetchOptions: { cache: "no-store" },
     }),
     // viem's built-in Ethereum mainnet chain defaults to Merkle, which does not
     // send CORS headers for browser requests. Keep mainnet available for wallet
     // compatibility, but route it through a browser-safe public RPC instead.
     [mainnet.id]: http("https://cloudflare-eth.com", {
-      batch: true,
+      batch: { batchSize: JSON_RPC_BATCH_SIZE },
       fetchOptions: { cache: "no-store" },
     }),
   },
