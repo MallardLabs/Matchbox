@@ -501,17 +501,11 @@ export default function ValidatorVotingPage(): JSX.Element {
     setSelectedGaugeAddresses(nextSelected)
   }
 
-  function previewOptimizedRewards(
-    maxGaugeCount: number,
-    excludedGaugeIds: ReadonlySet<string>,
-  ) {
+  function optimizeValidatorAllocation() {
     const votingPowers = eligibleLocks.map((lock) => lock.votingPower)
     const result = optimizeRewardAllocations({
-      gauges: validatorOptimizerData.optimizerGauges.filter(
-        (gauge) => !excludedGaugeIds.has(gauge.id),
-      ),
+      gauges: validatorOptimizerData.optimizerGauges,
       votingPowers,
-      maxGaugeCount,
     })
     if (!result) {
       setOptimizerFeedback({
@@ -523,6 +517,7 @@ export default function ValidatorVotingPage(): JSX.Element {
       return
     }
 
+    applyOptimizedValidatorAllocation(result)
     const assetPriceMicroUsd =
       btcPriceUsd === null ? 0n : decimalToScaledBigInt(btcPriceUsd, 6)
     setOptimizerFeedback({
@@ -556,18 +551,6 @@ export default function ValidatorVotingPage(): JSX.Element {
 
     setAllocations(nextAllocations)
     setSelectedGaugeAddresses(nextSelected)
-  }
-
-  function resolveValidatorOptimizerGaugeLabel(gaugeId: string): string {
-    const validator = votableValidators.find(
-      (candidate) => candidate.gauge.toLowerCase() === gaugeId,
-    )
-    if (!validator) return gaugeId
-    return (
-      validatorProfiles.get(gaugeId)?.display_name ||
-      validator.moniker ||
-      validator.operator
-    )
   }
 
   function handleSort(nextSort: ValidatorSortMode) {
@@ -725,9 +708,7 @@ export default function ValidatorVotingPage(): JSX.Element {
                   validatorOptimizerData.unpricedIncentiveCount
                 }
                 feedback={optimizerFeedback}
-                resolveGaugeLabel={resolveValidatorOptimizerGaugeLabel}
-                onPreview={previewOptimizedRewards}
-                onApply={applyOptimizedValidatorAllocation}
+                onOptimize={optimizeValidatorAllocation}
               />
 
               <Input

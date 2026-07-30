@@ -902,17 +902,11 @@ export default function BoostPage(): JSX.Element {
     ],
   })
 
-  function handlePreviewOptimizedRewards(
-    maxGaugeCount: number,
-    excludedGaugeIds: ReadonlySet<string>,
-  ) {
+  function handleOptimizeRewards() {
     const votingPowers = votableLocks.map((lock) => lock.votingPower)
     const result = optimizeRewardAllocations({
-      gauges: boostOptimizerData.optimizerGauges.filter(
-        (gauge) => !excludedGaugeIds.has(gauge.id),
-      ),
+      gauges: boostOptimizerData.optimizerGauges,
       votingPowers,
-      maxGaugeCount,
     })
     if (!result) {
       setOptimizerFeedback({
@@ -924,6 +918,7 @@ export default function BoostPage(): JSX.Element {
       return
     }
 
+    applyOptimizedBoostAllocation(result)
     const assetPriceMicroUsd =
       mezoPrice === null ? 0n : decimalToScaledBigInt(String(mezoPrice), 6)
     setOptimizerFeedback({
@@ -955,18 +950,6 @@ export default function BoostPage(): JSX.Element {
     setGaugeAllocations(nextAllocations)
     setSelectedGaugeIndexes(nextSelected)
     setCartSnapshots(new Map(nextAllocations))
-  }
-
-  function resolveBoostOptimizerGaugeLabel(gaugeId: string): string {
-    const gauge = gauges.find(
-      (candidate) => candidate.address.toLowerCase() === gaugeId,
-    )
-    if (!gauge) return gaugeId
-    const profile = gaugeProfiles.get(gaugeId)
-    if (profile?.display_name) return profile.display_name
-    if (gauge.veBTCTokenId > 0n)
-      return `veBTC #${gauge.veBTCTokenId.toString()}`
-    return `${gauge.address.slice(0, 6)}…${gauge.address.slice(-4)}`
   }
 
   const handleAllocationChange = (gaugeIndex: number, percentage: number) => {
@@ -2215,9 +2198,7 @@ export default function BoostPage(): JSX.Element {
                         boostOptimizerData.unpricedIncentiveCount
                       }
                       feedback={optimizerFeedback}
-                      resolveGaugeLabel={resolveBoostOptimizerGaugeLabel}
-                      onPreview={handlePreviewOptimizedRewards}
-                      onApply={applyOptimizedBoostAllocation}
+                      onOptimize={handleOptimizeRewards}
                     />
 
                     {/* Status filter */}

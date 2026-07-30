@@ -1,7 +1,6 @@
 import type { RewardOptimizerResult } from "@/utils/rewardOptimizer"
 import { formatMicroUsd, formatValidatorApy } from "@/utils/validatorApy"
-import { Button, Input, Tag } from "@mezo-org/mezo-clay"
-import { useState } from "react"
+import { Button, Tag } from "@mezo-org/mezo-clay"
 
 export type RewardOptimizerFeedback =
   | {
@@ -22,12 +21,26 @@ type RewardOptimizerPanelProps = {
   isLoading: boolean
   unpricedIncentiveCount: number
   feedback: RewardOptimizerFeedback | null
-  resolveGaugeLabel: (gaugeId: string) => string
-  onPreview: (
-    maxGaugeCount: number,
-    excludedGaugeIds: ReadonlySet<string>,
-  ) => void
-  onApply: (result: RewardOptimizerResult) => void
+  onOptimize: () => void
+}
+
+function summaryMetrics(
+  feedback: Extract<RewardOptimizerFeedback, { message: null }>,
+): { label: string; value: string }[] {
+  return [
+    {
+      label: "Est. epoch rewards",
+      value: formatMicroUsd(feedback.result.projectedRewardMicroUsd),
+    },
+    {
+      label: "Blended APY",
+      value: formatValidatorApy(feedback.annualizedReturnBasisPoints),
+    },
+    {
+      label: "Gauges considered",
+      value: feedback.result.evaluatedGaugeCount.toString(),
+    },
+  ]
 }
 
 export default function RewardOptimizerPanel({
@@ -37,257 +50,73 @@ export default function RewardOptimizerPanel({
   isLoading,
   unpricedIncentiveCount,
   feedback,
-  resolveGaugeLabel,
-  onPreview,
-  onApply,
+  onOptimize,
 }: RewardOptimizerPanelProps): JSX.Element {
-  const [maxGaugeCount, setMaxGaugeCount] = useState("8")
-  const [lastPreviewGaugeCount, setLastPreviewGaugeCount] = useState<
-    number | null
-  >(null)
-  const [excludedGaugeIds, setExcludedGaugeIds] = useState<Set<string>>(
-    new Set(),
-  )
-  const [isApplied, setIsApplied] = useState(false)
-  const parsedMaxGaugeCount = Number(maxGaugeCount)
-  const hasIntegerGaugeCountSyntax = /^\d+$/.test(maxGaugeCount)
-  const isGaugeCountValid =
-    hasIntegerGaugeCountSyntax &&
-    Number.isSafeInteger(parsedMaxGaugeCount) &&
-    parsedMaxGaugeCount >= 1 &&
-    parsedMaxGaugeCount <= 16
-  const maxGaugeInputId = `optimizer-max-gauges-${assetLabel.toLowerCase()}`
-  const maxGaugeErrorId = `${maxGaugeInputId}-error`
-
-  function preview(nextExcludedGaugeIds = excludedGaugeIds) {
-    if (!isGaugeCountValid) return
-    setLastPreviewGaugeCount(parsedMaxGaugeCount)
-    setIsApplied(false)
-    onPreview(parsedMaxGaugeCount, nextExcludedGaugeIds)
-  }
-
-  function excludeGauge(gaugeId: string) {
-    const next = new Set(excludedGaugeIds)
-    next.add(gaugeId)
-    setExcludedGaugeIds(next)
-    preview(next)
-  }
-
-  function resetExclusions() {
-    const next = new Set<string>()
-    setExcludedGaugeIds(next)
-    preview(next)
-  }
-
   return (
-    <fieldset className="rounded-xl border border-[var(--border)] bg-[var(--surface-secondary)] p-4">
-      <legend className="px-2 text-balance text-sm font-semibold text-[var(--content-primary)]">
-        Reward optimizer
-      </legend>
-      <div className="flex flex-col gap-4">
-        <p className="text-pretty text-xs text-[var(--content-secondary)]">
-          Estimates a reward-maximizing ballot from the current USD value of
-          priced incentives, your {assetLabel} vote, and its dilution of each
-          gauge.
-        </p>
-
-        <ol className="flex list-none flex-col gap-3 p-0 sm:flex-row sm:items-end">
-          <li className="w-full sm:max-w-36">
-            <label
-              htmlFor={maxGaugeInputId}
-              className="mb-1 block text-xs text-[var(--content-secondary)]"
-            >
-              Maximum gauges
-            </label>
-            <Input
-              id={maxGaugeInputId}
-              type="number"
-              min={1}
-              max={16}
-              step={1}
-              value={maxGaugeCount}
-              onChange={(event) => {
-                setMaxGaugeCount(event.target.value)
-                setIsApplied(false)
-              }}
-              aria-invalid={!isGaugeCountValid}
-              aria-describedby={maxGaugeErrorId}
-              size="small"
-            />
-          </li>
-          <li>
-            <Button
-              kind="primary"
-              size="small"
-              disabled={disabled || isLoading || !isGaugeCountValid}
-              isLoading={isLoading}
-              onClick={() => preview()}
-            >
-              Preview optimized ballot
-            </Button>
-          </li>
-        </ol>
-
-        <p
-          id={maxGaugeErrorId}
-          className={
-            isGaugeCountValid
-              ? "sr-only"
-              : "text-pretty text-xs text-[var(--negative)]"
-          }
+    <section className="flex flex-col gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-secondary)] p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="text-sm font-semibold text-[var(--content-primary)]">
+            Optimize
+          </h3>
+          <p className="text-pretty text-xs text-[var(--content-secondary)]">
+            Fills your ballot with the reward-maximizing split of this
+            epoch&apos;s priced incentives across your {assetLabel} vote.
+          </p>
+        </div>
+        <Button
+          kind="primary"
+          size="small"
+          disabled={disabled || isLoading}
+          isLoading={isLoading}
+          onClick={onOptimize}
         >
-          Choose between 1 and 16 gauges.
+          Optimize
+        </Button>
+      </div>
+
+      {disabled && !isLoading ? (
+        <p className="text-pretty text-xs text-[var(--content-tertiary)]">
+          {disabledMessage}
         </p>
-        {isGaugeCountValid && disabled ? (
-          <p className="text-pretty text-xs text-[var(--content-tertiary)]">
-            {disabledMessage}
-          </p>
-        ) : null}
+      ) : null}
 
-        {feedback && (
-          <div
-            aria-live="polite"
-            className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3"
-          >
-            {feedback.result ? (
-              <div className="flex flex-col gap-3">
-                <div className="flex flex-wrap gap-2">
-                  <Tag closeable={false} color="green">
-                    {isApplied ? "Applied" : "Preview"}
-                  </Tag>
-                  <Tag closeable={false} color="gray">
-                    {feedback.result.allocations.length} gauge
-                    {feedback.result.allocations.length === 1 ? "" : "s"}
-                  </Tag>
-                  {lastPreviewGaugeCount !== null && (
-                    <Tag closeable={false} color="gray">
-                      {lastPreviewGaugeCount} gauge max
-                    </Tag>
-                  )}
-                  {excludedGaugeIds.size > 0 && (
-                    <Tag closeable={false} color="yellow">
-                      {excludedGaugeIds.size} excluded
-                    </Tag>
-                  )}
-                  <Tag closeable={false} color="gray">
-                    0.01% precision
-                  </Tag>
+      <div aria-live="polite" className="empty:hidden">
+        {feedback?.result ? (
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <Tag closeable={false} color="green">
+              Applied to {feedback.result.allocations.length} gauge
+              {feedback.result.allocations.length === 1 ? "" : "s"}
+            </Tag>
+            <dl className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+              {summaryMetrics(feedback).map((metric) => (
+                <div key={metric.label} className="flex items-baseline">
+                  <dt className="text-[var(--content-tertiary)]">
+                    {metric.label}
+                  </dt>
+                  <dd className="ml-1.5 font-mono font-semibold tabular-nums text-[var(--content-primary)]">
+                    {metric.value}
+                  </dd>
                 </div>
-                <dl className="grid gap-3 sm:grid-cols-3">
-                  <div>
-                    <dt className="text-xs text-[var(--content-tertiary)]">
-                      Estimated epoch rewards
-                    </dt>
-                    <dd className="mt-1 font-mono text-sm font-semibold tabular-nums text-[var(--content-primary)]">
-                      {formatMicroUsd(feedback.result.projectedRewardMicroUsd)}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="text-xs text-[var(--content-tertiary)]">
-                      Blended APY
-                    </dt>
-                    <dd className="mt-1 font-mono text-sm font-semibold tabular-nums text-[var(--content-primary)]">
-                      {formatValidatorApy(feedback.annualizedReturnBasisPoints)}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="text-xs text-[var(--content-tertiary)]">
-                      Gauges evaluated
-                    </dt>
-                    <dd className="mt-1 font-mono text-sm font-semibold tabular-nums text-[var(--content-primary)]">
-                      {feedback.result.evaluatedGaugeCount}
-                    </dd>
-                  </div>
-                </dl>
-                <ol className="flex max-h-64 flex-col gap-2 overflow-y-auto">
-                  {feedback.result.allocations.map((allocation) => (
-                    <li
-                      key={allocation.id}
-                      className="flex flex-col gap-2 rounded-lg border border-[var(--border)] p-3 sm:flex-row sm:items-center sm:justify-between"
-                    >
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-medium text-[var(--content-primary)]">
-                          {resolveGaugeLabel(allocation.id)}
-                        </p>
-                        <p className="mt-1 font-mono text-xs tabular-nums text-[var(--content-secondary)]">
-                          {formatOptimizerPercentage(allocation.basisPoints)}% ·{" "}
-                          {formatMicroUsd(allocation.projectedRewardMicroUsd)}{" "}
-                          estimated
-                        </p>
-                      </div>
-                      <Button
-                        kind="tertiary"
-                        size="small"
-                        onClick={() => excludeGauge(allocation.id)}
-                      >
-                        Exclude
-                      </Button>
-                    </li>
-                  ))}
-                </ol>
-                <p className="text-pretty text-xs text-[var(--content-secondary)]">
-                  The ballot balances each gauge&apos;s marginal reward after
-                  self-dilution. Previewed percentages do not change your ballot
-                  until you apply them.
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {excludedGaugeIds.size > 0 && (
-                    <Button
-                      kind="secondary"
-                      size="small"
-                      onClick={resetExclusions}
-                    >
-                      Reset exclusions
-                    </Button>
-                  )}
-                  <Button
-                    kind="primary"
-                    size="small"
-                    disabled={isApplied}
-                    onClick={() => {
-                      setIsApplied(true)
-                      onApply(feedback.result)
-                    }}
-                  >
-                    {isApplied
-                      ? "Applied to ballot"
-                      : "Apply optimized allocation"}
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              <div className="flex flex-col gap-3">
-                <p className="text-pretty text-xs text-[var(--content-secondary)]">
-                  {feedback.message}
-                </p>
-                {excludedGaugeIds.size > 0 && (
-                  <Button
-                    kind="secondary"
-                    size="small"
-                    onClick={resetExclusions}
-                  >
-                    Reset exclusions
-                  </Button>
-                )}
-              </div>
-            )}
+              ))}
+            </dl>
           </div>
-        )}
-
-        {unpricedIncentiveCount > 0 && (
-          <p className="text-pretty text-xs text-[var(--warning)]">
-            {unpricedIncentiveCount} current-epoch incentive token
-            {unpricedIncentiveCount === 1 ? " was" : "s were"} excluded because
-            a reliable USD price is unavailable.
-          </p>
+        ) : (
+          feedback && (
+            <p className="text-pretty text-xs text-[var(--content-secondary)]">
+              {feedback.message}
+            </p>
+          )
         )}
       </div>
-    </fieldset>
-  )
-}
 
-function formatOptimizerPercentage(basisPoints: bigint): string {
-  const whole = basisPoints / 100n
-  const fraction = (basisPoints % 100n).toString().padStart(2, "0")
-  return fraction === "00" ? whole.toString() : `${whole}.${fraction}`
+      {unpricedIncentiveCount > 0 && (
+        <p className="text-pretty text-xs text-[var(--warning)]">
+          {unpricedIncentiveCount} current-epoch incentive token
+          {unpricedIncentiveCount === 1 ? " was" : "s were"} excluded because a
+          reliable USD price is unavailable.
+        </p>
+      )}
+    </section>
+  )
 }
