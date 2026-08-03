@@ -10,16 +10,16 @@ import {
   BigInt,
 } from "@graphprotocol/graph-ts";
 
-export class NotifyReward extends ethereum.Event {
-  get params(): NotifyReward__Params {
-    return new NotifyReward__Params(this);
+export class Deposit extends ethereum.Event {
+  get params(): Deposit__Params {
+    return new Deposit__Params(this);
   }
 }
 
-export class NotifyReward__Params {
-  _event: NotifyReward;
+export class Deposit__Params {
+  _event: Deposit;
 
-  constructor(event: NotifyReward) {
+  constructor(event: Deposit) {
     this._event = event;
   }
 
@@ -27,16 +27,34 @@ export class NotifyReward__Params {
     return this._event.parameters[0].value.toAddress();
   }
 
-  get reward(): Address {
+  get to(): Address {
     return this._event.parameters[1].value.toAddress();
   }
 
-  get epoch(): BigInt {
+  get amount(): BigInt {
     return this._event.parameters[2].value.toBigInt();
+  }
+}
+
+export class Withdraw extends ethereum.Event {
+  get params(): Withdraw__Params {
+    return new Withdraw__Params(this);
+  }
+}
+
+export class Withdraw__Params {
+  _event: Withdraw;
+
+  constructor(event: Withdraw) {
+    this._event = event;
+  }
+
+  get from(): Address {
+    return this._event.parameters[0].value.toAddress();
   }
 
   get amount(): BigInt {
-    return this._event.parameters[3].value.toBigInt();
+    return this._event.parameters[1].value.toBigInt();
   }
 }
 
@@ -57,17 +75,13 @@ export class ClaimRewards__Params {
     return this._event.parameters[0].value.toAddress();
   }
 
-  get reward(): Address {
-    return this._event.parameters[1].value.toAddress();
-  }
-
   get amount(): BigInt {
-    return this._event.parameters[2].value.toBigInt();
+    return this._event.parameters[1].value.toBigInt();
   }
 }
 
-export class BribeVotingReward extends ethereum.SmartContract {
-  static bind(address: Address): BribeVotingReward {
-    return new BribeVotingReward("BribeVotingReward", address);
+export class Gauge extends ethereum.SmartContract {
+  static bind(address: Address): Gauge {
+    return new Gauge("Gauge", address);
   }
 }

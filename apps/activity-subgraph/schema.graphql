@@ -35,6 +35,15 @@ enum ActivityActionType {
   STRATEGY_YIELD_RECEIVED
   PCV_DISTRIBUTION
   PCV_DEBT_PAYMENT
+  # Phase 1+ wallet ledger extensions
+  VOTE_FEE_CLAIMED
+  VOTE_BRIBE_CLAIMED
+  LP_ADDED
+  LP_REMOVED
+  LP_STAKED
+  LP_UNSTAKED
+  SWAP
+  POOL_CREATED
 }
 
 enum BoostContext {
@@ -57,6 +66,11 @@ enum ActivitySource {
   MEZO_MERKLE_DISTRIBUTOR
   MUSD_SAVINGS_RATE
   PCV
+  POOL_FACTORY
+  POOL
+  GAUGE
+  FEE_VOTING_REWARD
+  BRIBE_VOTING_REWARD
 }
 
 type ActivityEvent @entity(immutable: true) {

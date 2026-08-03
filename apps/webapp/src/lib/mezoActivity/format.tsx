@@ -49,6 +49,8 @@ export type ActivityCategory =
   | "automated"
   | "protocol"
   | "lifecycle"
+  | "capital"
+  | "swap"
 
 const TIGRIS_MAINTAINER_LABEL = "Tigris maintainer (cron)"
 
@@ -431,6 +433,49 @@ export function formatActivity(
         emoji: "🔀",
         title: `Merged veMEZO ${sourceLabel} into ${destLabel}`,
         subtitle: actor,
+        drawer,
+      }
+    }
+
+    case "lockTransferred": {
+      drawer.unshift(
+        { label: "Recipient", value: actor, mono: true },
+        ...(item.recipient
+          ? [
+              {
+                label: "From",
+                value: shortenAddress(item.recipient),
+                mono: true,
+              },
+            ]
+          : []),
+        ...(item.tokenId
+          ? [
+              {
+                label: "veMEZO token",
+                value: `#${item.tokenId.toString()}`,
+                mono: true,
+              },
+            ]
+          : []),
+        ...(item.amount
+          ? [
+              {
+                label: "Amount",
+                value: `${formatTokenAmount(item.amount) ?? "—"} MEZO`,
+              },
+            ]
+          : []),
+      )
+      return {
+        category: "lock",
+        emoji: "↔️",
+        title: `Received lock${item.tokenId ? ` #${item.tokenId}` : ""}${item.amount ? ` · ${formatCompactAmount(item.amount)} MEZO` : ""}`,
+        subtitle: item.recipient
+          ? `from ${shortenAddress(item.recipient)}`
+          : actor,
+        amount: formatTokenAmount(item.amount),
+        amountSubtext: item.amount ? "MEZO" : undefined,
         drawer,
       }
     }
@@ -1185,6 +1230,207 @@ export function formatActivity(
         emoji: "🔥",
         title: `Boostable token burned${item.tokenId ? ` #${item.tokenId}` : ""}`,
         subtitle: actor,
+        drawer,
+      }
+    }
+
+    case "voteFeeClaimed": {
+      const where = gaugeWhere(ctx, item.gaugeAddress)
+      drawer.unshift(
+        { label: "Claimer", value: actor, mono: true },
+        ...(item.tokenId
+          ? [
+              {
+                label: "veMEZO token",
+                value: `#${item.tokenId.toString()}`,
+                mono: true,
+              },
+            ]
+          : []),
+        ...(item.amount
+          ? [{ label: "Amount", value: formatTokenAmount(item.amount) ?? "—" }]
+          : []),
+      )
+      return {
+        category: "reward",
+        emoji: "💵",
+        title: `Claimed fees${item.amount ? ` · ${formatCompactAmount(item.amount)}` : ""}`,
+        subtitle: where?.label ? `${actor} · ${where.label}` : actor,
+        amount: formatCompactAmount(item.amount),
+        ...(where ? { where } : {}),
+        drawer,
+      }
+    }
+
+    case "voteBribeClaimed": {
+      const where = gaugeWhere(ctx, item.gaugeAddress)
+      drawer.unshift(
+        { label: "Claimer", value: actor, mono: true },
+        ...(item.tokenId
+          ? [
+              {
+                label: "veMEZO token",
+                value: `#${item.tokenId.toString()}`,
+                mono: true,
+              },
+            ]
+          : []),
+        ...(item.amount
+          ? [{ label: "Amount", value: formatTokenAmount(item.amount) ?? "—" }]
+          : []),
+      )
+      return {
+        category: "reward",
+        emoji: "🎁",
+        title: `Claimed incentives${item.amount ? ` · ${formatCompactAmount(item.amount)}` : ""}`,
+        subtitle: where?.label ? `${actor} · ${where.label}` : actor,
+        amount: formatCompactAmount(item.amount),
+        ...(where ? { where } : {}),
+        drawer,
+      }
+    }
+
+    case "lpAdded":
+    case "lpRemoved": {
+      const where = gaugeWhere(ctx, item.gaugeAddress)
+      const isAdd = item.actionType === "lpAdded"
+      const dualAmount =
+        item.firstRecipientAmount !== undefined ||
+        item.secondRecipientAmount !== undefined
+          ? `${formatCompactAmount(item.firstRecipientAmount)} / ${formatCompactAmount(item.secondRecipientAmount)}`
+          : formatCompactAmount(item.amount)
+      drawer.unshift(
+        { label: "User", value: actor, mono: true },
+        ...(item.firstRecipientAmount !== undefined
+          ? [
+              {
+                label: "Token 0",
+                value: formatTokenAmount(item.firstRecipientAmount) ?? "—",
+              },
+            ]
+          : []),
+        ...(item.secondRecipientAmount !== undefined
+          ? [
+              {
+                label: "Token 1",
+                value: formatTokenAmount(item.secondRecipientAmount) ?? "—",
+              },
+            ]
+          : []),
+        ...(item.amount !== undefined && item.firstRecipientAmount === undefined
+          ? [
+              {
+                label: "LP amount",
+                value: formatTokenAmount(item.amount) ?? "—",
+              },
+            ]
+          : []),
+      )
+      return {
+        category: "capital",
+        emoji: isAdd ? "💧" : "🌊",
+        title: isAdd ? "Added liquidity" : "Removed liquidity",
+        subtitle: where?.label ? `${actor} · ${where.label}` : actor,
+        amount: dualAmount,
+        ...(where ? { where } : {}),
+        drawer,
+      }
+    }
+
+    case "lpStaked":
+    case "lpUnstaked": {
+      const where = gaugeWhere(ctx, item.gaugeAddress)
+      const isStake = item.actionType === "lpStaked"
+      drawer.unshift(
+        { label: "User", value: actor, mono: true },
+        ...(item.amount
+          ? [{ label: "Amount", value: formatTokenAmount(item.amount) ?? "—" }]
+          : []),
+        ...(item.gaugeAddress
+          ? [
+              {
+                label: "Gauge",
+                value: shortenAddress(item.gaugeAddress),
+                mono: true,
+                href: `/gauges/${item.gaugeAddress}`,
+              },
+            ]
+          : []),
+      )
+      return {
+        category: "capital",
+        emoji: isStake ? "📥" : "📤",
+        title: isStake ? "Staked LP" : "Unstaked LP",
+        subtitle: where?.label ? `${actor} · ${where.label}` : actor,
+        amount: formatCompactAmount(item.amount),
+        ...(where ? { where } : {}),
+        drawer,
+      }
+    }
+
+    case "swap": {
+      const dualAmount =
+        item.firstRecipientAmount !== undefined ||
+        item.secondRecipientAmount !== undefined
+          ? `${formatCompactAmount(item.firstRecipientAmount)} → ${formatCompactAmount(item.secondRecipientAmount)}`
+          : formatCompactAmount(item.amount)
+      drawer.unshift(
+        { label: "Trader", value: actor, mono: true },
+        ...(item.firstRecipientAmount !== undefined
+          ? [
+              {
+                label: "Sold",
+                value: formatTokenAmount(item.firstRecipientAmount) ?? "—",
+              },
+            ]
+          : []),
+        ...(item.secondRecipientAmount !== undefined
+          ? [
+              {
+                label: "Bought",
+                value: formatTokenAmount(item.secondRecipientAmount) ?? "—",
+              },
+            ]
+          : []),
+        ...(item.amount !== undefined && item.firstRecipientAmount === undefined
+          ? [
+              {
+                label: "Amount",
+                value: formatTokenAmount(item.amount) ?? "—",
+              },
+            ]
+          : []),
+      )
+      return {
+        category: "swap",
+        emoji: "🔄",
+        title: "Swapped",
+        subtitle: actor,
+        amount: dualAmount,
+        drawer,
+      }
+    }
+
+    case "poolCreated": {
+      const where = gaugeWhere(ctx, item.gaugeAddress)
+      drawer.unshift(
+        { label: "Creator", value: actor, mono: true },
+        ...(item.gaugeAddress
+          ? [
+              {
+                label: "Gauge",
+                value: shortenAddress(item.gaugeAddress),
+                mono: true,
+              },
+            ]
+          : []),
+      )
+      return {
+        category: "lifecycle",
+        emoji: "✨",
+        title: `Created pool${where?.label ? ` · ${where.label}` : ""}`,
+        subtitle: actor,
+        ...(where ? { where } : {}),
         drawer,
       }
     }

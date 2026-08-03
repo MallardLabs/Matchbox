@@ -57,6 +57,24 @@ async function handler(request: Request): Promise<Response> {
   const source =
     rawContract === "validatorsVoter" ? "VALIDATORS_VOTER" : undefined
 
+  const rawActor = url.searchParams.get("actor")
+  if (rawActor && !isAddress(rawActor)) {
+    return new Response(
+      JSON.stringify({
+        success: false,
+        error: "Invalid actor address",
+      }),
+      {
+        status: 400,
+        headers: {
+          "Content-Type": "application/json",
+          ...CORS_HEADERS,
+        },
+      },
+    )
+  }
+  const actor = rawActor && isAddress(rawActor) ? rawActor : undefined
+
   const result = await fetchMezoActivity({
     chainId,
     fromTimestamp,
@@ -64,7 +82,7 @@ async function handler(request: Request): Promise<Response> {
     limit,
     page,
     orderDirection,
-    actor: url.searchParams.get("actor") ?? undefined,
+    actor,
     gauge,
     source,
     ...(actionTypes && actionTypes.length > 0 ? { actionTypes } : {}),
@@ -86,6 +104,10 @@ async function handler(request: Request): Promise<Response> {
         boosts: "indexed",
         extensions: "indexed",
         incentives: "indexed",
+        claims: "indexed",
+        capital: "indexed",
+        swaps: "indexed",
+        veBtcLocks: "indexed",
       },
       range: {
         fromTimestamp,

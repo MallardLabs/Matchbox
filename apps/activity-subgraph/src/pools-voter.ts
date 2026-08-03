@@ -7,7 +7,11 @@ import {
   NotifyReward,
   Voted,
 } from "../generated/PoolsVoter/PoolsVoter"
-import { BribeVotingReward } from "../generated/templates"
+import {
+  BribeVotingReward,
+  FeeVotingReward,
+  Gauge,
+} from "../generated/templates"
 import { BribeToPool } from "../generated/schema"
 import {
   baseActivity,
@@ -53,12 +57,23 @@ export function handlePoolGaugeCreated(event: GaugeCreated): void {
   gauge.isAlive = true
   gauge.save()
 
-  // Track dynamic pool bribe contracts and map the bribe contract to the pool and gauge
+  // Track dynamic bribe / fee reward / gauge contracts for claims + LP stake
   BribeVotingReward.create(event.params.bribeVotingReward)
-  const mapping = new BribeToPool(event.params.bribeVotingReward.toHexString())
-  mapping.poolAddress = event.params.pool
-  mapping.gaugeAddress = event.params.gauge
-  mapping.save()
+  FeeVotingReward.create(event.params.feeVotingReward)
+  Gauge.create(event.params.gauge)
+
+  const bribeMapping = new BribeToPool(
+    event.params.bribeVotingReward.toHexString(),
+  )
+  bribeMapping.poolAddress = event.params.pool
+  bribeMapping.gaugeAddress = event.params.gauge
+  bribeMapping.save()
+
+  // Reuse BribeToPool entity for fee reward → pool/gauge resolution on claims
+  const feeMapping = new BribeToPool(event.params.feeVotingReward.toHexString())
+  feeMapping.poolAddress = event.params.pool
+  feeMapping.gaugeAddress = event.params.gauge
+  feeMapping.save()
 }
 
 export function handlePoolVoted(event: Voted): void {

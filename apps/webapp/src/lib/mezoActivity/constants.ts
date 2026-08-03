@@ -11,6 +11,7 @@ export const USER_ACTION_TYPES_GRAPHQL = [
   "LOCK_WITHDRAWN",
   "LOCK_PERMANENT",
   "LOCK_PERMANENT_UNLOCKED",
+  "LOCK_TRANSFERRED",
   "LOCK_MERGED",
   "BOOST_VOTE",
   "BOOST_ABSTAIN",
@@ -20,6 +21,19 @@ export const USER_ACTION_TYPES_GRAPHQL = [
   "SAVINGS_DEPOSIT",
   "SAVINGS_WITHDRAW",
   "SAVINGS_YIELD_CLAIMED",
+] as const
+
+/** Wallet personal ledger: user actions plus claim/capital/swap types as indexed. */
+export const WALLET_ACTION_TYPES_GRAPHQL = [
+  ...USER_ACTION_TYPES_GRAPHQL,
+  "VOTE_FEE_CLAIMED",
+  "VOTE_BRIBE_CLAIMED",
+  "LP_ADDED",
+  "LP_REMOVED",
+  "LP_STAKED",
+  "LP_UNSTAKED",
+  "SWAP",
+  "POOL_CREATED",
 ] as const
 
 export const SYSTEM_ACTION_TYPES_GRAPHQL = [
