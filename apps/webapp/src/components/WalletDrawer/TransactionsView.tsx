@@ -52,6 +52,8 @@ export default function TransactionsView({
     isFetching,
   } = useWalletTransactions({
     actor: accountAddress,
+    // All-time; API defaults to last 30d when `from` is omitted.
+    fromTimestamp: 0,
     limit: 15,
     page: 0,
   })
@@ -125,10 +127,10 @@ export default function TransactionsView({
               Your locks, votes, claims, and capital moves will show up here.
             </p>
             <a
-              href="/activity"
+              href="/transactions"
               className="mt-2 text-xs text-[#F7931A] no-underline hover:underline"
             >
-              Explore protocol activity
+              See more transactions
             </a>
           </div>
         ) : null}

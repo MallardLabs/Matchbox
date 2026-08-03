@@ -40,7 +40,8 @@ const WALLET_FILTERS: Array<{ key: MezoActivityFilter; label: string }> = [
 const ALL_WALLET_FILTERS = WALLET_FILTERS.map((f) => f.key)
 
 const PAGE_SIZE = 50
-const DEFAULT_FROM_OFFSET = 30 * 86_400
+/** Default range is all-time (subgraph genesis), not a rolling window. */
+const DEFAULT_FROM_TIMESTAMP = 0
 const GRID_COLS = "grid-cols-[1.6fr_0.8fr_1.2fr_0.8fr_0.3fr]"
 
 function nowSeconds() {
@@ -510,7 +511,7 @@ export default function WalletTransactionsPage() {
   const [groupByTx, setGroupByTx] = useState(true)
   const initialNow = useMemo(nowSeconds, [])
   const [fromDate, setFromDate] = useState(() =>
-    toDateInputValue(initialNow - DEFAULT_FROM_OFFSET),
+    toDateInputValue(DEFAULT_FROM_TIMESTAMP),
   )
   const [toDate, setToDate] = useState(() => toDateInputValue(initialNow))
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
