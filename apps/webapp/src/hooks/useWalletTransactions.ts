@@ -1,4 +1,5 @@
 import { useNetwork } from "@/contexts/NetworkContext"
+import { WALLET_ACTION_TYPES_GRAPHQL } from "@/lib/mezoActivity/constants"
 import { deserializeActivityItem } from "@/lib/mezoActivity/normalize"
 import type {
   MezoActivityApiResponse,
@@ -8,9 +9,11 @@ import type {
 import { CHAIN_ID } from "@repo/shared/contracts"
 import { useQuery } from "@tanstack/react-query"
 import { useMemo } from "react"
+import type { Address } from "viem"
 
-type UseMezoActivityParams = {
-  filters: MezoActivityFilter[]
+type UseWalletTransactionsParams = {
+  actor: Address | undefined
+  filters?: MezoActivityFilter[]
   fromTimestamp?: number
   toTimestamp?: number
   page?: number
@@ -23,7 +26,7 @@ const NETWORK_BY_CHAIN: Record<number, "mainnet" | "testnet"> = {
   [CHAIN_ID.testnet]: "testnet",
 }
 
-const LOCK_ACTIONS: MezoActivityItem["actionType"][] = [
+const LOCK_ACTIONS: ReadonlySet<MezoActivityItem["actionType"]> = new Set([
   "lockCreated",
   "lockAmountIncreased",
   "lockWithdrawn",
@@ -31,30 +34,41 @@ const LOCK_ACTIONS: MezoActivityItem["actionType"][] = [
   "lockPermanentUnlocked",
   "lockTransferred",
   "lockMerged",
-]
+])
 
-const INCENTIVE_ACTIONS: MezoActivityItem["actionType"][] = [
-  "incentiveAdded",
-  "rewardDistributed",
-  "rewardNotified",
+const CLAIM_ACTIONS: ReadonlySet<MezoActivityItem["actionType"]> = new Set([
+  "voteFeeClaimed",
+  "voteBribeClaimed",
   "rebaseClaimed",
   "merkleClaimed",
+  "savingsYieldClaimed",
+])
+
+const CAPITAL_ACTIONS: ReadonlySet<MezoActivityItem["actionType"]> = new Set([
   "savingsDeposit",
   "savingsWithdraw",
-  "savingsYieldClaimed",
-]
+  "lpAdded",
+  "lpRemoved",
+  "lpStaked",
+  "lpUnstaked",
+  "poolCreated",
+])
 
-function filterItems(
-  items: MezoActivityItem[],
-  filters: MezoActivityFilter[],
-): MezoActivityItem[] {
-  const selected = new Set(filters)
-  return items.filter((item) => {
-    if (LOCK_ACTIONS.includes(item.actionType)) return selected.has("locks")
-    if (item.actionType === "lockExtended") return selected.has("extensions")
-    if (INCENTIVE_ACTIONS.includes(item.actionType)) {
-      return selected.has("incentives")
-    }
+const INCENTIVE_ACTIONS: ReadonlySet<MezoActivityItem["actionType"]> = new Set([
+  "incentiveAdded",
+])
+
+function matchesWalletFilter(
+  item: MezoActivityItem,
+  selected: Set<MezoActivityFilter>,
+): boolean {
+  if (LOCK_ACTIONS.has(item.actionType)) return selected.has("locks")
+  if (item.actionType === "lockExtended") return selected.has("extensions")
+  if (CLAIM_ACTIONS.has(item.actionType)) return selected.has("claims")
+  if (CAPITAL_ACTIONS.has(item.actionType)) return selected.has("capital")
+  if (item.actionType === "swap") return selected.has("swaps")
+  if (INCENTIVE_ACTIONS.has(item.actionType)) return selected.has("incentives")
+  if (item.actionType === "boostVote" || item.actionType === "boostAbstain") {
     if (item.boostContext === "matchboxGaugeBoost") {
       return selected.has("boostMatchbox")
     }
@@ -62,51 +76,63 @@ function filterItems(
       return selected.has("boostPair")
     }
     return selected.has("boostMatchbox") || selected.has("boostPair")
-  })
+  }
+  return false
 }
 
-export function useMezoActivity({
+function filterWalletItems(
+  items: MezoActivityItem[],
+  filters: MezoActivityFilter[] | undefined,
+): MezoActivityItem[] {
+  // No filters prop → show all (drawer preview). Empty array → show none.
+  if (filters === undefined) return items
+  if (filters.length === 0) return []
+  const selected = new Set(filters)
+  return items.filter((item) => matchesWalletFilter(item, selected))
+}
+
+export function useWalletTransactions({
+  actor,
   filters,
   fromTimestamp,
   toTimestamp,
   page = 0,
   limit = 50,
-  actionTypes,
-}: UseMezoActivityParams) {
+  actionTypes = WALLET_ACTION_TYPES_GRAPHQL,
+}: UseWalletTransactionsParams) {
   const { chainId, isNetworkReady } = useNetwork()
   const network = NETWORK_BY_CHAIN[chainId]
-  const actionTypesKey = actionTypes ? [...actionTypes].sort().join(",") : ""
+  const actionTypesKey = [...actionTypes].sort().join(",")
 
   const query = useQuery({
     queryKey: [
-      "activity",
+      "wallet-transactions",
       network,
+      actor,
       fromTimestamp,
       toTimestamp,
       limit,
       page,
       actionTypesKey,
     ],
-    enabled: isNetworkReady && !!network,
-    // Don't use keepPreviousData here: when the user pages forward and back,
-    // stale page data would briefly flash in for the new page and (worse) the
-    // visible rows would not reliably update to the new page's contents. Clear
-    // the table on page change and show a loading state instead.
+    enabled: isNetworkReady && !!network && !!actor,
     queryFn: async () => {
+      if (!actor) throw new Error("Actor address required")
       const params = new URLSearchParams()
       if (network) params.set("network", network)
+      params.set("actor", actor)
       params.set("limit", String(limit))
       params.set("page", String(page))
       if (fromTimestamp !== undefined) params.set("from", String(fromTimestamp))
       if (toTimestamp !== undefined) params.set("to", String(toTimestamp))
-      if (actionTypes && actionTypes.length > 0) {
+      if (actionTypes.length > 0) {
         params.set("actionTypes", actionTypes.join(","))
       }
       const response = await fetch(`/api/activity?${params.toString()}`, {
         cache: "no-store",
       })
       if (!response.ok) {
-        throw new Error(`Failed to fetch activity: ${response.status}`)
+        throw new Error(`Failed to fetch transactions: ${response.status}`)
       }
       const json = (await response.json()) as MezoActivityApiResponse
       if (!json.success) throw new Error("Activity API reported failure")
@@ -117,13 +143,6 @@ export function useMezoActivity({
         meta: json.meta,
       }
     },
-    // Re-fetch on every page change. Caching across pages was the original
-    // source of the "stuck on page 2" report: a cached entry for a queryKey
-    // (or stale placeholderData) would render before the new page's data and
-    // the user could not tell the page had changed. With gcTime:0 the cache
-    // entry is evicted as soon as no observer is mounted, so navigating back
-    // to a previous page guarantees a fresh fetch and a visible loading
-    // state.
     gcTime: 0,
     staleTime: 0,
     refetchOnWindowFocus: false,
@@ -131,7 +150,7 @@ export function useMezoActivity({
 
   const items = query.data?.data ?? []
   const filteredData = useMemo(
-    () => filterItems(items, filters),
+    () => filterWalletItems(items, filters),
     [items, filters],
   )
 

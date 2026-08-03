@@ -207,7 +207,9 @@ function matchesActivityFilter(
     item.actionType === "lockAmountIncreased" ||
     item.actionType === "lockWithdrawn" ||
     item.actionType === "lockPermanent" ||
-    item.actionType === "lockPermanentUnlocked"
+    item.actionType === "lockPermanentUnlocked" ||
+    item.actionType === "lockTransferred" ||
+    item.actionType === "lockMerged"
   ) {
     return selected.has("locks")
   }

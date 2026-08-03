@@ -37,6 +37,14 @@ export type MezoActivityActionType =
   | "strategyYieldReceived"
   | "pcvDistribution"
   | "pcvDebtPayment"
+  | "voteFeeClaimed"
+  | "voteBribeClaimed"
+  | "lpAdded"
+  | "lpRemoved"
+  | "lpStaked"
+  | "lpUnstaked"
+  | "swap"
+  | "poolCreated"
 
 export type MezoActivityVoterContext =
   | "pools"
@@ -75,6 +83,11 @@ export type MezoActivityContract =
   | "merkleDistributor"
   | "musdSavingsRate"
   | "pcv"
+  | "poolFactory"
+  | "pool"
+  | "gauge"
+  | "feeVotingReward"
+  | "bribeVotingReward"
   | "unknown"
 
 export type MezoPokeMethod = "poke" | "pokeBoost" | "pokeBoosts"
@@ -148,6 +161,9 @@ export type MezoActivityFilter =
   | "boostPair"
   | "extensions"
   | "incentives"
+  | "claims"
+  | "capital"
+  | "swaps"
 
 export type MezoActivityTab = "activity" | "system"
 
@@ -162,12 +178,18 @@ export type MezoSystemFilter =
   | "pcvDistributions"
   | "savingsRate"
 
+export type MezoActivityCoverageStatus = "indexed" | "partial" | "planned"
+
 export type MezoActivityMeta = {
   coverage: {
-    locks: "indexed"
-    boosts: "indexed"
-    extensions: "indexed"
-    incentives: "indexed"
+    locks: MezoActivityCoverageStatus
+    boosts: MezoActivityCoverageStatus
+    extensions: MezoActivityCoverageStatus
+    incentives: MezoActivityCoverageStatus
+    claims?: MezoActivityCoverageStatus
+    capital?: MezoActivityCoverageStatus
+    swaps?: MezoActivityCoverageStatus
+    veBtcLocks?: MezoActivityCoverageStatus
   }
   range: {
     fromTimestamp: number

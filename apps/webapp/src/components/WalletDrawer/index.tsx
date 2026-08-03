@@ -32,9 +32,10 @@ import { formatUnits } from "viem"
 import { useBalance, useDisconnect, useReadContracts } from "wagmi"
 import { ReceiveView } from "./ReceiveView"
 import { SendView } from "./SendView"
+import TransactionsView from "./TransactionsView"
 import { WalletSetupView, useWalletReady } from "./WalletSetupView"
 
-type DrawerView = "main" | "send" | "receive" | "setup"
+type DrawerView = "main" | "send" | "receive" | "transactions" | "setup"
 
 function PowerIcon(): JSX.Element {
   return (
@@ -204,6 +205,29 @@ function ReceiveIcon(): JSX.Element {
     >
       <line x1="12" y1="5" x2="12" y2="19" />
       <polyline points="19 12 12 19 5 12" />
+    </svg>
+  )
+}
+
+function TransactionsIcon(): JSX.Element {
+  return (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <line x1="8" y1="6" x2="21" y2="6" />
+      <line x1="8" y1="12" x2="21" y2="12" />
+      <line x1="8" y1="18" x2="21" y2="18" />
+      <line x1="3" y1="6" x2="3.01" y2="6" />
+      <line x1="3" y1="12" x2="3.01" y2="12" />
+      <line x1="3" y1="18" x2="3.01" y2="18" />
     </svg>
   )
 }
@@ -524,6 +548,10 @@ export function WalletDrawer({
     setCurrentView("receive")
   }, [])
 
+  const handleTransactionsClick = useCallback(() => {
+    setCurrentView("transactions")
+  }, [])
+
   const handleSetupComplete = useCallback(() => {
     if (pendingView) {
       setCurrentView(pendingView)
@@ -565,6 +593,8 @@ export function WalletDrawer({
         return "Send"
       case "receive":
         return "Receive"
+      case "transactions":
+        return "Transactions"
       case "setup":
         return "Wallet Setup"
       default:
@@ -679,7 +709,7 @@ export function WalletDrawer({
                 </div>
               )}
 
-              {/* Send & Receive Buttons */}
+              {/* Send / Receive / Transactions */}
               <div className="mt-6 flex gap-3">
                 <button
                   type="button"
@@ -698,6 +728,14 @@ export function WalletDrawer({
                   Receive
                 </button>
               </div>
+              <button
+                type="button"
+                onClick={handleTransactionsClick}
+                className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-[var(--border)] bg-[var(--surface)] py-3 font-semibold text-[var(--content-primary)] transition-colors hover:bg-[var(--surface-secondary)]"
+              >
+                <TransactionsIcon />
+                Transactions
+              </button>
             </div>
 
             {/* Token Balances */}
@@ -949,6 +987,19 @@ export function WalletDrawer({
             }`}
           >
             <ReceiveView onBack={() => setCurrentView("main")} />
+          </div>
+
+          {/* Transactions View — mount only when active so we don't fetch on every drawer open */}
+          <div
+            className={`absolute inset-0 flex flex-col overflow-hidden bg-[var(--surface)] transition-all duration-300 ease-out ${
+              currentView === "transactions"
+                ? "translate-x-0 opacity-100"
+                : "translate-x-full opacity-0"
+            }`}
+          >
+            {currentView === "transactions" ? (
+              <TransactionsView onBack={() => setCurrentView("main")} />
+            ) : null}
           </div>
 
           {/* Setup View */}

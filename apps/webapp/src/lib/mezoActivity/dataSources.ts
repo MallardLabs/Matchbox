@@ -63,6 +63,9 @@ type ExplorerActivityEvent = {
   mergeDestPrevIsPermanent?: boolean | null
   token?: string | null
   gauge?: string | null
+  pool?: string | null
+  rewardContract?: string | null
+  rewardType?: string | null
   boostableTokenId?: string | null
   boost?: string | null
   weight?: string | null
@@ -141,6 +144,14 @@ const ACTION_TYPE_MAP: Record<string, MezoActivityActionType> = {
   STRATEGY_YIELD_RECEIVED: "strategyYieldReceived",
   PCV_DISTRIBUTION: "pcvDistribution",
   PCV_DEBT_PAYMENT: "pcvDebtPayment",
+  VOTE_FEE_CLAIMED: "voteFeeClaimed",
+  VOTE_BRIBE_CLAIMED: "voteBribeClaimed",
+  LP_ADDED: "lpAdded",
+  LP_REMOVED: "lpRemoved",
+  LP_STAKED: "lpStaked",
+  LP_UNSTAKED: "lpUnstaked",
+  SWAP: "swap",
+  POOL_CREATED: "poolCreated",
 }
 
 const CONTRACT_MAP: Record<
@@ -160,6 +171,11 @@ const CONTRACT_MAP: Record<
   MEZO_MERKLE_DISTRIBUTOR: "merkleDistributor",
   MUSD_SAVINGS_RATE: "musdSavingsRate",
   PCV: "pcv",
+  POOL_FACTORY: "poolFactory",
+  POOL: "pool",
+  GAUGE: "gauge",
+  FEE_VOTING_REWARD: "feeVotingReward",
+  BRIBE_VOTING_REWARD: "bribeVotingReward",
 }
 
 function mapBoostContext(value: string): MezoActivityItem["boostContext"] {
@@ -246,6 +262,9 @@ async function fetchExplorerActivityRaw(
           mergeDestPrevIsPermanent
           token
           gauge
+          pool
+          rewardContract
+          rewardType
           boostableTokenId
           boost
           weight
@@ -283,7 +302,10 @@ async function fetchExplorerActivityRaw(
     const recipientAddress = normalizeAddress(event.recipient ?? undefined)
     const txFromAddress = normalizeAddress(event.txFrom ?? undefined)
     const tokenAddress = normalizeAddress(event.token ?? undefined)
-    const gaugeAddress = normalizeAddress(event.gauge ?? undefined)
+    // Prefer gauge; fall back to pool so LP/swap rows still resolve "where".
+    const gaugeAddress = normalizeAddress(
+      event.gauge ?? event.pool ?? undefined,
+    )
     const txHash = maybeHash(event.txHash)
     const pokeMethod = mapPokeMethod(event.pokeMethod)
     const contract = CONTRACT_MAP[event.source]
