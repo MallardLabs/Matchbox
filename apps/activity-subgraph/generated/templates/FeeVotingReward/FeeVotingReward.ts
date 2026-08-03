@@ -66,8 +66,8 @@ export class ClaimRewards__Params {
   }
 }
 
-export class BribeVotingReward extends ethereum.SmartContract {
-  static bind(address: Address): BribeVotingReward {
-    return new BribeVotingReward("BribeVotingReward", address);
+export class FeeVotingReward extends ethereum.SmartContract {
+  static bind(address: Address): FeeVotingReward {
+    return new FeeVotingReward("FeeVotingReward", address);
   }
 }

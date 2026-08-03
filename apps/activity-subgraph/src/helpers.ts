@@ -47,6 +47,14 @@ export const PROTOCOL_YIELD_RECEIVED = "PROTOCOL_YIELD_RECEIVED"
 export const STRATEGY_YIELD_RECEIVED = "STRATEGY_YIELD_RECEIVED"
 export const PCV_DISTRIBUTION = "PCV_DISTRIBUTION"
 export const PCV_DEBT_PAYMENT = "PCV_DEBT_PAYMENT"
+export const VOTE_FEE_CLAIMED = "VOTE_FEE_CLAIMED"
+export const VOTE_BRIBE_CLAIMED = "VOTE_BRIBE_CLAIMED"
+export const LP_ADDED = "LP_ADDED"
+export const LP_REMOVED = "LP_REMOVED"
+export const LP_STAKED = "LP_STAKED"
+export const LP_UNSTAKED = "LP_UNSTAKED"
+export const SWAP = "SWAP"
+export const POOL_CREATED = "POOL_CREATED"
 
 export const MATCHBOX_GAUGE_BOOST = "MATCHBOX_GAUGE_BOOST"
 export const MEZO_VEBTC_PAIR_BOOST = "MEZO_VEBTC_PAIR_BOOST"
@@ -65,6 +73,11 @@ export const MEZO_REBASE_DISTRIBUTOR = "MEZO_REBASE_DISTRIBUTOR"
 export const MEZO_MERKLE_DISTRIBUTOR = "MEZO_MERKLE_DISTRIBUTOR"
 export const MUSD_SAVINGS_RATE = "MUSD_SAVINGS_RATE"
 export const PCV = "PCV"
+export const POOL_FACTORY = "POOL_FACTORY"
+export const POOL = "POOL"
+export const GAUGE = "GAUGE"
+export const FEE_VOTING_REWARD = "FEE_VOTING_REWARD"
+export const BRIBE_VOTING_REWARD = "BRIBE_VOTING_REWARD"
 
 export const ZERO = BigInt.fromI32(0)
 export const ONE = BigInt.fromI32(1)
@@ -120,28 +133,31 @@ export function remainingDuration(
   return remaining.gt(MAXTIME) ? MAXTIME : remaining
 }
 
-// veMEZO VotingEscrow addresses across supported networks. Voted events on
+// VotingEscrow addresses across supported networks. Voted events on
 // BoostVoter/PoolsVoter carry `voter = msg.sender`, which is the maintainer
 // when the cron calls `poke(tokenId)`. Resolve the real owner by looking up
-// the LockPosition entity keyed on (veMEZO contract, tokenId).
+// the LockPosition entity keyed on (escrow contract, tokenId).
 const VE_MEZO_MAINNET_HEX = "0xb90fdad3dfd180458d62cc6acedc983d78e20122"
 const VE_MEZO_TESTNET_HEX = "0xace816ca2bcc9b12c59799dcc5a959fb9b98111b"
+const VE_BTC_MAINNET_HEX = "0x3d4b1b884a7a1e59fe8589a3296ec8f8cbb6f279"
+const VE_BTC_TESTNET_HEX = "0x38e35d92e6bfc6787272a62345856b13ea12130a"
 
 // Returns the lock owner's address, or the provided fallback if no lock exists.
 // Avoids returning a nullable Bytes across modules — the AS compiler crashes on
 // that pattern. Callers pass the event's `voter` field as the fallback.
 export function resolveLockOwner(tokenId: BigInt, fallback: Bytes): Bytes {
-  const idMainnet = VE_MEZO_MAINNET_HEX + "-" + tokenId.toString()
-  const mainnet = LockPosition.load(idMainnet)
-  if (mainnet != null) {
-    const owner = mainnet.owner
-    if (owner) return owner
-  }
-  const idTestnet = VE_MEZO_TESTNET_HEX + "-" + tokenId.toString()
-  const testnet = LockPosition.load(idTestnet)
-  if (testnet != null) {
-    const owner = testnet.owner
-    if (owner) return owner
+  const escrows = [
+    VE_MEZO_MAINNET_HEX,
+    VE_MEZO_TESTNET_HEX,
+    VE_BTC_MAINNET_HEX,
+    VE_BTC_TESTNET_HEX,
+  ]
+  for (let i = 0; i < escrows.length; i++) {
+    const lock = LockPosition.load(escrows[i] + "-" + tokenId.toString())
+    if (lock != null) {
+      const owner = lock.owner
+      if (owner) return owner
+    }
   }
   return fallback
 }

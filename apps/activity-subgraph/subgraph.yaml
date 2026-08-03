@@ -36,6 +36,39 @@ dataSources:
           handler: handleUpdateBoost
       file: ./src/voting-escrow.ts
   - kind: ethereum
+    name: VeBTC
+    network: mezo
+    source:
+      address: "0x3D4b1b884A7a1E59fE8589a3296EC8f8cBB6f279"
+      abi: VotingEscrow
+      startBlock: 7739500
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - ActivityEvent
+        - ActivityStats
+      abis:
+        - name: VotingEscrow
+          file: ./abis/VotingEscrow.json
+      eventHandlers:
+        - event: Deposit(indexed address,indexed uint256,indexed uint8,uint256,uint256,uint256)
+          handler: handleVotingEscrowDeposit
+        - event: LockPermanent(indexed address,indexed uint256,uint256,uint256)
+          handler: handleLockPermanent
+        - event: Merge(indexed address,indexed uint256,indexed uint256,uint256,uint256,uint256,uint256,uint256)
+          handler: handleMerge
+        - event: UnlockPermanent(indexed address,indexed uint256,uint256,uint256)
+          handler: handleUnlockPermanent
+        - event: Withdraw(indexed address,indexed uint256,uint256,uint256)
+          handler: handleWithdraw
+        - event: Transfer(indexed address,indexed address,indexed uint256)
+          handler: handleTransfer
+        - event: UpdateBoost(indexed uint256,uint256)
+          handler: handleUpdateBoost
+      file: ./src/voting-escrow.ts
+  - kind: ethereum
     name: BoostVoter
     network: mezo
     source:
@@ -373,6 +406,104 @@ dataSources:
         - event: PCVDebtPayment(uint256)
           handler: handlePcvDebtPayment
       file: ./src/pcv.ts
+  - kind: ethereum
+    name: PoolFactory
+    network: mezo
+    source:
+      address: "0x83FE469C636C4081b87bA5b3Ae9991c6Ed104248"
+      abi: PoolFactory
+      startBlock: 7739500
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - ActivityEvent
+        - ActivityStats
+      abis:
+        - name: PoolFactory
+          file: ./abis/PoolFactory.json
+      eventHandlers:
+        - event: PoolCreated(indexed address,indexed address,indexed bool,address,uint256)
+          handler: handlePoolCreated
+      file: ./src/pools.ts
+  # Known mainnet pools (pre-existing before indexer start; factory template
+  # still covers newly created pools via PoolCreated).
+  - kind: ethereum
+    name: PoolMusdBtc
+    network: mezo
+    source:
+      address: "0x52e604c44417233b6CcEDDDc0d640A405Caacefb"
+      abi: Pool
+      startBlock: 7739500
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - ActivityEvent
+        - ActivityStats
+      abis:
+        - name: Pool
+          file: ./abis/Pool.json
+      eventHandlers:
+        - event: Mint(indexed address,uint256,uint256)
+          handler: handlePoolMint
+        - event: Burn(indexed address,indexed address,uint256,uint256)
+          handler: handlePoolBurn
+        - event: Swap(indexed address,indexed address,uint256,uint256,uint256,uint256)
+          handler: handlePoolSwap
+      file: ./src/pools.ts
+  - kind: ethereum
+    name: PoolMusdMusdc
+    network: mezo
+    source:
+      address: "0xEd812AEc0Fecc8fD882Ac3eccC43f3aA80A6c356"
+      abi: Pool
+      startBlock: 7739500
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - ActivityEvent
+        - ActivityStats
+      abis:
+        - name: Pool
+          file: ./abis/Pool.json
+      eventHandlers:
+        - event: Mint(indexed address,uint256,uint256)
+          handler: handlePoolMint
+        - event: Burn(indexed address,indexed address,uint256,uint256)
+          handler: handlePoolBurn
+        - event: Swap(indexed address,indexed address,uint256,uint256,uint256,uint256)
+          handler: handlePoolSwap
+      file: ./src/pools.ts
+  - kind: ethereum
+    name: PoolMusdMusdt
+    network: mezo
+    source:
+      address: "0x10906a9E9215939561597b4C8e4b98F93c02031A"
+      abi: Pool
+      startBlock: 7739500
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - ActivityEvent
+        - ActivityStats
+      abis:
+        - name: Pool
+          file: ./abis/Pool.json
+      eventHandlers:
+        - event: Mint(indexed address,uint256,uint256)
+          handler: handlePoolMint
+        - event: Burn(indexed address,indexed address,uint256,uint256)
+          handler: handlePoolBurn
+        - event: Swap(indexed address,indexed address,uint256,uint256,uint256,uint256)
+          handler: handlePoolSwap
+      file: ./src/pools.ts
 templates:
   - kind: ethereum
     name: BribeVotingReward
@@ -392,5 +523,74 @@ templates:
       eventHandlers:
         - event: NotifyReward(indexed address,indexed address,indexed uint256,uint256)
           handler: handleBribeNotifyReward
+        - event: ClaimRewards(indexed address,indexed address,uint256)
+          handler: handleBribeClaimRewards
       file: ./src/bribes.ts
+  - kind: ethereum
+    name: FeeVotingReward
+    network: mezo
+    source:
+      abi: FeeVotingReward
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - ActivityEvent
+        - ActivityStats
+      abis:
+        - name: FeeVotingReward
+          file: ./abis/FeeVotingReward.json
+      eventHandlers:
+        - event: NotifyReward(indexed address,indexed address,indexed uint256,uint256)
+          handler: handleFeeNotifyReward
+        - event: ClaimRewards(indexed address,indexed address,uint256)
+          handler: handleFeeClaimRewards
+      file: ./src/fee-rewards.ts
+  - kind: ethereum
+    name: Gauge
+    network: mezo
+    source:
+      abi: Gauge
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - ActivityEvent
+        - ActivityStats
+      abis:
+        - name: Gauge
+          file: ./abis/Gauge.json
+      eventHandlers:
+        - event: Deposit(indexed address,indexed address,uint256)
+          handler: handleGaugeDeposit
+        - event: Withdraw(indexed address,uint256)
+          handler: handleGaugeWithdraw
+        - event: ClaimRewards(indexed address,uint256)
+          handler: handleGaugeClaimRewards
+      file: ./src/gauges.ts
+  - kind: ethereum
+    name: Pool
+    network: mezo
+    source:
+      abi: Pool
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - ActivityEvent
+        - ActivityStats
+      abis:
+        - name: Pool
+          file: ./abis/Pool.json
+      eventHandlers:
+        - event: Mint(indexed address,uint256,uint256)
+          handler: handlePoolMint
+        - event: Burn(indexed address,indexed address,uint256,uint256)
+          handler: handlePoolBurn
+        - event: Swap(indexed address,indexed address,uint256,uint256,uint256,uint256)
+          handler: handlePoolSwap
+      file: ./src/pools.ts
 

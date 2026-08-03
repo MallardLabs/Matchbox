@@ -1,11 +1,11 @@
 import {
   ClaimRewards,
   NotifyReward,
-} from "../generated/templates/BribeVotingReward/BribeVotingReward"
+} from "../generated/templates/FeeVotingReward/FeeVotingReward"
 import { BribeToPool } from "../generated/schema"
 import {
   baseActivity,
-  BRIBE_VOTING_REWARD,
+  FEE_VOTING_REWARD,
   getOrCreateAccount,
   getOrCreateGauge,
   getOrCreateGaugeEpoch,
@@ -15,12 +15,15 @@ import {
   ONE,
   POOLS_VOTER,
   saveActivity,
-  VOTE_BRIBE_CLAIMED,
+  VOTE_FEE_CLAIMED,
 } from "./helpers"
 
-export function handleBribeNotifyReward(event: NotifyReward): void {
-  const bribeAddress = event.address.toHexString()
-  const mapping = BribeToPool.load(bribeAddress)
+// Fee reward contracts are mapped with the same BribeToPool entity (id =
+// fee contract address) so pool/gauge can be resolved on claims.
+
+export function handleFeeNotifyReward(event: NotifyReward): void {
+  const feeAddress = event.address.toHexString()
+  const mapping = BribeToPool.load(feeAddress)
   if (mapping == null) {
     return
   }
@@ -29,14 +32,14 @@ export function handleBribeNotifyReward(event: NotifyReward): void {
     event,
     INCENTIVE_ADDED,
     MATCHBOX_GAUGE_BOOST,
-    POOLS_VOTER,
+    FEE_VOTING_REWARD,
   )
   activity.actor = event.params.from
   activity.gauge = mapping.gaugeAddress
   activity.pool = mapping.poolAddress
   activity.token = event.params.reward
   activity.amount = event.params.amount
-  activity.rewardType = "Bribe"
+  activity.rewardType = "Fee"
   activity.rewardContract = event.address
   saveActivity(activity)
 
@@ -79,20 +82,20 @@ export function handleBribeNotifyReward(event: NotifyReward): void {
   gaugeEpoch.save()
 }
 
-export function handleBribeClaimRewards(event: ClaimRewards): void {
-  const bribeAddress = event.address.toHexString()
-  const mapping = BribeToPool.load(bribeAddress)
+export function handleFeeClaimRewards(event: ClaimRewards): void {
+  const feeAddress = event.address.toHexString()
+  const mapping = BribeToPool.load(feeAddress)
 
   const activity = baseActivity(
     event,
-    VOTE_BRIBE_CLAIMED,
+    VOTE_FEE_CLAIMED,
     MATCHBOX_GAUGE_BOOST,
-    BRIBE_VOTING_REWARD,
+    FEE_VOTING_REWARD,
   )
   activity.actor = event.params.from
   activity.token = event.params.reward
   activity.amount = event.params.amount
-  activity.rewardType = "Bribe"
+  activity.rewardType = "Fee"
   activity.rewardContract = event.address
   if (mapping != null) {
     activity.gauge = mapping.gaugeAddress

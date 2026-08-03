@@ -1,20 +1,17 @@
 # Matchbox Activity Subgraph
 
-Goldsky subgraph for the public Matchbox activity API.
+Goldsky subgraph for the public Matchbox activity API (`matchbox-explorer`).
+
+**Deployed version:** `matchbox-explorer/3.3.0` (tag `live`)
 
 It normalizes activity from:
 
-- `VeMEZO` voting escrow `Deposit` events
-  - lock creation
-  - lock amount increases
-  - lock duration extensions
-- `BoostVoter` events
-  - veMEZO votes on veBTC boost gauges
-  - boost gauge creation
-  - boost pokes
-- `PoolsVoter` events
-  - votes on Matchbox staking/pool gauges
-  - staking/pool gauge creation
+- `VeMEZO` + `VeBTC` voting escrow lock lifecycle
+- `BoostVoter` / `PoolsVoter` / third-party / validators votes
+- Bribe + fee voting reward notify/claims (`VOTE_*_CLAIMED`)
+- Pool factory + known pools: LP add/remove, swaps
+- Gauge stake/unstake (dynamic template from PoolsVoter)
+- mUSD savings, rebase/merkle claims, system splitters/PCV/minter
 
 ## Development
 

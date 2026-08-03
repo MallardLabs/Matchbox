@@ -19,3 +19,37 @@ export class BribeVotingReward extends DataSourceTemplate {
     );
   }
 }
+
+export class FeeVotingReward extends DataSourceTemplate {
+  static create(address: Address): void {
+    DataSourceTemplate.create("FeeVotingReward", [address.toHex()]);
+  }
+
+  static createWithContext(address: Address, context: DataSourceContext): void {
+    DataSourceTemplate.createWithContext(
+      "FeeVotingReward",
+      [address.toHex()],
+      context,
+    );
+  }
+}
+
+export class Gauge extends DataSourceTemplate {
+  static create(address: Address): void {
+    DataSourceTemplate.create("Gauge", [address.toHex()]);
+  }
+
+  static createWithContext(address: Address, context: DataSourceContext): void {
+    DataSourceTemplate.createWithContext("Gauge", [address.toHex()], context);
+  }
+}
+
+export class Pool extends DataSourceTemplate {
+  static create(address: Address): void {
+    DataSourceTemplate.create("Pool", [address.toHex()]);
+  }
+
+  static createWithContext(address: Address, context: DataSourceContext): void {
+    DataSourceTemplate.createWithContext("Pool", [address.toHex()], context);
+  }
+}
