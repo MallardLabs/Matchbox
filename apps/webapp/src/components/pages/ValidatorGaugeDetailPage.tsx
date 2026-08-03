@@ -652,6 +652,47 @@ export default function ValidatorGaugeDetailPage({
             </div>
           </SectionCard>
 
+          {hasAboutContent ? (
+            <SectionCard
+              title="About"
+              description="Operator-published strategy for this gauge."
+            >
+              <div className="flex flex-col gap-4">
+                {profileState.profile?.incentive_strategy ? (
+                  <div>
+                    <h3 className="text-xs uppercase tracking-wide text-[var(--content-tertiary)]">
+                      Incentive strategy
+                    </h3>
+                    <p className="mt-1.5 whitespace-pre-wrap text-pretty text-sm text-[var(--content-secondary)]">
+                      {profileState.profile.incentive_strategy}
+                    </p>
+                  </div>
+                ) : null}
+                {profileState.profile?.voting_strategy ? (
+                  <div>
+                    <h3 className="text-xs uppercase tracking-wide text-[var(--content-tertiary)]">
+                      Voting strategy
+                    </h3>
+                    <p className="mt-1.5 whitespace-pre-wrap text-pretty text-sm text-[var(--content-secondary)]">
+                      {profileState.profile.voting_strategy}
+                    </p>
+                  </div>
+                ) : null}
+                {profileState.profile?.tags?.length ? (
+                  <ul className="flex flex-wrap gap-2">
+                    {profileState.profile.tags.map((tag) => (
+                      <li key={tag}>
+                        <Tag color="blue" closeable={false}>
+                          {tag}
+                        </Tag>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
+            </SectionCard>
+          ) : null}
+
           <SectionCard
             title="Distribution history"
             description="Indexed MEZO reward distributions for this gauge."
@@ -731,77 +772,6 @@ export default function ValidatorGaugeDetailPage({
         </div>
 
         <aside className="flex flex-col gap-4">
-          {hasAboutContent ? (
-            <SectionCard
-              title="About"
-              description="Operator-published strategy for this gauge."
-            >
-              <div className="flex flex-col gap-4">
-                {profileState.profile?.incentive_strategy ? (
-                  <div>
-                    <h3 className="text-xs uppercase tracking-wide text-[var(--content-tertiary)]">
-                      Incentive strategy
-                    </h3>
-                    <p className="mt-1.5 whitespace-pre-wrap text-pretty text-sm text-[var(--content-secondary)]">
-                      {profileState.profile.incentive_strategy}
-                    </p>
-                  </div>
-                ) : null}
-                {profileState.profile?.voting_strategy ? (
-                  <div>
-                    <h3 className="text-xs uppercase tracking-wide text-[var(--content-tertiary)]">
-                      Voting strategy
-                    </h3>
-                    <p className="mt-1.5 whitespace-pre-wrap text-pretty text-sm text-[var(--content-secondary)]">
-                      {profileState.profile.voting_strategy}
-                    </p>
-                  </div>
-                ) : null}
-                {profileState.profile?.tags?.length ? (
-                  <ul className="flex flex-wrap gap-2">
-                    {profileState.profile.tags.map((tag) => (
-                      <li key={tag}>
-                        <Tag color="blue" closeable={false}>
-                          {tag}
-                        </Tag>
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
-              </div>
-            </SectionCard>
-          ) : null}
-
-          <SectionCard
-            title="Addresses"
-            description="Contract addresses and ownership."
-          >
-            <dl className="flex flex-col gap-3">
-              {(
-                [
-                  ["Gauge", gaugeAddress],
-                  ["Bribe", validator.bribe],
-                  ["PoA operator", validator.operator],
-                  ["Rewards beneficiary", beneficiary],
-                ] as const
-              ).map(([label, value]) =>
-                value ? (
-                  <div
-                    key={label}
-                    className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-2"
-                  >
-                    <dt className="text-2xs uppercase tracking-wide text-[var(--content-tertiary)]">
-                      {label}
-                    </dt>
-                    <dd className="min-w-0">
-                      <ClickableAddress address={value as Address} />
-                    </dd>
-                  </div>
-                ) : null,
-              )}
-            </dl>
-          </SectionCard>
-
           <SectionCard
             title="Rewards"
             description={
@@ -881,49 +851,79 @@ export default function ValidatorGaugeDetailPage({
               </div>
             ) : null}
           </SectionCard>
+
+          <SectionCard
+            title="Validator details"
+            description="Contract addresses, ownership, and PoA registry data."
+          >
+            <dl className="flex flex-col gap-3">
+              {(
+                [
+                  ["Gauge", gaugeAddress],
+                  ["Bribe", validator.bribe],
+                  ["PoA operator", validator.operator],
+                  ["Rewards beneficiary", beneficiary],
+                ] as const
+              ).map(([label, value]) =>
+                value ? (
+                  <div
+                    key={label}
+                    className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-2"
+                  >
+                    <dt className="text-2xs uppercase tracking-wide text-[var(--content-tertiary)]">
+                      {label}
+                    </dt>
+                    <dd className="min-w-0">
+                      <ClickableAddress address={value as Address} />
+                    </dd>
+                  </div>
+                ) : null,
+              )}
+            </dl>
+
+            <details className="mt-4 border-t border-[var(--border)] pt-4">
+              <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-[var(--content-tertiary)]">
+                PoA registry metadata
+              </summary>
+              <p className="mt-2 text-xs text-[var(--content-secondary)]">
+                Immutable on-chain registration data for this validator.
+              </p>
+              <div className="mt-2">
+                <Tag color="gray" closeable={false}>
+                  Immutable on Matchbox
+                </Tag>
+              </div>
+              <dl className="mt-3 flex flex-col gap-3">
+                {(
+                  [
+                    ["Moniker", validator.moniker],
+                    ["Identity", validator.identity],
+                    ["Consensus public key", validator.consensusPublicKey],
+                    ["Security contact", validator.securityContact],
+                  ] as const
+                ).map(([label, value]) => (
+                  <div key={label}>
+                    <dt className="text-2xs uppercase tracking-wide text-[var(--content-tertiary)]">
+                      {label}
+                    </dt>
+                    <dd className="mt-1 break-all font-mono text-xs text-[var(--content-secondary)]">
+                      {value || "—"}
+                    </dd>
+                  </div>
+                ))}
+                <div>
+                  <dt className="text-2xs uppercase tracking-wide text-[var(--content-tertiary)]">
+                    Registry details
+                  </dt>
+                  <dd className="mt-1 whitespace-pre-wrap text-pretty text-sm text-[var(--content-secondary)]">
+                    {validator.details || "—"}
+                  </dd>
+                </div>
+              </dl>
+            </details>
+          </SectionCard>
         </aside>
       </div>
-
-      <details className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
-        <summary className="cursor-pointer text-sm font-semibold text-[var(--content-primary)]">
-          PoA registry metadata
-        </summary>
-        <p className="mt-1 text-xs text-[var(--content-secondary)]">
-          Immutable on-chain registration data for this validator.
-        </p>
-        <div className="mt-3">
-          <Tag color="gray" closeable={false}>
-            Immutable on Matchbox
-          </Tag>
-        </div>
-        <dl className="mt-4 grid gap-4 md:grid-cols-2">
-          {(
-            [
-              ["Moniker", validator.moniker],
-              ["Identity", validator.identity],
-              ["Consensus public key", validator.consensusPublicKey],
-              ["Security contact", validator.securityContact],
-            ] as const
-          ).map(([label, value]) => (
-            <div key={label}>
-              <dt className="text-2xs uppercase tracking-wide text-[var(--content-tertiary)]">
-                {label}
-              </dt>
-              <dd className="mt-1 break-all font-mono text-xs text-[var(--content-secondary)]">
-                {value || "—"}
-              </dd>
-            </div>
-          ))}
-          <div className="md:col-span-2">
-            <dt className="text-2xs uppercase tracking-wide text-[var(--content-tertiary)]">
-              Registry details
-            </dt>
-            <dd className="mt-1 whitespace-pre-wrap text-pretty text-sm text-[var(--content-secondary)]">
-              {validator.details || "—"}
-            </dd>
-          </div>
-        </dl>
-      </details>
 
       <AddValidatorIncentiveModal
         gauge={gaugeAddress}
