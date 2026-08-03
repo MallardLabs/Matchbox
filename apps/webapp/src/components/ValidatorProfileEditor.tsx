@@ -177,7 +177,7 @@ export default function ValidatorProfileEditor({
     >
       <fieldset>
         <legend className="mb-3 text-sm font-semibold text-[var(--content-primary)]">
-          Validator profile
+          Identity
         </legend>
         <ol className="grid gap-4 md:grid-cols-2">
           <li>
