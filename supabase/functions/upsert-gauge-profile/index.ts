@@ -3,23 +3,28 @@ import {
   createPublicClient,
   getAddress,
   http,
-  verifyMessage,
-  type Address,
+  isHex,
 } from "https://esm.sh/viem@2"
 import { z } from "https://esm.sh/zod@4.1.12"
+import {
+  profileWriteAuthorizationMessage,
+  resolveGaugeController,
+  sha256,
+} from "../_shared/gaugeProfileAuthorization.ts"
+import { getMezoNetworkConfigForChain } from "../_shared/contracts.ts"
 import { corsHeaders } from "../_shared/cors.ts"
 import { structuredLogger } from "../_shared/structuredLogger.ts"
 
-const BOOST_VOTER = "0x2Ba614a598Cffa5a19d683cDCA97bac3a49313d1" as Address
-const VEBTC = "0x3D4b1b884A7a1E59fE8589a3296EC8f8cBB6f279" as Address
-const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
-
-const tokenSchema = z.object({
+const addressSchema = z.string().regex(/^0x[0-9a-fA-F]{40}$/)
+const identitySchema = z.object({
+  chainId: z.union([z.literal(31611), z.literal(31612)]).default(31612),
+  gaugeAddress: addressSchema,
+  veBtcTokenId: z.string().regex(/^\d+$/),
+  ownerAddress: addressSchema,
+})
+const tokenSchema = identitySchema.extend({
   action: z.literal("nonce"),
   operation: z.enum(["upsert-profile", "upload-avatar"]),
-  gaugeAddress: z.string().regex(/^0x[0-9a-fA-F]{40}$/),
-  veBtcTokenId: z.string().regex(/^\d+$/),
-  ownerAddress: z.string().regex(/^0x[0-9a-fA-F]{40}$/),
 })
 
 const proofSchema = z.object({
@@ -27,11 +32,8 @@ const proofSchema = z.object({
   signature: z.string().regex(/^0x[0-9a-fA-F]+$/),
 })
 
-const profileSchema = z.object({
+const profileSchema = identitySchema.extend({
   action: z.literal("upsert-profile"),
-  gaugeAddress: z.string().regex(/^0x[0-9a-fA-F]{40}$/),
-  veBtcTokenId: z.string().regex(/^\d+$/),
-  ownerAddress: z.string().regex(/^0x[0-9a-fA-F]{40}$/),
   proof: proofSchema,
   profile: z.object({
     profilePictureUrl: z.string().url().nullable(),
@@ -45,11 +47,8 @@ const profileSchema = z.object({
   }),
 })
 
-const avatarSchema = z.object({
+const avatarSchema = identitySchema.extend({
   action: z.literal("upload-avatar"),
-  gaugeAddress: z.string().regex(/^0x[0-9a-fA-F]{40}$/),
-  veBtcTokenId: z.string().regex(/^\d+$/),
-  ownerAddress: z.string().regex(/^0x[0-9a-fA-F]{40}$/),
   proof: proofSchema,
   extension: z.enum(["jpg", "jpeg", "png", "gif", "webp"]),
 })
@@ -63,76 +62,11 @@ function json(value: unknown, status = 200): Response {
   })
 }
 
-async function sha256(value: string): Promise<string> {
-  const bytes = new TextEncoder().encode(value)
-  const digest = await crypto.subtle.digest("SHA-256", bytes)
-  return Array.from(new Uint8Array(digest))
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("")
-}
-
-function messageFor(input: {
-  operation: "upsert-profile" | "upload-avatar"
-  gaugeAddress: string
-  veBtcTokenId: string
-  ownerAddress: string
-  nonce: string
-}): string {
-  return [
-    "Matchbox gauge profile authorization",
-    `Action: ${input.operation}`,
-    `Gauge: ${input.gaugeAddress.toLowerCase()}`,
-    `veBTC token: ${input.veBtcTokenId}`,
-    `Owner: ${input.ownerAddress.toLowerCase()}`,
-    `Nonce: ${input.nonce}`,
-    "This signature is gasless and cannot submit a transaction.",
-  ].join("\n")
-}
-
-async function verifyOwnership(input: {
-  gaugeAddress: string
-  veBtcTokenId: string
-  ownerAddress: string
-}): Promise<boolean> {
-  const client = createPublicClient({
-    transport: http(Deno.env.get("MEZO_RPC_URL") ?? "https://mezo-mainnet.boar.network"),
-  })
-  const [onchainOwner, mappedGauge] = await Promise.all([
-    client.readContract({
-      address: VEBTC,
-      abi: [{
-        type: "function",
-        name: "ownerOf",
-        stateMutability: "view",
-        inputs: [{ name: "tokenId", type: "uint256" }],
-        outputs: [{ type: "address" }],
-      }] as const,
-      functionName: "ownerOf",
-      args: [BigInt(input.veBtcTokenId)],
-    }),
-    client.readContract({
-      address: BOOST_VOTER,
-      abi: [{
-        type: "function",
-        name: "boostableTokenIdToGauge",
-        stateMutability: "view",
-        inputs: [{ name: "tokenId", type: "uint256" }],
-        outputs: [{ type: "address" }],
-      }] as const,
-      functionName: "boostableTokenIdToGauge",
-      args: [BigInt(input.veBtcTokenId)],
-    }),
-  ])
-  return (
-    mappedGauge.toLowerCase() !== ZERO_ADDRESS &&
-    mappedGauge.toLowerCase() === input.gaugeAddress.toLowerCase() &&
-    onchainOwner.toLowerCase() === input.ownerAddress.toLowerCase()
-  )
-}
-
 Deno.serve(async (request) => {
-  if (request.method === "OPTIONS") return new Response("ok", { headers: corsHeaders })
-  if (request.method !== "POST") return json({ error: "method-not-allowed" }, 405)
+  if (request.method === "OPTIONS")
+    return new Response("ok", { headers: corsHeaders })
+  if (request.method !== "POST")
+    return json({ error: "method-not-allowed" }, 405)
 
   try {
     const rawBody: unknown = await request.json()
@@ -143,67 +77,128 @@ Deno.serve(async (request) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
       { auth: { autoRefreshToken: false, persistSession: false } },
     )
+    const network = getMezoNetworkConfigForChain(parsed.data.chainId)
+    const publicClient = createPublicClient({
+      chain: network.chain,
+      transport: http(network.rpcUrl),
+    })
+    const controller = await resolveGaugeController(publicClient, {
+      chainId: parsed.data.chainId,
+      gaugeAddress: parsed.data.gaugeAddress,
+      veBtcTokenId: parsed.data.veBtcTokenId,
+      veBtcAddress: getAddress(network.contracts.veBTC),
+      boostVoterAddress: getAddress(network.contracts.boostVoter),
+    })
+    const signer = parsed.data.ownerAddress.toLowerCase()
+    let signerAuthorized = signer === controller.nftOwnerAddress.toLowerCase()
+    if (
+      !signerAuthorized &&
+      Deno.env.get("ENABLE_MANAGED_GAUGE_EDITORS") === "true" &&
+      controller.controllerKind !== "direct-eoa"
+    ) {
+      if (signer === controller.controllerAddress.toLowerCase()) {
+        signerAuthorized = true
+      } else {
+        const { data: editor, error: editorError } = await supabase
+          .from("gauge_profile_editors")
+          .select("editor_address")
+          .eq("chain_id", controller.chainId)
+          .eq("gauge_address", controller.gaugeAddress.toLowerCase())
+          .eq("vebtc_token_id", controller.veBtcTokenId.toString())
+          .eq("nft_owner_address", controller.nftOwnerAddress.toLowerCase())
+          .eq("controller_address", controller.controllerAddress.toLowerCase())
+          .eq("editor_address", signer)
+          .is("revoked_at", null)
+          .maybeSingle()
+        if (editorError)
+          throw new Error("Unable to verify gauge profile editor")
+        signerAuthorized = editor !== null
+      }
+    }
+    if (!signerAuthorized) {
+      return json({ error: "profile-authorization-failed" }, 403)
+    }
 
     if (parsed.data.action === "nonce") {
       const nonce = crypto.randomUUID().replaceAll("-", "")
-      const { error } = await supabase.from("gauge_profile_write_nonces").insert({
-        nonce_hash: await sha256(nonce),
-        gauge_address: parsed.data.gaugeAddress.toLowerCase(),
-        vebtc_token_id: parsed.data.veBtcTokenId,
-        owner_address: parsed.data.ownerAddress.toLowerCase(),
-        action: parsed.data.operation,
-        expires_at: new Date(Date.now() + 5 * 60_000).toISOString(),
-      })
+      const expiresAt = new Date(Date.now() + 5 * 60_000).toISOString()
+      const { error } = await supabase
+        .from("gauge_profile_write_nonces")
+        .insert({
+          nonce_hash: await sha256(nonce),
+          chain_id: parsed.data.chainId,
+          gauge_address: parsed.data.gaugeAddress.toLowerCase(),
+          vebtc_token_id: parsed.data.veBtcTokenId,
+          owner_address: parsed.data.ownerAddress.toLowerCase(),
+          action: parsed.data.operation,
+          expires_at: expiresAt,
+        })
       if (error) throw new Error("Unable to issue write nonce")
       return json({
-        message: messageFor({ ...parsed.data, nonce }),
+        message: profileWriteAuthorizationMessage({
+          operation: parsed.data.operation,
+          chainId: parsed.data.chainId,
+          gaugeAddress: parsed.data.gaugeAddress,
+          veBtcTokenId: parsed.data.veBtcTokenId,
+          signerAddress: parsed.data.ownerAddress,
+          nonce,
+          expiresAt,
+        }),
       })
     }
 
     const operation = parsed.data.action
     const lines = parsed.data.proof.message.split("\n")
     const nonceLine = lines.find((line) => line.startsWith("Nonce: "))
+    const expiresLine = lines.find((line) => line.startsWith("Expires at: "))
     const nonce = nonceLine?.slice("Nonce: ".length)
-    if (!nonce) return json({ error: "invalid-proof" }, 401)
-    const expectedMessage = messageFor({
+    const expiresAt = expiresLine?.slice("Expires at: ".length)
+    if (!nonce || !expiresAt || !Number.isFinite(Date.parse(expiresAt))) {
+      return json({ error: "invalid-proof" }, 401)
+    }
+    const expectedMessage = profileWriteAuthorizationMessage({
       operation,
+      chainId: parsed.data.chainId,
       gaugeAddress: parsed.data.gaugeAddress,
       veBtcTokenId: parsed.data.veBtcTokenId,
-      ownerAddress: parsed.data.ownerAddress,
+      signerAddress: parsed.data.ownerAddress,
       nonce,
+      expiresAt,
     })
     if (expectedMessage !== parsed.data.proof.message) {
       return json({ error: "invalid-proof" }, 401)
     }
+    if (!isHex(parsed.data.proof.signature)) {
+      return json({ error: "invalid-proof" }, 401)
+    }
+    const signatureValid = await publicClient.verifyMessage({
+      address: getAddress(parsed.data.ownerAddress),
+      message: parsed.data.proof.message,
+      signature: parsed.data.proof.signature,
+    })
+    if (!signatureValid) {
+      return json({ error: "profile-authorization-failed" }, 403)
+    }
+
     const now = new Date().toISOString()
     const { data: consumedNonce } = await supabase
       .from("gauge_profile_write_nonces")
       .update({ used_at: now })
       .eq("nonce_hash", await sha256(nonce))
+      .eq("chain_id", parsed.data.chainId)
       .eq("gauge_address", parsed.data.gaugeAddress.toLowerCase())
       .eq("vebtc_token_id", parsed.data.veBtcTokenId)
       .eq("owner_address", parsed.data.ownerAddress.toLowerCase())
       .eq("action", operation)
+      .eq("expires_at", expiresAt)
       .is("used_at", null)
       .gt("expires_at", now)
       .select("nonce_hash")
       .maybeSingle()
     if (!consumedNonce) return json({ error: "expired-or-used-proof" }, 401)
 
-    const [signatureValid, ownershipValid] = await Promise.all([
-      verifyMessage({
-        address: getAddress(parsed.data.ownerAddress),
-        message: parsed.data.proof.message,
-        signature: parsed.data.proof.signature as `0x${string}`,
-      }),
-      verifyOwnership(parsed.data),
-    ])
-    if (!signatureValid || !ownershipValid) {
-      return json({ error: "ownership-verification-failed" }, 403)
-    }
-
     if (operation === "upload-avatar") {
-      const path = `${parsed.data.gaugeAddress.toLowerCase()}.${parsed.data.extension}`
+      const path = `${parsed.data.chainId}/${parsed.data.gaugeAddress.toLowerCase()}.${parsed.data.extension}`
       const { data, error } = await supabase.storage
         .from("gauge-avatars")
         .createSignedUploadUrl(path, { upsert: true })
@@ -217,7 +212,7 @@ Deno.serve(async (request) => {
         {
           gauge_address: parsed.data.gaugeAddress.toLowerCase(),
           vebtc_token_id: parsed.data.veBtcTokenId,
-          owner_address: parsed.data.ownerAddress.toLowerCase(),
+          owner_address: controller.nftOwnerAddress.toLowerCase(),
           profile_picture_url: parsed.data.profile.profilePictureUrl,
           description: parsed.data.profile.description,
           display_name: parsed.data.profile.displayName,
@@ -233,8 +228,10 @@ Deno.serve(async (request) => {
       .single()
     if (error) throw new Error("Unable to save gauge profile")
     structuredLogger.info({
-      message: "Gauge profile updated after ownership verification",
+      message: "Gauge profile updated after signer authorization",
+      chainId: parsed.data.chainId,
       gaugeAddress: parsed.data.gaugeAddress.toLowerCase(),
+      signerAddress: parsed.data.ownerAddress.toLowerCase(),
     })
     return json({ profile: data })
   } catch (error) {

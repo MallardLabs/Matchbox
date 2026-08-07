@@ -1,6 +1,7 @@
 import { AddGaugeIncentiveModal } from "@/components/AddGaugeIncentiveModal"
 import { AddressLink } from "@/components/AddressLink"
 import ApyMetric from "@/components/ApyMetric"
+import { ManagedGaugeProfileAccess } from "@/components/ManagedGaugeProfileAccess"
 import OptimalVeMEZOProgress from "@/components/OptimalVeMEZOProgress"
 import { SpringIn } from "@/components/SpringIn"
 import { TokenIcon } from "@/components/TokenIcon"
@@ -12,6 +13,7 @@ import type { GaugeHistory, GaugeProfile } from "@/config/supabase"
 import { useNetwork } from "@/contexts/NetworkContext"
 import { formatAPY, useGaugeAPY } from "@/hooks/useAPY"
 import {
+  managedGaugeEditorsEnabled,
   useGaugeHistory,
   useGaugeOwnershipCheck,
   useGaugeProfile,
@@ -300,7 +302,11 @@ export default function GaugeDetailPage({
 
   const { chainId } = useNetwork()
   const contracts = getContractConfig(chainId)
-  const { profile, isLoading: isLoadingProfile } = useGaugeProfile(gaugeAddress)
+  const {
+    profile,
+    isLoading: isLoadingProfile,
+    refetch: refetchProfiles,
+  } = useGaugeProfile(gaugeAddress)
   const resolvedProfile = profile ?? initialProfile
 
   // Fetch gauge data
@@ -729,6 +735,17 @@ export default function GaugeDetailPage({
               </div>
             </Card>
           </SpringIn>
+
+          {managedGaugeEditorsEnabled && resolvedVeBTCTokenId !== undefined && (
+            <SpringIn delay={1} variant="card">
+              <ManagedGaugeProfileAccess
+                gaugeAddress={gaugeAddress}
+                veBtcTokenId={resolvedVeBTCTokenId}
+                profile={resolvedProfile}
+                onProfileSaved={() => void refetchProfiles()}
+              />
+            </SpringIn>
+          )}
 
           {/* Stats Grid */}
           <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 md:grid-cols-3 md:gap-4 lg:grid-cols-6">

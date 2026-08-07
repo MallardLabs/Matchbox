@@ -12,6 +12,7 @@ import {
   useGaugeProfileFromContext,
 } from "@/contexts/GaugeProfilesContext"
 import { useNetwork } from "@/contexts/NetworkContext"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import type { Address } from "viem"
 import { useReadContract, useSignMessage } from "wagmi"
@@ -60,6 +61,34 @@ const avatarUploadResponseSchema = z.object({
 })
 const profileWriteResponseSchema = z.object({ profile: gaugeProfileSchema })
 
+const gaugeControllerSchema = z.object({
+  chainId: z.union([z.literal(31611), z.literal(31612)]),
+  gaugeAddress: z.string(),
+  veBtcTokenId: z.string(),
+  nftOwnerAddress: z.string(),
+  controllerAddress: z.string(),
+  controllerKind: z.union([
+    z.literal("direct-eoa"),
+    z.literal("direct-contract"),
+    z.literal("ownable-eoa"),
+    z.literal("ownable-contract"),
+  ]),
+})
+const editorStatusResponseSchema = z.object({
+  controller: gaugeControllerSchema,
+  editors: z.array(
+    z.object({
+      editor_address: z.string(),
+      granted_at: z.string(),
+    }),
+  ),
+})
+const editorNonceResponseSchema = z.object({
+  message: z.string(),
+  controllerAddress: z.string(),
+})
+const editorApplyResponseSchema = z.object({ success: z.literal(true) })
+
 type GaugeWriteOperation = "upsert-profile" | "upload-avatar"
 
 async function invokeGaugeProfileWrite(body: unknown): Promise<unknown> {
@@ -80,8 +109,36 @@ async function invokeGaugeProfileWrite(body: unknown): Promise<unknown> {
   return data
 }
 
+async function invokeGaugeProfileEditor(body: unknown): Promise<unknown> {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  if (!url || !anonKey)
+    throw new Error("Gauge profile editor service is not configured")
+  const response = await fetch(
+    `${url}/functions/v1/manage-gauge-profile-editor`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${anonKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    },
+  )
+  const data: unknown = await response.json()
+  if (!response.ok) {
+    throw new Error(
+      response.status === 403
+        ? "The controlling wallet did not authorize this editor"
+        : "Unable to manage this gauge profile editor",
+    )
+  }
+  return data
+}
+
 async function createGaugeWriteProof(args: {
   operation: GaugeWriteOperation
+  chainId: 31611 | 31612
   gaugeAddress: Address
   veBtcTokenId: bigint
   ownerAddress: Address
@@ -90,6 +147,7 @@ async function createGaugeWriteProof(args: {
   const rawNonce = await invokeGaugeProfileWrite({
     action: "nonce",
     operation: args.operation,
+    chainId: args.chainId,
     gaugeAddress: args.gaugeAddress,
     veBtcTokenId: args.veBtcTokenId.toString(),
     ownerAddress: args.ownerAddress,
@@ -170,6 +228,7 @@ export function useUpsertGaugeProfile() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<Error | null>(null)
   const { refetch } = useAllGaugeProfilesFromContext()
+  const { chainId } = useNetwork()
   const { signMessageAsync } = useSignMessage()
 
   const upsertProfile = useCallback(
@@ -192,6 +251,7 @@ export function useUpsertGaugeProfile() {
       try {
         const proof = await createGaugeWriteProof({
           operation: "upsert-profile",
+          chainId,
           gaugeAddress,
           veBtcTokenId: veBTCTokenId,
           ownerAddress,
@@ -199,6 +259,7 @@ export function useUpsertGaugeProfile() {
         })
         const rawResult = await invokeGaugeProfileWrite({
           action: "upsert-profile",
+          chainId,
           gaugeAddress,
           veBtcTokenId: veBTCTokenId.toString(),
           ownerAddress,
@@ -228,11 +289,123 @@ export function useUpsertGaugeProfile() {
         return null
       }
     },
-    [refetch, signMessageAsync],
+    [chainId, refetch, signMessageAsync],
   )
 
   return {
     upsertProfile,
+    isLoading,
+    error,
+  }
+}
+
+export const managedGaugeEditorsEnabled =
+  process.env.NEXT_PUBLIC_MANAGED_GAUGE_EDITORS_ENABLED === "true"
+
+export function useGaugeProfileEditorStatus(
+  gaugeAddress: Address | undefined,
+  veBtcTokenId: bigint | undefined,
+) {
+  const { chainId, isNetworkReady } = useNetwork()
+
+  return useQuery({
+    queryKey: [
+      "gauge-profile-editor-status",
+      chainId,
+      gaugeAddress,
+      veBtcTokenId?.toString(),
+    ],
+    enabled:
+      managedGaugeEditorsEnabled &&
+      isNetworkReady &&
+      gaugeAddress !== undefined &&
+      veBtcTokenId !== undefined,
+    queryFn: async () => {
+      if (!gaugeAddress || veBtcTokenId === undefined) {
+        throw new Error("Gauge profile editor identity is incomplete")
+      }
+      const raw = await invokeGaugeProfileEditor({
+        action: "resolve",
+        chainId,
+        gaugeAddress,
+        veBtcTokenId: veBtcTokenId.toString(),
+      })
+      return editorStatusResponseSchema.parse(raw)
+    },
+    staleTime: 15_000,
+  })
+}
+
+export function useManageGaugeProfileEditor(
+  gaugeAddress: Address | undefined,
+  veBtcTokenId: bigint | undefined,
+) {
+  const { chainId } = useNetwork()
+  const { signMessageAsync } = useSignMessage()
+  const queryClient = useQueryClient()
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<Error | null>(null)
+
+  const updateEditor = useCallback(
+    async (
+      editorAddress: Address,
+      operation: "grant-editor" | "revoke-editor",
+    ): Promise<boolean> => {
+      if (!gaugeAddress || veBtcTokenId === undefined) {
+        setError(new Error("Gauge profile editor identity is incomplete"))
+        return false
+      }
+
+      setIsLoading(true)
+      setError(null)
+      try {
+        const identity = {
+          chainId,
+          gaugeAddress,
+          veBtcTokenId: veBtcTokenId.toString(),
+          editorAddress,
+          operation,
+        }
+        const rawNonce = await invokeGaugeProfileEditor({
+          action: "nonce",
+          ...identity,
+        })
+        const nonce = editorNonceResponseSchema.parse(rawNonce)
+        const signature = await signMessageAsync({ message: nonce.message })
+        const rawResult = await invokeGaugeProfileEditor({
+          action: "apply",
+          ...identity,
+          proof: { message: nonce.message, signature },
+        })
+        editorApplyResponseSchema.parse(rawResult)
+        await queryClient.invalidateQueries({
+          queryKey: [
+            "gauge-profile-editor-status",
+            chainId,
+            gaugeAddress,
+            veBtcTokenId.toString(),
+          ],
+        })
+        setIsLoading(false)
+        return true
+      } catch (caughtError) {
+        const message =
+          caughtError instanceof Error
+            ? caughtError.message
+            : "Unable to update gauge profile editor"
+        setError(new Error(message))
+        setIsLoading(false)
+        return false
+      }
+    },
+    [chainId, gaugeAddress, queryClient, signMessageAsync, veBtcTokenId],
+  )
+
+  return {
+    grantEditor: (editorAddress: Address) =>
+      updateEditor(editorAddress, "grant-editor"),
+    revokeEditor: (editorAddress: Address) =>
+      updateEditor(editorAddress, "revoke-editor"),
     isLoading,
     error,
   }
@@ -294,6 +467,7 @@ export function useUploadProfilePicture() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<Error | null>(null)
   const { signMessageAsync } = useSignMessage()
+  const { chainId } = useNetwork()
 
   const uploadPicture = useCallback(
     async (
@@ -315,6 +489,7 @@ export function useUploadProfilePicture() {
         }
         const proof = await createGaugeWriteProof({
           operation: "upload-avatar",
+          chainId,
           gaugeAddress,
           veBtcTokenId,
           ownerAddress,
@@ -322,6 +497,7 @@ export function useUploadProfilePicture() {
         })
         const rawAuthorization = await invokeGaugeProfileWrite({
           action: "upload-avatar",
+          chainId,
           gaugeAddress,
           veBtcTokenId: veBtcTokenId.toString(),
           ownerAddress,
@@ -352,7 +528,7 @@ export function useUploadProfilePicture() {
         return null
       }
     },
-    [signMessageAsync],
+    [chainId, signMessageAsync],
   )
 
   return {

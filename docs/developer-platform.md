@@ -19,6 +19,7 @@ The implementation spans the existing app, a new identity/developer frontend, a 
 | TypeScript SDK | `packages/developer-sdk` | `@matchbox-markets/sdk` client for partners |
 | Supabase schema | `supabase/migrations/20260620000001_create_developer_platform.sql` | Developer orgs, apps, keys, grants, auth codes, audit events, and profile hardening |
 | Gauge profile write function | `supabase/functions/upsert-gauge-profile` | Ownership-gated gauge profile updates |
+| Managed gauge editor function | `supabase/functions/manage-gauge-profile-editor` | Controller-gated off-chain editor grants for contract-owned veBTC gauges |
 | Wallet continuity bridge | `apps/webapp/src/pages/id-bridge.tsx` | Lets Matchbox ID detect a wallet already connected on `app.matchbox.markets` |
 | Existing app hook updates | `apps/webapp/src/hooks/useGaugeProfiles.ts` | Routes profile writes through the ownership-gated function |
 
@@ -230,7 +231,33 @@ supabase secrets set MEZO_RPC_URL=https://mezo-mainnet.boar.network
 
 The function performs its own nonce, wallet signature, and on-chain ownership checks. It intentionally does not rely on Supabase's gateway JWT check.
 
-### 5.3 Configure Supabase Auth
+### 5.3 Enable managed veBTC profile editors
+
+Apply `20260807000001_add_gauge_profile_editors.sql`, then deploy both profile
+functions and enable the server-side gate:
+
+```powershell
+supabase functions deploy upsert-gauge-profile --no-verify-jwt
+supabase functions deploy manage-gauge-profile-editor --no-verify-jwt
+supabase secrets set ENABLE_MANAGED_GAUGE_EDITORS=true `
+  MEZO_MAINNET_RPC_URL=https://rpc-http.mezo.boar.network
+```
+
+After the migration and functions are healthy, set
+`NEXT_PUBLIC_MANAGED_GAUGE_EDITORS_ENABLED=true` in the webapp deployment and
+redeploy it. Keep both flags disabled during rollback.
+
+`MEZO_TESTNET_RPC_URL` is optional and defaults to the public Mezo testnet RPC.
+The profile functions never reuse a mainnet RPC for a testnet authorization.
+
+The edge function resolves the gauge, veBTC NFT owner, and one-level `owner()`
+controller from Mezo on every request. A Safe or other ERC-1271 controller must
+verify the whole message under its normal threshold. The resulting grant permits
+only Matchbox profile and avatar updates; it grants no on-chain authority. Grants
+stop matching automatically if the NFT owner or controller changes, and the new
+controller can revoke them explicitly.
+
+### 5.4 Configure Supabase Auth
 
 In Supabase Dashboard -> Authentication:
 

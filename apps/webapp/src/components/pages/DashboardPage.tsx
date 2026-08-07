@@ -205,9 +205,23 @@ function VeBTCLockCard({
             </div>
           </div>
           <Tag
-            color={lock.isPermanent ? "green" : isExpired ? "red" : "yellow"}
+            color={
+              lock.managedTokenId
+                ? "blue"
+                : lock.isPermanent
+                  ? "green"
+                  : isExpired
+                    ? "red"
+                    : "yellow"
+            }
           >
-            {lock.isPermanent ? "Permanent" : isExpired ? "Expired" : "Active"}
+            {lock.managedTokenId
+              ? `Managed by #${lock.managedTokenId.toString()}`
+              : lock.isPermanent
+                ? "Permanent"
+                : isExpired
+                  ? "Expired"
+                  : "Active"}
           </Tag>
         </div>
 
@@ -257,7 +271,8 @@ function VeBTCLockCard({
               {hasGauge && gaugeAddress ? (
                 <>
                   <span className="text-sm font-medium text-[var(--accent)]">
-                    View Gauge →
+                    {lock.managedTokenId ? "View managed gauge" : "View Gauge"}{" "}
+                    →
                   </span>
                   {!isLoadingAPY &&
                   apy !== null &&
@@ -290,7 +305,7 @@ function VeBTCLockCard({
                 Unlocks:{" "}
                 {lock.isPermanent ? "Never" : unlockDate.toLocaleDateString()}
               </p>
-              {hasGauge && (
+              {hasGauge && !lock.managedTokenId && (
                 <div className="flex items-center gap-1 self-start sm:self-auto">
                   <Button
                     kind="secondary"
@@ -865,13 +880,21 @@ export default function DashboardPage(): JSX.Element {
     () => veMEZOLocks.map((lock) => lock.tokenId),
     [veMEZOLocks],
   )
-  const veBTCTokenIds = useMemo(
-    () => veBTCLocks.map((lock) => lock.tokenId),
+  const veBTCGaugeTokenIds = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          veBTCLocks.flatMap((lock) => [
+            lock.tokenId,
+            ...(lock.managedTokenId ? [lock.managedTokenId] : []),
+          ]),
+        ),
+      ),
     [veBTCLocks],
   )
 
   const { gaugeDataMap, isLoading: isLoadingBatchGaugeData } =
-    useBatchGaugeData(veBTCTokenIds)
+    useBatchGaugeData(veBTCGaugeTokenIds)
   const { voteStateMap } = useBatchVoteState(veMEZOTokenIds)
 
   const {
@@ -1130,7 +1153,8 @@ export default function DashboardPage(): JSX.Element {
 
     for (const lock of veBTCLocks) {
       const tokenIdKey = lock.tokenId.toString()
-      const gaugeData = gaugeDataMap.get(tokenIdKey)
+      const gaugeTokenId = lock.managedTokenId ?? lock.tokenId
+      const gaugeData = gaugeDataMap.get(gaugeTokenId.toString())
       const gaugeAddress = gaugeData?.gaugeAddress
       const profile = gaugeAddress
         ? (allGaugeProfiles.get(gaugeAddress.toLowerCase()) ?? null)
