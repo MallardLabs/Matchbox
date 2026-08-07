@@ -11,6 +11,7 @@ import {
 
 type Lock = {
   tokenId: bigint
+  managedTokenId: bigint | undefined
   amount: bigint
   end: bigint
   isPermanent: boolean
@@ -19,7 +20,7 @@ type Lock = {
   unboostedVotingPower: bigint
 }
 
-type VeMEZOLock = Omit<Lock, "unboostedVotingPower">
+type VeMEZOLock = Omit<Lock, "managedTokenId" | "unboostedVotingPower">
 
 type RefetchFn = () => Promise<unknown>
 
@@ -80,6 +81,11 @@ export function useVeBTCLocks() {
         functionName: "unboostedVotingPowerOfNFT",
         args: [tokenId],
       },
+      {
+        ...contracts.veBTC,
+        functionName: "idToManaged",
+        args: [tokenId],
+      },
     ]),
     query: {
       ...QUERY_PROFILES.SHORT_CACHE,
@@ -89,16 +95,23 @@ export function useVeBTCLocks() {
 
   const locks: Lock[] =
     tokenIdList.map((tokenId, i) => {
-      const lockedResult = lockData?.[i * 3]?.result as
+      const lockedResult = lockData?.[i * 4]?.result as
         | { amount: bigint; end: bigint; isPermanent: boolean; boost: bigint }
         | undefined
-      const votingPower = lockData?.[i * 3 + 1]?.result as bigint | undefined
-      const unboostedVotingPower = lockData?.[i * 3 + 2]?.result as
+      const votingPower = lockData?.[i * 4 + 1]?.result as bigint | undefined
+      const unboostedVotingPower = lockData?.[i * 4 + 2]?.result as
+        | bigint
+        | undefined
+      const managedTokenIdResult = lockData?.[i * 4 + 3]?.result as
         | bigint
         | undefined
 
       return {
         tokenId,
+        managedTokenId:
+          managedTokenIdResult && managedTokenIdResult > 0n
+            ? managedTokenIdResult
+            : undefined,
         amount: lockedResult?.amount ?? 0n,
         end: lockedResult?.end ?? 0n,
         isPermanent: lockedResult?.isPermanent ?? false,

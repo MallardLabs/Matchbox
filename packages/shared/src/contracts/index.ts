@@ -95,6 +95,13 @@ export const VOTING_ESCROW_ABI = [
     type: "function",
   },
   {
+    inputs: [{ internalType: "uint256", name: "", type: "uint256" }],
+    name: "idToManaged",
+    outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
     inputs: [
       { internalType: "address", name: "_owner", type: "address" },
       { internalType: "uint256", name: "_index", type: "uint256" },

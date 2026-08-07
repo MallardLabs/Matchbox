@@ -88,7 +88,9 @@ export function getMezoNetworkConfig(options?: {
     (requestedNetwork === "mainnet" || requestedNetwork === "testnet"
       ? requestedNetwork
       : null) ??
-    (envNetwork === "mainnet" || envNetwork === "testnet" ? envNetwork : null) ??
+    (envNetwork === "mainnet" || envNetwork === "testnet"
+      ? envNetwork
+      : null) ??
     getNetworkFromChainId(options?.chainId ?? NaN) ??
     getNetworkFromChainId(envChainId) ??
     getNetworkFromRpcUrl(options?.rpcUrl ?? undefined) ??
@@ -110,6 +112,21 @@ export function getMezoNetworkConfig(options?: {
     chain: CHAINS[network],
     contracts: CONTRACTS[network],
   }
+}
+
+export function getMezoNetworkConfigForChain(
+  chainId: 31611 | 31612,
+): ReturnType<typeof getMezoNetworkConfig> {
+  const network: SupportedNetwork =
+    chainId === CHAIN_ID.mainnet ? "mainnet" : "testnet"
+  const rpcUrl =
+    network === "mainnet"
+      ? (Deno.env.get("MEZO_MAINNET_RPC_URL") ??
+        Deno.env.get("MEZO_RPC_URL") ??
+        RPC_URLS.mainnet)
+      : (Deno.env.get("MEZO_TESTNET_RPC_URL") ?? RPC_URLS.testnet)
+
+  return getMezoNetworkConfig({ chainId, network, rpcUrl })
 }
 
 // Minimal ABIs for the functions we need
@@ -157,7 +174,9 @@ export const BOOST_VOTER_ABI = [
     type: "function",
   },
   {
-    inputs: [{ internalType: "uint256", name: "boostableTokenId", type: "uint256" }],
+    inputs: [
+      { internalType: "uint256", name: "boostableTokenId", type: "uint256" },
+    ],
     name: "getBoost",
     outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
     stateMutability: "view",
