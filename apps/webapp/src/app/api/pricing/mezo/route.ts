@@ -16,8 +16,10 @@ const BASE_RPC_URLS = [
 ].filter((url): url is string => Boolean(url))
 
 // Aerodrome Slipstream pool: MEZO / MUSD on Base.
-// Use the active liquid pool rather than the older near-empty one.
-const POOL_ADDRESS = getAddress("0xfCd3F5cA230E7c1Bd5b415eb85d5186346De0fec")
+// Use the active liquid pool (created 2026-04-16) rather than the older
+// near-empty pool (0xfCd3...), which has had ~0 volume and kept its stale
+// last-traded price (~$0.0095) while market MEZO trades around $0.0077.
+const POOL_ADDRESS = getAddress("0xef458a3263d2a8c7f3ed9e949ae2f9b345d08b1f")
 
 // This pool is fixed and both assets use 18 decimals.
 // We intentionally keep reads minimal to avoid Base RPC rate limits.

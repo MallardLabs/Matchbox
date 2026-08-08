@@ -45,12 +45,16 @@
 //                              as a secondary historical source when CoinGecko
 //                              has no data. Default: the known Aerodrome pool.)
 //
-// Pre-market note: MEZO had no market anywhere before the Aerodrome pool was
-// created on 2026-04-01 (~1743465600) and was only listed on CoinGecko around
-// 2026-04-12. For epochs older than that, no source will return a MEZO price.
-// The backfill still recomputes BTC- and stablecoin-denominated incentives for
-// those epochs and tags the row with price_source = "mezo-premarket" so we
-// don't keep retrying and don't falsely claim a placeholder MEZO price.
+// Pre-market note: MEZO had no market anywhere before the first Aerodrome
+// pool was created on 2026-04-01 (~1743465600) and was only listed on
+// CoinGecko around 2026-04-12. For epochs older than that, no source will
+// return a MEZO price; the backfill still recomputes BTC- and
+// stablecoin-denominated incentives for those epochs and tags the row with
+// price_source = "mezo-premarket" so we don't keep retrying and don't
+// falsely claim a placeholder MEZO price. Also note the default GeckoTerminal
+// pool below was created on 2026-04-16, so epochs between the first pool and
+// that date fall back to CoinGecko only; override MEZO_GECKOTERMINAL_POOL if
+// an earlier pool is preferred.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 import {
@@ -1139,7 +1143,7 @@ Deno.serve(async (req) => {
     const coingeckoTier: CoingeckoTier = tierEnv === "pro" ? "pro" : "demo"
     const mezoGeckoTerminalPool = (
       Deno.env.get("MEZO_GECKOTERMINAL_POOL") ??
-      "0xfCd3F5cA230E7c1Bd5b415eb85d5186346De0fec"
+      "0xef458a3263d2a8c7f3ed9e949ae2f9b345d08b1f"
     ).toLowerCase()
 
     const supabase = createClient(supabaseUrl, supabaseKey, {

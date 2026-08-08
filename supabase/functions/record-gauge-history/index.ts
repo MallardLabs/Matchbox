@@ -47,7 +47,10 @@ const BASE_CHAIN = {
 const BASE_RPC_URLS = BASE_CHAIN.rpcUrls.default.http
 
 // Aerodrome Slipstream pool: MEZO / MUSD on Base.
-const MEZO_MUSD_POOL_ADDRESS = "0xfCd3F5cA230E7c1Bd5b415eb85d5186346De0fec"
+// Active pool (created 2026-04-16). The previously referenced pool
+// (0xfCd3...) stopped trading (0 volume), leaving its price pinned at a
+// stale ~$0.0095 while market MEZO trades around $0.0077.
+const MEZO_MUSD_POOL_ADDRESS = "0xef458a3263d2a8c7f3ed9e949ae2f9b345d08b1f"
 const Q96 = 2n ** 96n
 const PERFECT_SUBSCRIPTION_TOLERANCE_BPS = 200n
 const RATIO_SCALE = 100_000_000n
