@@ -71,7 +71,7 @@ describe("gauge optimizer", () => {
         0,
       ),
     ).toBe(100)
-    expect(Number(result.projectedTotalUsd)).toBeGreaterThan(0)
+    expect(result.projectedTotalUsd).toMatch(/^[1-9]/)
     expect(result.calculationVersion).toBe("optimizer-live-v1")
   })
 

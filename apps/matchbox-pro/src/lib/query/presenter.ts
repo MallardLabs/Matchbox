@@ -383,7 +383,7 @@ function supportResponse(input: PresentationInput): QueryResponse {
     kind: "support",
     title: "Ask Stuart anything about Mezo",
     answer:
-      safeSupportAnswer(input.supportAnswer) ||
+      safeSupportAnswer(input.supportAnswer) ??
       `I couldn’t map “${input.query}” to a connected Matchbox tool yet.`,
     generatedAt: new Date().toISOString(),
     snapshotLabel: "Stuart service alpha",

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest"
 import {
   type DispatchCallState,
   dispatchProposalRequests,
+  dispatchWithRefreshGate,
 } from "./useProposalDispatch"
 
 const address = "0x9999999999999999999999999999999999999999"
@@ -106,5 +107,43 @@ describe("proposal dispatch", () => {
       "confirmed",
       "confirmed",
     ])
+  })
+
+  it("does not dispatch a material pre-sign refresh before acknowledgement", async () => {
+    const send = vi.fn(async () => undefined)
+    const onAwaitingAcknowledgement = vi.fn()
+    const result = await dispatchWithRefreshGate({
+      requests,
+      refresh: async () => ({
+        requests,
+        diff: {
+          type: "allocation_diff",
+          material: true,
+          allocationChanged: true,
+          projectedChangeMaterial: false,
+          callsChanged: true,
+          beforeProjectedUsd: "100",
+          afterProjectedUsd: "100",
+          targets: [
+            {
+              ballotKey: "ballot",
+              gaugeId: "gauge",
+              gaugeName: "Gauge",
+              beforeBasisPoints: 5_000,
+              afterBasisPoints: 5_100,
+              deltaBasisPoints: 100,
+            },
+          ],
+          notice: "Acknowledge the material change.",
+        },
+      }),
+      send,
+      onDiff: vi.fn(),
+      onAwaitingAcknowledgement,
+    })
+
+    expect(result).toBe("awaiting-acknowledgement")
+    expect(send).not.toHaveBeenCalled()
+    expect(onAwaitingAcknowledgement).toHaveBeenCalledWith(requests)
   })
 })

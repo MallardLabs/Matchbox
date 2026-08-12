@@ -34,6 +34,11 @@ type DispatchDependencies = {
   onCalls: (calls: DispatchCallState[]) => void
 }
 
+type RefreshedRequests = {
+  requests: TransactionRequest[]
+  diff: Extract<QueryBlock, { type: "allocation_diff" }>
+}
+
 function requestKey(request: TransactionRequest): string {
   return [
     request.chainId,
@@ -138,6 +143,28 @@ export async function dispatchProposalRequests(
   return calls
 }
 
+export async function dispatchWithRefreshGate(input: {
+  requests: TransactionRequest[]
+  refresh?: () => Promise<RefreshedRequests>
+  send: (requests: TransactionRequest[]) => Promise<void>
+  onDiff: (
+    diff: Extract<QueryBlock, { type: "allocation_diff" }> | null,
+  ) => void
+  onAwaitingAcknowledgement: (requests: TransactionRequest[] | null) => void
+}): Promise<"awaiting-acknowledgement" | "dispatched"> {
+  const refreshed = input.refresh ? await input.refresh() : null
+  const requests = refreshed?.requests ?? input.requests
+  if (refreshed?.diff.material) {
+    input.onDiff(refreshed.diff)
+    input.onAwaitingAcknowledgement(requests)
+    return "awaiting-acknowledgement"
+  }
+  input.onDiff(refreshed?.diff ?? null)
+  input.onAwaitingAcknowledgement(null)
+  await input.send(requests)
+  return "dispatched"
+}
+
 export function useProposalDispatch(input: {
   wallet: WalletContext
   requests: TransactionRequest[]
@@ -215,16 +242,13 @@ export function useProposalDispatch(input: {
     setDispatching(true)
     setError(null)
     try {
-      const refreshed = input.refresh ? await input.refresh() : null
-      const requests = refreshed?.requests ?? input.requests
-      if (refreshed?.diff.material) {
-        setDiff(refreshed.diff)
-        setPendingRequests(requests)
-        return
-      }
-      setDiff(refreshed?.diff ?? null)
-      setPendingRequests(null)
-      await sendRequests(requests)
+      await dispatchWithRefreshGate({
+        requests: input.requests,
+        ...(input.refresh ? { refresh: input.refresh } : {}),
+        send: sendRequests,
+        onDiff: setDiff,
+        onAwaitingAcknowledgement: setPendingRequests,
+      })
     } catch (dispatchError) {
       setError(errorMessage(dispatchError))
     } finally {
