@@ -63,7 +63,7 @@ export const queryBlockSchema = z.discriminatedUnion("type", [
     gauges: z.array(gaugeSchema),
     objective: z.enum([
       "Best personal return",
-      "Highest incentives deposited",
+      "Most incentives deposited",
       "Most consistently funded",
     ]),
     projectedTotalUsd: z.string().nullable(),
@@ -72,6 +72,19 @@ export const queryBlockSchema = z.discriminatedUnion("type", [
   preparedVoteSchema.extend({ type: z.literal("vote_composer") }),
   preparedEarnDepositSchema.extend({ type: z.literal("zap_route") }),
   allocationDiffSchema.extend({ type: z.literal("allocation_diff") }),
+  z.object({
+    type: z.literal("clarification_card"),
+    prompt: z.string(),
+    options: z.array(
+      z.object({
+        id: z.string(),
+        label: z.string(),
+        description: z.string(),
+        query: z.string(),
+        availability: z.enum(["available", "unavailable"]),
+      }),
+    ),
+  }),
   z.object({
     type: z.literal("activity_trace"),
     items: z.array(traceItemSchema),
@@ -87,7 +100,7 @@ export const evidenceSchema = z.object({
 
 export const queryResponseSchema = z.object({
   id: z.string(),
-  kind: z.enum(["bridge", "vote", "zap", "support"]),
+  kind: z.enum(["bridge", "vote", "zap", "support", "clarification"]),
   title: z.string(),
   answer: z.string(),
   generatedAt: z.string(),

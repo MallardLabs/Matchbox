@@ -151,4 +151,67 @@ describe("Stuart runtime", () => {
       }),
     )
   })
+
+  it("clarifies ambiguous best gauges without calling Groq or a write tool", async () => {
+    const fetch = vi.fn()
+    const response = await runStuartQuery(
+      {
+        query: "which gauges are best?",
+        wallet: { address, mode: "connected" },
+      },
+      { apiKey: "test-key", fetch },
+    )
+
+    expect(fetch).not.toHaveBeenCalled()
+    expect(response.kind).toBe("clarification")
+    expect(response.blocks[0]).toEqual(
+      expect.objectContaining({ type: "clarification_card" }),
+    )
+  })
+
+  it("clarifies an unspecified vault without rewriting it to Savings", async () => {
+    const response = await runStuartQuery({
+      query: "put $50 in the vault",
+      wallet: { address, mode: "connected" },
+    })
+
+    expect(response.kind).toBe("clarification")
+    expect(response.snapshotLabel).toMatch(/no financial tool/i)
+    expect(response.blocks.some((block) => block.type === "zap_route")).toBe(
+      false,
+    )
+  })
+
+  it("keeps an explicit dual-deposit pool unavailable without a Savings rewrite", async () => {
+    const response = await runStuartQuery({
+      query: "zap $100 BTC into the BTC/MUSD LP pool",
+      wallet: { address, mode: "connected" },
+    })
+
+    expect(response.kind).toBe("zap")
+    expect(response.blocks[0]).toEqual(
+      expect.objectContaining({
+        type: "zap_route",
+        status: "unavailable",
+        transactionRequests: [],
+        vault: "BTC / MUSD LP Pool",
+      }),
+    )
+    expect(response.answer).not.toMatch(/Savings deposit/i)
+  })
+
+  it("returns fixed honest Rewards copy without Groq", async () => {
+    const fetch = vi.fn()
+    const response = await runStuartQuery(
+      {
+        query: "show my claimable rewards",
+        wallet: { address, mode: "connected" },
+      },
+      { apiKey: "test-key", fetch },
+    )
+
+    expect(fetch).not.toHaveBeenCalled()
+    expect(response.answer).toMatch(/claims are not in this prototype/i)
+    expect(response.answer).not.toMatch(/\$\d/)
+  })
 })

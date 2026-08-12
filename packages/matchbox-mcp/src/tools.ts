@@ -86,10 +86,7 @@ export const rankGaugesInputSchema = z.object({
 })
 
 export const rankGaugesResultSchema = z.object({
-  objective: z.enum([
-    "Highest incentives deposited",
-    "Most consistently funded",
-  ]),
+  objective: z.enum(["Most incentives deposited", "Most consistently funded"]),
   snapshot: z.object({
     chainId: z.number().int(),
     blockNumber: z.string(),
@@ -140,8 +137,8 @@ export const prepareZapInputSchema = z.object({
     .union([z.string(), z.number()])
     .transform((value) => String(value))
     .pipe(z.string().regex(/^\d+(?:\.\d+)?$/)),
-  fundingAsset: z.string().default("MUSD"),
-  vault: z.string().default("MEZO / MUSD Earn Vault"),
+  fundingAsset: z.string(),
+  vault: z.string(),
 })
 
 export const prepareZapResultSchema = preparedEarnDepositSchema
@@ -254,7 +251,7 @@ export const toolDefinitions: ToolDefinition[] = [
     name: "prepare_zap",
     title: "Prepare an unsigned Earn zap",
     description:
-      "Prepare an unsigned Earn deposit when an approved contract route exists. Unsupported zaps return unavailable without inventing calls. Never signs or submits.",
+      "Prepare a direct single-sided MUSD Savings deposit, or report a named dual-deposit LP zap unavailable when no approved router exists. Never rewrite an LP request to Savings, invent a router, sign, or submit.",
     inputSchema: prepareZapInputSchema,
     outputSchema: prepareZapResultSchema,
     annotations: {
@@ -528,7 +525,7 @@ export async function executeMatchboxTool(
         objective:
           input.objective === "most_consistent"
             ? "Most consistently funded"
-            : "Highest incentives deposited",
+            : "Most incentives deposited",
         snapshot: {
           chainId: snapshot.chainId,
           blockNumber: snapshot.blockNumber,

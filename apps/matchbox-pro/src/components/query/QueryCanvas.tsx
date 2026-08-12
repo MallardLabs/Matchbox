@@ -10,6 +10,7 @@ import { type FormEvent, useState } from "react"
 import { ActivityTrace } from "./blocks/ActivityTrace"
 import { AllocationDiff } from "./blocks/AllocationDiff"
 import { BridgeRecords } from "./blocks/BridgeRecords"
+import { ClarificationCard } from "./blocks/ClarificationCard"
 import { GaugeRanking } from "./blocks/GaugeRanking"
 import { VoteComposer } from "./blocks/VoteComposer"
 import { ZapRoute } from "./blocks/ZapRoute"
@@ -17,9 +18,11 @@ import { ZapRoute } from "./blocks/ZapRoute"
 function BlockRenderer({
   block,
   wallet,
+  onQuery,
 }: {
   block: QueryBlock
   wallet: QueryResponse["wallet"]
+  onQuery: (query: string) => void
 }): JSX.Element | null {
   switch (block.type) {
     case "bridge_records":
@@ -34,6 +37,8 @@ function BlockRenderer({
       return null
     case "allocation_diff":
       return <AllocationDiff diff={block} />
+    case "clarification_card":
+      return <ClarificationCard block={block} onQuery={onQuery} />
   }
 }
 
@@ -113,6 +118,7 @@ export function QueryCanvas({
               <BlockRenderer
                 block={block}
                 key={`${block.type}-${index}-${"proposalHash" in block ? block.proposalHash : response.id}`}
+                onQuery={onQuery}
                 wallet={response.wallet}
               />
             ))}

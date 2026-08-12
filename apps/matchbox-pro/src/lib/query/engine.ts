@@ -122,7 +122,7 @@ function voteResponse(): QueryResponse {
       },
     ],
     followups: [
-      "Show the highest incentives deposited",
+      "Show the most incentives deposited",
       "Deposit 50 MUSD into Savings",
     ],
   })

@@ -77,6 +77,7 @@ function unavailable(input: {
   address: string
   amount: string
   fundingAsset: string
+  vault: string
   walletMode: "connected" | "watching" | "inspecting"
 }): PreparedEarnDeposit {
   const account = getAddress(input.address)
@@ -90,7 +91,7 @@ function unavailable(input: {
       content: {
         amount: input.amount,
         fundingAsset: input.fundingAsset,
-        vault: "MEZO / MUSD Earn Vault",
+        vault: input.vault,
         transactionRequests,
       },
     }),
@@ -98,11 +99,11 @@ function unavailable(input: {
     canSign: false,
     amount: input.amount,
     fundingAsset: input.fundingAsset,
-    vault: "MEZO / MUSD Earn Vault",
+    vault: input.vault,
     vaultAddress: null,
     route: [
       { label: "Requested", value: `${input.amount} ${input.fundingAsset}` },
-      { label: "Route", value: "Swap + liquidity + vault deposit" },
+      { label: "Route", value: "Dual-asset swap + LP deposit" },
     ],
     balance: null,
     allowance: null,
@@ -114,7 +115,7 @@ function unavailable(input: {
       reason: "No approved Matchbox zap router is configured.",
     },
     notice:
-      "Stuart found no approved MEZO/MUSD zap router in the Matchbox contract registry, so it did not invent a transaction.",
+      "No approved dual-deposit zap router is configured in the Matchbox contract registry, so Stuart did not invent swap hops or rewrite this request to MUSD Savings.",
   })
 }
 
@@ -141,6 +142,7 @@ export async function prepareEarnDeposit(input: {
       address: account,
       amount,
       fundingAsset: input.fundingAsset,
+      vault: input.vault,
       walletMode: input.walletMode,
     })
   }

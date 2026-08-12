@@ -27,6 +27,83 @@ type PresentationInput = {
   supportAnswer?: string | null
 }
 
+export type ClarificationKind = "gauge-objective" | "earn-destination"
+
+export function presentClarificationResponse(input: {
+  kind: ClarificationKind
+  wallet: WalletContext
+  service: ServiceState
+}): QueryResponse {
+  const gauge = input.kind === "gauge-objective"
+  return queryResponseSchema.parse({
+    id: `clarification-${input.service.requestId}`,
+    kind: "clarification",
+    title: gauge ? "What does best mean here?" : "Choose an Earn destination",
+    answer: gauge
+      ? "Gauge rankings answer different questions. Choose the objective you want; only personal return runs the Optimizer."
+      : "MUSD Savings is a direct single-asset deposit. LP pools need two assets and an approved zap router, which is not configured in this prototype.",
+    generatedAt: new Date().toISOString(),
+    snapshotLabel: "No financial tool called yet",
+    wallet: input.wallet,
+    blocks: [
+      {
+        type: "clarification_card",
+        prompt: gauge
+          ? "Choose a gauge objective"
+          : "Choose the destination you intended",
+        options: gauge
+          ? [
+              {
+                id: "best-personal-return",
+                label: "Best return for me",
+                description:
+                  "Maximize projected personal voting-incentive USD with the canonical Optimizer.",
+                query: "optimize my votes for the best personal return",
+                availability: "available",
+              },
+              {
+                id: "most-incentives-deposited",
+                label: "Most incentives deposited",
+                description:
+                  "Rank gross currently deposited incentive USD without optimizing a ballot.",
+                query: "show gauges with the most incentives deposited",
+                availability: "available",
+              },
+              {
+                id: "most-consistently-funded",
+                label: "Most consistently funded",
+                description:
+                  "Rank the funded-epoch rate over the last 8 completed epochs.",
+                query: "show the most consistently funded gauges",
+                availability: "available",
+              },
+            ]
+          : [
+              {
+                id: "musd-savings",
+                label: "Deposit MUSD into Savings",
+                description:
+                  "Direct single-sided deposit with an exact approval only when required.",
+                query: "deposit 50 MUSD into Savings",
+                availability: "available",
+              },
+              {
+                id: "lp-pool-zap",
+                label: "Zap into an LP pool",
+                description:
+                  "Requires an approved dual-deposit router and remains unavailable this increment.",
+                query: "zap 50 MUSD into the MEZO/MUSD LP pool",
+                availability: "unavailable",
+              },
+            ],
+      },
+    ],
+    followups: [],
+    evidence: [],
+    service: input.service,
+  })
+}
+
 function money(value: string): string {
   return Money(`USD ${value}`).toString()
 }
@@ -236,7 +313,7 @@ function voteResponse(input: PresentationInput): QueryResponse {
       },
     ],
     followups: [
-      "Show the highest incentives deposited",
+      "Show the most incentives deposited",
       "Show the most consistently funded gauges",
       "Deposit 50 MUSD into Savings",
     ],

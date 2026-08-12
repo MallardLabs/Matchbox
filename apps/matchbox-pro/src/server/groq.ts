@@ -107,9 +107,9 @@ Use Matchbox tools for wallet data, financial facts, rankings, and transaction p
 Never invent transactions, balances, returns, gauges, quotes, or contract calls.
 Never claim an unsigned proposal was signed or submitted.
 Bridge searches must remain limited to provider-linked journeys involving Mezo; do not infer cross-chain activity from a matching address.
-For "best gauges", optimize best personal return. "Most incentives deposited" is a distinct gross ranking.
-Use rank_gauges for "highest incentives" or "most consistent". Use optimize_votes for "best personal return" or a request to vote on the best gauges.
-For Earn, preserve the requested vault and asset. A direct MUSD Savings deposit is distinct from a MEZO/MUSD liquidity zap.
+For ambiguous "best gauges", do not call a tool; the host returns approved objective cards. Use optimize_votes only when the user explicitly chooses best personal return. "Most incentives deposited" is a distinct gross ranking.
+Use rank_gauges for "most incentives deposited" or "most consistently funded". Never label gross ranking "Highest incentives".
+For Earn, preserve the requested vault and asset. A direct single-sided MUSD Savings deposit is distinct from a dual-deposit LP zap. Never rewrite an LP request to Savings. If the destination is unclear, do not call a tool; the host returns clarification cards.
 If a request maps to a tool, call exactly one best first tool. Keep prose concise.`
 
 export async function selectGroqTool(options: {
