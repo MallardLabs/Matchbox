@@ -17,6 +17,7 @@ import {
 import {
   prepareVoteTransactions,
   preparedVoteSchema,
+  proposalHashFor,
   type transactionRequestSchema,
 } from "./transactions"
 
@@ -91,6 +92,33 @@ function assertProposalBinding(input: {
   }
   if (input.address.toLowerCase() !== input.from.toLowerCase()) {
     throw new Error("Proposal refresh wallet does not match its bound address")
+  }
+}
+
+function assertProposalHash(input: RefreshProposalInput): void {
+  const content =
+    input.kind === "vote"
+      ? {
+          ballots: input.proposal.ballots,
+          transactionRequests: input.proposal.transactionRequests,
+        }
+      : {
+          amount: input.proposal.amount,
+          fundingAsset: input.proposal.fundingAsset,
+          vault: input.proposal.vault,
+          transactionRequests: input.proposal.transactionRequests,
+        }
+  const expected = proposalHashFor({
+    kind: input.kind,
+    from: getAddress(input.proposal.from),
+    snapshotBlock: input.proposal.snapshotBlock,
+    content,
+  })
+  if (
+    expected.toLowerCase() !== input.proposal.proposalHash.toLowerCase() ||
+    `${input.kind}_${expected.slice(2, 10)}` !== input.proposal.proposalId
+  ) {
+    throw new Error("Proposal content hash does not match its payload")
   }
 }
 
@@ -233,6 +261,7 @@ async function refreshVote(
     chainId: input.proposal.chainId,
     from: input.proposal.from,
   })
+  assertProposalHash(input)
   const snapshot = await fetchGaugeSnapshot(options)
   const positions: VotingPosition[] = await readBestVotingPositions(
     input.address,
@@ -282,6 +311,7 @@ async function refreshSavings(
     chainId: input.proposal.chainId,
     from: input.proposal.from,
   })
+  assertProposalHash(input)
   const proposal = await prepareEarnDeposit({
     address: getAddress(input.address),
     walletMode: input.walletMode,

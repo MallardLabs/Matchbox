@@ -367,13 +367,23 @@ function earnResponse(input: PresentationInput): QueryResponse {
   })
 }
 
+function safeSupportAnswer(value: string | null | undefined): string | null {
+  const answer = value?.trim()
+  if (!answer) return null
+  return /stuart.{0,50}(?:submitted|broadcast|sent).{0,50}(?:transaction|call)/i.test(
+    answer,
+  )
+    ? "Stuart can only prepare unsigned requests. Your wallet is the only client that can submit them."
+    : answer
+}
+
 function supportResponse(input: PresentationInput): QueryResponse {
   return queryResponseSchema.parse({
     id: `support-${input.service.requestId}`,
     kind: "support",
     title: "Ask Stuart anything about Mezo",
     answer:
-      input.supportAnswer?.trim() ||
+      safeSupportAnswer(input.supportAnswer) ||
       `I couldn’t map “${input.query}” to a connected Matchbox tool yet.`,
     generatedAt: new Date().toISOString(),
     snapshotLabel: "Stuart service alpha",

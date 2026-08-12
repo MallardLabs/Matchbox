@@ -110,4 +110,24 @@ describe("vote transaction safety", () => {
 
     expect(decoded.args?.[1]).toEqual([getAddress(pool)])
   })
+
+  it("rejects ballots that do not total 10,000 basis points", async () => {
+    await expect(
+      prepareVoteTransactions({
+        address: account,
+        walletMode: "watching",
+        snapshot,
+        ballots: [
+          {
+            ...ballot,
+            allocations: ballot.allocations.map((allocation) => ({
+              ...allocation,
+              percentage: 99,
+              basisPoints: 9_900,
+            })),
+          },
+        ],
+      }),
+    ).rejects.toThrow(/10,000 basis points/)
+  })
 })

@@ -38,6 +38,7 @@ describe("stateless MCP 2026-07-28 transport", () => {
       expect.arrayContaining([
         expect.objectContaining({ name: "search_transactions" }),
         expect.objectContaining({ name: "prepare_zap" }),
+        expect.objectContaining({ name: "refresh_proposal" }),
       ]),
     )
   })

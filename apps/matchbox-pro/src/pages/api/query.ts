@@ -1,6 +1,9 @@
 import { runStuartQuery } from "@/server/stuart"
+import { createLogger } from "@repo/shared/logger"
 import type { NextApiRequest, NextApiResponse } from "next"
 import { ZodError } from "zod"
+
+const logger = createLogger("matchbox-pro:query")
 
 export default async function handler(
   request: NextApiRequest,
@@ -30,11 +33,12 @@ export default async function handler(
     response.setHeader("Cache-Control", "no-store, max-age=0")
     return response.status(200).json(result)
   } catch (error) {
+    logger.error({
+      message: "Stuart Query request failed",
+      error: error instanceof Error ? error.message : String(error),
+    })
     if (error instanceof ZodError) {
-      return response.status(400).json({
-        error: "Invalid Query request",
-        issues: error.issues,
-      })
+      return response.status(400).json({ error: "Invalid Query request" })
     }
     return response.status(500).json({ error: "Stuart Query failed" })
   }

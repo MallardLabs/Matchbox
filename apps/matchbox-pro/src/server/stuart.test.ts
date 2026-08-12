@@ -223,4 +223,33 @@ describe("Stuart runtime", () => {
     expect(response.answer).toMatch(/claims are not in this prototype/i)
     expect(response.answer).not.toMatch(/\$\d/)
   })
+
+  it("never repeats a model claim that Stuart submitted a transaction", async () => {
+    const fetch = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  role: "assistant",
+                  content: "Stuart submitted the transaction for you.",
+                },
+              },
+            ],
+          }),
+          { status: 200 },
+        ),
+    ) as unknown as typeof globalThis.fetch
+    const response = await runStuartQuery(
+      {
+        query: "tell me a story",
+        wallet: { address, mode: "connected" },
+      },
+      { apiKey: "test-key", fetch },
+    )
+
+    expect(response.answer).toMatch(/your wallet/i)
+    expect(response.answer).not.toMatch(/Stuart submitted/i)
+  })
 })

@@ -77,15 +77,13 @@ export const preparedVoteSchema = proposalMetadataSchema.extend({
 export type PreparedVote = z.infer<typeof preparedVoteSchema>
 export type ProposalMetadata = z.infer<typeof proposalMetadataSchema>
 
-export function createProposalMetadata(input: {
+export function proposalHashFor(input: {
   kind: "vote" | "savings"
   from: Address
-  origin: ProposalMetadata["origin"]
   snapshotBlock: string
   content: unknown
-  now?: Date
-}): ProposalMetadata {
-  const proposalHash = keccak256(
+}): Hex {
+  return keccak256(
     stringToHex(
       JSON.stringify({
         kind: input.kind,
@@ -96,6 +94,17 @@ export function createProposalMetadata(input: {
       }),
     ),
   )
+}
+
+export function createProposalMetadata(input: {
+  kind: "vote" | "savings"
+  from: Address
+  origin: ProposalMetadata["origin"]
+  snapshotBlock: string
+  content: unknown
+  now?: Date
+}): ProposalMetadata {
+  const proposalHash = proposalHashFor(input)
   const now = input.now ?? new Date()
   return proposalMetadataSchema.parse({
     proposalId: `${input.kind}_${proposalHash.slice(2, 10)}`,

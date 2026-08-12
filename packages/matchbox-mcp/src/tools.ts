@@ -303,6 +303,16 @@ function canonicalGaugeName(value: string): string {
     .replace(/[^a-z0-9]/g, "")
 }
 
+export function validateSingleVotingDomain(votingContracts: string[]): void {
+  if (
+    new Set(votingContracts.map((address) => address.toLowerCase())).size !== 1
+  ) {
+    throw new Error(
+      "A custom ballot must use one voting domain. Stuart can prepare separate veMEZO boost, veBTC pool/vault, and veBTC validator ballots.",
+    )
+  }
+}
+
 async function prepareRequestedVote(
   input: z.infer<typeof prepareVoteInputSchema>,
   context: ToolContext,
@@ -328,14 +338,9 @@ async function prepareRequestedVote(
     if (!gauge) throw new Error("Resolved gauge disappeared")
     return { request: allocation, gauge }
   })
-  const votingContracts = new Set(
-    selected.map((entry) => entry.gauge.votingContract.toLowerCase()),
+  validateSingleVotingDomain(
+    selected.map((entry) => entry.gauge.votingContract),
   )
-  if (votingContracts.size !== 1) {
-    throw new Error(
-      "A custom ballot must use one voting domain. Stuart can prepare separate veMEZO boost, veBTC pool/vault, and veBTC validator ballots.",
-    )
-  }
   const firstGauge = selected[0]?.gauge
   if (!firstGauge) throw new Error("No live gauges were selected")
   const positions = await readBestVotingPositions(input.address, options)

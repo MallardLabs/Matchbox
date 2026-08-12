@@ -2,6 +2,8 @@ import { CONTRACTS } from "@repo/shared/contracts"
 import { describe, expect, it } from "vitest"
 import { optimizedBallotSchema } from "./optimizer"
 import { createVoteAllocationDiff } from "./proposals"
+import { refreshProposal } from "./proposals"
+import { createProposalMetadata, preparedVoteSchema } from "./transactions"
 
 function ballot(basisPoints: number, projectedReturnUsd: string) {
   return optimizedBallotSchema.parse({
@@ -72,5 +74,42 @@ describe("proposal refresh diff", () => {
 
     expect(diff.material).toBe(true)
     expect(diff.projectedChangeMaterial).toBe(true)
+  })
+
+  it("rejects a refreshed proposal whose content no longer matches its hash", async () => {
+    const originalBallot = ballot(5_000, "100")
+    const metadata = createProposalMetadata({
+      kind: "vote",
+      from: "0x9999999999999999999999999999999999999999",
+      origin: "manual",
+      snapshotBlock: "100",
+      content: { ballots: [originalBallot], transactionRequests: [] },
+    })
+    const proposal = preparedVoteSchema.parse({
+      ...metadata,
+      status: "read-only",
+      canSign: false,
+      ballots: [originalBallot],
+      transactionRequests: [],
+      simulation: {
+        status: "not-run",
+        calls: 0,
+        gasEstimate: null,
+        reason: "Read-only",
+        results: [],
+      },
+    })
+
+    await expect(
+      refreshProposal({
+        kind: "vote",
+        address: proposal.from,
+        walletMode: "watching",
+        proposal: { ...proposal, ballots: [ballot(5_100, "100")] },
+        ballots: [originalBallot],
+        manualOverride: true,
+        acceptNewOptimum: false,
+      }),
+    ).rejects.toThrow(/content hash/)
   })
 })
