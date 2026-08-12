@@ -5,6 +5,7 @@ import {
   ShieldIcon,
 } from "@/components/ui/Icons"
 import type { QueryBlock, QueryResponse } from "@/lib/query/contracts"
+import { richSessionBlocks } from "@/lib/query/session"
 import { cn } from "@/utils/cn"
 import { type FormEvent, useState } from "react"
 import { ActivityTrace } from "./blocks/ActivityTrace"
@@ -44,12 +45,14 @@ function BlockRenderer({
 
 export function QueryCanvas({
   response,
+  thread,
   onQuery,
   onOpenCommand,
   loading,
   error,
 }: {
   response: QueryResponse
+  thread: QueryResponse[]
   onQuery: (query: string) => void
   onOpenCommand: () => void
   loading: boolean
@@ -60,6 +63,11 @@ export function QueryCanvas({
     (block): block is Extract<QueryBlock, { type: "activity_trace" }> =>
       block.type === "activity_trace",
   )
+  const clarification = response.blocks.find(
+    (block): block is Extract<QueryBlock, { type: "clarification_card" }> =>
+      block.type === "clarification_card",
+  )
+  const richBlocks = richSessionBlocks(thread)
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -74,9 +82,8 @@ export function QueryCanvas({
         <div className="min-w-0">
           <div className="mb-2 flex items-center gap-2 text-xs text-muted">
             <HistoryIcon className="size-3.5" />
-            Query history
-            <span aria-hidden="true">/</span>
-            <span className="truncate text-secondary">{response.title}</span>
+            This tab · {thread.length}{" "}
+            {thread.length === 1 ? "query" : "queries"}
           </div>
           <h1 className="text-balance text-2xl font-medium text-ink sm:text-3xl">
             {response.title}
@@ -114,7 +121,7 @@ export function QueryCanvas({
             </output>
           )}
           {!loading &&
-            response.blocks.map((block, index) => (
+            richBlocks.map((block, index) => (
               <BlockRenderer
                 block={block}
                 key={`${block.type}-${index}-${"proposalHash" in block ? block.proposalHash : response.id}`}
@@ -122,23 +129,20 @@ export function QueryCanvas({
                 wallet={response.wallet}
               />
             ))}
-          {!loading &&
-            response.blocks.every(
-              (block) => block.type === "activity_trace",
-            ) && (
-              <div className="rounded-lg border border-line bg-panel p-8 text-center">
-                <p className="text-pretty text-sm text-secondary">
-                  This result does not have a rich prototype block yet.
-                </p>
-                <button
-                  className="button-primary mt-4"
-                  onClick={onOpenCommand}
-                  type="button"
-                >
-                  Try a prototype query
-                </button>
-              </div>
-            )}
+          {!loading && richBlocks.length === 0 && !clarification && (
+            <div className="rounded-lg border border-line bg-panel p-8 text-center">
+              <p className="text-pretty text-sm text-secondary">
+                This result does not have a rich prototype block yet.
+              </p>
+              <button
+                className="button-primary mt-4"
+                onClick={onOpenCommand}
+                type="button"
+              >
+                Try a prototype query
+              </button>
+            </div>
+          )}
         </div>
 
         <aside className="min-w-0 xl:sticky xl:top-20 xl:self-start">
@@ -157,6 +161,10 @@ export function QueryCanvas({
             <p className="text-pretty text-sm leading-6 text-secondary">
               {response.answer}
             </p>
+
+            {clarification && (
+              <ClarificationCard block={clarification} onQuery={onQuery} />
+            )}
 
             {response.service && (
               <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-muted">

@@ -169,6 +169,15 @@ describe("Stuart runtime", () => {
     )
   })
 
+  it("clarifies a generic vote instead of silently choosing the optimizer", async () => {
+    const response = await runStuartQuery({
+      query: "help me vote",
+      wallet: { address, mode: "connected" },
+    })
+
+    expect(response.kind).toBe("clarification")
+  })
+
   it("clarifies an unspecified vault without rewriting it to Savings", async () => {
     const response = await runStuartQuery({
       query: "put $50 in the vault",

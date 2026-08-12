@@ -9,13 +9,18 @@ Matchbox MCP clients.
 - A stateless MCP 2026-07-28 HTTP transport.
 - Wallet context for connected, watched, and one-off inspected addresses.
 - Live, explicitly linked Mezo Wormhole journeys from Wormholescan.
-- Deterministic prototype vote optimization, unsigned voting proposals, and
-  unsigned MEZO/MUSD Earn zap proposals.
+- Live gauge ranking and ruthless personal-return optimization across every
+  eligible veMEZO and veBTC lock.
+- Simulated, content-hashed, wallet-bound unsigned voting proposals with live
+  refresh and structured material-change diffs.
+- Direct single-sided MUSD Savings deposits with exact approval when required.
+- Explicitly unavailable dual-deposit LP zaps until an approved router exists.
 - Labeled fixture fallback for the prototype wallet only when enabled by the
   host application.
 
-The tool layer never signs or broadcasts transactions. `prepare_vote` and
-`prepare_zap` only return expiring, simulated, unsigned proposals.
+The tool layer never signs or broadcasts transactions. `prepare_vote`,
+`prepare_zap`, and `refresh_proposal` only return expiring, simulated, unsigned
+proposals. The browser wallet submits each call after explicit review.
 
 ## Tools
 
@@ -23,9 +28,11 @@ The tool layer never signs or broadcasts transactions. `prepare_vote` and
 | --- | --- | --- |
 | `get_wallet_context` | Resolve wallet mode and permissions | Request context |
 | `search_transactions` | Find linked bridge journeys involving Mezo | Live Wormholescan |
-| `optimize_votes` | Maximize projected personal incentive return | Prototype optimizer fixture |
-| `prepare_vote` | Validate and prepare an unsigned vote | Deterministic prototype |
-| `prepare_zap` | Prepare an unsigned Earn zap | Deterministic prototype |
+| `rank_gauges` | Rank deposited incentives or funded-epoch rate over the last 8 completed epochs | Live indexer + Mezo RPC |
+| `optimize_votes` | Maximize projected personal incentive return across all eligible locks | Live indexer + Mezo RPC |
+| `prepare_vote` | Validate, simulate, and prepare independent unsigned ballots | Live indexer + Mezo RPC |
+| `prepare_zap` | Prepare direct MUSD Savings or refuse an unapproved dual-deposit LP zap | Mezo mainnet contracts |
+| `refresh_proposal` | Re-read live state and return a replacement proposal plus material diff | Live indexer + Mezo RPC |
 
 `search_transactions` currently has live coverage for Wormhole only. A request
 for all bridge providers includes a visible partial-coverage notice until native

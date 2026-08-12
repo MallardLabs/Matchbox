@@ -10,7 +10,10 @@ import {
 } from "@/components/ui/Icons"
 import { runQuery as runLiveQuery } from "@/lib/query/client"
 import type { QueryResponse } from "@/lib/query/contracts"
-import { runDemoQuery } from "@/lib/query/engine"
+import {
+  appendSessionResponse,
+  latestSessionResponse,
+} from "@/lib/query/session"
 import { shortenAddress } from "@/lib/wallet/selection"
 import {
   noWalletContext,
@@ -43,9 +46,7 @@ const primaryNav = [
 
 export function QueryPrototype() {
   const [view, setView] = useState<View>("overview")
-  const [response, setResponse] = useState<QueryResponse>(() =>
-    runDemoQuery("wormhole transactions"),
-  )
+  const [thread, setThread] = useState<QueryResponse[]>([])
   const [commandOpen, setCommandOpen] = useState(false)
   const [walletOpen, setWalletOpen] = useState(false)
   const [lightMode, setLightMode] = useState(false)
@@ -54,6 +55,7 @@ export function QueryPrototype() {
   const requestSequence = useRef(0)
   const walletSelection = useWalletSelection()
   const selectedWallet = walletSelection.activeWallet
+  const response = latestSessionResponse(thread)
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -83,7 +85,7 @@ export function QueryPrototype() {
     })
       .then((result) => {
         if (requestSequence.current !== sequence) return
-        setResponse(result)
+        setThread((current) => appendSessionResponse(current, result))
       })
       .catch((error: unknown) => {
         if (requestSequence.current !== sequence) return
@@ -151,7 +153,7 @@ export function QueryPrototype() {
                 (item.action === "overview" && view === "overview") ||
                 (item.label === "Vote" &&
                   view === "query" &&
-                  response.kind === "vote")
+                  response?.kind === "vote")
               return (
                 <button
                   aria-current={active ? "page" : undefined}
@@ -217,7 +219,7 @@ export function QueryPrototype() {
             <span className="max-w-52 truncate text-xs text-muted">
               {view === "overview"
                 ? (selectedWallet?.label ?? "No wallet selected")
-                : response.title}
+                : (response?.title ?? "This tab")}
             </span>
           </div>
 
@@ -278,7 +280,7 @@ export function QueryPrototype() {
           </div>
         </header>
 
-        {view === "overview" ? (
+        {view === "overview" || !response ? (
           <Overview onQuery={runQuery} />
         ) : (
           <QueryCanvas
@@ -287,6 +289,7 @@ export function QueryPrototype() {
             onOpenCommand={() => setCommandOpen(true)}
             onQuery={runQuery}
             response={response}
+            thread={thread}
           />
         )}
       </div>

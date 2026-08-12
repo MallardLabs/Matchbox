@@ -169,6 +169,18 @@ function deterministicSelection(query: string): {
   }
   if (normalized.includes("vote")) {
     const allocations = parseRequestedAllocations(query)
+    const requestsPersonalOptimum =
+      /(?:for me|my (?:vote|return)|personal return|optimi[sz]e)/i.test(
+        normalized,
+      )
+    if (!allocations && !requestsPersonalOptimum) {
+      return {
+        name: null,
+        arguments: {},
+        clarification: "gauge-objective",
+        fixedAnswer: null,
+      }
+    }
     return allocations
       ? {
           name: "prepare_vote",
