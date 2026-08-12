@@ -8,6 +8,7 @@ import type { QueryBlock, QueryResponse } from "@/lib/query/contracts"
 import { cn } from "@/utils/cn"
 import { type FormEvent, useState } from "react"
 import { ActivityTrace } from "./blocks/ActivityTrace"
+import { AllocationDiff } from "./blocks/AllocationDiff"
 import { BridgeRecords } from "./blocks/BridgeRecords"
 import { GaugeRanking } from "./blocks/GaugeRanking"
 import { VoteComposer } from "./blocks/VoteComposer"
@@ -31,6 +32,8 @@ function BlockRenderer({
       return <ZapRoute block={block} wallet={wallet} />
     case "activity_trace":
       return null
+    case "allocation_diff":
+      return <AllocationDiff diff={block} />
   }
 }
 

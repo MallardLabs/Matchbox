@@ -1,7 +1,7 @@
 import { z } from "zod"
 import { preparedEarnDepositSchema } from "./earn"
-import { optimizedBallotSchema } from "./optimizer"
-import { transactionRequestSchema } from "./transactions"
+import { allocationDiffSchema } from "./proposals"
+import { preparedVoteSchema } from "./transactions"
 
 export const walletAddressSchema = z
   .string()
@@ -69,21 +69,9 @@ export const queryBlockSchema = z.discriminatedUnion("type", [
     projectedTotalUsd: z.string().nullable(),
     calculationVersion: z.string(),
   }),
-  z.object({
-    type: z.literal("vote_composer"),
-    canSign: z.boolean(),
-    status: z.enum(["unsigned", "blocked", "read-only", "ranking-only"]),
-    ballots: z.array(optimizedBallotSchema),
-    transactionRequests: z.array(transactionRequestSchema),
-    simulation: z.object({
-      status: z.enum(["passed", "blocked", "not-run"]),
-      calls: z.number().int().nonnegative(),
-      gasEstimate: z.string().nullable(),
-      reason: z.string().nullable(),
-    }),
-    snapshotBlock: z.string(),
-  }),
+  preparedVoteSchema.extend({ type: z.literal("vote_composer") }),
   preparedEarnDepositSchema.extend({ type: z.literal("zap_route") }),
+  allocationDiffSchema.extend({ type: z.literal("allocation_diff") }),
   z.object({
     type: z.literal("activity_trace"),
     items: z.array(traceItemSchema),

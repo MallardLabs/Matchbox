@@ -212,12 +212,8 @@ function voteResponse(input: PresentationInput): QueryResponse {
         : []),
       {
         type: "vote_composer",
-        canSign: proposal.canSign,
-        status: hasBallot ? proposal.status : "ranking-only",
+        ...proposal,
         ballots,
-        transactionRequests: proposal.transactionRequests,
-        simulation: proposal.simulation,
-        snapshotBlock: proposal.snapshotBlock,
       },
       {
         type: "activity_trace",

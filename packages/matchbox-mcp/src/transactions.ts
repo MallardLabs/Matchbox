@@ -2,11 +2,10 @@ import { CHAIN_ID } from "@repo/shared/contracts"
 import {
   type Address,
   type Hex,
-  concatHex,
   encodeFunctionData,
-  encodePacked,
   getAddress,
   keccak256,
+  stringToHex,
 } from "viem"
 import { z } from "zod"
 import {
@@ -43,13 +42,20 @@ export const transactionRequestSchema = z.object({
   label: z.string(),
 })
 
-export const preparedVoteSchema = z.object({
+export const proposalMetadataSchema = z.object({
   proposalId: z.string(),
   proposalHash: z.string().regex(/^0x[a-fA-F0-9]{64}$/),
-  status: z.enum(["unsigned", "blocked", "read-only"]),
-  canSign: z.boolean(),
+  chainId: z.literal(CHAIN_ID.mainnet),
+  from: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
+  origin: z.enum(["optimizer", "manual", "savings"]),
   expiresAt: z.string(),
   snapshotBlock: z.string(),
+})
+
+export const preparedVoteSchema = proposalMetadataSchema.extend({
+  origin: z.enum(["optimizer", "manual"]),
+  status: z.enum(["unsigned", "blocked", "read-only"]),
+  canSign: z.boolean(),
   ballots: z.array(optimizedBallotSchema),
   transactionRequests: z.array(transactionRequestSchema),
   simulation: z.object({
@@ -61,6 +67,38 @@ export const preparedVoteSchema = z.object({
 })
 
 export type PreparedVote = z.infer<typeof preparedVoteSchema>
+export type ProposalMetadata = z.infer<typeof proposalMetadataSchema>
+
+export function createProposalMetadata(input: {
+  kind: "vote" | "savings"
+  from: Address
+  origin: ProposalMetadata["origin"]
+  snapshotBlock: string
+  content: unknown
+  now?: Date
+}): ProposalMetadata {
+  const proposalHash = keccak256(
+    stringToHex(
+      JSON.stringify({
+        kind: input.kind,
+        chainId: CHAIN_ID.mainnet,
+        from: input.from.toLowerCase(),
+        snapshotBlock: input.snapshotBlock,
+        content: input.content,
+      }),
+    ),
+  )
+  const now = input.now ?? new Date()
+  return proposalMetadataSchema.parse({
+    proposalId: `${input.kind}_${proposalHash.slice(2, 10)}`,
+    proposalHash,
+    chainId: CHAIN_ID.mainnet,
+    from: input.from,
+    origin: input.origin,
+    expiresAt: new Date(now.getTime() + 15 * 60_000).toISOString(),
+    snapshotBlock: input.snapshotBlock,
+  })
+}
 
 function simulationMessage(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error)
@@ -125,6 +163,7 @@ export async function prepareVoteTransactions(input: {
   walletMode: "connected" | "watching" | "inspecting"
   snapshot: GaugeSnapshot
   ballots: z.infer<typeof optimizedBallotSchema>[]
+  origin?: "optimizer" | "manual"
   options?: GaugeAdapterOptions
 }): Promise<PreparedVote> {
   const account = getAddress(input.address)
@@ -143,15 +182,18 @@ export async function prepareVoteTransactions(input: {
     }
   }
 
-  const emptyHash = keccak256(encodePacked(["address"], [account]))
+  const emptyMetadata = createProposalMetadata({
+    kind: "vote",
+    from: account,
+    origin: input.origin ?? "manual",
+    snapshotBlock: input.snapshot.blockNumber,
+    content: { ballots, transactionRequests: [] },
+  })
   if (ballots.length === 0) {
     return preparedVoteSchema.parse({
-      proposalId: `vote_${emptyHash.slice(2, 10)}`,
-      proposalHash: emptyHash,
+      ...emptyMetadata,
       status: input.walletMode === "connected" ? "blocked" : "read-only",
       canSign: false,
-      expiresAt: new Date(Date.now() + 15 * 60_000).toISOString(),
-      snapshotBlock: input.snapshot.blockNumber,
       ballots: [],
       transactionRequests: [],
       simulation: {
@@ -164,12 +206,9 @@ export async function prepareVoteTransactions(input: {
   }
   if (input.walletMode !== "connected") {
     return preparedVoteSchema.parse({
-      proposalId: `vote_${emptyHash.slice(2, 10)}`,
-      proposalHash: emptyHash,
+      ...emptyMetadata,
       status: "read-only",
       canSign: false,
-      expiresAt: new Date(Date.now() + 15 * 60_000).toISOString(),
-      snapshotBlock: input.snapshot.blockNumber,
       ballots,
       transactionRequests: [],
       simulation: {
@@ -197,12 +236,13 @@ export async function prepareVoteTransactions(input: {
   const requests = reconciledBallots.map((ballot) =>
     buildVoteTransactionRequest({ account, ballot, snapshot: input.snapshot }),
   )
-  const proposalHash = keccak256(
-    encodePacked(
-      ["address", "bytes"],
-      [account, concatHex(requests.map((request) => request.data as Hex))],
-    ),
-  )
+  const metadata = createProposalMetadata({
+    kind: "vote",
+    from: account,
+    origin: input.origin ?? "manual",
+    snapshotBlock: input.snapshot.blockNumber,
+    content: { ballots: reconciledBallots, transactionRequests: requests },
+  })
   const client = createMezoClient(input.options)
   try {
     const simulations = await Promise.all(
@@ -218,12 +258,9 @@ export async function prepareVoteTransactions(input: {
     )
     const gasEstimate = simulations.reduce((total, gas) => total + gas, 0n)
     return preparedVoteSchema.parse({
-      proposalId: `vote_${proposalHash.slice(2, 10)}`,
-      proposalHash,
+      ...metadata,
       status: "unsigned",
       canSign: true,
-      expiresAt: new Date(Date.now() + 15 * 60_000).toISOString(),
-      snapshotBlock: input.snapshot.blockNumber,
       ballots: reconciledBallots,
       transactionRequests: requests,
       simulation: {
@@ -235,12 +272,9 @@ export async function prepareVoteTransactions(input: {
     })
   } catch (error) {
     return preparedVoteSchema.parse({
-      proposalId: `vote_${proposalHash.slice(2, 10)}`,
-      proposalHash,
+      ...metadata,
       status: "blocked",
       canSign: false,
-      expiresAt: new Date(Date.now() + 15 * 60_000).toISOString(),
-      snapshotBlock: input.snapshot.blockNumber,
       ballots: reconciledBallots,
       transactionRequests: [],
       simulation: {

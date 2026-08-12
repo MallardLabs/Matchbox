@@ -6,9 +6,11 @@ import {
 } from "@/components/ui/Icons"
 import { StatusBadge } from "@/components/ui/StatusBadge"
 import { TokenMark } from "@/components/ui/TokenMark"
+import { refreshProposal as refreshPreparedProposal } from "@/lib/query/client"
 import type { QueryBlock, WalletContext } from "@/lib/query/contracts"
 import { useProposalDispatch } from "@/lib/wallet/useProposalDispatch"
 import { useState } from "react"
+import { AllocationDiff } from "./AllocationDiff"
 import { ProposalCallStatus } from "./ProposalCallStatus"
 
 type ZapBlock = Extract<QueryBlock, { type: "zap_route" }>
@@ -25,6 +27,27 @@ export function ZapRoute({
   const proposalDispatch = useProposalDispatch({
     wallet,
     requests: block.transactionRequests,
+    refresh: async () => {
+      const refreshed = await refreshPreparedProposal({
+        kind: "savings",
+        address: wallet.address,
+        walletMode: wallet.mode,
+        proposal: block,
+      })
+      if (refreshed.kind !== "savings") {
+        throw new Error("Stuart returned the wrong refreshed proposal type")
+      }
+      if (!refreshed.proposal.canSign) {
+        throw new Error(
+          refreshed.proposal.simulation.reason ??
+            "The refreshed deposit is not safe to sign",
+        )
+      }
+      return {
+        requests: refreshed.proposal.transactionRequests,
+        diff: { type: "allocation_diff", ...refreshed.diff },
+      }
+    },
   })
   const readOnly = block.status === "read-only" || wallet.mode !== "connected"
 
@@ -152,17 +175,23 @@ export function ZapRoute({
                     proposalDispatch.dispatching ||
                     !proposalDispatch.canDispatch
                   }
-                  onClick={() => void proposalDispatch.dispatch()}
+                  onClick={() =>
+                    void (proposalDispatch.awaitingAcknowledgement
+                      ? proposalDispatch.acknowledgeAndDispatch()
+                      : proposalDispatch.dispatch())
+                  }
                   type="button"
                 >
                   <CheckIcon className="size-4" />
                   {proposalDispatch.dispatching
                     ? "Waiting for confirmations"
-                    : proposalDispatch.calls.some(
-                          (call) => call.status === "failed",
-                        )
-                      ? "Retry failed call"
-                      : "Confirm in wallet"}
+                    : proposalDispatch.awaitingAcknowledgement
+                      ? "Acknowledge changes & continue"
+                      : proposalDispatch.calls.some(
+                            (call) => call.status === "failed",
+                          )
+                        ? "Retry failed call"
+                        : "Confirm in wallet"}
                 </button>
                 <button
                   className="button-ghost"
@@ -179,6 +208,9 @@ export function ZapRoute({
                 >
                   {proposalDispatch.error}
                 </p>
+              )}
+              {proposalDispatch.diff?.material && (
+                <AllocationDiff diff={proposalDispatch.diff} />
               )}
               <ProposalCallStatus calls={proposalDispatch.calls} />
             </div>

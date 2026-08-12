@@ -17,6 +17,7 @@
     "@rainbow-me/rainbowkit": "^2.2.10",
     "@radix-ui/react-dialog": "^1.1.17",
     "@repo/matchbox-mcp": "workspace:*",
+    "@repo/shared": "workspace:*",
     "@tanstack/react-query": "^5.62.2",
     "@thesis-co/cent": "^0.0.5",
     "clsx": "^2.1.1",

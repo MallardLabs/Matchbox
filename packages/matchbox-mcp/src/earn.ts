@@ -12,7 +12,11 @@ import {
   type GaugeAdapterOptions,
   createMezoClient,
 } from "./adapters/matchbox-gauges"
-import { transactionRequestSchema } from "./transactions"
+import {
+  createProposalMetadata,
+  proposalMetadataSchema,
+  transactionRequestSchema,
+} from "./transactions"
 
 export const MUSD_SAVINGS_RATE_ADDRESS = getAddress(
   "0xb4D498029af77680cD1eF828b967f010d06C51CC",
@@ -37,7 +41,8 @@ const savingsAbi = [
 
 const decimalAmountSchema = z.string().regex(/^\d+(?:\.\d+)?$/)
 
-export const preparedEarnDepositSchema = z.object({
+export const preparedEarnDepositSchema = proposalMetadataSchema.extend({
+  origin: z.literal("savings"),
   status: z.enum([
     "unsigned",
     "needs-approval",
@@ -69,11 +74,26 @@ export const preparedEarnDepositSchema = z.object({
 export type PreparedEarnDeposit = z.infer<typeof preparedEarnDepositSchema>
 
 function unavailable(input: {
+  address: string
   amount: string
   fundingAsset: string
   walletMode: "connected" | "watching" | "inspecting"
 }): PreparedEarnDeposit {
+  const account = getAddress(input.address)
+  const transactionRequests: z.infer<typeof transactionRequestSchema>[] = []
   return preparedEarnDepositSchema.parse({
+    ...createProposalMetadata({
+      kind: "savings",
+      from: account,
+      origin: "savings",
+      snapshotBlock: "unavailable",
+      content: {
+        amount: input.amount,
+        fundingAsset: input.fundingAsset,
+        vault: "MEZO / MUSD Earn Vault",
+        transactionRequests,
+      },
+    }),
     status: "unavailable",
     canSign: false,
     amount: input.amount,
@@ -86,7 +106,7 @@ function unavailable(input: {
     ],
     balance: null,
     allowance: null,
-    transactionRequests: [],
+    transactionRequests,
     simulation: {
       status: "not-run",
       calls: 0,
@@ -112,25 +132,26 @@ export async function prepareEarnDeposit(input: {
   options?: GaugeAdapterOptions
 }): Promise<PreparedEarnDeposit> {
   const amount = decimalAmountSchema.parse(input.amount)
+  const account = getAddress(input.address)
   const isSavings =
     /savings|smusd/i.test(input.vault) &&
     input.fundingAsset.trim().toUpperCase() === "MUSD"
   if (!isSavings) {
     return unavailable({
+      address: account,
       amount,
       fundingAsset: input.fundingAsset,
       walletMode: input.walletMode,
     })
   }
 
-  const account = getAddress(input.address)
   const client = createMezoClient(input.options)
   const musdAddress = await client.readContract({
     address: MUSD_SAVINGS_RATE_ADDRESS,
     abi: savingsAbi,
     functionName: "musdToken",
   })
-  const [decimals, balance, allowance] = await Promise.all([
+  const [decimals, balance, allowance, blockNumber] = await Promise.all([
     client.readContract({
       address: musdAddress,
       abi: erc20Abi,
@@ -148,6 +169,7 @@ export async function prepareEarnDeposit(input: {
       functionName: "allowance",
       args: [account, MUSD_SAVINGS_RATE_ADDRESS],
     }),
+    client.getBlockNumber(),
   ])
   const rawAmount = parseUnits(amount, decimals)
   const formattedBalance = formatUnits(balance, decimals)
@@ -164,9 +186,26 @@ export async function prepareEarnDeposit(input: {
     balance: formattedBalance,
     allowance: formattedAllowance,
   }
+  function metadata(
+    transactionRequests: z.infer<typeof transactionRequestSchema>[],
+  ) {
+    return createProposalMetadata({
+      kind: "savings",
+      from: account,
+      origin: "savings",
+      snapshotBlock: blockNumber.toString(),
+      content: {
+        amount,
+        fundingAsset: "MUSD",
+        vault: "MUSD Savings Vault",
+        transactionRequests,
+      },
+    })
+  }
 
   if (balance < rawAmount) {
     return preparedEarnDepositSchema.parse({
+      ...metadata([]),
       ...common,
       status: "blocked",
       canSign: false,
@@ -183,6 +222,7 @@ export async function prepareEarnDeposit(input: {
   }
   if (input.walletMode !== "connected") {
     return preparedEarnDepositSchema.parse({
+      ...metadata([]),
       ...common,
       status: "read-only",
       canSign: false,
@@ -229,6 +269,7 @@ export async function prepareEarnDeposit(input: {
         data: approvalRequest.data as `0x${string}`,
       })
       return preparedEarnDepositSchema.parse({
+        ...metadata([approvalRequest, depositRequest]),
         ...common,
         status: "needs-approval",
         canSign: true,
@@ -245,6 +286,7 @@ export async function prepareEarnDeposit(input: {
       })
     } catch (error) {
       return preparedEarnDepositSchema.parse({
+        ...metadata([]),
         ...common,
         status: "blocked",
         canSign: false,
@@ -269,6 +311,7 @@ export async function prepareEarnDeposit(input: {
     await client.call(call)
     const gasEstimate = await client.estimateGas(call)
     return preparedEarnDepositSchema.parse({
+      ...metadata([depositRequest]),
       ...common,
       status: "unsigned",
       canSign: true,
@@ -284,6 +327,7 @@ export async function prepareEarnDeposit(input: {
     })
   } catch (error) {
     return preparedEarnDepositSchema.parse({
+      ...metadata([]),
       ...common,
       status: "blocked",
       canSign: false,

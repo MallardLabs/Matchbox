@@ -1,9 +1,11 @@
 import { CheckIcon, ShieldIcon, VoteIcon } from "@/components/ui/Icons"
 import { StatusBadge } from "@/components/ui/StatusBadge"
+import { refreshProposal as refreshPreparedProposal } from "@/lib/query/client"
 import type { QueryBlock, WalletContext } from "@/lib/query/contracts"
 import { useProposalDispatch } from "@/lib/wallet/useProposalDispatch"
 import { Money } from "@thesis-co/cent"
 import { useState } from "react"
+import { AllocationDiff } from "./AllocationDiff"
 import { ProposalCallStatus } from "./ProposalCallStatus"
 
 type VoteBlock = Extract<QueryBlock, { type: "vote_composer" }>
@@ -19,6 +21,30 @@ export function VoteComposer({
   const proposalDispatch = useProposalDispatch({
     wallet,
     requests: block.transactionRequests,
+    refresh: async () => {
+      const refreshed = await refreshPreparedProposal({
+        kind: "vote",
+        address: wallet.address,
+        walletMode: wallet.mode,
+        proposal: block,
+        ballots: block.ballots,
+        manualOverride: block.origin === "manual",
+        acceptNewOptimum: false,
+      })
+      if (refreshed.kind !== "vote") {
+        throw new Error("Stuart returned the wrong refreshed proposal type")
+      }
+      if (!refreshed.proposal.canSign) {
+        throw new Error(
+          refreshed.proposal.simulation.reason ??
+            "The refreshed vote is not safe to sign",
+        )
+      }
+      return {
+        requests: refreshed.proposal.transactionRequests,
+        diff: { type: "allocation_diff", ...refreshed.diff },
+      }
+    },
   })
   const needsConnection =
     wallet.mode !== "connected" || !proposalDispatch.canDispatch
@@ -146,17 +172,23 @@ export function VoteComposer({
                     proposalDispatch.dispatching ||
                     !proposalDispatch.canDispatch
                   }
-                  onClick={() => void proposalDispatch.dispatch()}
+                  onClick={() =>
+                    void (proposalDispatch.awaitingAcknowledgement
+                      ? proposalDispatch.acknowledgeAndDispatch()
+                      : proposalDispatch.dispatch())
+                  }
                   type="button"
                 >
                   <CheckIcon className="size-4" />
                   {proposalDispatch.dispatching
                     ? "Waiting for confirmations"
-                    : proposalDispatch.calls.some(
-                          (call) => call.status === "failed",
-                        )
-                      ? "Retry failed call"
-                      : "Confirm in wallet"}
+                    : proposalDispatch.awaitingAcknowledgement
+                      ? "Acknowledge changes & continue"
+                      : proposalDispatch.calls.some(
+                            (call) => call.status === "failed",
+                          )
+                        ? "Retry failed call"
+                        : "Confirm in wallet"}
                 </button>
                 <button
                   className="button-ghost"
@@ -173,6 +205,9 @@ export function VoteComposer({
                 >
                   {proposalDispatch.error}
                 </p>
+              )}
+              {proposalDispatch.diff?.material && (
+                <AllocationDiff diff={proposalDispatch.diff} />
               )}
               <ProposalCallStatus calls={proposalDispatch.calls} />
             </div>

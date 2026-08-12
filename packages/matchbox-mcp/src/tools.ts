@@ -1,3 +1,4 @@
+import { getAddress } from "viem"
 import { z } from "zod"
 import { fetchGaugeSnapshot } from "./adapters/matchbox-gauges"
 import { searchWormholeOperations } from "./adapters/wormholescan"
@@ -18,7 +19,16 @@ import {
   readBestVotingPositions,
   voteOptimizationSchema,
 } from "./optimizer"
-import { prepareVoteTransactions, preparedVoteSchema } from "./transactions"
+import {
+  refreshProposal,
+  refreshProposalInputSchema,
+  refreshProposalResultSchema,
+} from "./proposals"
+import {
+  createProposalMetadata,
+  prepareVoteTransactions,
+  preparedVoteSchema,
+} from "./transactions"
 
 const walletModeSchema = z.enum(["connected", "watching", "inspecting"])
 
@@ -143,6 +153,7 @@ export const toolNames = [
   "optimize_votes",
   "prepare_vote",
   "prepare_zap",
+  "refresh_proposal",
 ] as const
 
 export type MatchboxToolName = (typeof toolNames)[number]
@@ -253,17 +264,21 @@ export const toolDefinitions: ToolDefinition[] = [
       openWorldHint: false,
     },
   },
+  {
+    name: "refresh_proposal",
+    title: "Refresh an unsigned proposal",
+    description:
+      "Re-read live Mezo state for a wallet-bound vote or direct MUSD Savings proposal and return a content-hashed replacement plus a structured material-change diff. Never signs or submits.",
+    inputSchema: refreshProposalInputSchema,
+    outputSchema: refreshProposalResultSchema,
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
+  },
 ]
-
-function stableHandle(prefix: string, value: unknown): string {
-  const text = JSON.stringify(value)
-  let hash = 2166136261
-  for (let index = 0; index < text.length; index += 1) {
-    hash ^= text.charCodeAt(index)
-    hash = Math.imul(hash, 16777619)
-  }
-  return `${prefix}_${(hash >>> 0).toString(16).padStart(8, "0")}`
-}
 
 function demoRecordsFor(
   provider: "Wormhole" | "all",
@@ -331,10 +346,14 @@ async function prepareRequestedVote(
     (candidate) => candidate.governanceAsset === firstGauge.governanceAsset,
   )
   if (!position) {
-    const proposalHash = `0x${stableHandle("", input).replace("_", "").padEnd(64, "0")}`
     return prepareVoteResultSchema.parse({
-      proposalId: stableHandle("vote", input),
-      proposalHash,
+      ...createProposalMetadata({
+        kind: "vote",
+        from: getAddress(input.address),
+        origin: "manual",
+        snapshotBlock: snapshot.blockNumber,
+        content: { ballots: [], transactionRequests: [] },
+      }),
       status: input.walletMode === "connected" ? "blocked" : "read-only",
       canSign: false,
       expiresAt: new Date(Date.now() + 15 * 60_000).toISOString(),
@@ -524,6 +543,7 @@ export async function executeMatchboxTool(
         walletMode: input.walletMode,
         snapshot,
         ballots: optimization.ballots,
+        origin: "optimizer",
         options,
       })
       return optimizeVotesResultSchema.parse({ ...optimization, proposal })
@@ -545,6 +565,11 @@ export async function executeMatchboxTool(
           vault: input.vault,
           options: adapterOptions(context),
         }),
+      )
+    }
+    case "refresh_proposal": {
+      return refreshProposalResultSchema.parse(
+        await refreshProposal(rawInput, adapterOptions(context)),
       )
     }
     default:

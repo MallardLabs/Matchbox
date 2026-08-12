@@ -94,8 +94,14 @@ function voteResponse(): QueryResponse {
       },
       {
         type: "vote_composer",
+        proposalId: "vote_demo0001",
+        proposalHash: `0x${"1".repeat(64)}`,
+        chainId: 31_612,
+        from: demoWallet.address,
+        origin: "optimizer",
+        expiresAt: "2026-08-11T14:17:00.000Z",
         canSign: false,
-        status: "ranking-only",
+        status: "blocked",
         ballots: [ballot],
         transactionRequests: [],
         simulation: {
@@ -124,6 +130,13 @@ function earnResponse(amount = "50"): QueryResponse {
     blocks: [
       {
         type: "zap_route",
+        proposalId: "savings_demo0001",
+        proposalHash: `0x${"2".repeat(64)}`,
+        chainId: 31_612,
+        from: demoWallet.address,
+        origin: "savings",
+        expiresAt: "2026-08-11T14:17:00.000Z",
+        snapshotBlock: "unavailable",
         status: "unavailable",
         canSign: false,
         amount,

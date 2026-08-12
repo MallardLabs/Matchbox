@@ -163,6 +163,74 @@ export function projectedGaugeReturn(input: {
   )
 }
 
+export function repriceBallots(input: {
+  ballots: z.infer<typeof optimizedBallotSchema>[]
+  positions: VotingPosition[]
+  snapshot: GaugeSnapshot
+}): z.infer<typeof optimizedBallotSchema>[] {
+  const positions = new Map(
+    input.positions.map((position) => [
+      `${position.governanceAsset}:${position.tokenId}`,
+      position,
+    ]),
+  )
+  return input.ballots.map((ballot) => {
+    const position = positions.get(
+      `${ballot.governanceAsset}:${ballot.position.tokenId}`,
+    )
+    if (!position) {
+      throw new Error(
+        `${ballot.governanceAsset} #${ballot.position.tokenId} is no longer eligible`,
+      )
+    }
+    const allocations = ballot.allocations.map((allocation) => {
+      const gauge = input.snapshot.gauges.find(
+        (candidate) => candidate.id === allocation.gaugeId,
+      )
+      if (!gauge) {
+        throw new Error(`${allocation.gaugeName} is no longer a live gauge`)
+      }
+      if (
+        gauge.votingContract.toLowerCase() !==
+          ballot.votingContract.toLowerCase() ||
+        gauge.votingBucket !== ballot.votingBucket
+      ) {
+        throw new Error(`${allocation.gaugeName} changed voting domains`)
+      }
+      return optimizedAllocationSchema.parse({
+        gaugeId: gauge.id,
+        gaugeAddress: gauge.address,
+        gaugeName: gauge.name,
+        gaugeType: gauge.type,
+        tokenPair: gauge.tokenPair,
+        pricingStatus: gauge.pricingStatus,
+        percentage: allocation.percentage,
+        basisPoints: allocation.basisPoints,
+        depositedUsd: gauge.depositedUsd,
+        projectedReturnUsd: usdDecimal(
+          projectedGaugeReturn({
+            depositedUsd: gauge.depositedUsd,
+            currentWeight: BigInt(gauge.currentWeight),
+            votingPower: BigInt(position.votingPower),
+            allocationBasisPoints: allocation.basisPoints,
+          }),
+        ),
+        consistencyBps: gauge.consistencyBps,
+      })
+    })
+    const projectedTotal = allocations.reduce(
+      (total, allocation) => total.add(usd(allocation.projectedReturnUsd)),
+      zeroUsd(),
+    )
+    return optimizedBallotSchema.parse({
+      ...ballot,
+      position,
+      allocations,
+      projectedReturnUsd: usdDecimal(projectedTotal),
+    })
+  })
+}
+
 export function optimizeGaugeSnapshot(input: {
   snapshot: GaugeSnapshot
   positions: VotingPosition[]

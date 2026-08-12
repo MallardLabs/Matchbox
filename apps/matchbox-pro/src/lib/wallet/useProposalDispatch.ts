@@ -141,7 +141,10 @@ export async function dispatchProposalRequests(
 export function useProposalDispatch(input: {
   wallet: WalletContext
   requests: TransactionRequest[]
-  refresh?: () => Promise<TransactionRequest[]>
+  refresh?: () => Promise<{
+    requests: TransactionRequest[]
+    diff: Extract<QueryBlock, { type: "allocation_diff" }>
+  }>
 }) {
   const account = useAccount()
   const publicClient = usePublicClient({ chainId: mezoMainnet.id })
@@ -150,6 +153,13 @@ export function useProposalDispatch(input: {
   const [calls, setCalls] = useState<DispatchCallState[]>([])
   const [error, setError] = useState<string | null>(null)
   const [dispatching, setDispatching] = useState(false)
+  const [diff, setDiff] = useState<Extract<
+    QueryBlock,
+    { type: "allocation_diff" }
+  > | null>(null)
+  const [pendingRequests, setPendingRequests] = useState<
+    TransactionRequest[] | null
+  >(null)
 
   const canDispatch = useMemo(
     () =>
@@ -160,12 +170,9 @@ export function useProposalDispatch(input: {
     [account.address, input.requests.length, input.wallet],
   )
 
-  const dispatch = useCallback(async (): Promise<void> => {
-    setDispatching(true)
-    setError(null)
-    try {
+  const sendRequests = useCallback(
+    async (requests: TransactionRequest[]): Promise<void> => {
       if (!publicClient) throw new Error("Mezo Mainnet RPC is unavailable")
-      const requests = input.refresh ? await input.refresh() : input.requests
       await dispatchProposalRequests({
         accountAddress: account.address,
         accountChainId: account.chainId,
@@ -192,20 +199,61 @@ export function useProposalDispatch(input: {
         },
         onCalls: setCalls,
       })
+    },
+    [
+      account.address,
+      account.chainId,
+      calls,
+      input.wallet,
+      publicClient,
+      sendTransactionAsync,
+      switchChainAsync,
+    ],
+  )
+
+  const dispatch = useCallback(async (): Promise<void> => {
+    setDispatching(true)
+    setError(null)
+    try {
+      const refreshed = input.refresh ? await input.refresh() : null
+      const requests = refreshed?.requests ?? input.requests
+      if (refreshed?.diff.material) {
+        setDiff(refreshed.diff)
+        setPendingRequests(requests)
+        return
+      }
+      setDiff(refreshed?.diff ?? null)
+      setPendingRequests(null)
+      await sendRequests(requests)
     } catch (dispatchError) {
       setError(errorMessage(dispatchError))
     } finally {
       setDispatching(false)
     }
-  }, [
-    account.address,
-    account.chainId,
-    calls,
-    input,
-    publicClient,
-    sendTransactionAsync,
-    switchChainAsync,
-  ])
+  }, [input, sendRequests])
 
-  return { calls, canDispatch, dispatch, dispatching, error }
+  const acknowledgeAndDispatch = useCallback(async (): Promise<void> => {
+    if (!pendingRequests) return
+    setDispatching(true)
+    setError(null)
+    try {
+      await sendRequests(pendingRequests)
+      setPendingRequests(null)
+    } catch (dispatchError) {
+      setError(errorMessage(dispatchError))
+    } finally {
+      setDispatching(false)
+    }
+  }, [pendingRequests, sendRequests])
+
+  return {
+    acknowledgeAndDispatch,
+    awaitingAcknowledgement: !!pendingRequests,
+    calls,
+    canDispatch,
+    diff,
+    dispatch,
+    dispatching,
+    error,
+  }
 }
