@@ -1,14 +1,27 @@
 import { CheckIcon, ShieldIcon, VoteIcon } from "@/components/ui/Icons"
 import { StatusBadge } from "@/components/ui/StatusBadge"
-import type { QueryBlock } from "@/lib/query/contracts"
+import type { QueryBlock, WalletContext } from "@/lib/query/contracts"
+import { useProposalDispatch } from "@/lib/wallet/useProposalDispatch"
 import { Money } from "@thesis-co/cent"
 import { useState } from "react"
+import { ProposalCallStatus } from "./ProposalCallStatus"
 
 type VoteBlock = Extract<QueryBlock, { type: "vote_composer" }>
 
-export function VoteComposer({ block }: { block: VoteBlock }) {
+export function VoteComposer({
+  block,
+  wallet,
+}: {
+  block: VoteBlock
+  wallet: WalletContext
+}): JSX.Element {
   const [reviewing, setReviewing] = useState(false)
-  const [walletMessage, setWalletMessage] = useState<string | null>(null)
+  const proposalDispatch = useProposalDispatch({
+    wallet,
+    requests: block.transactionRequests,
+  })
+  const needsConnection =
+    wallet.mode !== "connected" || !proposalDispatch.canDispatch
 
   return (
     <section
@@ -103,12 +116,13 @@ export function VoteComposer({ block }: { block: VoteBlock }) {
           disabled={!block.canSign || block.transactionRequests.length === 0}
           onClick={() => {
             setReviewing(true)
-            setWalletMessage(null)
           }}
           type="button"
         >
           <VoteIcon className="size-4" />
-          Review vote
+          {needsConnection && block.status === "read-only"
+            ? "Connect this wallet to continue"
+            : "Review vote"}
         </button>
       </div>
 
@@ -128,15 +142,21 @@ export function VoteComposer({ block }: { block: VoteBlock }) {
               <div className="mt-4 flex flex-wrap gap-3">
                 <button
                   className="button-primary"
-                  onClick={() =>
-                    setWalletMessage(
-                      "Wallet-ready request created. EIP-1193 dispatch is the next integration seam; nothing was submitted.",
-                    )
+                  disabled={
+                    proposalDispatch.dispatching ||
+                    !proposalDispatch.canDispatch
                   }
+                  onClick={() => void proposalDispatch.dispatch()}
                   type="button"
                 >
                   <CheckIcon className="size-4" />
-                  Open wallet
+                  {proposalDispatch.dispatching
+                    ? "Waiting for confirmations"
+                    : proposalDispatch.calls.some(
+                          (call) => call.status === "failed",
+                        )
+                      ? "Retry failed call"
+                      : "Confirm in wallet"}
                 </button>
                 <button
                   className="button-ghost"
@@ -146,11 +166,15 @@ export function VoteComposer({ block }: { block: VoteBlock }) {
                   Close review
                 </button>
               </div>
-              {walletMessage && (
-                <output className="mt-3 block text-sm text-positive">
-                  {walletMessage}
-                </output>
+              {proposalDispatch.error && (
+                <p
+                  className="mt-3 text-pretty text-sm text-warning"
+                  role="alert"
+                >
+                  {proposalDispatch.error}
+                </p>
               )}
+              <ProposalCallStatus calls={proposalDispatch.calls} />
             </div>
           </div>
         </div>

@@ -13,16 +13,22 @@ import { GaugeRanking } from "./blocks/GaugeRanking"
 import { VoteComposer } from "./blocks/VoteComposer"
 import { ZapRoute } from "./blocks/ZapRoute"
 
-function BlockRenderer({ block }: { block: QueryBlock }) {
+function BlockRenderer({
+  block,
+  wallet,
+}: {
+  block: QueryBlock
+  wallet: QueryResponse["wallet"]
+}): JSX.Element | null {
   switch (block.type) {
     case "bridge_records":
       return <BridgeRecords block={block} />
     case "gauge_ranking":
       return <GaugeRanking block={block} />
     case "vote_composer":
-      return <VoteComposer block={block} />
+      return <VoteComposer block={block} wallet={wallet} />
     case "zap_route":
-      return <ZapRoute block={block} />
+      return <ZapRoute block={block} wallet={wallet} />
     case "activity_trace":
       return null
   }
@@ -101,7 +107,11 @@ export function QueryCanvas({
           )}
           {!loading &&
             response.blocks.map((block, index) => (
-              <BlockRenderer block={block} key={`${block.type}-${index}`} />
+              <BlockRenderer
+                block={block}
+                key={`${block.type}-${index}`}
+                wallet={response.wallet}
+              />
             ))}
           {!loading &&
             response.blocks.every(

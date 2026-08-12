@@ -6,15 +6,27 @@ import {
 } from "@/components/ui/Icons"
 import { StatusBadge } from "@/components/ui/StatusBadge"
 import { TokenMark } from "@/components/ui/TokenMark"
-import type { QueryBlock } from "@/lib/query/contracts"
+import type { QueryBlock, WalletContext } from "@/lib/query/contracts"
+import { useProposalDispatch } from "@/lib/wallet/useProposalDispatch"
 import { useState } from "react"
+import { ProposalCallStatus } from "./ProposalCallStatus"
 
 type ZapBlock = Extract<QueryBlock, { type: "zap_route" }>
 
-export function ZapRoute({ block }: { block: ZapBlock }) {
+export function ZapRoute({
+  block,
+  wallet,
+}: {
+  block: ZapBlock
+  wallet: WalletContext
+}): JSX.Element {
   const [reviewing, setReviewing] = useState(false)
-  const [walletMessage, setWalletMessage] = useState<string | null>(null)
   const actionable = block.canSign && block.transactionRequests.length > 0
+  const proposalDispatch = useProposalDispatch({
+    wallet,
+    requests: block.transactionRequests,
+  })
+  const readOnly = block.status === "read-only" || wallet.mode !== "connected"
 
   return (
     <section
@@ -106,12 +118,15 @@ export function ZapRoute({ block }: { block: ZapBlock }) {
             disabled={!actionable}
             onClick={() => {
               setReviewing(true)
-              setWalletMessage(null)
             }}
             type="button"
           >
             <BoltIcon className="size-4" />
-            {actionable ? "Review & deposit" : "No executable route"}
+            {readOnly
+              ? "Connect this wallet to continue"
+              : actionable
+                ? "Review & deposit"
+                : "No executable route"}
             <ArrowRightIcon className="size-4" />
           </button>
         </div>
@@ -133,15 +148,21 @@ export function ZapRoute({ block }: { block: ZapBlock }) {
               <div className="mt-4 flex flex-wrap gap-3">
                 <button
                   className="button-primary"
-                  onClick={() =>
-                    setWalletMessage(
-                      "Wallet-ready request created. Nothing was signed or submitted.",
-                    )
+                  disabled={
+                    proposalDispatch.dispatching ||
+                    !proposalDispatch.canDispatch
                   }
+                  onClick={() => void proposalDispatch.dispatch()}
                   type="button"
                 >
                   <CheckIcon className="size-4" />
-                  Open wallet
+                  {proposalDispatch.dispatching
+                    ? "Waiting for confirmations"
+                    : proposalDispatch.calls.some(
+                          (call) => call.status === "failed",
+                        )
+                      ? "Retry failed call"
+                      : "Confirm in wallet"}
                 </button>
                 <button
                   className="button-ghost"
@@ -151,11 +172,15 @@ export function ZapRoute({ block }: { block: ZapBlock }) {
                   Back to route
                 </button>
               </div>
-              {walletMessage && (
-                <output className="mt-3 block text-sm text-positive">
-                  {walletMessage}
-                </output>
+              {proposalDispatch.error && (
+                <p
+                  className="mt-3 text-pretty text-sm text-warning"
+                  role="alert"
+                >
+                  {proposalDispatch.error}
+                </p>
               )}
+              <ProposalCallStatus calls={proposalDispatch.calls} />
             </div>
           </div>
         </div>
