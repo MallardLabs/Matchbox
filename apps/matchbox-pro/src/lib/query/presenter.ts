@@ -113,7 +113,7 @@ function rankingResponse(input: PresentationInput): QueryResponse {
     kind: "vote",
     title: result.objective,
     answer: leader
-      ? `${leader.name} ranks first for ${result.objective.toLowerCase()}. It currently shows ${money(leader.depositedUsd)} in priced incentives and ${leader.consistencyBps / 100}% recent funding consistency.`
+      ? `${leader.name} ranks first for ${result.objective.toLowerCase()}. It currently shows ${money(leader.depositedUsd)} in priced incentives and was funded in ${leader.consistencyBps / 100}% of the last 8 completed epochs.`
       : "No funded gauges were found in the current indexed snapshot.",
     generatedAt: result.snapshot.generatedAt,
     snapshotLabel: `Mezo Mainnet · block ${result.snapshot.blockNumber}`,

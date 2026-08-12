@@ -112,7 +112,7 @@ export function QueryCanvas({
             response.blocks.map((block, index) => (
               <BlockRenderer
                 block={block}
-                key={`${block.type}-${index}`}
+                key={`${block.type}-${index}-${"proposalHash" in block ? block.proposalHash : response.id}`}
                 wallet={response.wallet}
               />
             ))}

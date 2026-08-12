@@ -84,4 +84,31 @@ describe("gauge optimizer", () => {
       "No eligible veBTC lock was found for this wallet.",
     )
   })
+
+  it("emits one complete independent ballot for every eligible lock", () => {
+    const positions = ["42", "43"].map((tokenId) =>
+      votingPositionSchema.parse({
+        governanceAsset: "veBTC",
+        tokenId,
+        votingPower: "50000000000000000000",
+        votingPowerFormatted: "50",
+      }),
+    )
+    const result = optimizeGaugeSnapshot({ snapshot, positions })
+
+    expect(result.positions).toHaveLength(2)
+    expect(result.ballots.map((ballot) => ballot.position.tokenId)).toEqual([
+      "42",
+      "43",
+    ])
+    expect(
+      result.ballots.every(
+        (ballot) =>
+          ballot.allocations.reduce(
+            (total, allocation) => total + allocation.basisPoints,
+            0,
+          ) === 10_000,
+      ),
+    ).toBe(true)
+  })
 })

@@ -88,7 +88,7 @@ export function GaugeRanking({ block }: { block: GaugeBlock }) {
                   </p>
                   <p className="text-xs capitalize text-muted">
                     {gauge.type} · {gauge.governanceAsset} ·{" "}
-                    {gauge.consistencyBps / 100}% funded consistency
+                    {gauge.consistencyBps / 100}% funded epochs / last 8
                     {gauge.pricingStatus === "partial"
                       ? " · partial pricing"
                       : ""}
@@ -139,8 +139,8 @@ export function GaugeRanking({ block }: { block: GaugeBlock }) {
       </div>
       <p className="mt-3 text-pretty text-xs text-muted">
         Objective: {block.objective}. Gross deposited incentives and historical
-        consistency are shown as context and do not replace the optimizer
-        objective.
+        funded-epoch rates over the last 8 completed epochs are shown as context
+        and do not replace the optimizer objective.
       </p>
     </section>
   )

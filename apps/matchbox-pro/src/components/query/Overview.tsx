@@ -105,7 +105,7 @@ export function Overview({ onQuery }: { onQuery: (query: string) => void }) {
           </p>
           <p className="max-w-sm text-pretty text-sm leading-6 text-secondary">
             Rank boost, pool, vault, and validator gauges by deposited
-            incentives or eight-epoch funding consistency.
+            incentives or funded-epoch rate over the last 8 completed epochs.
           </p>
           <button
             className="button-secondary mt-5"

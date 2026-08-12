@@ -60,11 +60,11 @@ export type OptimizeVotesOptions = GaugeAdapterOptions & {
   snapshot: GaugeSnapshot
 }
 
-async function readPositionForAsset(input: {
+async function readPositionsForAsset(input: {
   address: Address
   governanceAsset: VotingPosition["governanceAsset"]
   options: GaugeAdapterOptions
-}): Promise<VotingPosition | null> {
+}): Promise<VotingPosition[]> {
   const client = createMezoClient(input.options)
   const contractAddress =
     input.governanceAsset === "veMEZO"
@@ -76,7 +76,7 @@ async function readPositionForAsset(input: {
     functionName: "balanceOf",
     args: [input.address],
   })
-  if (balance === 0n) return null
+  if (balance === 0n) return []
   if (balance > MAX_LOCKS_PER_ASSET) {
     throw new Error(
       `${input.governanceAsset} position count exceeds the safe read limit`,
@@ -104,26 +104,17 @@ async function readPositionForAsset(input: {
       args: [tokenId],
     })),
   })
-  let selectedIndex = 0
-  for (let index = 1; index < powerResults.length; index += 1) {
-    if ((powerResults[index] ?? 0n) > (powerResults[selectedIndex] ?? 0n)) {
-      selectedIndex = index
-    }
-  }
-  const tokenId = tokenIdResults[selectedIndex]
-  const votingPower = powerResults[selectedIndex]
-  if (
-    tokenId === undefined ||
-    votingPower === undefined ||
-    votingPower === 0n
-  ) {
-    return null
-  }
-  return votingPositionSchema.parse({
-    governanceAsset: input.governanceAsset,
-    tokenId: tokenId.toString(),
-    votingPower: votingPower.toString(),
-    votingPowerFormatted: formatUnits(votingPower, 18),
+  return tokenIdResults.flatMap((tokenId, index) => {
+    const votingPower = powerResults[index]
+    if (votingPower === undefined || votingPower === 0n) return []
+    return [
+      votingPositionSchema.parse({
+        governanceAsset: input.governanceAsset,
+        tokenId: tokenId.toString(),
+        votingPower: votingPower.toString(),
+        votingPowerFormatted: formatUnits(votingPower, 18),
+      }),
+    ]
   })
 }
 
@@ -133,18 +124,18 @@ export async function readBestVotingPositions(
 ): Promise<VotingPosition[]> {
   const account = getAddress(address)
   const positions = await Promise.all([
-    readPositionForAsset({
+    readPositionsForAsset({
       address: account,
       governanceAsset: "veMEZO",
       options,
     }),
-    readPositionForAsset({
+    readPositionsForAsset({
       address: account,
       governanceAsset: "veBTC",
       options,
     }),
   ])
-  return positions.filter((position): position is VotingPosition => !!position)
+  return positions.flat()
 }
 
 export function projectedGaugeReturn(input: {
@@ -235,9 +226,6 @@ export function optimizeGaugeSnapshot(input: {
   snapshot: GaugeSnapshot
   positions: VotingPosition[]
 }): VoteOptimization {
-  const positions = new Map(
-    input.positions.map((position) => [position.governanceAsset, position]),
-  )
   const groups = new Map<string, GaugeSnapshot["gauges"]>()
   for (const gauge of input.snapshot.gauges) {
     if (gauge.depositedUsd === "0") continue
@@ -251,85 +239,88 @@ export function optimizeGaugeSnapshot(input: {
   for (const gauges of groups.values()) {
     const firstGauge = gauges[0]
     if (!firstGauge) continue
-    const position = positions.get(firstGauge.governanceAsset)
-    if (!position) continue
-    const points = new Map(gauges.map((gauge) => [gauge.id, 0]))
-    const votingPower = BigInt(position.votingPower)
+    const eligiblePositions = input.positions.filter(
+      (position) => position.governanceAsset === firstGauge.governanceAsset,
+    )
+    for (const position of eligiblePositions) {
+      const points = new Map(gauges.map((gauge) => [gauge.id, 0]))
+      const votingPower = BigInt(position.votingPower)
 
-    for (let point = 0; point < ALLOCATION_POINTS; point += 1) {
-      let selected = gauges[0]
-      let selectedMarginal = zeroUsd()
-      for (const gauge of gauges) {
-        const currentPoints = points.get(gauge.id) ?? 0
-        const currentReturn = projectedGaugeReturn({
-          depositedUsd: gauge.depositedUsd,
-          currentWeight: BigInt(gauge.currentWeight),
-          votingPower,
-          allocationBasisPoints: currentPoints * 100,
-        })
-        const nextReturn = projectedGaugeReturn({
-          depositedUsd: gauge.depositedUsd,
-          currentWeight: BigInt(gauge.currentWeight),
-          votingPower,
-          allocationBasisPoints: (currentPoints + 1) * 100,
-        })
-        const marginal = nextReturn.subtract(currentReturn)
-        if (!selected || marginal.compare(selectedMarginal) > 0) {
-          selected = gauge
-          selectedMarginal = marginal
-        }
-      }
-      if (!selected) break
-      points.set(selected.id, (points.get(selected.id) ?? 0) + 1)
-    }
-
-    const allocations = gauges
-      .flatMap((gauge) => {
-        const percentage = points.get(gauge.id) ?? 0
-        if (percentage === 0) return []
-        return [
-          optimizedAllocationSchema.parse({
-            gaugeId: gauge.id,
-            gaugeAddress: gauge.address,
-            gaugeName: gauge.name,
-            gaugeType: gauge.type,
-            tokenPair: gauge.tokenPair,
-            pricingStatus: gauge.pricingStatus,
-            percentage,
-            basisPoints: percentage * 100,
+      for (let point = 0; point < ALLOCATION_POINTS; point += 1) {
+        let selected = gauges[0]
+        let selectedMarginal = zeroUsd()
+        for (const gauge of gauges) {
+          const currentPoints = points.get(gauge.id) ?? 0
+          const currentReturn = projectedGaugeReturn({
             depositedUsd: gauge.depositedUsd,
-            projectedReturnUsd: usdDecimal(
-              projectedGaugeReturn({
-                depositedUsd: gauge.depositedUsd,
-                currentWeight: BigInt(gauge.currentWeight),
-                votingPower,
-                allocationBasisPoints: percentage * 100,
-              }),
-            ),
-            consistencyBps: gauge.consistencyBps,
-          }),
-        ]
-      })
-      .sort(
-        (left, right) =>
-          right.percentage - left.percentage ||
-          left.gaugeName.localeCompare(right.gaugeName),
+            currentWeight: BigInt(gauge.currentWeight),
+            votingPower,
+            allocationBasisPoints: currentPoints * 100,
+          })
+          const nextReturn = projectedGaugeReturn({
+            depositedUsd: gauge.depositedUsd,
+            currentWeight: BigInt(gauge.currentWeight),
+            votingPower,
+            allocationBasisPoints: (currentPoints + 1) * 100,
+          })
+          const marginal = nextReturn.subtract(currentReturn)
+          if (!selected || marginal.compare(selectedMarginal) > 0) {
+            selected = gauge
+            selectedMarginal = marginal
+          }
+        }
+        if (!selected) break
+        points.set(selected.id, (points.get(selected.id) ?? 0) + 1)
+      }
+
+      const allocations = gauges
+        .flatMap((gauge) => {
+          const percentage = points.get(gauge.id) ?? 0
+          if (percentage === 0) return []
+          return [
+            optimizedAllocationSchema.parse({
+              gaugeId: gauge.id,
+              gaugeAddress: gauge.address,
+              gaugeName: gauge.name,
+              gaugeType: gauge.type,
+              tokenPair: gauge.tokenPair,
+              pricingStatus: gauge.pricingStatus,
+              percentage,
+              basisPoints: percentage * 100,
+              depositedUsd: gauge.depositedUsd,
+              projectedReturnUsd: usdDecimal(
+                projectedGaugeReturn({
+                  depositedUsd: gauge.depositedUsd,
+                  currentWeight: BigInt(gauge.currentWeight),
+                  votingPower,
+                  allocationBasisPoints: percentage * 100,
+                }),
+              ),
+              consistencyBps: gauge.consistencyBps,
+            }),
+          ]
+        })
+        .sort(
+          (left, right) =>
+            right.percentage - left.percentage ||
+            left.gaugeName.localeCompare(right.gaugeName),
+        )
+      if (allocations.length === 0) continue
+      const projectedTotal = allocations.reduce(
+        (total, allocation) => total.add(usd(allocation.projectedReturnUsd)),
+        zeroUsd(),
       )
-    if (allocations.length === 0) continue
-    const projectedTotal = allocations.reduce(
-      (total, allocation) => total.add(usd(allocation.projectedReturnUsd)),
-      zeroUsd(),
-    )
-    ballots.push(
-      optimizedBallotSchema.parse({
-        votingContract: firstGauge.votingContract,
-        votingBucket: firstGauge.votingBucket,
-        governanceAsset: firstGauge.governanceAsset,
-        position,
-        allocations,
-        projectedReturnUsd: usdDecimal(projectedTotal),
-      }),
-    )
+      ballots.push(
+        optimizedBallotSchema.parse({
+          votingContract: firstGauge.votingContract,
+          votingBucket: firstGauge.votingBucket,
+          governanceAsset: firstGauge.governanceAsset,
+          position,
+          allocations,
+          projectedReturnUsd: usdDecimal(projectedTotal),
+        }),
+      )
+    }
   }
 
   const projectedTotal = ballots.reduce(
@@ -337,7 +328,8 @@ export function optimizeGaugeSnapshot(input: {
     zeroUsd(),
   )
   const missing = (["veMEZO", "veBTC"] as const).filter(
-    (asset) => !positions.has(asset),
+    (asset) =>
+      !input.positions.some((position) => position.governanceAsset === asset),
   )
   return voteOptimizationSchema.parse({
     objective: "Best personal return",

@@ -109,6 +109,14 @@ function voteResponse(): QueryResponse {
           calls: 0,
           gasEstimate: null,
           reason: "Fixture output is never wallet-executable.",
+          results: [
+            {
+              label: "Vote pool-gauges with veBTC #184",
+              status: "not-run",
+              gasEstimate: null,
+              reason: "Fixture output is never wallet-executable.",
+            },
+          ],
         },
         snapshotBlock: "12482113",
       },

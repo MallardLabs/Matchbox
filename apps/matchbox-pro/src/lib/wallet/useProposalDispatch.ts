@@ -246,6 +246,12 @@ export function useProposalDispatch(input: {
     }
   }, [pendingRequests, sendRequests])
 
+  const resetReview = useCallback((): void => {
+    setDiff(null)
+    setPendingRequests(null)
+    setError(null)
+  }, [])
+
   return {
     acknowledgeAndDispatch,
     awaitingAcknowledgement: !!pendingRequests,
@@ -255,5 +261,6 @@ export function useProposalDispatch(input: {
     dispatch,
     dispatching,
     error,
+    resetReview,
   }
 }

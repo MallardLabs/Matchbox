@@ -246,6 +246,7 @@ export type GaugeAdapterOptions = {
   dataBaseUrl?: string
   rpcUrls?: string[]
   now?: Date
+  client?: PublicClient
 }
 
 function shortAddress(address: Address): string {
@@ -279,6 +280,7 @@ async function fetchJson<T>(input: {
 export function createMezoClient(
   options: GaugeAdapterOptions = {},
 ): PublicClient {
+  if (options.client) return options.client
   const fetchImplementation = options.fetch ?? globalThis.fetch
   const rpcUrls = options.rpcUrls?.length
     ? options.rpcUrls

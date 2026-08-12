@@ -63,6 +63,14 @@ export const preparedVoteSchema = proposalMetadataSchema.extend({
     calls: z.number().int().nonnegative(),
     gasEstimate: z.string().nullable(),
     reason: z.string().nullable(),
+    results: z.array(
+      z.object({
+        label: z.string(),
+        status: z.enum(["passed", "blocked", "not-run"]),
+        gasEstimate: z.string().nullable(),
+        reason: z.string().nullable(),
+      }),
+    ),
   }),
 })
 
@@ -201,6 +209,7 @@ export async function prepareVoteTransactions(input: {
         calls: 0,
         gasEstimate: null,
         reason: "No eligible voting position and ballot were available.",
+        results: [],
       },
     })
   }
@@ -216,17 +225,28 @@ export async function prepareVoteTransactions(input: {
         calls: 0,
         gasEstimate: null,
         reason: "Watched and inspected wallets are read-only.",
+        results: ballots.map((ballot) => ({
+          label: `Vote ${ballot.votingBucket} with ${ballot.governanceAsset} #${ballot.position.tokenId}`,
+          status: "not-run",
+          gasEstimate: null,
+          reason: "Connect this wallet to simulate and sign this ballot.",
+        })),
       },
     })
   }
 
   const ownedPositions = await readBestVotingPositions(account, input.options)
-  const ownedByAsset = new Map(
-    ownedPositions.map((position) => [position.governanceAsset, position]),
+  const ownedPositionKeys = new Set(
+    ownedPositions.map(
+      (position) => `${position.governanceAsset}:${position.tokenId}`,
+    ),
   )
   const reconciledBallots = ballots.map((ballot) => {
-    const owned = ownedByAsset.get(ballot.governanceAsset)
-    if (!owned || owned.tokenId !== ballot.position.tokenId) {
+    if (
+      !ownedPositionKeys.has(
+        `${ballot.governanceAsset}:${ballot.position.tokenId}`,
+      )
+    ) {
       throw new Error(
         `Connected wallet does not own the selected ${ballot.governanceAsset} position`,
       )
@@ -244,19 +264,40 @@ export async function prepareVoteTransactions(input: {
     content: { ballots: reconciledBallots, transactionRequests: requests },
   })
   const client = createMezoClient(input.options)
-  try {
-    const simulations = await Promise.all(
-      requests.map(async (request) => {
+  const simulations = await Promise.all(
+    requests.map(async (request) => {
+      try {
         const call = {
           account,
           to: getAddress(request.to),
           data: request.data as Hex,
         }
         await client.call(call)
-        return client.estimateGas(call)
-      }),
+        const gasEstimate = await client.estimateGas(call)
+        return {
+          label: request.label,
+          status: "passed" as const,
+          gasEstimate: gasEstimate.toString(),
+          reason: null,
+        }
+      } catch (error) {
+        return {
+          label: request.label,
+          status: "blocked" as const,
+          gasEstimate: null,
+          reason: simulationMessage(error),
+        }
+      }
+    }),
+  )
+  const failed = simulations.find(
+    (simulation) => simulation.status === "blocked",
+  )
+  if (!failed) {
+    const gasEstimate = simulations.reduce(
+      (total, simulation) => total + BigInt(simulation.gasEstimate ?? "0"),
+      0n,
     )
-    const gasEstimate = simulations.reduce((total, gas) => total + gas, 0n)
     return preparedVoteSchema.parse({
       ...metadata,
       status: "unsigned",
@@ -268,29 +309,33 @@ export async function prepareVoteTransactions(input: {
         calls: requests.length,
         gasEstimate: gasEstimate.toString(),
         reason: null,
-      },
-    })
-  } catch (error) {
-    return preparedVoteSchema.parse({
-      ...metadata,
-      status: "blocked",
-      canSign: false,
-      ballots: reconciledBallots,
-      transactionRequests: [],
-      simulation: {
-        status: "blocked",
-        calls: requests.length,
-        gasEstimate: null,
-        reason: simulationMessage(error),
+        results: simulations,
       },
     })
   }
+  return preparedVoteSchema.parse({
+    ...metadata,
+    status: "blocked",
+    canSign: false,
+    ballots: reconciledBallots,
+    transactionRequests: [],
+    simulation: {
+      status: "blocked",
+      calls: requests.length,
+      gasEstimate: null,
+      reason: failed.reason,
+      results: simulations,
+    },
+  })
 }
 
 export function positionsForBallots(
   positions: VotingPosition[],
-): Map<VotingPosition["governanceAsset"], VotingPosition> {
+): Map<string, VotingPosition> {
   return new Map(
-    positions.map((position) => [position.governanceAsset, position]),
+    positions.map((position) => [
+      `${position.governanceAsset}:${position.tokenId}`,
+      position,
+    ]),
   )
 }

@@ -342,10 +342,10 @@ async function prepareRequestedVote(
   const firstGauge = selected[0]?.gauge
   if (!firstGauge) throw new Error("No live gauges were selected")
   const positions = await readBestVotingPositions(input.address, options)
-  const position = positions.find(
+  const eligiblePositions = positions.filter(
     (candidate) => candidate.governanceAsset === firstGauge.governanceAsset,
   )
-  if (!position) {
+  if (eligiblePositions.length === 0) {
     return prepareVoteResultSchema.parse({
       ...createProposalMetadata({
         kind: "vote",
@@ -365,34 +365,15 @@ async function prepareRequestedVote(
         calls: 0,
         gasEstimate: null,
         reason: `No eligible ${firstGauge.governanceAsset} lock was found for this wallet.`,
+        results: [],
       },
     })
   }
-  const allocations = selected.map(({ request, gauge }) => {
-    const basisPoints = Math.round(request.percentage * 100)
-    return optimizedAllocationSchema.parse({
-      gaugeId: gauge.id,
-      gaugeAddress: gauge.address,
-      gaugeName: gauge.name,
-      gaugeType: gauge.type,
-      tokenPair: gauge.tokenPair,
-      pricingStatus: gauge.pricingStatus,
-      percentage: basisPoints / 100,
-      basisPoints,
-      depositedUsd: gauge.depositedUsd,
-      projectedReturnUsd: usdDecimal(
-        projectedGaugeReturn({
-          depositedUsd: gauge.depositedUsd,
-          currentWeight: BigInt(gauge.currentWeight),
-          votingPower: BigInt(position.votingPower),
-          allocationBasisPoints: basisPoints,
-        }),
-      ),
-      consistencyBps: gauge.consistencyBps,
-    })
-  })
-  const totalBasisPoints = allocations.reduce(
-    (total, allocation) => total + allocation.basisPoints,
+  const requestedBasisPoints = selected.map(({ request }) =>
+    Math.round(request.percentage * 100),
+  )
+  const totalBasisPoints = requestedBasisPoints.reduce(
+    (total, basisPoints) => total + basisPoints,
     0,
   )
   if (totalBasisPoints !== 10_000) {
@@ -400,23 +381,51 @@ async function prepareRequestedVote(
       `Vote allocations must total 100%; received ${totalBasisPoints / 100}%`,
     )
   }
-  const projectedTotal = allocations.reduce(
-    (total, allocation) => total.add(usd(allocation.projectedReturnUsd)),
-    zeroUsd(),
-  )
-  const ballot = optimizedBallotSchema.parse({
-    votingContract: firstGauge.votingContract,
-    votingBucket: firstGauge.votingBucket,
-    governanceAsset: firstGauge.governanceAsset,
-    position,
-    allocations,
-    projectedReturnUsd: usdDecimal(projectedTotal),
+  const ballots = eligiblePositions.map((position) => {
+    const allocations = selected.map(({ gauge }, index) => {
+      const basisPoints = requestedBasisPoints[index]
+      if (basisPoints === undefined) {
+        throw new Error("A requested allocation disappeared")
+      }
+      return optimizedAllocationSchema.parse({
+        gaugeId: gauge.id,
+        gaugeAddress: gauge.address,
+        gaugeName: gauge.name,
+        gaugeType: gauge.type,
+        tokenPair: gauge.tokenPair,
+        pricingStatus: gauge.pricingStatus,
+        percentage: basisPoints / 100,
+        basisPoints,
+        depositedUsd: gauge.depositedUsd,
+        projectedReturnUsd: usdDecimal(
+          projectedGaugeReturn({
+            depositedUsd: gauge.depositedUsd,
+            currentWeight: BigInt(gauge.currentWeight),
+            votingPower: BigInt(position.votingPower),
+            allocationBasisPoints: basisPoints,
+          }),
+        ),
+        consistencyBps: gauge.consistencyBps,
+      })
+    })
+    const projectedTotal = allocations.reduce(
+      (total, allocation) => total.add(usd(allocation.projectedReturnUsd)),
+      zeroUsd(),
+    )
+    return optimizedBallotSchema.parse({
+      votingContract: firstGauge.votingContract,
+      votingBucket: firstGauge.votingBucket,
+      governanceAsset: firstGauge.governanceAsset,
+      position,
+      allocations,
+      projectedReturnUsd: usdDecimal(projectedTotal),
+    })
   })
   return prepareVoteTransactions({
     address: input.address,
     walletMode: input.walletMode,
     snapshot,
-    ballots: [ballot],
+    ballots,
     options,
   })
 }
