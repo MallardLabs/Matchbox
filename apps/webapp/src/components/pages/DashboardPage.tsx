@@ -8,6 +8,7 @@ import Tooltip from "@/components/Tooltip"
 import type { GaugeProfile } from "@/config/supabase"
 import {
   type GaugeAPYData,
+  type ProjectedTokenReward,
   formatAPY,
   useGaugesAPY,
   useUpcomingVotingAPY,
@@ -24,6 +25,12 @@ import {
 } from "@/hooks/useMultiLockClaimBribes"
 import { usePagination } from "@/hooks/usePagination"
 import {
+  type ValidatorGaugeIncentives,
+  useUpcomingValidatorRewards,
+  useValidatorGaugeIncentives,
+  useValidatorVoteAllocations,
+} from "@/hooks/useValidatorRewards"
+import {
   type ClaimableBribe,
   type VoteAllocation,
   useAllUsedWeights,
@@ -31,6 +38,7 @@ import {
   useBatchVoteState,
   useClaimBribes,
   useClaimableBribes,
+  useClaimableValidatorBribes,
   usePokeBoost,
 } from "@/hooks/useVoting"
 import {
@@ -103,6 +111,10 @@ function VeBTCLockCard({
   profile,
   apy,
   isLoadingAPY,
+  validatorClaimableUSD,
+  validatorAllocations,
+  validatorUsedWeight,
+  validatorIncentivesByGauge,
 }: {
   lock: ReturnType<typeof useVeBTCLocks>["locks"][0]
   hasGauge: boolean
@@ -111,6 +123,11 @@ function VeBTCLockCard({
   profile: GaugeProfile | null
   apy: number | null
   isLoadingAPY: boolean
+  /** Unclaimed validator-gauge bribes this NFT has earned. */
+  validatorClaimableUSD: number
+  validatorAllocations: VoteAllocation[]
+  validatorUsedWeight: bigint | undefined
+  validatorIncentivesByGauge: Map<string, ValidatorGaugeIncentives>
 }): JSX.Element {
   const unlockDate = new Date(Number(lock.end) * 1000)
   const isExpired = unlockDate < new Date()
@@ -119,6 +136,13 @@ function VeBTCLockCard({
     isPending: isPokePending,
     isConfirming: isPokeConfirming,
   } = usePokeBoost()
+  // Validator-gauge rewards this NFT is on track for at the next epoch flip
+  const { projectedIncentivesUSD: validatorProjectedUSD } =
+    useUpcomingValidatorRewards(
+      validatorAllocations,
+      validatorIncentivesByGauge,
+      validatorUsedWeight,
+    )
 
   const cardContent = (
     <Card
@@ -201,6 +225,20 @@ function VeBTCLockCard({
                 >
                   {profile.description}
                 </ParagraphSmall>
+              )}
+              {(validatorClaimableUSD > 0 || validatorProjectedUSD > 0) && (
+                <div className="flex flex-wrap items-center gap-1">
+                  {validatorClaimableUSD > 0 && (
+                    <span className="inline-flex items-center rounded-sm border border-[rgba(var(--positive-rgb),0.3)] bg-[rgba(var(--positive-rgb),0.15)] px-1 py-0.5 text-[9px] font-semibold text-[var(--positive)]">
+                      ${validatorClaimableUSD.toFixed(2)} claimable
+                    </span>
+                  )}
+                  {validatorProjectedUSD > 0 && (
+                    <span className="inline-flex items-center rounded-sm border border-[var(--border)] bg-[var(--surface-secondary)] px-1 py-0.5 text-[9px] font-medium text-[var(--content-secondary)]">
+                      ≈ ${validatorProjectedUSD.toFixed(2)} pending
+                    </span>
+                  )}
+                </div>
               )}
             </div>
           </div>
@@ -463,8 +501,18 @@ function VeMEZOLockCard({
   )
 }
 
+/** Which escrow's NFTs a reward row is describing. */
+type RewardAsset = "veMEZO" | "veBTC"
+
+type ProjectedRewardsSummary = {
+  upcomingAPY: number | null
+  projectedIncentivesUSD: number
+  projectedRewardsByToken: ProjectedTokenReward[]
+}
+
 function ClaimableRewardRow({
   tokenId,
+  asset,
   bribes,
   onClaim,
   isPending,
@@ -472,13 +520,12 @@ function ClaimableRewardRow({
   isClaimDisabled = false,
   isLast,
   claimableUSD,
-  usedWeight,
-  allocations,
-  apyMap,
+  projected,
   btcPrice,
   mezoPrice,
 }: {
   tokenId: bigint
+  asset: RewardAsset
   bribes: ClaimableBribe[]
   onClaim: () => void
   isPending: boolean
@@ -486,14 +533,12 @@ function ClaimableRewardRow({
   isClaimDisabled?: boolean
   isLast: boolean
   claimableUSD: number
-  usedWeight: bigint | undefined
-  allocations: VoteAllocation[]
-  apyMap: Map<string, GaugeAPYData>
+  projected: ProjectedRewardsSummary
   btcPrice: number | null
   mezoPrice: number | null
 }): JSX.Element | null {
   const { upcomingAPY, projectedIncentivesUSD, projectedRewardsByToken } =
-    useUpcomingVotingAPY(allocations, apyMap, usedWeight)
+    projected
 
   // Group rewards by token across all bribes for this tokenId
   const rewardsByToken = useMemo(() => {
@@ -557,7 +602,7 @@ function ClaimableRewardRow({
           </div>
           <div className="flex flex-col gap-0.5">
             <span className="text-sm font-medium text-[var(--content-primary)]">
-              veMEZO
+              {asset}
             </span>
             {upcomingAPY !== null && upcomingAPY > 0 && (
               <div className="flex items-center gap-1">
@@ -712,22 +757,19 @@ function ClaimableRewardRow({
 
 function ProjectedRewardRow({
   tokenId,
-  usedWeight,
-  allocations,
-  apyMap,
+  asset,
+  projected,
   isLast,
 }: {
   tokenId: bigint
-  usedWeight: bigint | undefined
-  allocations: VoteAllocation[]
-  apyMap: Map<string, GaugeAPYData>
+  asset: RewardAsset
+  projected: ProjectedRewardsSummary
   isLast: boolean
 }): JSX.Element | null {
   const [isExpanded, setIsExpanded] = useState(false)
 
-  // Calculate projected rewards and APY for this specific token
   const { upcomingAPY, projectedIncentivesUSD, projectedRewardsByToken } =
-    useUpcomingVotingAPY(allocations, apyMap, usedWeight)
+    projected
 
   if (projectedIncentivesUSD === 0) {
     return null
@@ -761,7 +803,7 @@ function ProjectedRewardRow({
           </div>
           <div className="flex flex-col gap-0.5">
             <span className="text-sm font-medium text-[var(--content-secondary)]">
-              veMEZO
+              {asset}
             </span>
             {upcomingAPY !== null && upcomingAPY > 0 && (
               <span className="inline-flex items-center rounded-sm border border-[var(--border)] bg-[var(--surface-secondary)] px-1 py-0.5 text-[9px] font-medium text-[var(--content-secondary)]">
@@ -857,6 +899,385 @@ function ProjectedRewardRow({
   )
 }
 
+type ClaimableTotals = Map<
+  Address,
+  { symbol: string; decimals: number; amount: bigint }
+>
+
+function groupBribesByTokenId(
+  bribes: ClaimableBribe[],
+): Map<string, ClaimableBribe[]> {
+  const map = new Map<string, ClaimableBribe[]>()
+  for (const bribe of bribes) {
+    const key = bribe.tokenId.toString()
+    const existing = map.get(key) ?? []
+    existing.push(bribe)
+    map.set(key, existing)
+  }
+  return map
+}
+
+function mergeClaimableTotals(...totals: ClaimableTotals[]): ClaimableTotals {
+  const merged: ClaimableTotals = new Map()
+  for (const source of totals) {
+    for (const [tokenAddress, info] of source.entries()) {
+      const existing = merged.get(tokenAddress)
+      if (existing) {
+        existing.amount += info.amount
+      } else {
+        merged.set(tokenAddress, { ...info })
+      }
+    }
+  }
+  return merged
+}
+
+function sumClaimableTotalsUsd(
+  totals: ClaimableTotals,
+  btcPrice: number | null,
+  mezoPrice: number | null,
+): number {
+  let total = 0
+  for (const [tokenAddress, info] of totals.entries()) {
+    const tokenAmount = Number(info.amount) / 10 ** info.decimals
+    const price =
+      getTokenUsdPrice(tokenAddress, info.symbol, btcPrice, mezoPrice) ?? 0
+    total += tokenAmount * price
+  }
+  return total
+}
+
+function claimableUsdByTokenId(
+  bribes: ClaimableBribe[],
+  btcPrice: number | null,
+  mezoPrice: number | null,
+): Map<string, number> {
+  const map = new Map<string, number>()
+  for (const bribe of bribes) {
+    const tokenIdKey = bribe.tokenId.toString()
+    let usdValue = 0
+    for (const reward of bribe.rewards) {
+      const tokenAmount = Number(reward.earned) / 10 ** reward.decimals
+      const price =
+        getTokenUsdPrice(
+          reward.tokenAddress,
+          reward.symbol,
+          btcPrice,
+          mezoPrice,
+        ) ?? 0
+      usdValue += tokenAmount * price
+    }
+    map.set(tokenIdKey, (map.get(tokenIdKey) ?? 0) + usdValue)
+  }
+  return map
+}
+
+function toClaimRequests(
+  tokenIds: bigint[],
+  bribesByTokenId: Map<string, ClaimableBribe[]>,
+): ClaimLockRequest[] {
+  return tokenIds.flatMap((tokenId) => {
+    const bribesForToken = bribesByTokenId.get(tokenId.toString())
+    if (!bribesForToken || bribesForToken.length === 0) return []
+
+    return [
+      {
+        tokenId,
+        bribes: bribesForToken.map((bribe) => ({
+          bribeAddress: bribe.bribeAddress,
+          tokens: bribe.rewards.map((reward) => reward.tokenAddress),
+        })),
+      },
+    ]
+  })
+}
+
+/**
+ * Wraps a multi-lock claim run with the snapshot bookkeeping the "claim all" and
+ * "retry failed" controls need, plus the auto-dismiss on a clean finish.
+ */
+function useClaimAllController(
+  claim: ReturnType<typeof useMultiLockClaimBribes>,
+) {
+  const [snapshot, setSnapshot] = useState<ClaimLockRequest[]>([])
+  const { claimAll, exportClaimBatch, clear, lockStates, isDone, hasErrors } =
+    claim
+
+  useEffect(() => {
+    if (isDone && !hasErrors) {
+      const timer = setTimeout(() => {
+        clear()
+        setSnapshot([])
+      }, 1500)
+
+      return () => clearTimeout(timer)
+    }
+  }, [clear, isDone, hasErrors])
+
+  const handleClaimAll = useCallback(
+    (requests: ClaimLockRequest[]) => {
+      if (requests.length === 0) return
+      setSnapshot(requests)
+      claimAll(requests)
+    },
+    [claimAll],
+  )
+
+  const handleExportClaimBatch = useCallback(
+    (requests: ClaimLockRequest[]) => {
+      if (requests.length < 2) return
+      setSnapshot(requests)
+      void exportClaimBatch(requests)
+    },
+    [exportClaimBatch],
+  )
+
+  const handleCloseMultiClaim = useCallback(() => {
+    clear()
+    setSnapshot([])
+  }, [clear])
+
+  const handleRetryFailedClaims = useCallback(() => {
+    const failedTokenIds = new Set(
+      lockStates
+        .filter((state) => state.status === "error")
+        .map((state) => state.tokenId.toString()),
+    )
+
+    const retryClaims = snapshot.filter((request) =>
+      failedTokenIds.has(request.tokenId.toString()),
+    )
+
+    if (retryClaims.length === 0) return
+
+    clear()
+    setSnapshot(retryClaims)
+    claimAll(retryClaims)
+  }, [claimAll, clear, lockStates, snapshot])
+
+  return {
+    handleClaimAll,
+    handleExportClaimBatch,
+    handleCloseMultiClaim,
+    handleRetryFailedClaims,
+  }
+}
+
+function MultiClaimProgress({
+  asset,
+  claim,
+  onClose,
+  onRetryFailed,
+}: {
+  asset: RewardAsset
+  claim: ReturnType<typeof useMultiLockClaimBribes>
+  onClose: () => void
+  onRetryFailed: () => void
+}): JSX.Element | null {
+  if (!claim.isInProgress && !claim.isDone) {
+    return null
+  }
+
+  return (
+    <div className="mt-5 border-t border-[var(--border)] pt-5">
+      <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-2xs uppercase tracking-wider text-[var(--content-tertiary)]">
+              {asset} Claim Progress
+            </p>
+            <p className="text-sm font-medium text-[var(--content-primary)]">
+              {claim.isInProgress
+                ? claim.executionMode === "safe-export"
+                  ? "Waiting for execution in Safe"
+                  : claim.executionMode === "batched"
+                    ? "Confirm batch in wallet"
+                    : `Signing transactions (${claim.currentIndex + 1}/${claim.totalLocks})`
+                : claim.hasErrors
+                  ? `${claim.successCount} of ${claim.totalLocks} succeeded`
+                  : claim.executionMode === "safe-export"
+                    ? "Safe batch executed"
+                    : claim.executionMode === "batched"
+                      ? "Batch confirmed"
+                      : "All transactions confirmed"}
+            </p>
+          </div>
+          {claim.isDone && !claim.hasErrors && (
+            <Tag color="green" closeable={false}>
+              Done
+            </Tag>
+          )}
+        </div>
+
+        <div className="mb-3 flex h-2 gap-0.5 overflow-hidden rounded-full">
+          {claim.lockStates.map((state) => (
+            <div
+              key={state.tokenId.toString()}
+              className={`flex-1 transition-colors ${
+                state.status === "success"
+                  ? "bg-[var(--positive)]"
+                  : state.status === "error"
+                    ? "bg-[var(--negative)]"
+                    : state.status === "signing" ||
+                        state.status === "confirming"
+                      ? "animate-pulse bg-[#F7931A]"
+                      : "bg-[var(--border)]"
+              }`}
+            />
+          ))}
+        </div>
+
+        <ol className="flex flex-col gap-2">
+          {claim.lockStates.map((state) => (
+            <li
+              key={state.tokenId.toString()}
+              className="flex items-center justify-between text-xs"
+            >
+              <span className="font-mono text-[var(--content-primary)]">
+                {asset} #{state.tokenId.toString()}
+              </span>
+              <span
+                className={`flex items-center gap-1.5 ${
+                  state.status === "success"
+                    ? "text-[var(--positive)]"
+                    : state.status === "error"
+                      ? "text-[var(--negative)]"
+                      : state.status === "signing" ||
+                          state.status === "confirming"
+                        ? "text-[#F7931A]"
+                        : "text-[var(--content-secondary)]"
+                }`}
+              >
+                {state.status === "success"
+                  ? "Claimed"
+                  : state.status === "error"
+                    ? "Failed"
+                    : state.status === "signing"
+                      ? "Awaiting signature"
+                      : state.status === "confirming"
+                        ? claim.executionMode === "safe-export"
+                          ? "Waiting for Safe"
+                          : "Confirming"
+                        : "Pending"}
+              </span>
+            </li>
+          ))}
+        </ol>
+
+        {claim.isDone && claim.hasErrors && (
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Button kind="secondary" onClick={onClose}>
+              Close
+            </Button>
+            <Button kind="primary" onClick={onRetryFailed}>
+              Retry Failed ({claim.errorCount})
+            </Button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// The projection hooks must run per row, so each voter gets a thin wrapper that
+// resolves its own numbers and hands them to the shared presentational rows.
+
+function BoostRewardRows({
+  tokenId,
+  bribes,
+  usedWeight,
+  allocations,
+  apyMap,
+  ...rest
+}: {
+  tokenId: bigint
+  bribes: ClaimableBribe[] | undefined
+  usedWeight: bigint | undefined
+  allocations: VoteAllocation[]
+  apyMap: Map<string, GaugeAPYData>
+  onClaim: () => void
+  isPending: boolean
+  isConfirming: boolean
+  isClaimDisabled?: boolean
+  isLast: boolean
+  claimableUSD: number
+  btcPrice: number | null
+  mezoPrice: number | null
+}): JSX.Element | null {
+  const projected = useUpcomingVotingAPY(allocations, apyMap, usedWeight)
+
+  if (!bribes || bribes.length === 0) {
+    return (
+      <ProjectedRewardRow
+        tokenId={tokenId}
+        asset="veMEZO"
+        projected={projected}
+        isLast={rest.isLast}
+      />
+    )
+  }
+
+  return (
+    <ClaimableRewardRow
+      {...rest}
+      tokenId={tokenId}
+      asset="veMEZO"
+      bribes={bribes}
+      projected={projected}
+    />
+  )
+}
+
+function ValidatorRewardRows({
+  tokenId,
+  bribes,
+  usedWeight,
+  allocations,
+  incentivesByGauge,
+  ...rest
+}: {
+  tokenId: bigint
+  bribes: ClaimableBribe[] | undefined
+  usedWeight: bigint | undefined
+  allocations: VoteAllocation[]
+  incentivesByGauge: Map<string, ValidatorGaugeIncentives>
+  onClaim: () => void
+  isPending: boolean
+  isConfirming: boolean
+  isClaimDisabled?: boolean
+  isLast: boolean
+  claimableUSD: number
+  btcPrice: number | null
+  mezoPrice: number | null
+}): JSX.Element | null {
+  const projected = useUpcomingValidatorRewards(
+    allocations,
+    incentivesByGauge,
+    usedWeight,
+  )
+
+  if (!bribes || bribes.length === 0) {
+    return (
+      <ProjectedRewardRow
+        tokenId={tokenId}
+        asset="veBTC"
+        projected={projected}
+        isLast={rest.isLast}
+      />
+    )
+  }
+
+  return (
+    <ClaimableRewardRow
+      {...rest}
+      tokenId={tokenId}
+      asset="veBTC"
+      bribes={bribes}
+      projected={projected}
+    />
+  )
+}
+
 export default function DashboardPage(): JSX.Element {
   const { isConnected } = useAccount()
   const { locks: veBTCLocks, isLoading: isLoadingVeBTC } = useVeBTCLocks()
@@ -892,6 +1313,14 @@ export default function DashboardPage(): JSX.Element {
       ),
     [veBTCLocks],
   )
+  // Validator votes and their bribes belong to the NFTs the caller owns, so this
+  // deliberately excludes the managed NFTs that `veBTCGaugeTokenIds` pulls in for
+  // gauge lookup: a managed lock votes through its manager, and only the manager
+  // can claim against that NFT.
+  const veBTCVotingTokenIds = useMemo(
+    () => veBTCLocks.map((lock) => lock.tokenId),
+    [veBTCLocks],
+  )
 
   const { gaugeDataMap, isLoading: isLoadingBatchGaugeData } =
     useBatchGaugeData(veBTCGaugeTokenIds)
@@ -906,34 +1335,45 @@ export default function DashboardPage(): JSX.Element {
     enabled: isConnected && veMEZOTokenIds.length > 0,
   })
 
+  // Validator gauges are voted with veBTC on ValidatorsVoter, so their bribes
+  // are a second, independent claim surface alongside the veMEZO/BoostVoter one.
+  const {
+    claimableBribes: validatorClaimableBribes,
+    totalClaimable: validatorTotalClaimable,
+    isRefreshing: isRefreshingValidatorBribes,
+    refetch: refetchValidatorBribes,
+  } = useClaimableValidatorBribes(veBTCVotingTokenIds, {
+    enabled: isConnected && veBTCVotingTokenIds.length > 0,
+  })
+
   const {
     claimBribes,
     isPending: isClaimPending,
     isConfirming: isClaimConfirming,
     isSuccess: isClaimSuccess,
   } = useClaimBribes()
-  const [claimAllSnapshot, setClaimAllSnapshot] = useState<ClaimLockRequest[]>(
-    [],
-  )
   const {
-    claimAll,
-    exportClaimBatch,
-    copyClaimBatchJson,
-    lockStates: multiClaimLockStates,
-    currentIndex: multiClaimCurrentIndex,
-    totalLocks: multiClaimTotalLocks,
-    successCount: multiClaimSuccessCount,
-    errorCount: multiClaimErrorCount,
-    isInProgress: isMultiClaimInProgress,
-    isDone: isMultiClaimDone,
-    hasErrors: multiClaimHasErrors,
-    executionMode: multiClaimExecutionMode,
-    canExportSafeBatch: canExportClaimSafeBatch,
-    canCopyBatchJson: canCopyClaimBatchJson,
-    copiedBatchJson: copiedClaimBatchJson,
-    safeBatchError: claimSafeBatchError,
-    clear: clearMultiClaim,
-  } = useMultiLockClaimBribes()
+    claimBribes: claimValidatorBribes,
+    isPending: isValidatorClaimPending,
+    isConfirming: isValidatorClaimConfirming,
+    isSuccess: isValidatorClaimSuccess,
+  } = useClaimBribes("validators")
+
+  const boostMultiClaim = useMultiLockClaimBribes()
+  const validatorMultiClaim = useMultiLockClaimBribes("validators")
+
+  const {
+    handleClaimAll,
+    handleExportClaimBatch,
+    handleCloseMultiClaim,
+    handleRetryFailedClaims,
+  } = useClaimAllController(boostMultiClaim)
+  const {
+    handleClaimAll: handleClaimAllValidator,
+    handleExportClaimBatch: handleExportValidatorClaimBatch,
+    handleCloseMultiClaim: handleCloseValidatorMultiClaim,
+    handleRetryFailedClaims: handleRetryFailedValidatorClaims,
+  } = useClaimAllController(validatorMultiClaim)
 
   // Refetch bribes after successful claim
   useEffect(() => {
@@ -943,140 +1383,81 @@ export default function DashboardPage(): JSX.Element {
   }, [isClaimSuccess, refetchBribes])
 
   useEffect(() => {
-    if (isMultiClaimDone && multiClaimSuccessCount > 0) {
-      void refetchBribes()
+    if (isValidatorClaimSuccess) {
+      void refetchValidatorBribes()
     }
-  }, [isMultiClaimDone, multiClaimSuccessCount, refetchBribes])
+  }, [isValidatorClaimSuccess, refetchValidatorBribes])
 
   useEffect(() => {
-    if (isMultiClaimDone && !multiClaimHasErrors) {
-      const timer = setTimeout(() => {
-        clearMultiClaim()
-        setClaimAllSnapshot([])
-      }, 1500)
-
-      return () => clearTimeout(timer)
+    if (boostMultiClaim.isDone && boostMultiClaim.successCount > 0) {
+      void refetchBribes()
     }
-  }, [clearMultiClaim, isMultiClaimDone, multiClaimHasErrors])
+  }, [boostMultiClaim.isDone, boostMultiClaim.successCount, refetchBribes])
+
+  useEffect(() => {
+    if (validatorMultiClaim.isDone && validatorMultiClaim.successCount > 0) {
+      void refetchValidatorBribes()
+    }
+  }, [
+    validatorMultiClaim.isDone,
+    validatorMultiClaim.successCount,
+    refetchValidatorBribes,
+  ])
 
   // Group claimable bribes by tokenId
-  const bribesGroupedByTokenId = useMemo(() => {
-    const map = new Map<string, ClaimableBribe[]>()
-    for (const bribe of claimableBribes) {
-      const key = bribe.tokenId.toString()
-      const existing = map.get(key) ?? []
-      existing.push(bribe)
-      map.set(key, existing)
-    }
-    return map
-  }, [claimableBribes])
+  const bribesGroupedByTokenId = useMemo(
+    () => groupBribesByTokenId(claimableBribes),
+    [claimableBribes],
+  )
+  const validatorBribesGroupedByTokenId = useMemo(
+    () => groupBribesByTokenId(validatorClaimableBribes),
+    [validatorClaimableBribes],
+  )
 
-  // Calculate total claimable USD value
-  const totalClaimableUSD = useMemo(() => {
-    let total = 0
-    for (const [tokenAddr, info] of totalClaimable.entries()) {
-      const tokenAmount = Number(info.amount) / 10 ** info.decimals
-      const price =
-        getTokenUsdPrice(tokenAddr, info.symbol, btcPrice, mezoPrice) ?? 0
-      total += tokenAmount * price
-    }
-    return total
-  }, [totalClaimable, btcPrice, mezoPrice])
+  // Claimable token totals across both voters, so the header reads as one pot
+  const combinedTotalClaimable = useMemo(
+    () => mergeClaimableTotals(totalClaimable, validatorTotalClaimable),
+    [totalClaimable, validatorTotalClaimable],
+  )
+
+  const totalClaimableUSD = useMemo(
+    () => sumClaimableTotalsUsd(combinedTotalClaimable, btcPrice, mezoPrice),
+    [combinedTotalClaimable, btcPrice, mezoPrice],
+  )
 
   // Calculate claimable USD per tokenId
-  const claimableUSDByTokenId = useMemo(() => {
-    const map = new Map<string, number>()
-    for (const bribe of claimableBribes) {
-      const tokenIdKey = bribe.tokenId.toString()
-      let usdValue = 0
-      for (const reward of bribe.rewards) {
-        const tokenAmount = Number(reward.earned) / 10 ** reward.decimals
-        const price =
-          getTokenUsdPrice(
-            reward.tokenAddress,
-            reward.symbol,
-            btcPrice,
-            mezoPrice,
-          ) ?? 0
-        usdValue += tokenAmount * price
-      }
-      const existing = map.get(tokenIdKey) ?? 0
-      map.set(tokenIdKey, existing + usdValue)
-    }
-    return map
-  }, [claimableBribes, btcPrice, mezoPrice])
+  const claimableUSDByTokenId = useMemo(
+    () => claimableUsdByTokenId(claimableBribes, btcPrice, mezoPrice),
+    [claimableBribes, btcPrice, mezoPrice],
+  )
+  const validatorClaimableUSDByTokenId = useMemo(
+    () => claimableUsdByTokenId(validatorClaimableBribes, btcPrice, mezoPrice),
+    [validatorClaimableBribes, btcPrice, mezoPrice],
+  )
 
-  const claimAllRequests = useMemo(() => {
-    return veMEZOLocks.flatMap((lock) => {
-      const bribesForToken = bribesGroupedByTokenId.get(lock.tokenId.toString())
-      if (!bribesForToken || bribesForToken.length === 0) {
-        return []
-      }
-
-      return [
-        {
-          tokenId: lock.tokenId,
-          bribes: bribesForToken.map((bribe) => ({
-            bribeAddress: bribe.bribeAddress,
-            tokens: bribe.rewards.map((reward) => reward.tokenAddress),
-          })),
-        },
-      ]
-    })
-  }, [bribesGroupedByTokenId, veMEZOLocks])
+  const claimAllRequests = useMemo(
+    () => toClaimRequests(veMEZOTokenIds, bribesGroupedByTokenId),
+    [bribesGroupedByTokenId, veMEZOTokenIds],
+  )
+  const validatorClaimAllRequests = useMemo(
+    () => toClaimRequests(veBTCVotingTokenIds, validatorBribesGroupedByTokenId),
+    [validatorBribesGroupedByTokenId, veBTCVotingTokenIds],
+  )
 
   const handleClaimBribes = (tokenId: bigint) => {
-    const bribesForToken = bribesGroupedByTokenId.get(tokenId.toString()) ?? []
-    if (bribesForToken.length === 0) return
-
-    const bribesData = bribesForToken.map((bribe) => ({
-      bribeAddress: bribe.bribeAddress,
-      tokens: bribe.rewards.map((r) => r.tokenAddress),
-    }))
-
-    claimBribes(tokenId, bribesData)
+    const request = toClaimRequests([tokenId], bribesGroupedByTokenId)[0]
+    if (!request) return
+    claimBribes(tokenId, request.bribes)
   }
 
-  const handleClaimAll = useCallback(() => {
-    if (claimAllRequests.length === 0) {
-      return
-    }
-
-    setClaimAllSnapshot(claimAllRequests)
-    claimAll(claimAllRequests)
-  }, [claimAll, claimAllRequests])
-
-  const handleExportClaimBatch = useCallback(() => {
-    if (claimAllRequests.length < 2) return
-
-    setClaimAllSnapshot(claimAllRequests)
-    void exportClaimBatch(claimAllRequests)
-  }, [claimAllRequests, exportClaimBatch])
-
-  const handleCloseMultiClaim = useCallback(() => {
-    clearMultiClaim()
-    setClaimAllSnapshot([])
-  }, [clearMultiClaim])
-
-  const handleRetryFailedClaims = useCallback(() => {
-    const failedTokenIds = new Set(
-      multiClaimLockStates
-        .filter((state) => state.status === "error")
-        .map((state) => state.tokenId.toString()),
-    )
-
-    const retryClaims = claimAllSnapshot.filter((claim) =>
-      failedTokenIds.has(claim.tokenId.toString()),
-    )
-
-    if (retryClaims.length === 0) {
-      return
-    }
-
-    clearMultiClaim()
-    setClaimAllSnapshot(retryClaims)
-    claimAll(retryClaims)
-  }, [claimAll, claimAllSnapshot, clearMultiClaim, multiClaimLockStates])
+  const handleClaimValidatorBribes = (tokenId: bigint) => {
+    const request = toClaimRequests(
+      [tokenId],
+      validatorBribesGroupedByTokenId,
+    )[0]
+    if (!request) return
+    claimValidatorBribes(tokenId, request.bribes)
+  }
 
   const isLoadingCore = isLoadingVeBTC || isLoadingVeMEZO
 
@@ -1127,13 +1508,41 @@ export default function DashboardPage(): JSX.Element {
     totalUsedWeight,
   )
 
-  const hasClaimableRewards = claimableBribes.length > 0
-  const hasFutureRewards = projectedIncentivesUSD > 0
+  // Validator gauge incentives, and how the caller's veBTC votes split them
+  const {
+    incentivesByGauge: validatorIncentivesByGauge,
+    validatorGaugeAddresses,
+  } = useValidatorGaugeIncentives({ enabled: isConnected })
+  const {
+    allocationsByToken: validatorAllocationsByToken,
+    aggregatedAllocations: aggregatedValidatorAllocations,
+    usedWeightsByToken: validatorUsedWeightsByToken,
+    totalUsedWeight: totalValidatorUsedWeight,
+  } = useValidatorVoteAllocations(veBTCVotingTokenIds, validatorGaugeAddresses)
+
+  const {
+    upcomingAPY: validatorUpcomingAPY,
+    projectedIncentivesUSD: validatorProjectedIncentivesUSD,
+  } = useUpcomingValidatorRewards(
+    aggregatedValidatorAllocations,
+    validatorIncentivesByGauge,
+    totalValidatorUsedWeight,
+  )
+
+  const hasBoostClaimableRewards = claimableBribes.length > 0
+  const hasValidatorClaimableRewards = validatorClaimableBribes.length > 0
+  const hasClaimableRewards =
+    hasBoostClaimableRewards || hasValidatorClaimableRewards
+  const combinedProjectedIncentivesUSD =
+    projectedIncentivesUSD + validatorProjectedIncentivesUSD
+  const hasFutureRewards = combinedProjectedIncentivesUSD > 0
   const showRewardsSection =
     hasClaimableRewards ||
     hasFutureRewards ||
-    isMultiClaimInProgress ||
-    isMultiClaimDone
+    boostMultiClaim.isInProgress ||
+    boostMultiClaim.isDone ||
+    validatorMultiClaim.isInProgress ||
+    validatorMultiClaim.isDone
 
   // Get all gauge profiles for transfer modal
   const { profiles: allGaugeProfiles, refetch: refetchProfiles } =
@@ -1414,9 +1823,15 @@ export default function DashboardPage(): JSX.Element {
                           </p>
                           {upcomingAPY !== null && upcomingAPY > 0 && (
                             <span className="inline-flex items-center rounded-full border border-[rgba(var(--positive-rgb),0.4)] bg-[rgba(var(--positive-rgb),0.15)] px-2.5 py-1 text-xs font-semibold text-[var(--positive)]">
-                              {formatAPY(upcomingAPY)} APY
+                              {formatAPY(upcomingAPY)} veMEZO APY
                             </span>
                           )}
+                          {validatorUpcomingAPY !== null &&
+                            validatorUpcomingAPY > 0 && (
+                              <span className="inline-flex items-center rounded-full border border-[rgba(247,147,26,0.4)] bg-[rgba(247,147,26,0.15)] px-2.5 py-1 text-xs font-semibold text-[#F7931A]">
+                                {formatAPY(validatorUpcomingAPY)} veBTC APY
+                              </span>
+                            )}
                         </div>
 
                         {/* Total USD Value - prominent display */}
@@ -1434,7 +1849,7 @@ export default function DashboardPage(): JSX.Element {
                         {/* Asset breakdown */}
                         {hasClaimableRewards && (
                           <div className="flex flex-wrap gap-3">
-                            {Array.from(totalClaimable.entries()).map(
+                            {Array.from(combinedTotalClaimable.entries()).map(
                               ([tokenAddr, info]) => {
                                 const tokenAmount =
                                   Number(info.amount) / 10 ** info.decimals
@@ -1496,253 +1911,267 @@ export default function DashboardPage(): JSX.Element {
                               </p>
                               <span className="font-mono text-lg font-semibold tabular-nums text-[var(--content-secondary)]">
                                 +$
-                                {projectedIncentivesUSD.toLocaleString(
+                                {combinedProjectedIncentivesUSD.toLocaleString(
                                   undefined,
                                   { maximumFractionDigits: 2 },
                                 )}
                               </span>
                             </div>
+                            {projectedIncentivesUSD > 0 &&
+                              validatorProjectedIncentivesUSD > 0 && (
+                                <p className="mt-1 text-xs text-[var(--content-tertiary)]">
+                                  veMEZO gauges $
+                                  {projectedIncentivesUSD.toLocaleString(
+                                    undefined,
+                                    { maximumFractionDigits: 2 },
+                                  )}
+                                  {" · "}
+                                  veBTC validator gauges $
+                                  {validatorProjectedIncentivesUSD.toLocaleString(
+                                    undefined,
+                                    { maximumFractionDigits: 2 },
+                                  )}
+                                </p>
+                              )}
                           </div>
                         )}
                       </div>
 
-                      {hasClaimableRewards &&
-                        !isMultiClaimInProgress &&
-                        !isMultiClaimDone && (
-                          <div className="flex flex-wrap gap-2">
-                            {canExportClaimSafeBatch &&
-                              claimAllRequests.length > 1 && (
-                                <Button
-                                  kind="secondary"
-                                  onClick={handleExportClaimBatch}
-                                  disabled={isRefreshingClaimableBribes}
-                                >
-                                  Export Safe batch
-                                </Button>
-                              )}
-                            {canCopyClaimBatchJson &&
-                              claimAllRequests.length > 1 && (
-                                <Button
-                                  kind="tertiary"
-                                  size="small"
-                                  onClick={() =>
-                                    void copyClaimBatchJson(claimAllRequests)
-                                  }
-                                >
-                                  {copiedClaimBatchJson
-                                    ? "Copied"
-                                    : "Copy tx JSON"}
-                                </Button>
-                              )}
-                            <Button
-                              kind="primary"
-                              onClick={handleClaimAll}
-                              disabled={
-                                claimAllRequests.length === 0 ||
-                                isClaimPending ||
-                                isClaimConfirming ||
-                                isRefreshingClaimableBribes
-                              }
-                            >
-                              Claim all
-                            </Button>
-                          </div>
-                        )}
-                    </div>
-
-                    {claimSafeBatchError && (
-                      <p className="mt-3 text-pretty text-xs text-[var(--negative)]">
-                        {claimSafeBatchError.message}
-                      </p>
-                    )}
-
-                    {(isMultiClaimInProgress || isMultiClaimDone) && (
-                      <div className="mt-5 border-t border-[var(--border)] pt-5">
-                        <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
-                          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-                            <div>
-                              <p className="text-2xs uppercase tracking-wider text-[var(--content-tertiary)]">
-                                Claim Progress
-                              </p>
-                              <p className="text-sm font-medium text-[var(--content-primary)]">
-                                {isMultiClaimInProgress
-                                  ? multiClaimExecutionMode === "safe-export"
-                                    ? "Waiting for execution in Safe"
-                                    : multiClaimExecutionMode === "batched"
-                                      ? "Confirm batch in wallet"
-                                      : `Signing transactions (${multiClaimCurrentIndex + 1}/${multiClaimTotalLocks})`
-                                  : multiClaimHasErrors
-                                    ? `${multiClaimSuccessCount} of ${multiClaimTotalLocks} succeeded`
-                                    : multiClaimExecutionMode === "safe-export"
-                                      ? "Safe batch executed"
-                                      : multiClaimExecutionMode === "batched"
-                                        ? "Batch confirmed"
-                                        : "All transactions confirmed"}
-                              </p>
-                            </div>
-                            {isMultiClaimDone && !multiClaimHasErrors && (
-                              <Tag color="green" closeable={false}>
-                                Done
-                              </Tag>
-                            )}
-                          </div>
-
-                          <div className="mb-3 flex h-2 gap-0.5 overflow-hidden rounded-full">
-                            {multiClaimLockStates.map((state) => (
-                              <div
-                                key={state.tokenId.toString()}
-                                className={`flex-1 transition-colors ${
-                                  state.status === "success"
-                                    ? "bg-[var(--positive)]"
-                                    : state.status === "error"
-                                      ? "bg-[var(--negative)]"
-                                      : state.status === "signing" ||
-                                          state.status === "confirming"
-                                        ? "animate-pulse bg-[#F7931A]"
-                                        : "bg-[var(--border)]"
-                                }`}
-                              />
-                            ))}
-                          </div>
-
-                          <ol className="flex flex-col gap-2">
-                            {multiClaimLockStates.map((state) => (
-                              <li
-                                key={state.tokenId.toString()}
-                                className="flex items-center justify-between text-xs"
-                              >
-                                <span className="font-mono text-[var(--content-primary)]">
-                                  veMEZO #{state.tokenId.toString()}
-                                </span>
-                                <span
-                                  className={`flex items-center gap-1.5 ${
-                                    state.status === "success"
-                                      ? "text-[var(--positive)]"
-                                      : state.status === "error"
-                                        ? "text-[var(--negative)]"
-                                        : state.status === "signing" ||
-                                            state.status === "confirming"
-                                          ? "text-[#F7931A]"
-                                          : "text-[var(--content-secondary)]"
-                                  }`}
-                                >
-                                  {state.status === "success"
-                                    ? "Claimed"
-                                    : state.status === "error"
-                                      ? "Failed"
-                                      : state.status === "signing"
-                                        ? "Awaiting signature"
-                                        : state.status === "confirming"
-                                          ? multiClaimExecutionMode ===
-                                            "safe-export"
-                                            ? "Waiting for Safe"
-                                            : "Confirming"
-                                          : "Pending"}
-                                </span>
-                              </li>
-                            ))}
-                          </ol>
-
-                          {isMultiClaimDone && multiClaimHasErrors && (
-                            <div className="mt-4 flex flex-wrap gap-2">
-                              <Button
-                                kind="secondary"
-                                onClick={handleCloseMultiClaim}
-                              >
-                                Close
-                              </Button>
+                      {/*
+                        The two voters need separate transactions, so they get
+                        separate controls rather than one button that silently
+                        fires two wallet prompts.
+                      */}
+                      <div className="flex flex-col items-stretch gap-2">
+                        {hasBoostClaimableRewards &&
+                          !boostMultiClaim.isInProgress &&
+                          !boostMultiClaim.isDone && (
+                            <div className="flex flex-wrap gap-2">
+                              {boostMultiClaim.canExportSafeBatch &&
+                                claimAllRequests.length > 1 && (
+                                  <Button
+                                    kind="secondary"
+                                    onClick={() =>
+                                      handleExportClaimBatch(claimAllRequests)
+                                    }
+                                    disabled={isRefreshingClaimableBribes}
+                                  >
+                                    Export Safe batch
+                                  </Button>
+                                )}
+                              {boostMultiClaim.canCopyBatchJson &&
+                                claimAllRequests.length > 1 && (
+                                  <Button
+                                    kind="tertiary"
+                                    size="small"
+                                    onClick={() =>
+                                      void boostMultiClaim.copyClaimBatchJson(
+                                        claimAllRequests,
+                                      )
+                                    }
+                                  >
+                                    {boostMultiClaim.copiedBatchJson
+                                      ? "Copied"
+                                      : "Copy tx JSON"}
+                                  </Button>
+                                )}
                               <Button
                                 kind="primary"
-                                onClick={handleRetryFailedClaims}
+                                onClick={() => handleClaimAll(claimAllRequests)}
+                                disabled={
+                                  claimAllRequests.length === 0 ||
+                                  isClaimPending ||
+                                  isClaimConfirming ||
+                                  isRefreshingClaimableBribes
+                                }
                               >
-                                Retry Failed ({multiClaimErrorCount})
+                                {hasValidatorClaimableRewards
+                                  ? "Claim all veMEZO"
+                                  : "Claim all"}
                               </Button>
                             </div>
                           )}
-                        </div>
+
+                        {hasValidatorClaimableRewards &&
+                          !validatorMultiClaim.isInProgress &&
+                          !validatorMultiClaim.isDone && (
+                            <div className="flex flex-wrap gap-2">
+                              {validatorMultiClaim.canExportSafeBatch &&
+                                validatorClaimAllRequests.length > 1 && (
+                                  <Button
+                                    kind="secondary"
+                                    onClick={() =>
+                                      handleExportValidatorClaimBatch(
+                                        validatorClaimAllRequests,
+                                      )
+                                    }
+                                    disabled={isRefreshingValidatorBribes}
+                                  >
+                                    Export Safe batch
+                                  </Button>
+                                )}
+                              {validatorMultiClaim.canCopyBatchJson &&
+                                validatorClaimAllRequests.length > 1 && (
+                                  <Button
+                                    kind="tertiary"
+                                    size="small"
+                                    onClick={() =>
+                                      void validatorMultiClaim.copyClaimBatchJson(
+                                        validatorClaimAllRequests,
+                                      )
+                                    }
+                                  >
+                                    {validatorMultiClaim.copiedBatchJson
+                                      ? "Copied"
+                                      : "Copy tx JSON"}
+                                  </Button>
+                                )}
+                              <Button
+                                kind="primary"
+                                onClick={() =>
+                                  handleClaimAllValidator(
+                                    validatorClaimAllRequests,
+                                  )
+                                }
+                                disabled={
+                                  validatorClaimAllRequests.length === 0 ||
+                                  isValidatorClaimPending ||
+                                  isValidatorClaimConfirming ||
+                                  isRefreshingValidatorBribes
+                                }
+                              >
+                                {hasBoostClaimableRewards
+                                  ? "Claim all veBTC"
+                                  : "Claim all"}
+                              </Button>
+                            </div>
+                          )}
                       </div>
+                    </div>
+
+                    {boostMultiClaim.safeBatchError && (
+                      <p className="mt-3 text-pretty text-xs text-[var(--negative)]">
+                        {boostMultiClaim.safeBatchError.message}
+                      </p>
                     )}
+                    {validatorMultiClaim.safeBatchError && (
+                      <p className="mt-3 text-pretty text-xs text-[var(--negative)]">
+                        {validatorMultiClaim.safeBatchError.message}
+                      </p>
+                    )}
+
+                    <MultiClaimProgress
+                      asset="veMEZO"
+                      claim={boostMultiClaim}
+                      onClose={handleCloseMultiClaim}
+                      onRetryFailed={handleRetryFailedClaims}
+                    />
+
+                    <MultiClaimProgress
+                      asset="veBTC"
+                      claim={validatorMultiClaim}
+                      onClose={handleCloseValidatorMultiClaim}
+                      onRetryFailed={handleRetryFailedValidatorClaims}
+                    />
                   </div>
                   {/* Reward rows */}
                   {(hasClaimableRewards || hasFutureRewards) && (
                     <div className="px-7 py-1 pb-2">
-                      {/* Calculate which tokens have pending rewards but no claimable rewards */}
                       {(() => {
-                        const tokensWithPendingOnly: Array<{
-                          tokenId: bigint
-                        }> = []
-                        for (const lock of veMEZOLocks) {
-                          const tokenIdStr = lock.tokenId.toString()
-                          const hasClaimable =
-                            bribesGroupedByTokenId.has(tokenIdStr)
-                          if (!hasClaimable) {
-                            tokensWithPendingOnly.push({
-                              tokenId: lock.tokenId,
-                            })
-                          }
-                        }
+                        // Claimable rows first, then pending-only rows, per asset
+                        const orderByClaimable = (
+                          tokenIds: bigint[],
+                          bribesByTokenId: Map<string, ClaimableBribe[]>,
+                        ) => [
+                          ...tokenIds.filter((tokenId) =>
+                            bribesByTokenId.has(tokenId.toString()),
+                          ),
+                          ...tokenIds.filter(
+                            (tokenId) =>
+                              !bribesByTokenId.has(tokenId.toString()),
+                          ),
+                        ]
 
-                        // Calculate total rows to determine last one
-                        const totalClaimableRows = bribesGroupedByTokenId.size
-                        const totalPendingOnlyRows =
-                          tokensWithPendingOnly.length
+                        const boostRows = orderByClaimable(
+                          veMEZOTokenIds,
+                          bribesGroupedByTokenId,
+                        )
+                        const validatorRows = orderByClaimable(
+                          veBTCVotingTokenIds,
+                          validatorBribesGroupedByTokenId,
+                        )
                         const totalRows =
-                          totalClaimableRows + totalPendingOnlyRows
-
-                        let currentRowIndex = 0
+                          boostRows.length + validatorRows.length
+                        let rowIndex = 0
 
                         return (
                           <>
-                            {/* Claimable rewards section */}
-                            {hasClaimableRewards &&
-                              Array.from(bribesGroupedByTokenId.entries()).map(
-                                ([tokenIdStr, bribes]) => {
-                                  const tokenState =
-                                    voteStateMap.get(tokenIdStr)
-                                  const tokenAllocations =
-                                    allocationsByToken.get(tokenIdStr) ?? []
-                                  currentRowIndex++
-                                  return (
-                                    <ClaimableRewardRow
-                                      key={`claimable-${tokenIdStr}`}
-                                      tokenId={BigInt(tokenIdStr)}
-                                      bribes={bribes}
-                                      onClaim={() =>
-                                        handleClaimBribes(BigInt(tokenIdStr))
-                                      }
-                                      isPending={isClaimPending}
-                                      isConfirming={isClaimConfirming}
-                                      isClaimDisabled={isMultiClaimInProgress}
-                                      isLast={currentRowIndex === totalRows}
-                                      claimableUSD={
-                                        claimableUSDByTokenId.get(tokenIdStr) ??
-                                        0
-                                      }
-                                      usedWeight={tokenState?.usedWeight}
-                                      allocations={tokenAllocations}
-                                      apyMap={apyMap}
-                                      btcPrice={btcPrice}
-                                      mezoPrice={mezoPrice}
-                                    />
-                                  )
-                                },
-                              )}
-
-                            {/* Projected rewards section - only for tokens without claimable rewards */}
-                            {tokensWithPendingOnly.map(({ tokenId }) => {
+                            {boostRows.map((tokenId) => {
                               const tokenIdStr = tokenId.toString()
-                              const tokenState = voteStateMap.get(tokenIdStr)
-                              const tokenAllocations =
-                                allocationsByToken.get(tokenIdStr) ?? []
-                              currentRowIndex++
+                              rowIndex++
                               return (
-                                <ProjectedRewardRow
-                                  key={`projected-${tokenId.toString()}`}
+                                <BoostRewardRows
+                                  key={`boost-${tokenIdStr}`}
                                   tokenId={tokenId}
-                                  usedWeight={tokenState?.usedWeight}
-                                  allocations={tokenAllocations}
+                                  bribes={bribesGroupedByTokenId.get(
+                                    tokenIdStr,
+                                  )}
+                                  onClaim={() => handleClaimBribes(tokenId)}
+                                  isPending={isClaimPending}
+                                  isConfirming={isClaimConfirming}
+                                  isClaimDisabled={boostMultiClaim.isInProgress}
+                                  isLast={rowIndex === totalRows}
+                                  claimableUSD={
+                                    claimableUSDByTokenId.get(tokenIdStr) ?? 0
+                                  }
+                                  usedWeight={
+                                    voteStateMap.get(tokenIdStr)?.usedWeight
+                                  }
+                                  allocations={
+                                    allocationsByToken.get(tokenIdStr) ?? []
+                                  }
                                   apyMap={apyMap}
-                                  isLast={currentRowIndex === totalRows}
+                                  btcPrice={btcPrice}
+                                  mezoPrice={mezoPrice}
+                                />
+                              )
+                            })}
+
+                            {validatorRows.map((tokenId) => {
+                              const tokenIdStr = tokenId.toString()
+                              rowIndex++
+                              return (
+                                <ValidatorRewardRows
+                                  key={`validator-${tokenIdStr}`}
+                                  tokenId={tokenId}
+                                  bribes={validatorBribesGroupedByTokenId.get(
+                                    tokenIdStr,
+                                  )}
+                                  onClaim={() =>
+                                    handleClaimValidatorBribes(tokenId)
+                                  }
+                                  isPending={isValidatorClaimPending}
+                                  isConfirming={isValidatorClaimConfirming}
+                                  isClaimDisabled={
+                                    validatorMultiClaim.isInProgress
+                                  }
+                                  isLast={rowIndex === totalRows}
+                                  claimableUSD={
+                                    validatorClaimableUSDByTokenId.get(
+                                      tokenIdStr,
+                                    ) ?? 0
+                                  }
+                                  usedWeight={validatorUsedWeightsByToken.get(
+                                    tokenIdStr,
+                                  )}
+                                  allocations={
+                                    validatorAllocationsByToken.get(
+                                      tokenIdStr,
+                                    ) ?? []
+                                  }
+                                  incentivesByGauge={validatorIncentivesByGauge}
+                                  btcPrice={btcPrice}
+                                  mezoPrice={mezoPrice}
                                 />
                               )
                             })}
@@ -1909,8 +2338,9 @@ export default function DashboardPage(): JSX.Element {
                 ) : (
                   <div className="grid grid-cols-3 gap-4 max-[1024px]:grid-cols-2 max-[640px]:grid-cols-1 max-[480px]:gap-3">
                     {veBTCLocks.map((lock, index) => {
+                      const tokenIdKey = lock.tokenId.toString()
                       const cardData =
-                        veBTCGaugeCardData.get(lock.tokenId.toString()) ?? null
+                        veBTCGaugeCardData.get(tokenIdKey) ?? null
 
                       return (
                         <SpringIn
@@ -1931,6 +2361,19 @@ export default function DashboardPage(): JSX.Element {
                             apy={cardData?.apy ?? null}
                             isLoadingAPY={
                               isLoadingAPY || isLoadingBatchGaugeData
+                            }
+                            validatorClaimableUSD={
+                              validatorClaimableUSDByTokenId.get(tokenIdKey) ??
+                              0
+                            }
+                            validatorAllocations={
+                              validatorAllocationsByToken.get(tokenIdKey) ?? []
+                            }
+                            validatorUsedWeight={validatorUsedWeightsByToken.get(
+                              tokenIdKey,
+                            )}
+                            validatorIncentivesByGauge={
+                              validatorIncentivesByGauge
                             }
                           />
                         </SpringIn>
