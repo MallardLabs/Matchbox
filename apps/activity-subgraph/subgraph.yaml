@@ -504,18 +504,19 @@ dataSources:
         - event: Swap(indexed address,indexed address,uint256,uint256,uint256,uint256)
           handler: handlePoolSwap
       file: ./src/pools.ts
-  # Bribe contracts for pool gauges created before startBlock. Their GaugeCreated
-  # was never indexed, so the BribeVotingReward template was never spawned and
-  # every bribe posted to them was invisible. Listed statically so graph-node
-  # subscribes; src/legacy-pool-rewards.ts seeds the pool/gauge mapping.
+  # Reward contracts for pool gauges created before startBlock. Their
+  # GaugeCreated was never indexed, so the dynamic templates were never spawned and
+  # every bribe posted to them was invisible. Declared statically so graph-node
+  # subscribes, each at its own contract creation block so the full history is
+  # covered. src/legacy-pool-rewards.ts seeds the pool/gauge mapping. GENERATED.
   - kind: ethereum
-    name: LegacyBribeMusdMusdt
+    name: LegacyBribeMUSDmUSDT
     network: mezo
     source:
       # MUSD/mUSDT
       address: "0x6F3e2aFc81A8FD8e3490DDb032a91d339B371AFB"
       abi: BribeVotingReward
-      startBlock: 7739500
+      startBlock: 5231392
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.7
@@ -533,37 +534,13 @@ dataSources:
           handler: handleBribeClaimRewards
       file: ./src/bribes.ts
   - kind: ethereum
-    name: LegacyBribeMusdcMusdt
-    network: mezo
-    source:
-      # mUSDC/mUSDT
-      address: "0xA908809b0602606f86A745E13296881A9B267462"
-      abi: BribeVotingReward
-      startBlock: 7739500
-    mapping:
-      kind: ethereum/events
-      apiVersion: 0.0.7
-      language: wasm/assemblyscript
-      entities:
-        - ActivityEvent
-        - ActivityStats
-      abis:
-        - name: BribeVotingReward
-          file: ./abis/BribeVotingReward.json
-      eventHandlers:
-        - event: NotifyReward(indexed address,indexed address,indexed uint256,uint256)
-          handler: handleBribeNotifyReward
-        - event: ClaimRewards(indexed address,indexed address,uint256)
-          handler: handleBribeClaimRewards
-      file: ./src/bribes.ts
-  - kind: ethereum
-    name: LegacyBribeBtcMxsolvbtc
+    name: LegacyBribeBTCmxSolvBTC
     network: mezo
     source:
       # BTC/mxSolvBTC
       address: "0x7C90026167FF9051fec3e14a5Ec486E484722dEd"
       abi: BribeVotingReward
-      startBlock: 7739500
+      startBlock: 5231405
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.7
@@ -581,13 +558,37 @@ dataSources:
           handler: handleBribeClaimRewards
       file: ./src/bribes.ts
   - kind: ethereum
-    name: LegacyBribeBtcMusd
+    name: LegacyBribeMUSDCmUSDT
+    network: mezo
+    source:
+      # mUSDC/mUSDT
+      address: "0xA908809b0602606f86A745E13296881A9B267462"
+      abi: BribeVotingReward
+      startBlock: 5231405
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - ActivityEvent
+        - ActivityStats
+      abis:
+        - name: BribeVotingReward
+          file: ./abis/BribeVotingReward.json
+      eventHandlers:
+        - event: NotifyReward(indexed address,indexed address,indexed uint256,uint256)
+          handler: handleBribeNotifyReward
+        - event: ClaimRewards(indexed address,indexed address,uint256)
+          handler: handleBribeClaimRewards
+      file: ./src/bribes.ts
+  - kind: ethereum
+    name: LegacyBribeBTCMUSD
     network: mezo
     source:
       # BTC/MUSD
       address: "0x94A9A494872BF7231D8378d0Aef7d32BA552E305"
       abi: BribeVotingReward
-      startBlock: 7739500
+      startBlock: 5231418
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.7
@@ -605,13 +606,13 @@ dataSources:
           handler: handleBribeClaimRewards
       file: ./src/bribes.ts
   - kind: ethereum
-    name: LegacyBribeMsolvbtcMusd
+    name: LegacyBribeMSolvBTCMUSD
     network: mezo
     source:
       # mSolvBTC/MUSD
       address: "0xA2e2F01F9342582557917D114CaBCCe4A26Bb47f"
       abi: BribeVotingReward
-      startBlock: 7739500
+      startBlock: 5231418
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.7
@@ -629,37 +630,13 @@ dataSources:
           handler: handleBribeClaimRewards
       file: ./src/bribes.ts
   - kind: ethereum
-    name: LegacyBribeMtMusd
-    network: mezo
-    source:
-      # mT/MUSD
-      address: "0xF4C0067b6A38ca5B28fB2c8E1d8A2a20D20d2af3"
-      abi: BribeVotingReward
-      startBlock: 7739500
-    mapping:
-      kind: ethereum/events
-      apiVersion: 0.0.7
-      language: wasm/assemblyscript
-      entities:
-        - ActivityEvent
-        - ActivityStats
-      abis:
-        - name: BribeVotingReward
-          file: ./abis/BribeVotingReward.json
-      eventHandlers:
-        - event: NotifyReward(indexed address,indexed address,indexed uint256,uint256)
-          handler: handleBribeNotifyReward
-        - event: ClaimRewards(indexed address,indexed address,uint256)
-          handler: handleBribeClaimRewards
-      file: ./src/bribes.ts
-  - kind: ethereum
-    name: LegacyBribeMcbbtcBtc
+    name: LegacyBribeMcbBTCBTC
     network: mezo
     source:
       # mcbBTC/BTC
       address: "0x0377249DD6916f335048c7Cd5541022B6EC2185C"
       abi: BribeVotingReward
-      startBlock: 7739500
+      startBlock: 5231440
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.7
@@ -677,13 +654,13 @@ dataSources:
           handler: handleBribeClaimRewards
       file: ./src/bribes.ts
   - kind: ethereum
-    name: LegacyBribeMusdcMusd
+    name: LegacyBribeMTMUSD
     network: mezo
     source:
-      # mUSDC/MUSD
-      address: "0xf2B88Ec68c8fBD5261c5483D1385c46dc7619589"
+      # mT/MUSD
+      address: "0xF4C0067b6A38ca5B28fB2c8E1d8A2a20D20d2af3"
       abi: BribeVotingReward
-      startBlock: 7739500
+      startBlock: 5231440
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.7
@@ -701,13 +678,13 @@ dataSources:
           handler: handleBribeClaimRewards
       file: ./src/bribes.ts
   - kind: ethereum
-    name: LegacyBribeBtcMsolvbtc
+    name: LegacyBribeBTCmSolvBTC
     network: mezo
     source:
       # BTC/mSolvBTC
       address: "0x52A9A4310a1567CE828Df137b2eaD4883c0221cF"
       abi: BribeVotingReward
-      startBlock: 7739500
+      startBlock: 5231459
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.7
@@ -724,6 +701,246 @@ dataSources:
         - event: ClaimRewards(indexed address,indexed address,uint256)
           handler: handleBribeClaimRewards
       file: ./src/bribes.ts
+  - kind: ethereum
+    name: LegacyBribeMUSDCMUSD
+    network: mezo
+    source:
+      # mUSDC/MUSD
+      address: "0xf2B88Ec68c8fBD5261c5483D1385c46dc7619589"
+      abi: BribeVotingReward
+      startBlock: 5231459
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - ActivityEvent
+        - ActivityStats
+      abis:
+        - name: BribeVotingReward
+          file: ./abis/BribeVotingReward.json
+      eventHandlers:
+        - event: NotifyReward(indexed address,indexed address,indexed uint256,uint256)
+          handler: handleBribeNotifyReward
+        - event: ClaimRewards(indexed address,indexed address,uint256)
+          handler: handleBribeClaimRewards
+      file: ./src/bribes.ts
+  - kind: ethereum
+    name: LegacyFeeMUSDmUSDT
+    network: mezo
+    source:
+      # MUSD/mUSDT
+      address: "0x24e2d2EfC692aAB0AE54E0DD8b4C19aabc463c3b"
+      abi: FeeVotingReward
+      startBlock: 5231392
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - ActivityEvent
+        - ActivityStats
+      abis:
+        - name: FeeVotingReward
+          file: ./abis/FeeVotingReward.json
+      eventHandlers:
+        - event: NotifyReward(indexed address,indexed address,indexed uint256,uint256)
+          handler: handleFeeNotifyReward
+        - event: ClaimRewards(indexed address,indexed address,uint256)
+          handler: handleFeeClaimRewards
+      file: ./src/fee-rewards.ts
+  - kind: ethereum
+    name: LegacyFeeBTCmxSolvBTC
+    network: mezo
+    source:
+      # BTC/mxSolvBTC
+      address: "0xce8C65D38d3eB67263A658802Cb86cE963679871"
+      abi: FeeVotingReward
+      startBlock: 5231405
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - ActivityEvent
+        - ActivityStats
+      abis:
+        - name: FeeVotingReward
+          file: ./abis/FeeVotingReward.json
+      eventHandlers:
+        - event: NotifyReward(indexed address,indexed address,indexed uint256,uint256)
+          handler: handleFeeNotifyReward
+        - event: ClaimRewards(indexed address,indexed address,uint256)
+          handler: handleFeeClaimRewards
+      file: ./src/fee-rewards.ts
+  - kind: ethereum
+    name: LegacyFeeMUSDCmUSDT
+    network: mezo
+    source:
+      # mUSDC/mUSDT
+      address: "0xbbb03E37546E051F2588E12C47f804A216320C10"
+      abi: FeeVotingReward
+      startBlock: 5231405
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - ActivityEvent
+        - ActivityStats
+      abis:
+        - name: FeeVotingReward
+          file: ./abis/FeeVotingReward.json
+      eventHandlers:
+        - event: NotifyReward(indexed address,indexed address,indexed uint256,uint256)
+          handler: handleFeeNotifyReward
+        - event: ClaimRewards(indexed address,indexed address,uint256)
+          handler: handleFeeClaimRewards
+      file: ./src/fee-rewards.ts
+  - kind: ethereum
+    name: LegacyFeeBTCMUSD
+    network: mezo
+    source:
+      # BTC/MUSD
+      address: "0x0453820c89084E20658068A27EbB90824F1A6C6d"
+      abi: FeeVotingReward
+      startBlock: 5231418
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - ActivityEvent
+        - ActivityStats
+      abis:
+        - name: FeeVotingReward
+          file: ./abis/FeeVotingReward.json
+      eventHandlers:
+        - event: NotifyReward(indexed address,indexed address,indexed uint256,uint256)
+          handler: handleFeeNotifyReward
+        - event: ClaimRewards(indexed address,indexed address,uint256)
+          handler: handleFeeClaimRewards
+      file: ./src/fee-rewards.ts
+  - kind: ethereum
+    name: LegacyFeeMSolvBTCMUSD
+    network: mezo
+    source:
+      # mSolvBTC/MUSD
+      address: "0x0fCF5322DeDBe67B68208199DB234e98EF54c888"
+      abi: FeeVotingReward
+      startBlock: 5231418
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - ActivityEvent
+        - ActivityStats
+      abis:
+        - name: FeeVotingReward
+          file: ./abis/FeeVotingReward.json
+      eventHandlers:
+        - event: NotifyReward(indexed address,indexed address,indexed uint256,uint256)
+          handler: handleFeeNotifyReward
+        - event: ClaimRewards(indexed address,indexed address,uint256)
+          handler: handleFeeClaimRewards
+      file: ./src/fee-rewards.ts
+  - kind: ethereum
+    name: LegacyFeeMcbBTCBTC
+    network: mezo
+    source:
+      # mcbBTC/BTC
+      address: "0x7Ab52A8fC9f9100fec58a5eE319dDB872C1208D7"
+      abi: FeeVotingReward
+      startBlock: 5231440
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - ActivityEvent
+        - ActivityStats
+      abis:
+        - name: FeeVotingReward
+          file: ./abis/FeeVotingReward.json
+      eventHandlers:
+        - event: NotifyReward(indexed address,indexed address,indexed uint256,uint256)
+          handler: handleFeeNotifyReward
+        - event: ClaimRewards(indexed address,indexed address,uint256)
+          handler: handleFeeClaimRewards
+      file: ./src/fee-rewards.ts
+  - kind: ethereum
+    name: LegacyFeeMTMUSD
+    network: mezo
+    source:
+      # mT/MUSD
+      address: "0xf702Cd0C9fcfd453165Aef6c84627937695D5A6C"
+      abi: FeeVotingReward
+      startBlock: 5231440
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - ActivityEvent
+        - ActivityStats
+      abis:
+        - name: FeeVotingReward
+          file: ./abis/FeeVotingReward.json
+      eventHandlers:
+        - event: NotifyReward(indexed address,indexed address,indexed uint256,uint256)
+          handler: handleFeeNotifyReward
+        - event: ClaimRewards(indexed address,indexed address,uint256)
+          handler: handleFeeClaimRewards
+      file: ./src/fee-rewards.ts
+  - kind: ethereum
+    name: LegacyFeeBTCmSolvBTC
+    network: mezo
+    source:
+      # BTC/mSolvBTC
+      address: "0x4989D0128724b8B9D5d12bc98f1Df9d4adafbBfa"
+      abi: FeeVotingReward
+      startBlock: 5231459
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - ActivityEvent
+        - ActivityStats
+      abis:
+        - name: FeeVotingReward
+          file: ./abis/FeeVotingReward.json
+      eventHandlers:
+        - event: NotifyReward(indexed address,indexed address,indexed uint256,uint256)
+          handler: handleFeeNotifyReward
+        - event: ClaimRewards(indexed address,indexed address,uint256)
+          handler: handleFeeClaimRewards
+      file: ./src/fee-rewards.ts
+  - kind: ethereum
+    name: LegacyFeeMUSDCMUSD
+    network: mezo
+    source:
+      # mUSDC/MUSD
+      address: "0x898bBe9353DC576745724E8C64A02472645561Cd"
+      abi: FeeVotingReward
+      startBlock: 5231459
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - ActivityEvent
+        - ActivityStats
+      abis:
+        - name: FeeVotingReward
+          file: ./abis/FeeVotingReward.json
+      eventHandlers:
+        - event: NotifyReward(indexed address,indexed address,indexed uint256,uint256)
+          handler: handleFeeNotifyReward
+        - event: ClaimRewards(indexed address,indexed address,uint256)
+          handler: handleFeeClaimRewards
+      file: ./src/fee-rewards.ts
 templates:
   - kind: ethereum
     name: BribeVotingReward

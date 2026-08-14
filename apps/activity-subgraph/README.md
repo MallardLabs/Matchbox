@@ -11,31 +11,36 @@ It normalizes activity from:
 - Bribe + fee voting reward notify/claims (`VOTE_*_CLAIMED`)
 - Pool factory + known pools: LP add/remove, swaps
 - Gauge stake/unstake (dynamic template from PoolsVoter)
-- Bribes on pool gauges older than `startBlock` (see below)
+- Bribes and fees on pool gauges older than `startBlock` (see below)
 - mUSD savings, rebase/merkle claims, system splitters/PCV/minter
 
 ## Pre-`startBlock` pool gauges
 
 `BribeToPool` and the `BribeVotingReward` / `FeeVotingReward` templates are only
-created by `handlePoolGaugeCreated`. Gauges from the original v2 pool launch
-(~block 5231392) predate `startBlock` (7739500), so their reward contracts were
-never registered and every bribe posted to them was silently dropped — roughly
-$10.9k of real incentives missing, against ~$352 that was visible.
+created by `handlePoolGaugeCreated`. The nine gauges from the original v2 pool
+launch (blocks 5231392–5231459) predate the main `startBlock` (7739500), so their
+reward contracts were never registered and every bribe posted to them was silently
+dropped — roughly $10.9k of real incentives missing, against ~$352 that was
+visible. The split was total: every basic (v2) pool invisible, every concentrated
+pool fine.
 
-The nine affected bribe contracts are therefore declared as **static**
-datasources (`LegacyBribe*`), and `src/legacy-pool-rewards.ts` seeds the
-pool/gauge mapping on first use. That table is closed: it can only describe
-gauges older than `startBlock`, so new pools never belong in it.
+Both reward contracts for each of those nine gauges are therefore declared as
+**static** datasources (`LegacyBribe*` / `LegacyFee*`, 18 in total), each at its
+own contract-creation block so the full history is covered rather than just the
+window after 7739500. `src/legacy-pool-rewards.ts` seeds the pool/gauge mapping on
+first use.
 
-Two known limits:
+Because those datasources start at 5231392, the subgraph as a whole now begins
+there. Only the 18 legacy datasources are active before 7739500, so no other
+entity's history changes — but a fresh sync has ~2.5M more blocks to scan.
 
-- Coverage starts at `startBlock` (2026-03-25). Bribes those pools received
-  earlier (as far back as 2025-12-11) stay unindexed. The activity UI only
-  renders from 2026-04-02, so its window is fully covered — but widening that
-  start date would need a lower `startBlock` and a full resync.
-- Only the bribe side is backfilled. The matching `FeeVotingReward` contracts are
-  still untracked for these gauges, so `VOTE_FEE_CLAIMED` remains incomplete for
-  them. Fees are excluded from incentive totals, so this does not affect them.
+That address table is **generated from chain state**, with every entry read back
+from `gaugeToBribe` / `gaugeToFees` and cross-checked against the compiled
+manifest. Regenerate rather than hand-editing it: a mistyped address fails
+silently, which is exactly how the original bug went unnoticed.
+
+The set is closed — it can only ever describe gauges older than `startBlock`, so
+new pools never belong in it.
 
 ## Development
 

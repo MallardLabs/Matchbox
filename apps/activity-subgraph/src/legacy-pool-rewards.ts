@@ -2,77 +2,134 @@ import { Address } from "@graphprotocol/graph-ts"
 import { BribeToPool } from "../generated/schema"
 
 /**
- * Reward contracts belonging to pool gauges that were created before this
- * subgraph's startBlock.
+ * Reward contracts belonging to pool gauges created before this subgraph's
+ * startBlock.
  *
- * `BribeToPool` and the BribeVotingReward/FeeVotingReward dynamic datasources are
- * only created inside `handlePoolGaugeCreated`. Gauges from the original v2 pool
- * launch (~block 5231392) predate indexing, so their reward contracts were never
- * registered and every bribe posted to them was dropped on the floor — around
- * $10.9k of real incentives invisible to the activity feed, versus ~$352 that was
- * visible.
+ * `BribeToPool` and the BribeVotingReward / FeeVotingReward dynamic datasources
+ * are only created inside `handlePoolGaugeCreated`. The gauges from the original
+ * v2 pool launch predate indexing, so their reward contracts were never registered
+ * and every bribe posted to them was dropped on the floor — around $10.9k of real
+ * incentives invisible to the activity feed, against ~$352 that was visible.
  *
- * These are listed as static datasources in the manifest so graph-node actually
+ * These are declared as static datasources in the manifest so graph-node actually
  * subscribes to them, and the mapping each handler needs is seeded from this table
  * on first use. The set is closed: it can only ever describe gauges older than
  * startBlock, so nothing new belongs here.
  *
+ * GENERATED from chain state — every address was read from `gaugeToBribe` /
+ * `gaugeToFees` rather than transcribed. Regenerate rather than hand-editing; a
+ * mistyped address here fails silently.
+ *
  * Entries are `[rewardContract, pool, gauge]`, lowercased.
  */
 const LEGACY_POOL_REWARDS: string[][] = [
-  // MUSD/mUSDT
+  // MUSD/mUSDT — bribe
   [
     "0x6f3e2afc81a8fd8e3490ddb032a91d339b371afb",
     "0x10906a9e9215939561597b4c8e4b98f93c02031a",
     "0x4887fa1c88f8927932e5e1545b3b29a1a29656e7",
   ],
-  // mUSDC/mUSDT
+  // MUSD/mUSDT — fees
   [
-    "0xa908809b0602606f86a745e13296881a9b267462",
-    "0x2a1ab0224a7a608d3a992cb15594a2934f74f4c0",
-    "0x548289b8983398db857efbb1e0cec489d72a6355",
+    "0x24e2d2efc692aab0ae54e0dd8b4c19aabc463c3b",
+    "0x10906a9e9215939561597b4c8e4b98f93c02031a",
+    "0x4887fa1c88f8927932e5e1545b3b29a1a29656e7",
   ],
-  // BTC/mxSolvBTC
+  // BTC/mxSolvBTC — bribe
   [
     "0x7c90026167ff9051fec3e14a5ec486e484722ded",
     "0x329d64572f8922c3fe90d23a3c74a360d8ea6235",
     "0x3aecbfc4aa3fc152fbefd427f87db1e97226dc20",
   ],
-  // BTC/MUSD
+  // BTC/mxSolvBTC — fees
+  [
+    "0xce8c65d38d3eb67263a658802cb86ce963679871",
+    "0x329d64572f8922c3fe90d23a3c74a360d8ea6235",
+    "0x3aecbfc4aa3fc152fbefd427f87db1e97226dc20",
+  ],
+  // mUSDC/mUSDT — bribe
+  [
+    "0xa908809b0602606f86a745e13296881a9b267462",
+    "0x2a1ab0224a7a608d3a992cb15594a2934f74f4c0",
+    "0x548289b8983398db857efbb1e0cec489d72a6355",
+  ],
+  // mUSDC/mUSDT — fees
+  [
+    "0xbbb03e37546e051f2588e12c47f804a216320c10",
+    "0x2a1ab0224a7a608d3a992cb15594a2934f74f4c0",
+    "0x548289b8983398db857efbb1e0cec489d72a6355",
+  ],
+  // BTC/MUSD — bribe
   [
     "0x94a9a494872bf7231d8378d0aef7d32ba552e305",
     "0x52e604c44417233b6ccedddc0d640a405caacefb",
     "0x8be20a5ff57e381025ae5e3a121b697269569aaf",
   ],
-  // mSolvBTC/MUSD
+  // BTC/MUSD — fees
+  [
+    "0x0453820c89084e20658068a27ebb90824f1a6c6d",
+    "0x52e604c44417233b6ccedddc0d640a405caacefb",
+    "0x8be20a5ff57e381025ae5e3a121b697269569aaf",
+  ],
+  // mSolvBTC/MUSD — bribe
   [
     "0xa2e2f01f9342582557917d114cabcce4a26bb47f",
     "0x5cd2a025c001e07ae354a4c22c3009908de1ac59",
     "0xf93b51466519b7c9ca318f1bde0524530632af90",
   ],
-  // mT/MUSD
+  // mSolvBTC/MUSD — fees
   [
-    "0xf4c0067b6a38ca5b28fb2c8e1d8a2a20d20d2af3",
-    "0x6688f868e9c81ee671867e77fbc618bbea2e9782",
-    "0x39e06c2a671a237897ccbf9166a136eb5bdda432",
+    "0x0fcf5322dedbe67b68208199db234e98ef54c888",
+    "0x5cd2a025c001e07ae354a4c22c3009908de1ac59",
+    "0xf93b51466519b7c9ca318f1bde0524530632af90",
   ],
-  // mcbBTC/BTC
+  // mcbBTC/BTC — bribe
   [
     "0x0377249dd6916f335048c7cd5541022b6ec2185c",
     "0x72e6b3f126cf4f6c90c08114ac29038a0e269210",
     "0xf482d0edb24c888d63a031de71d963c4f4fa79e4",
   ],
-  // mUSDC/MUSD
+  // mcbBTC/BTC — fees
+  [
+    "0x7ab52a8fc9f9100fec58a5ee319ddb872c1208d7",
+    "0x72e6b3f126cf4f6c90c08114ac29038a0e269210",
+    "0xf482d0edb24c888d63a031de71d963c4f4fa79e4",
+  ],
+  // mT/MUSD — bribe
+  [
+    "0xf4c0067b6a38ca5b28fb2c8e1d8a2a20d20d2af3",
+    "0x6688f868e9c81ee671867e77fbc618bbea2e9782",
+    "0x39e06c2a671a237897ccbf9166a136eb5bdda432",
+  ],
+  // mT/MUSD — fees
+  [
+    "0xf702cd0c9fcfd453165aef6c84627937695d5a6c",
+    "0x6688f868e9c81ee671867e77fbc618bbea2e9782",
+    "0x39e06c2a671a237897ccbf9166a136eb5bdda432",
+  ],
+  // BTC/mSolvBTC — bribe
+  [
+    "0x52a9a4310a1567ce828df137b2ead4883c0221cf",
+    "0xf6f950485b0a65828f07581ca979ef1271778d6a",
+    "0x0edca8717ab81363ff722ab7bd45060800632ec8",
+  ],
+  // BTC/mSolvBTC — fees
+  [
+    "0x4989d0128724b8b9d5d12bc98f1df9d4adafbbfa",
+    "0xf6f950485b0a65828f07581ca979ef1271778d6a",
+    "0x0edca8717ab81363ff722ab7bd45060800632ec8",
+  ],
+  // mUSDC/MUSD — bribe
   [
     "0xf2b88ec68c8fbd5261c5483d1385c46dc7619589",
     "0xed812aec0fecc8fd882ac3eccc43f3aa80a6c356",
     "0x2945401f5e015a122b482de0ea5bf92c005c3c75",
   ],
-  // BTC/mSolvBTC
+  // mUSDC/MUSD — fees
   [
-    "0x52a9a4310a1567ce828df137b2ead4883c0221cf",
-    "0xf6f950485b0a65828f07581ca979ef1271778d6a",
-    "0x0edca8717ab81363ff722ab7bd45060800632ec8",
+    "0x898bbe9353dc576745724e8c64a02472645561cd",
+    "0xed812aec0fecc8fd882ac3eccc43f3aa80a6c356",
+    "0x2945401f5e015a122b482de0ea5bf92c005c3c75",
   ],
 ]
 
