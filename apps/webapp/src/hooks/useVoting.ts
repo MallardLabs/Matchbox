@@ -943,6 +943,13 @@ export type ClaimableBribe = {
   }[]
 }
 
+/**
+ * Which voter registry a bribe belongs to. BoostVoter bribes are earned by
+ * veMEZO NFTs, ValidatorsVoter bribes by veBTC NFTs — never mix the two, since
+ * `earned(token, tokenId)` would happily answer for an id from the wrong escrow.
+ */
+export type BribeVoterKind = "boost" | "validators"
+
 type ClaimableBribesOptions = {
   enabled?: boolean
 }
@@ -971,8 +978,14 @@ type EarnedQuery = {
   decimals: number
 }
 
-export function useClaimableBribes(
-  veMEZOTokenIds: bigint[],
+/**
+ * Read every unclaimed bribe balance a set of voting NFTs holds on one voter's
+ * gauges. `voter` selects both the gauge list and the escrow the token ids come
+ * from.
+ */
+function useClaimableVoterBribes(
+  tokenIds: bigint[],
+  voter: BribeVoterKind,
   options: ClaimableBribesOptions = {},
 ): {
   claimableBribes: ClaimableBribe[]
@@ -996,13 +1009,22 @@ export function useClaimableBribes(
     enabled,
   })
 
+  const voterGauges = useMemo(() => {
+    if (!topology) return []
+    // Tolerate a topology payload predating `validatorGauges` (older deployment
+    // still serving the API, or a cached response from before a rollout).
+    const gauges =
+      voter === "validators" ? topology.validatorGauges : topology.gauges
+    return gauges ?? []
+  }, [topology, voter])
+
   const tokenIdsKey = useMemo(
     () =>
-      veMEZOTokenIds
+      tokenIds
         .map((tokenId) => tokenId.toString())
         .sort()
         .join(","),
-    [veMEZOTokenIds],
+    [tokenIds],
   )
 
   const topologyQueryKey = useMemo(() => {
@@ -1010,7 +1032,7 @@ export function useClaimableBribes(
       return "no-topology"
     }
 
-    return topology.gauges
+    return voterGauges
       .map((gauge) => {
         const rewardTokens = gauge.rewardTokens
           .map((token) => token.tokenAddress.toLowerCase())
@@ -1025,17 +1047,17 @@ export function useClaimableBribes(
       })
       .sort()
       .join("|")
-  }, [topology])
+  }, [topology, voterGauges])
 
   const earnedQueries = useMemo(() => {
-    if (!enabled || !topology || veMEZOTokenIds.length === 0) {
+    if (!enabled || !topology || tokenIds.length === 0) {
       return [] as EarnedQuery[]
     }
 
     const queries: EarnedQuery[] = []
 
-    for (const tokenId of veMEZOTokenIds) {
-      for (const gauge of topology.gauges) {
+    for (const tokenId of tokenIds) {
+      for (const gauge of voterGauges) {
         if (!gauge.bribeAddress || gauge.rewardTokens.length === 0) {
           continue
         }
@@ -1054,12 +1076,13 @@ export function useClaimableBribes(
     }
 
     return queries
-  }, [enabled, topology, veMEZOTokenIds])
+  }, [enabled, topology, tokenIds, voterGauges])
 
   const earnedQuery = useQuery({
     queryKey: [
       "claimable-bribes-earned",
       chainId,
+      voter,
       tokenIdsKey,
       topologyQueryKey,
     ],
@@ -1159,7 +1182,7 @@ export function useClaimableBribes(
   }, [earnedQueries, earnedQuery.data])
 
   const isLoading =
-    (enabled && veMEZOTokenIds.length > 0 && isLoadingTopology) ||
+    (enabled && tokenIds.length > 0 && isLoadingTopology) ||
     (enabled && earnedQueries.length > 0 && earnedQuery.isLoading)
 
   const isRefreshing =
@@ -1182,6 +1205,22 @@ export function useClaimableBribes(
   }
 }
 
+/** Unclaimed BoostVoter bribes for the caller's veMEZO NFTs. */
+export function useClaimableBribes(
+  veMEZOTokenIds: bigint[],
+  options: ClaimableBribesOptions = {},
+) {
+  return useClaimableVoterBribes(veMEZOTokenIds, "boost", options)
+}
+
+/** Unclaimed ValidatorsVoter bribes for the caller's veBTC NFTs. */
+export function useClaimableValidatorBribes(
+  veBTCTokenIds: bigint[],
+  options: ClaimableBribesOptions = {},
+) {
+  return useClaimableVoterBribes(veBTCTokenIds, "validators", options)
+}
+
 type ClaimBribesResult = WriteHookResult & {
   claimBribes: (
     tokenId: bigint,
@@ -1189,7 +1228,9 @@ type ClaimBribesResult = WriteHookResult & {
   ) => void
 }
 
-export function useClaimBribes(): ClaimBribesResult {
+export function useClaimBribes(
+  voter: BribeVoterKind = "boost",
+): ClaimBribesResult {
   const { chainId } = useNetwork()
   const contracts = getContractConfig(chainId)
   const { writeContract, data: hash, isPending, error } = useWriteContract()
@@ -1202,7 +1243,8 @@ export function useClaimBribes(): ClaimBribesResult {
     tokenId: bigint,
     bribes: { bribeAddress: Address; tokens: Address[] }[],
   ) => {
-    const { address, abi } = contracts.boostVoter
+    const { address, abi } =
+      voter === "validators" ? contracts.validatorsVoter : contracts.boostVoter
     if (!address || bribes.length === 0) return
 
     const bribeAddresses = bribes.map((b) => b.bribeAddress)

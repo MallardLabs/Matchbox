@@ -131,11 +131,19 @@ export function useGaugeTopology(options: UseGaugeTopologyOptions = {}) {
     [query.data],
   )
 
+  // Validator gauges live on ValidatorsVoter and are voted with veBTC, so they
+  // stay in their own list rather than merging into `gauges`.
+  const validatorGauges = useMemo(
+    () => query.data?.validatorGauges ?? [],
+    [query.data],
+  )
+
   return {
     topology: query.data ?? null,
     gaugeToBribe,
     gaugeRewardTokens,
     allGaugeAddresses,
+    validatorGauges,
     isLoading: query.isLoading,
     isFetching: query.isFetching,
     isError: query.isError,

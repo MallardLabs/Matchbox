@@ -13,6 +13,7 @@ import {
 } from "wagmi"
 import type { MultiLockExecutionMode } from "./useMultiLockVoting"
 import { useSafeBatchExport } from "./useSafeBatchExport"
+import type { BribeVoterKind } from "./useVoting"
 
 type LockTxStatus = "pending" | "signing" | "confirming" | "success" | "error"
 
@@ -56,14 +57,21 @@ type UseMultiLockClaimBribesReturn = {
   clear: () => void
 }
 
-export function useMultiLockClaimBribes(): UseMultiLockClaimBribesReturn {
+export function useMultiLockClaimBribes(
+  voter: BribeVoterKind = "boost",
+): UseMultiLockClaimBribesReturn {
   const { chainId } = useNetwork()
   const { address: accountAddress } = useAccount()
   const contracts = getContractConfig(chainId)
+  const voterContract =
+    voter === "validators" ? contracts.validatorsVoter : contracts.boostVoter
+  const lockLabel = voter === "validators" ? "veBTC" : "veMEZO"
   const publicClient = usePublicClient({ chainId })
   const { data: walletClient } = useWalletClient({ chainId })
   const { writeContractAsync } = useWriteContract()
-  const safeBatch = useSafeBatchExport("claim-bribes")
+  const safeBatch = useSafeBatchExport(
+    voter === "validators" ? "claim-validator-bribes" : "claim-bribes",
+  )
 
   const [status, setStatus] = useState<MultiLockClaimStatus>("idle")
   const [executionMode, setExecutionMode] =
@@ -107,7 +115,7 @@ export function useMultiLockClaimBribes(): UseMultiLockClaimBribesReturn {
 
   const executeSequential = useCallback(
     async (claims: ClaimLockRequest[]) => {
-      const { address, abi } = contracts.boostVoter
+      const { address, abi } = voterContract
       const validClaims = claims.filter((claim) => claim.bribes.length > 0)
 
       if (!address || validClaims.length === 0) {
@@ -181,12 +189,12 @@ export function useMultiLockClaimBribes(): UseMultiLockClaimBribesReturn {
 
       setStatus("done")
     },
-    [contracts.boostVoter, publicClient, updateLockState, writeContractAsync],
+    [voterContract, publicClient, updateLockState, writeContractAsync],
   )
 
   const executeBatched = useCallback(
     async (claims: ClaimLockRequest[]) => {
-      const { address, abi } = contracts.boostVoter
+      const { address, abi } = voterContract
       const validClaims = claims.filter((claim) => claim.bribes.length > 0)
 
       if (
@@ -262,7 +270,7 @@ export function useMultiLockClaimBribes(): UseMultiLockClaimBribesReturn {
 
       setStatus("done")
     },
-    [accountAddress, contracts.boostVoter, walletClient],
+    [accountAddress, voterContract, walletClient],
   )
 
   const claimAll = useCallback(
@@ -288,7 +296,7 @@ export function useMultiLockClaimBribes(): UseMultiLockClaimBribesReturn {
 
   const exportClaimBatch = useCallback(
     async (claims: ClaimLockRequest[]) => {
-      const { address, abi } = contracts.boostVoter
+      const { address, abi } = voterContract
       const validClaims = claims.filter((claim) => claim.bribes.length > 0)
       if (!address || validClaims.length === 0) return
 
@@ -305,13 +313,13 @@ export function useMultiLockClaimBribes(): UseMultiLockClaimBribesReturn {
         }),
       )
       const pending = await safeBatch.exportBatch({
-        name: `Matchbox claim ${validClaims.length} locks`,
+        name: `Matchbox claim ${validClaims.length} ${lockLabel} locks`,
         description:
           "Atomic Matchbox rewards claim generated for Safe Transaction Builder.",
         calls,
         items: validClaims.map((claim) => ({
           id: claim.tokenId.toString(),
-          label: `Claim rewards for veMEZO #${claim.tokenId.toString()}`,
+          label: `Claim rewards for ${lockLabel} #${claim.tokenId.toString()}`,
         })),
       })
       if (!pending) return
@@ -325,16 +333,16 @@ export function useMultiLockClaimBribes(): UseMultiLockClaimBribesReturn {
         })),
       )
     },
-    [contracts.boostVoter, safeBatch.exportBatch],
+    [lockLabel, voterContract, safeBatch.exportBatch],
   )
 
   const copyClaimBatchJson = useCallback(
     async (claims: ClaimLockRequest[]) => {
-      const { address, abi } = contracts.boostVoter
+      const { address, abi } = voterContract
       const validClaims = claims.filter((claim) => claim.bribes.length > 0)
       if (!address) return
       await safeBatch.copyBatchJson({
-        name: `Matchbox claim ${validClaims.length} locks`,
+        name: `Matchbox claim ${validClaims.length} ${lockLabel} locks`,
         description:
           "Matchbox rewards claim transaction data. Execute only from the NFT-owning account.",
         calls: validClaims.map((claim) =>
@@ -351,7 +359,7 @@ export function useMultiLockClaimBribes(): UseMultiLockClaimBribesReturn {
         ),
       })
     },
-    [contracts.boostVoter, safeBatch.copyBatchJson],
+    [lockLabel, voterContract, safeBatch.copyBatchJson],
   )
 
   const clear = useCallback(() => {
