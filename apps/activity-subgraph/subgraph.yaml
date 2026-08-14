@@ -504,6 +504,226 @@ dataSources:
         - event: Swap(indexed address,indexed address,uint256,uint256,uint256,uint256)
           handler: handlePoolSwap
       file: ./src/pools.ts
+  # Bribe contracts for pool gauges created before startBlock. Their GaugeCreated
+  # was never indexed, so the BribeVotingReward template was never spawned and
+  # every bribe posted to them was invisible. Listed statically so graph-node
+  # subscribes; src/legacy-pool-rewards.ts seeds the pool/gauge mapping.
+  - kind: ethereum
+    name: LegacyBribeMusdMusdt
+    network: mezo
+    source:
+      # MUSD/mUSDT
+      address: "0x6F3e2aFc81A8FD8e3490DDb032a91d339B371AFB"
+      abi: BribeVotingReward
+      startBlock: 7739500
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - ActivityEvent
+        - ActivityStats
+      abis:
+        - name: BribeVotingReward
+          file: ./abis/BribeVotingReward.json
+      eventHandlers:
+        - event: NotifyReward(indexed address,indexed address,indexed uint256,uint256)
+          handler: handleBribeNotifyReward
+        - event: ClaimRewards(indexed address,indexed address,uint256)
+          handler: handleBribeClaimRewards
+      file: ./src/bribes.ts
+  - kind: ethereum
+    name: LegacyBribeMusdcMusdt
+    network: mezo
+    source:
+      # mUSDC/mUSDT
+      address: "0xA908809b0602606f86A745E13296881A9B267462"
+      abi: BribeVotingReward
+      startBlock: 7739500
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - ActivityEvent
+        - ActivityStats
+      abis:
+        - name: BribeVotingReward
+          file: ./abis/BribeVotingReward.json
+      eventHandlers:
+        - event: NotifyReward(indexed address,indexed address,indexed uint256,uint256)
+          handler: handleBribeNotifyReward
+        - event: ClaimRewards(indexed address,indexed address,uint256)
+          handler: handleBribeClaimRewards
+      file: ./src/bribes.ts
+  - kind: ethereum
+    name: LegacyBribeBtcMxsolvbtc
+    network: mezo
+    source:
+      # BTC/mxSolvBTC
+      address: "0x7C90026167FF9051fec3e14a5Ec486E484722dEd"
+      abi: BribeVotingReward
+      startBlock: 7739500
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - ActivityEvent
+        - ActivityStats
+      abis:
+        - name: BribeVotingReward
+          file: ./abis/BribeVotingReward.json
+      eventHandlers:
+        - event: NotifyReward(indexed address,indexed address,indexed uint256,uint256)
+          handler: handleBribeNotifyReward
+        - event: ClaimRewards(indexed address,indexed address,uint256)
+          handler: handleBribeClaimRewards
+      file: ./src/bribes.ts
+  - kind: ethereum
+    name: LegacyBribeBtcMusd
+    network: mezo
+    source:
+      # BTC/MUSD
+      address: "0x94A9A494872BF7231D8378d0Aef7d32BA552E305"
+      abi: BribeVotingReward
+      startBlock: 7739500
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - ActivityEvent
+        - ActivityStats
+      abis:
+        - name: BribeVotingReward
+          file: ./abis/BribeVotingReward.json
+      eventHandlers:
+        - event: NotifyReward(indexed address,indexed address,indexed uint256,uint256)
+          handler: handleBribeNotifyReward
+        - event: ClaimRewards(indexed address,indexed address,uint256)
+          handler: handleBribeClaimRewards
+      file: ./src/bribes.ts
+  - kind: ethereum
+    name: LegacyBribeMsolvbtcMusd
+    network: mezo
+    source:
+      # mSolvBTC/MUSD
+      address: "0xA2e2F01F9342582557917D114CaBCCe4A26Bb47f"
+      abi: BribeVotingReward
+      startBlock: 7739500
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - ActivityEvent
+        - ActivityStats
+      abis:
+        - name: BribeVotingReward
+          file: ./abis/BribeVotingReward.json
+      eventHandlers:
+        - event: NotifyReward(indexed address,indexed address,indexed uint256,uint256)
+          handler: handleBribeNotifyReward
+        - event: ClaimRewards(indexed address,indexed address,uint256)
+          handler: handleBribeClaimRewards
+      file: ./src/bribes.ts
+  - kind: ethereum
+    name: LegacyBribeMtMusd
+    network: mezo
+    source:
+      # mT/MUSD
+      address: "0xF4C0067b6A38ca5B28fB2c8E1d8A2a20D20d2af3"
+      abi: BribeVotingReward
+      startBlock: 7739500
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - ActivityEvent
+        - ActivityStats
+      abis:
+        - name: BribeVotingReward
+          file: ./abis/BribeVotingReward.json
+      eventHandlers:
+        - event: NotifyReward(indexed address,indexed address,indexed uint256,uint256)
+          handler: handleBribeNotifyReward
+        - event: ClaimRewards(indexed address,indexed address,uint256)
+          handler: handleBribeClaimRewards
+      file: ./src/bribes.ts
+  - kind: ethereum
+    name: LegacyBribeMcbbtcBtc
+    network: mezo
+    source:
+      # mcbBTC/BTC
+      address: "0x0377249DD6916f335048c7Cd5541022B6EC2185C"
+      abi: BribeVotingReward
+      startBlock: 7739500
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - ActivityEvent
+        - ActivityStats
+      abis:
+        - name: BribeVotingReward
+          file: ./abis/BribeVotingReward.json
+      eventHandlers:
+        - event: NotifyReward(indexed address,indexed address,indexed uint256,uint256)
+          handler: handleBribeNotifyReward
+        - event: ClaimRewards(indexed address,indexed address,uint256)
+          handler: handleBribeClaimRewards
+      file: ./src/bribes.ts
+  - kind: ethereum
+    name: LegacyBribeMusdcMusd
+    network: mezo
+    source:
+      # mUSDC/MUSD
+      address: "0xf2B88Ec68c8fBD5261c5483D1385c46dc7619589"
+      abi: BribeVotingReward
+      startBlock: 7739500
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - ActivityEvent
+        - ActivityStats
+      abis:
+        - name: BribeVotingReward
+          file: ./abis/BribeVotingReward.json
+      eventHandlers:
+        - event: NotifyReward(indexed address,indexed address,indexed uint256,uint256)
+          handler: handleBribeNotifyReward
+        - event: ClaimRewards(indexed address,indexed address,uint256)
+          handler: handleBribeClaimRewards
+      file: ./src/bribes.ts
+  - kind: ethereum
+    name: LegacyBribeBtcMsolvbtc
+    network: mezo
+    source:
+      # BTC/mSolvBTC
+      address: "0x52A9A4310a1567CE828Df137b2eaD4883c0221cF"
+      abi: BribeVotingReward
+      startBlock: 7739500
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - ActivityEvent
+        - ActivityStats
+      abis:
+        - name: BribeVotingReward
+          file: ./abis/BribeVotingReward.json
+      eventHandlers:
+        - event: NotifyReward(indexed address,indexed address,indexed uint256,uint256)
+          handler: handleBribeNotifyReward
+        - event: ClaimRewards(indexed address,indexed address,uint256)
+          handler: handleBribeClaimRewards
+      file: ./src/bribes.ts
 templates:
   - kind: ethereum
     name: BribeVotingReward
