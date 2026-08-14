@@ -775,8 +775,33 @@ export const VALIDATORS_VOTER_ABI = [
     type: "function",
   },
   {
+    inputs: [
+      { internalType: "address[]", name: "_bribes", type: "address[]" },
+      { internalType: "address[][]", name: "_tokens", type: "address[][]" },
+      { internalType: "uint256", name: "_tokenId", type: "uint256" },
+    ],
+    name: "claimBribes",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
     inputs: [],
     name: "rewardToken",
+    outputs: [{ internalType: "address", name: "", type: "address" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [],
+    name: "length",
+    outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [{ internalType: "uint256", name: "", type: "uint256" }],
+    name: "gauges",
     outputs: [{ internalType: "address", name: "", type: "address" }],
     stateMutability: "view",
     type: "function",
