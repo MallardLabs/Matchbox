@@ -979,7 +979,7 @@ function IncentiveHistoryPanel({
           ))}
         </div>
         <p className="text-xs text-[var(--content-tertiary)]">
-          Epoch history starts Apr 2
+          Epoch history starts Apr 2 · posted incentives only
         </p>
       </div>
 
@@ -988,6 +988,9 @@ function IncentiveHistoryPanel({
           <div className="min-w-0">
             <p className="text-xs uppercase text-[var(--content-tertiary)]">
               Total incentives
+              <span className="ml-1.5 normal-case text-[var(--content-tertiary)]">
+                (excludes trading fees routed to voters)
+              </span>
             </p>
             <p className="mt-2 truncate font-mono text-2xl font-semibold tabular-nums text-[var(--content-primary)] md:text-3xl">
               ~{formatUsdDetailed(selectedUsd)}

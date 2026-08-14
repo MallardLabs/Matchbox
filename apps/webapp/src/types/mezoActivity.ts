@@ -129,6 +129,12 @@ export type MezoActivityItem = {
   actionType: MezoActivityActionType
   boostContext: MezoBoostContext
   contract?: MezoActivityContract
+  /**
+   * How the indexer classified a reward deposit: "Bribe" for incentives someone
+   * posted to attract votes, "Fee" for trading fees redirected to voters. Both
+   * arrive as INCENTIVE_ADDED, so this is the only thing that separates them.
+   */
+  rewardType?: string
   source: MezoActivitySource
   pokeMethod?: MezoPokeMethod
   logIndex?: number
