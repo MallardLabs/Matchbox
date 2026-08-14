@@ -14,8 +14,8 @@ import type { Address } from "viem"
 import { erc20Abi, formatUnits } from "viem"
 import { useReadContracts } from "wagmi"
 
-export type IncentiveHistoryDomain = "vebtc" | "pools"
-export type IncentiveHistoryScope = "both" | IncentiveHistoryDomain
+export type IncentiveHistoryDomain = "vebtc" | "pools" | "validators"
+export type IncentiveHistoryScope = "all" | IncentiveHistoryDomain
 
 export type IncentiveHistoryToken = {
   domain: IncentiveHistoryDomain
@@ -40,11 +40,9 @@ export type IncentiveHistoryEpoch = {
   epochStart: number
   epochEnd: number
   label: string
-  vebtcUsd: number
-  poolsUsd: number
+  usdByDomain: Record<IncentiveHistoryDomain, number>
+  eventsByDomain: Record<IncentiveHistoryDomain, number>
   totalUsd: number
-  vebtcEvents: number
-  poolsEvents: number
   totalEvents: number
   unpricedEvents: number
   tokens: IncentiveHistoryToken[]
@@ -67,6 +65,9 @@ function epochStartFor(timestamp: number): number {
 function domainForItem(
   item: MezoActivityItem,
 ): IncentiveHistoryDomain | undefined {
+  // Validator incentives are indexed with an unknown boost context, so the
+  // emitting contract is the only signal — check it before the boost contexts.
+  if (item.contract === "validatorsVoter") return "validators"
   if (item.boostContext === "mezoVeBtcPairBoost") return "vebtc"
   if (item.boostContext === "matchboxGaugeBoost") return "pools"
   if (item.contract === "boostVoter") return "vebtc"
@@ -79,11 +80,9 @@ function createEpoch(epochStart: number, label: string): IncentiveHistoryEpoch {
     epochStart,
     epochEnd: epochStart + WEEK_SECONDS,
     label,
-    vebtcUsd: 0,
-    poolsUsd: 0,
+    usdByDomain: { vebtc: 0, pools: 0, validators: 0 },
+    eventsByDomain: { vebtc: 0, pools: 0, validators: 0 },
     totalUsd: 0,
-    vebtcEvents: 0,
-    poolsEvents: 0,
     totalEvents: 0,
     unpricedEvents: 0,
     tokens: [],
@@ -264,8 +263,7 @@ export function useActivityIncentiveHistory(): {
       if (!epoch) continue
 
       epoch.totalEvents += 1
-      if (domain === "vebtc") epoch.vebtcEvents += 1
-      else epoch.poolsEvents += 1
+      epoch.eventsByDomain[domain] += 1
 
       const amount = item.amount ?? 0n
       const tokenAddress = item.tokenAddress
@@ -282,11 +280,8 @@ export function useActivityIncentiveHistory(): {
 
       if (usdValue === null) {
         epoch.unpricedEvents += 1
-      } else if (domain === "vebtc") {
-        epoch.vebtcUsd += usdValue
-        epoch.totalUsd += usdValue
       } else {
-        epoch.poolsUsd += usdValue
+        epoch.usdByDomain[domain] += usdValue
         epoch.totalUsd += usdValue
       }
 

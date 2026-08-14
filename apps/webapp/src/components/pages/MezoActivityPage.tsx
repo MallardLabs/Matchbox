@@ -10,6 +10,7 @@ import {
 import { useAllGaugeProfiles } from "@/hooks/useGaugeProfiles"
 import { useMezoActivity } from "@/hooks/useMezoActivity"
 import { usePools } from "@/hooks/usePools"
+import { useAllValidatorProfiles } from "@/hooks/useValidatorProfiles"
 import {
   SYSTEM_ACTION_TYPES_GRAPHQL,
   USER_ACTION_TYPES_GRAPHQL,
@@ -93,10 +94,19 @@ const INCENTIVE_SCOPE_OPTIONS: Array<{
   key: IncentiveHistoryScope
   label: string
 }> = [
-  { key: "both", label: "Both" },
+  { key: "all", label: "All" },
   { key: "vebtc", label: "veBTC" },
+  { key: "validators", label: "Validators" },
   { key: "pools", label: "Pools" },
 ]
+
+/** Noun for the things a scope's incentives are attached to. */
+const INCENTIVE_TARGET_NOUN: Record<IncentiveHistoryScope, string> = {
+  all: "gauge/pool",
+  vebtc: "gauge",
+  validators: "validator gauge",
+  pools: "pool",
+}
 
 function nowSeconds() {
   return Math.floor(Date.now() / 1000)
@@ -166,18 +176,16 @@ function scopedUsd(
   epoch: IncentiveHistoryEpoch,
   scope: IncentiveHistoryScope,
 ): number {
-  if (scope === "vebtc") return epoch.vebtcUsd
-  if (scope === "pools") return epoch.poolsUsd
-  return epoch.totalUsd
+  if (scope === "all") return epoch.totalUsd
+  return epoch.usdByDomain[scope]
 }
 
 function scopedEvents(
   epoch: IncentiveHistoryEpoch,
   scope: IncentiveHistoryScope,
 ): number {
-  if (scope === "vebtc") return epoch.vebtcEvents
-  if (scope === "pools") return epoch.poolsEvents
-  return epoch.totalEvents
+  if (scope === "all") return epoch.totalEvents
+  return epoch.eventsByDomain[scope]
 }
 
 function scopedTargets(
@@ -185,7 +193,7 @@ function scopedTargets(
   scope: IncentiveHistoryScope,
 ): IncentiveHistoryTarget[] {
   if (!epoch) return []
-  if (scope === "both") return epoch.targets
+  if (scope === "all") return epoch.targets
   return epoch.targets.filter((target) => target.domain === scope)
 }
 
@@ -807,6 +815,7 @@ function IncentiveHistoryPanel({
     useActivityIncentiveHistory()
   const { pools } = usePools()
   const { profiles } = useAllGaugeProfiles()
+  const { profiles: validatorProfiles } = useAllValidatorProfiles()
   const [selectedEpochStart, setSelectedEpochStart] = useState<
     number | undefined
   >()
@@ -875,6 +884,26 @@ function IncentiveHistoryPanel({
       )
     }
 
+    if (target.domain === "validators") {
+      const validatorProfile = validatorProfiles.get(
+        target.gaugeAddress.toLowerCase(),
+      )
+      if (validatorProfile?.profile_picture_url) {
+        return (
+          <img
+            src={validatorProfile.profile_picture_url}
+            alt=""
+            className="h-8 w-8 flex-shrink-0 rounded-lg border border-[var(--border)] object-cover"
+          />
+        )
+      }
+      return (
+        <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface-secondary)] text-[var(--content-secondary)]">
+          <span className="font-mono text-2xs font-semibold">VAL</span>
+        </div>
+      )
+    }
+
     const profile = profiles.get(target.gaugeAddress.toLowerCase())
     if (profile?.profile_picture_url) {
       return (
@@ -901,11 +930,19 @@ function IncentiveHistoryPanel({
 
   const targetLabel = (target: IncentiveHistoryTarget): string => {
     if (!target.gaugeAddress) return "Unassigned gauge"
+    const gaugeKey = target.gaugeAddress.toLowerCase()
     if (target.domain === "pools") {
-      const pool = poolsByGauge.get(target.gaugeAddress.toLowerCase())
+      const pool = poolsByGauge.get(gaugeKey)
       if (pool) return `${pool.token0.symbol}/${pool.token1.symbol}`
     }
-    const profile = profiles.get(target.gaugeAddress.toLowerCase())
+    if (target.domain === "validators") {
+      const validatorProfile = validatorProfiles.get(gaugeKey)
+      return (
+        validatorProfile?.display_name?.trim() ||
+        shortenAddress(target.gaugeAddress)
+      )
+    }
+    const profile = profiles.get(gaugeKey)
     return profile?.display_name?.trim() || shortenAddress(target.gaugeAddress)
   }
 
@@ -917,6 +954,7 @@ function IncentiveHistoryPanel({
         return `${kind} pool`
       }
     }
+    if (target.domain === "validators") return "Validator gauge"
     return target.domain === "vebtc" ? "veBTC gauge" : "Pool gauge"
   }
 
@@ -930,7 +968,7 @@ function IncentiveHistoryPanel({
               type="button"
               onClick={() => onScopeChange(option.key)}
               aria-pressed={scope === option.key}
-              className={`min-h-0 flex-1 rounded-md px-3 py-1.5 text-sm transition-colors sm:flex-none ${
+              className={`min-h-0 flex-1 whitespace-nowrap rounded-md px-2 py-1.5 text-sm transition-colors sm:flex-none sm:px-3 ${
                 scope === option.key
                   ? "bg-[var(--surface)] text-[#F7931A] shadow-sm"
                   : "text-[var(--content-secondary)] hover:text-[var(--content-primary)]"
@@ -1045,12 +1083,7 @@ function IncentiveHistoryPanel({
             className="mt-4 flex w-full items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-left text-sm text-[var(--content-secondary)] transition-colors hover:text-[#F7931A]"
           >
             <span>
-              {selectedTargets.length}{" "}
-              {scope === "pools"
-                ? "pool"
-                : scope === "vebtc"
-                  ? "gauge"
-                  : "gauge/pool"}
+              {selectedTargets.length} {INCENTIVE_TARGET_NOUN[scope]}
               {selectedTargets.length === 1 ? "" : "s"} with incentives
             </span>
             <span
@@ -1157,7 +1190,7 @@ const PAGE_SIZE = 50
 export default function MezoActivityPage() {
   const [tab, setTab] = useState<MezoActivityTab>("activity")
   const [incentiveScope, setIncentiveScope] =
-    useState<IncentiveHistoryScope>("both")
+    useState<IncentiveHistoryScope>("all")
   const [activityFilters, setActivityFilters] =
     useState<MezoActivityFilter[]>(ALL_ACTIVITY_FILTERS)
   const [systemFilters, setSystemFilters] =
