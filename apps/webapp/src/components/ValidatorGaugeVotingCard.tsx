@@ -78,9 +78,9 @@ function ValidatorGaugeExportSnapshot({
   return (
     <article
       ref={snapshotRef}
-      className="flex min-w-0 flex-col gap-3 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4"
+      className="flex h-[220px] w-[320px] flex-col gap-3 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 pb-7 pt-4"
     >
-      <header className="flex min-w-0 items-center gap-3">
+      <header className="flex w-full min-w-0 items-start gap-3">
         <div className="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[var(--border)] bg-[var(--surface-secondary)]">
           {avatarUrl ? (
             <img src={avatarUrl} alt="" className="size-full object-cover" />
@@ -90,19 +90,17 @@ function ValidatorGaugeExportSnapshot({
             </span>
           )}
         </div>
-        <div className="min-w-0">
-          <p className="text-balance text-sm font-semibold text-[var(--content-primary)]">
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold text-[var(--content-primary)]">
             {displayName}
           </p>
-          {description ? (
-            <p className="line-clamp-2 text-pretty text-2xs text-[var(--content-secondary)]">
-              {description}
-            </p>
-          ) : null}
+          <p className="mt-0.5 line-clamp-2 h-8 overflow-hidden text-pretty text-2xs text-[var(--content-secondary)]">
+            {description ?? "\u00a0"}
+          </p>
         </div>
       </header>
 
-      <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-xs">
+      <dl className="grid w-full grid-cols-2 gap-x-4 gap-y-3 text-xs">
         <div>
           <dt className="text-[var(--content-tertiary)]">BTC Weight</dt>
           <dd className="font-mono tabular-nums text-[var(--content-primary)]">
@@ -115,20 +113,20 @@ function ValidatorGaugeExportSnapshot({
             {isLoadingMetrics ? "…" : formatValidatorApy(apy)}
           </dd>
         </div>
-        <div className="col-span-2">
+        <div className="col-span-2 min-w-0">
           <dt className="text-[var(--content-tertiary)]">Incentives</dt>
-          <dd className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-            <span className="font-mono text-sm font-medium tabular-nums text-[var(--content-primary)]">
+          <dd className="mt-0.5 flex min-h-7 min-w-0 items-center gap-x-2 overflow-hidden">
+            <span className="shrink-0 font-mono text-sm font-medium tabular-nums text-[var(--content-primary)]">
               {isLoadingMetrics
                 ? "…"
                 : formatMicroUsd(totalIncentivesMicroUsd ?? 0n)}
             </span>
             {incentives.length > 0 ? (
-              <span className="flex flex-wrap items-center gap-1.5">
+              <span className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
                 {incentives.map((incentive) => (
                   <span
                     key={incentive.tokenAddress}
-                    className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface-secondary)] px-2 py-1 text-2xs text-[var(--content-secondary)]"
+                    className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface-secondary)] px-2 py-1 text-2xs text-[var(--content-secondary)]"
                   >
                     <TokenIcon symbol={incentive.symbol} size={14} />
                     <span>{incentive.symbol}</span>
@@ -407,7 +405,7 @@ export default function ValidatorGaugeVotingCard({
 
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute inset-x-0 top-0 opacity-0"
+        className="pointer-events-none absolute left-0 top-0 w-[320px] opacity-0"
       >
         <ValidatorGaugeExportSnapshot
           snapshotRef={exportRef}
