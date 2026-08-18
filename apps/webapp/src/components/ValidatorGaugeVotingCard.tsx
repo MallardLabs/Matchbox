@@ -78,9 +78,14 @@ function ValidatorGaugeExportSnapshot({
   return (
     <article
       ref={snapshotRef}
-      className="flex h-[220px] w-[320px] flex-col gap-3 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 pb-7 pt-4"
+      className="flex h-[220px] w-[320px] flex-col gap-3 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] pb-7 pl-5 pr-4 pt-5"
     >
-      <header className="flex w-full min-w-0 items-start gap-3">
+      <header
+        className={cn(
+          "flex w-full min-w-0 gap-3",
+          description ? "items-start" : "items-center",
+        )}
+      >
         <div className="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[var(--border)] bg-[var(--surface-secondary)]">
           {avatarUrl ? (
             <img src={avatarUrl} alt="" className="size-full object-cover" />
@@ -94,9 +99,11 @@ function ValidatorGaugeExportSnapshot({
           <p className="truncate text-sm font-semibold text-[var(--content-primary)]">
             {displayName}
           </p>
-          <p className="mt-0.5 line-clamp-2 h-8 overflow-hidden text-pretty text-2xs text-[var(--content-secondary)]">
-            {description ?? "\u00a0"}
-          </p>
+          {description ? (
+            <p className="mt-0.5 line-clamp-2 overflow-hidden text-pretty text-2xs text-[var(--content-secondary)]">
+              {description}
+            </p>
+          ) : null}
         </div>
       </header>
 
