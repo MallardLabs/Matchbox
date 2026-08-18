@@ -129,16 +129,15 @@ function ValidatorGaugeExportSnapshot({
                 : formatMicroUsd(totalIncentivesMicroUsd ?? 0n)}
             </span>
             {incentives.length > 0 ? (
-              <span className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
+              <span className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
                 {incentives.map((incentive) => (
                   <span
                     key={incentive.tokenAddress}
-                    className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface-secondary)] px-2 py-1 text-2xs text-[var(--content-secondary)]"
+                    className="inline-flex shrink-0 items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface-secondary)] px-1.5 py-0.5 text-2xs text-[var(--content-secondary)]"
                   >
-                    <TokenIcon symbol={incentive.symbol} size={14} />
-                    <span>{incentive.symbol}</span>
-                    <span className="font-mono tabular-nums text-[var(--content-primary)]">
-                      {formatMicroUsd(incentive.valueMicroUsd)}
+                    <TokenIcon symbol={incentive.symbol} size={12} />
+                    <span className="font-mono tabular-nums">
+                      {incentive.symbol}
                     </span>
                   </span>
                 ))}
@@ -296,31 +295,32 @@ export default function ValidatorGaugeVotingCard({
               {apyChanged && (apyDirection === "up" ? " ↑" : " ↓")}
             </dd>
           </div>
-          <div>
+          <div className="col-span-2 min-w-0">
             <dt className="text-[var(--content-tertiary)]">Incentives</dt>
-            <dd className="font-mono tabular-nums text-[var(--content-primary)]">
-              {isLoadingMetrics
-                ? "…"
-                : formatMicroUsd(metric?.totalIncentivesMicroUsd ?? 0n)}
+            <dd className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+              <span className="font-mono text-sm font-medium tabular-nums text-[var(--content-primary)]">
+                {isLoadingMetrics
+                  ? "…"
+                  : formatMicroUsd(metric?.totalIncentivesMicroUsd ?? 0n)}
+              </span>
+              {metric && metric.incentives.length > 0 ? (
+                <span className="flex flex-wrap items-center gap-1">
+                  {metric.incentives.map((incentive) => (
+                    <span
+                      key={incentive.tokenAddress}
+                      className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface-secondary)] px-1.5 py-0.5 text-2xs text-[var(--content-secondary)]"
+                      title={`${formatAmount(incentive.amount, incentive.decimals)} ${incentive.symbol}`}
+                    >
+                      <TokenIcon symbol={incentive.symbol} size={12} />
+                      <span className="font-mono tabular-nums">
+                        {incentive.symbol}
+                      </span>
+                    </span>
+                  ))}
+                </span>
+              ) : null}
             </dd>
           </div>
-          {metric && metric.incentives.length > 0 && (
-            <div className="col-span-2 flex min-w-0 flex-wrap gap-1.5">
-              {metric.incentives.map((incentive) => (
-                <span
-                  key={incentive.tokenAddress}
-                  className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface-secondary)] px-2 py-1 text-2xs text-[var(--content-secondary)]"
-                  title={`${formatAmount(incentive.amount, incentive.decimals)} ${incentive.symbol}`}
-                >
-                  <TokenIcon symbol={incentive.symbol} size={14} />
-                  <span>{incentive.symbol}</span>
-                  <span className="font-mono tabular-nums text-[var(--content-primary)]">
-                    {formatMicroUsd(incentive.valueMicroUsd)}
-                  </span>
-                </span>
-              ))}
-            </div>
-          )}
         </dl>
 
         <p className="text-2xs text-[var(--content-secondary)]">
