@@ -1,21 +1,21 @@
 import MarqueeText from "@/components/MarqueeText"
-import { TokenIcon } from "@/components/TokenIcon"
+import { TokenIcon, tokenIconUrl } from "@/components/TokenIcon"
 import WatchGaugeButton from "@/components/WatchGaugeButton"
 import useShiftKeyHeld from "@/hooks/useShiftKeyHeld"
-import type {
-  ValidatorIncentiveMetric,
-  ValidatorMetric,
-} from "@/hooks/useValidatorMetrics"
+import type { ValidatorMetric } from "@/hooks/useValidatorMetrics"
 import { useValidatorProfile } from "@/hooks/useValidatorProfiles"
 import type { Validator } from "@/lib/validators"
 import { cn } from "@/utils/cn"
-import { exportElementAsSvg } from "@/utils/exportElementAsSvg"
+import {
+  exportFilename,
+  exportValidatorGaugeSvg,
+} from "@/utils/exportValidatorGaugeSvg"
 import { formatMicroUsd, formatValidatorApy } from "@/utils/validatorApy"
 import { percentageToBasisPoints } from "@/utils/validatorVoting"
 import { Button, Input, Skeleton, Tag } from "@mezo-org/mezo-clay"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import Link from "next/link"
-import { type ChangeEvent, type Ref, useRef, useState } from "react"
+import { type ChangeEvent, useState } from "react"
 import { formatUnits } from "viem"
 
 type ValidatorGaugeVotingCardProps = {
@@ -31,18 +31,6 @@ type ValidatorGaugeVotingCardProps = {
   onToggleSelection: () => void
 }
 
-type ValidatorGaugeExportSnapshotProps = {
-  snapshotRef: Ref<HTMLElement>
-  displayName: string
-  description: string | null
-  avatarUrl: string | null
-  weight: bigint
-  apy: bigint | null
-  isLoadingMetrics: boolean
-  totalIncentivesMicroUsd: bigint | null
-  incentives: ValidatorIncentiveMetric[]
-}
-
 function formatAmount(value: bigint, decimals = 18, precision = 4): string {
   const formatted = formatUnits(value, decimals)
   const [whole = "0", fraction = ""] = formatted.split(".")
@@ -54,100 +42,6 @@ function formatBasisPoints(value: bigint): string {
   const whole = value / 100n
   const fraction = (value % 100n).toString().padStart(2, "0")
   return `${whole}.${fraction}`
-}
-
-function exportFilename(displayName: string): string {
-  const safeName = displayName
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)/g, "")
-  return `matchbox-${safeName || "validator-gauge"}.svg`
-}
-
-function ValidatorGaugeExportSnapshot({
-  snapshotRef,
-  displayName,
-  description,
-  avatarUrl,
-  weight,
-  apy,
-  isLoadingMetrics,
-  totalIncentivesMicroUsd,
-  incentives,
-}: ValidatorGaugeExportSnapshotProps): JSX.Element {
-  return (
-    <article
-      ref={snapshotRef}
-      className="flex h-[220px] w-[320px] flex-col gap-3 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] pb-7 pl-5 pr-4 pt-5"
-    >
-      <header
-        className={cn(
-          "flex w-full min-w-0 gap-3",
-          description ? "items-start" : "items-center",
-        )}
-      >
-        <div className="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[var(--border)] bg-[var(--surface-secondary)]">
-          {avatarUrl ? (
-            <img src={avatarUrl} alt="" className="size-full object-cover" />
-          ) : (
-            <span className="font-mono text-xs font-semibold text-[var(--content-secondary)]">
-              {displayName.slice(0, 2).toUpperCase()}
-            </span>
-          )}
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold text-[var(--content-primary)]">
-            {displayName}
-          </p>
-          {description ? (
-            <p className="mt-0.5 line-clamp-2 overflow-hidden text-pretty text-2xs text-[var(--content-secondary)]">
-              {description}
-            </p>
-          ) : null}
-        </div>
-      </header>
-
-      <dl className="grid w-full grid-cols-2 gap-x-4 gap-y-3 text-xs">
-        <div>
-          <dt className="text-[var(--content-tertiary)]">BTC Weight</dt>
-          <dd className="font-mono tabular-nums text-[var(--content-primary)]">
-            {formatAmount(weight)} veBTC
-          </dd>
-        </div>
-        <div>
-          <dt className="text-[var(--content-tertiary)]">APY</dt>
-          <dd className="font-mono tabular-nums text-[var(--content-primary)]">
-            {isLoadingMetrics ? "…" : formatValidatorApy(apy)}
-          </dd>
-        </div>
-        <div className="col-span-2 min-w-0">
-          <dt className="text-[var(--content-tertiary)]">Incentives</dt>
-          <dd className="mt-0.5 flex min-h-7 min-w-0 items-center gap-x-2 overflow-hidden">
-            <span className="shrink-0 font-mono text-sm font-medium tabular-nums text-[var(--content-primary)]">
-              {isLoadingMetrics
-                ? "…"
-                : formatMicroUsd(totalIncentivesMicroUsd ?? 0n)}
-            </span>
-            {incentives.length > 0 ? (
-              <span className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
-                {incentives.map((incentive) => (
-                  <span
-                    key={incentive.tokenAddress}
-                    className="inline-flex shrink-0 items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface-secondary)] px-1.5 py-0.5 text-2xs text-[var(--content-secondary)]"
-                  >
-                    <TokenIcon symbol={incentive.symbol} size={12} />
-                    <span className="font-mono tabular-nums">
-                      {incentive.symbol}
-                    </span>
-                  </span>
-                ))}
-              </span>
-            ) : null}
-          </dd>
-        </div>
-      </dl>
-    </article>
-  )
 }
 
 export default function ValidatorGaugeVotingCard({
@@ -162,7 +56,6 @@ export default function ValidatorGaugeVotingCard({
   onAllocationChange,
   onToggleSelection,
 }: ValidatorGaugeVotingCardProps): JSX.Element {
-  const exportRef = useRef<HTMLElement>(null)
   const isShiftKeyHeld = useShiftKeyHeld()
   const prefersReducedMotion = useReducedMotion()
   const [isHovered, setIsHovered] = useState(false)
@@ -199,12 +92,28 @@ export default function ValidatorGaugeVotingCard({
   }
 
   async function handleExport(): Promise<void> {
-    if (!exportRef.current || isExporting) return
+    if (isExporting) return
 
     setExportError(null)
     setIsExporting(true)
     try {
-      await exportElementAsSvg(exportRef.current, exportFilename(displayName))
+      await exportValidatorGaugeSvg(
+        {
+          displayName,
+          description,
+          avatarUrl: profile?.profile_picture_url ?? null,
+          weightLabel: `${formatAmount(weight)} veBTC`,
+          apyLabel: isLoadingMetrics ? "…" : formatValidatorApy(currentApy),
+          incentivesLabel: isLoadingMetrics
+            ? "…"
+            : formatMicroUsd(metric?.totalIncentivesMicroUsd ?? 0n),
+          tokens: (metric?.incentives ?? []).map((incentive) => ({
+            symbol: incentive.symbol,
+            iconUrl: tokenIconUrl(incentive.symbol) ?? null,
+          })),
+        },
+        exportFilename(displayName),
+      )
     } catch {
       setExportError("Couldn't export this gauge. Please try again.")
     } finally {
@@ -409,23 +318,6 @@ export default function ValidatorGaugeVotingCard({
           </AnimatePresence>
         </div>
       </article>
-
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute left-0 top-0 w-[320px] opacity-0"
-      >
-        <ValidatorGaugeExportSnapshot
-          snapshotRef={exportRef}
-          displayName={displayName}
-          description={description}
-          avatarUrl={profile?.profile_picture_url ?? null}
-          weight={weight}
-          apy={currentApy}
-          isLoadingMetrics={isLoadingMetrics}
-          totalIncentivesMicroUsd={metric?.totalIncentivesMicroUsd ?? null}
-          incentives={metric?.incentives ?? []}
-        />
-      </div>
     </div>
   )
 }

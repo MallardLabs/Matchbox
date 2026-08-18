@@ -22,6 +22,8 @@ const sourceFiles = [
   "src/utils/validatorApy.test.ts",
   "src/utils/rewardPerVeMezo.ts",
   "src/utils/rewardPerVeMezo.test.ts",
+  "src/utils/exportValidatorGaugeSvg.ts",
+  "src/utils/exportValidatorGaugeSvg.test.ts",
   "src/lib/academy/simulate.ts",
   "src/lib/academy/simulate.test.ts",
   "src/lib/academy/epoch.ts",
@@ -37,6 +39,7 @@ const testEntries = [
   "utils/validatorVoting.test.js",
   "utils/validatorApy.test.js",
   "utils/rewardPerVeMezo.test.js",
+  "utils/exportValidatorGaugeSvg.test.js",
   "lib/academy/simulate.test.js",
 ]
 

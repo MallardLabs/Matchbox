@@ -11,7 +11,7 @@ const TOKEN_ICON_MAP: Record<string, string> = {
   mUSDT: "/token icons/mUSDT.svg",
 }
 
-function tokenIconUrl(symbol: string): string | undefined {
+export function tokenIconUrl(symbol: string): string | undefined {
   if (symbol === "mUSDC" || symbol === "mUSDT") {
     return TOKEN_ICON_MAP[symbol]
   }
