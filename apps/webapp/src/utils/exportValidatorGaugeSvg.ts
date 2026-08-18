@@ -5,6 +5,7 @@ const PAD_RIGHT = 16
 const PAD_TOP = 20
 const AVATAR = 44
 const HEADER_HEIGHT = 52
+const FONT_FAMILY = "IBM Plex Mono"
 
 export type ValidatorGaugeSvgColors = {
   surface: string
@@ -68,25 +69,25 @@ export function exportFilename(displayName: string): string {
   return `matchbox-${safeName || "validator-gauge"}.svg`
 }
 
-function estimateWidth(text: string, fontSize: number, mono: boolean): number {
-  return text.length * fontSize * (mono ? 0.62 : 0.52)
+function estimateWidth(text: string, fontSize: number): number {
+  return text.length * fontSize * 0.62
 }
 
-function ellipsize(
-  text: string,
-  maxWidth: number,
-  fontSize: number,
-  mono: boolean,
-): string {
-  if (estimateWidth(text, fontSize, mono) <= maxWidth) return text
+function ellipsize(text: string, maxWidth: number, fontSize: number): string {
+  if (estimateWidth(text, fontSize) <= maxWidth) return text
   let truncated = text
   while (
     truncated.length > 1 &&
-    estimateWidth(`${truncated}…`, fontSize, mono) > maxWidth
+    estimateWidth(`${truncated}…`, fontSize) > maxWidth
   ) {
     truncated = truncated.slice(0, -1)
   }
   return `${truncated}…`
+}
+
+function fontAttrs(size: number, weight?: number): string {
+  const weightAttr = weight ? ` font-weight="${weight}"` : ""
+  return `font-family="${FONT_FAMILY}" font-size="${size}"${weightAttr}`
 }
 
 function wrapText(
@@ -101,16 +102,14 @@ function wrapText(
 
   for (const [index, word] of words.entries()) {
     const next = current ? `${current} ${word}` : word
-    if (estimateWidth(next, fontSize, false) <= maxWidth) {
+    if (estimateWidth(next, fontSize) <= maxWidth) {
       current = next
       continue
     }
     if (current) lines.push(current)
     current = word
     if (lines.length === maxLines - 1) {
-      lines.push(
-        ellipsize(words.slice(index).join(" "), maxWidth, fontSize, false),
-      )
+      lines.push(ellipsize(words.slice(index).join(" "), maxWidth, fontSize))
       return lines
     }
   }
@@ -219,7 +218,7 @@ export function buildValidatorGaugeSvg(model: ValidatorGaugeSvgModel): string {
   const { colors } = model
   const textWidth = CARD_WIDTH - PAD_LEFT - PAD_RIGHT - AVATAR - 12
   const nameX = PAD_LEFT + AVATAR + 12
-  const name = ellipsize(model.displayName, textWidth, 14, false)
+  const name = ellipsize(model.displayName, textWidth, 14)
   const descriptionLines = model.description
     ? wrapText(model.description, textWidth, 11, 2)
     : []
@@ -228,24 +227,24 @@ export function buildValidatorGaugeSvg(model: ValidatorGaugeSvgModel): string {
   const incentivesY = metricY + 44
   const amountX = PAD_LEFT
   const amountY = incentivesY + 36
-  const amountWidth = estimateWidth(model.incentivesLabel, 18, true)
+  const amountWidth = estimateWidth(model.incentivesLabel, 18)
   const metricCol = (CARD_WIDTH - PAD_LEFT - PAD_RIGHT) / 2
 
   const pills: string[] = []
   let pillX = amountX + amountWidth + 10
   const pillY = amountY - 16
   for (const token of model.tokens) {
-    const symbol = ellipsize(token.symbol, 72, 12, true)
-    const pillWidth = 8 + 16 + 4 + estimateWidth(symbol, 12, true) + 8
+    const symbol = ellipsize(token.symbol, 72, 12)
+    const pillWidth = 8 + 16 + 4 + estimateWidth(symbol, 12) + 8
     if (pillX + pillWidth > CARD_WIDTH - PAD_RIGHT) break
     const icon = token.iconDataUrl
       ? imageHref(token.iconDataUrl, pillX + 8, pillY + 4, 16)
-      : `<text x="${pillX + 16}" y="${pillY + 16}" text-anchor="middle" font-family="IBM Plex Sans, ui-sans-serif, system-ui, sans-serif" font-size="10" font-weight="600" fill="${escapeXml(colors.contentSecondary)}">${escapeXml(symbol.slice(0, 1))}</text>`
+      : `<text x="${pillX + 16}" y="${pillY + 16}" text-anchor="middle" ${fontAttrs(10, 500)} fill="${escapeXml(colors.contentSecondary)}">${escapeXml(symbol.slice(0, 1))}</text>`
     pills.push(
       `<g>
         <rect x="${pillX}" y="${pillY}" width="${pillWidth}" height="24" rx="12" fill="${escapeXml(colors.surfaceSecondary)}" stroke="${escapeXml(colors.border)}" />
         ${icon}
-        <text x="${pillX + 28}" y="${pillY + 16}" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="12" fill="${escapeXml(colors.contentSecondary)}">${escapeXml(symbol)}</text>
+        <text x="${pillX + 28}" y="${pillY + 16}" ${fontAttrs(12)} fill="${escapeXml(colors.contentSecondary)}">${escapeXml(symbol)}</text>
       </g>`,
     )
     pillX += pillWidth + 6
@@ -256,12 +255,12 @@ export function buildValidatorGaugeSvg(model: ValidatorGaugeSvgModel): string {
       <circle cx="${PAD_LEFT + 22}" cy="${PAD_TOP + 22}" r="22.5" fill="${escapeXml(colors.surfaceSecondary)}" stroke="${escapeXml(colors.border)}" />
       ${imageHref(model.avatarDataUrl, PAD_LEFT, PAD_TOP, AVATAR, "avatar-clip")}`
     : `<circle cx="${PAD_LEFT + 22}" cy="${PAD_TOP + 22}" r="22" fill="${escapeXml(colors.surfaceSecondary)}" stroke="${escapeXml(colors.border)}" />
-      <text x="${PAD_LEFT + 22}" y="${PAD_TOP + 27}" text-anchor="middle" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="12" font-weight="600" fill="${escapeXml(colors.contentSecondary)}">${escapeXml(model.avatarInitials)}</text>`
+      <text x="${PAD_LEFT + 22}" y="${PAD_TOP + 27}" text-anchor="middle" ${fontAttrs(12, 500)} fill="${escapeXml(colors.contentSecondary)}">${escapeXml(model.avatarInitials)}</text>`
 
   const descriptionMarkup = descriptionLines
     .map(
       (line, index) =>
-        `<text x="${nameX}" y="${PAD_TOP + 32 + index * 14}" font-family="IBM Plex Sans, ui-sans-serif, system-ui, sans-serif" font-size="11" fill="${escapeXml(colors.contentSecondary)}">${escapeXml(line)}</text>`,
+        `<text x="${nameX}" y="${PAD_TOP + 32 + index * 14}" ${fontAttrs(11)} fill="${escapeXml(colors.contentSecondary)}">${escapeXml(line)}</text>`,
     )
     .join("\n")
 
@@ -270,14 +269,14 @@ export function buildValidatorGaugeSvg(model: ValidatorGaugeSvgModel): string {
   <title>${escapeXml(model.displayName)}</title>
   <rect x="0.5" y="0.5" width="${CARD_WIDTH - 1}" height="${CARD_HEIGHT - 1}" rx="12" fill="${escapeXml(colors.surface)}" stroke="${escapeXml(colors.border)}" />
   ${avatar}
-  <text x="${nameX}" y="${nameBaseline}" font-family="IBM Plex Sans, ui-sans-serif, system-ui, sans-serif" font-size="14" font-weight="600" fill="${escapeXml(colors.contentPrimary)}">${escapeXml(name)}</text>
+  <text x="${nameX}" y="${nameBaseline}" ${fontAttrs(14, 600)} fill="${escapeXml(colors.contentPrimary)}">${escapeXml(name)}</text>
   ${descriptionMarkup}
-  <text x="${PAD_LEFT}" y="${metricY}" font-family="IBM Plex Sans, ui-sans-serif, system-ui, sans-serif" font-size="11" fill="${escapeXml(colors.contentTertiary)}">BTC Weight</text>
-  <text x="${PAD_LEFT}" y="${metricY + 18}" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="13" fill="${escapeXml(colors.contentPrimary)}">${escapeXml(model.weightLabel)}</text>
-  <text x="${PAD_LEFT + metricCol}" y="${metricY}" font-family="IBM Plex Sans, ui-sans-serif, system-ui, sans-serif" font-size="11" fill="${escapeXml(colors.contentTertiary)}">APY</text>
-  <text x="${PAD_LEFT + metricCol}" y="${metricY + 18}" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="13" fill="${escapeXml(colors.contentPrimary)}">${escapeXml(model.apyLabel)}</text>
-  <text x="${PAD_LEFT}" y="${incentivesY}" font-family="IBM Plex Sans, ui-sans-serif, system-ui, sans-serif" font-size="13" fill="${escapeXml(colors.contentTertiary)}">Incentives</text>
-  <text x="${amountX}" y="${amountY}" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="18" font-weight="600" fill="${escapeXml(colors.contentPrimary)}">${escapeXml(model.incentivesLabel)}</text>
+  <text x="${PAD_LEFT}" y="${metricY}" ${fontAttrs(11)} fill="${escapeXml(colors.contentTertiary)}">BTC Weight</text>
+  <text x="${PAD_LEFT}" y="${metricY + 18}" ${fontAttrs(13)} fill="${escapeXml(colors.contentPrimary)}">${escapeXml(model.weightLabel)}</text>
+  <text x="${PAD_LEFT + metricCol}" y="${metricY}" ${fontAttrs(11)} fill="${escapeXml(colors.contentTertiary)}">APY</text>
+  <text x="${PAD_LEFT + metricCol}" y="${metricY + 18}" ${fontAttrs(13)} fill="${escapeXml(colors.contentPrimary)}">${escapeXml(model.apyLabel)}</text>
+  <text x="${PAD_LEFT}" y="${incentivesY}" ${fontAttrs(13)} fill="${escapeXml(colors.contentTertiary)}">Incentives</text>
+  <text x="${amountX}" y="${amountY}" ${fontAttrs(18, 500)} fill="${escapeXml(colors.contentPrimary)}">${escapeXml(model.incentivesLabel)}</text>
   ${pills.join("\n")}
 </svg>
 `
