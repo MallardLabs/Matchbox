@@ -31,6 +31,8 @@ const sourceFiles = [
   "src/lib/academy/blacklistedActors.ts",
   "src/lib/mezoActivity/constants.ts",
   "src/types/mezoActivity.ts",
+  "src/config/mezoRpcWrite.ts",
+  "src/config/mezoRpcWrite.test.ts",
 ]
 
 const testEntries = [
@@ -41,6 +43,7 @@ const testEntries = [
   "utils/rewardPerVeMezo.test.js",
   "utils/rewardOptimizer.test.js",
   "lib/academy/simulate.test.js",
+  "config/mezoRpcWrite.test.js",
 ]
 
 rmSync(outDir, { recursive: true, force: true })

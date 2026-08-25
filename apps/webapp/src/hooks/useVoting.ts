@@ -1,4 +1,5 @@
 import { getContractConfig } from "@/config/contracts"
+import { toJsonRpcAccount } from "@/config/mezoRpcWrite"
 import { QUERY_PROFILES } from "@/config/queryProfiles"
 import { useNetwork } from "@/contexts/NetworkContext"
 import { useGaugeTopology } from "@/hooks/useGaugeTopology"
@@ -6,11 +7,13 @@ import { chunkArray } from "@/utils/chunk"
 import { useQuery } from "@tanstack/react-query"
 import { useCallback, useMemo } from "react"
 import type { Address, Hex } from "viem"
+import { encodeFunctionData, erc20Abi } from "viem"
 import {
   useAccount,
   usePublicClient,
   useReadContract,
   useReadContracts,
+  useSendTransaction,
   useWaitForTransactionReceipt,
   useWriteContract,
 } from "wagmi"
@@ -647,13 +650,15 @@ export function useApproveToken(): {
   error: Error | null
   reset: () => void
 } {
+  const { chainId } = useNetwork()
+  const { address } = useAccount()
   const {
-    writeContract,
+    sendTransaction,
     data: hash,
     isPending,
     error,
     reset,
-  } = useWriteContract()
+  } = useSendTransaction()
 
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
     hash,
@@ -664,24 +669,17 @@ export function useApproveToken(): {
     spenderAddress: Address,
     amount: bigint,
   ) => {
-    if (amount <= 0n) return
+    if (!address || amount <= 0n) return
 
-    writeContract({
-      address: tokenAddress,
-      abi: [
-        {
-          inputs: [
-            { name: "spender", type: "address" },
-            { name: "amount", type: "uint256" },
-          ],
-          name: "approve",
-          outputs: [{ name: "", type: "bool" }],
-          stateMutability: "nonpayable",
-          type: "function",
-        },
-      ] as const,
-      functionName: "approve",
-      args: [spenderAddress, amount],
+    sendTransaction({
+      account: toJsonRpcAccount(address),
+      chainId,
+      to: tokenAddress,
+      data: encodeFunctionData({
+        abi: erc20Abi,
+        functionName: "approve",
+        args: [spenderAddress, amount],
+      }),
     })
   }
 

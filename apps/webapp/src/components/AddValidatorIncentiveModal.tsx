@@ -1,5 +1,6 @@
 import { TokenSelector } from "@/components/TokenSelector"
 import { getContractConfig } from "@/config/contracts"
+import { formatWalletWriteError } from "@/config/mezoRpcWrite"
 import { useNetwork } from "@/contexts/NetworkContext"
 import type { Token } from "@/hooks/useTokenList"
 import {
@@ -16,7 +17,7 @@ import {
 } from "@mezo-org/mezo-clay"
 import { useEffect, useMemo, useState } from "react"
 import { type Address, erc20Abi, formatUnits, parseUnits } from "viem"
-import { useAccount, useReadContract } from "wagmi"
+import { useAccount, useBalance, useReadContract } from "wagmi"
 
 type Props = {
   gauge: Address
@@ -36,6 +37,12 @@ export default function AddValidatorIncentiveModal({
   const { chainId } = useNetwork()
   const { address } = useAccount()
   const voter = getContractConfig(chainId).validatorsVoter.address
+  const { data: nativeBalance } = useBalance({
+    address,
+    chainId,
+    query: { enabled: !!address },
+  })
+  const hasNoGas = nativeBalance !== undefined && nativeBalance.value === 0n
   const [token, setToken] = useState<Token>()
   const [amount, setAmount] = useState("")
   const parsedAmount = useMemo(() => {
@@ -86,6 +93,7 @@ export default function AddValidatorIncentiveModal({
     onClose()
   }
 
+  const writeError = approval.error ?? incentive.error
   const isBusy =
     approval.isPending ||
     approval.isConfirming ||
@@ -148,9 +156,15 @@ export default function AddValidatorIncentiveModal({
               The amount exceeds your wallet balance.
             </p>
           )}
-          {(approval.error || incentive.error) && (
+          {hasNoGas && (
+            <p className="text-xs text-[var(--negative)]">
+              This wallet has no BTC for gas. Fund the connected address with a
+              small amount of BTC on Mezo before approving.
+            </p>
+          )}
+          {writeError && (
             <p className="text-pretty text-xs text-[var(--negative)]">
-              {(approval.error ?? incentive.error)?.message}
+              {formatWalletWriteError(writeError)}
             </p>
           )}
           <Button
@@ -164,6 +178,7 @@ export default function AddValidatorIncentiveModal({
               isBusy ||
               parsedAmount <= 0n ||
               hasInsufficientBalance ||
+              hasNoGas ||
               isAllowlisted !== true
             }
           >

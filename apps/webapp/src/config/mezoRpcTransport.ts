@@ -8,6 +8,7 @@ import {
   readMezoMainnetCustomRpcUrl,
   readMezoMainnetRpcPreference,
 } from "@/config/mezoRpc"
+import { isMutationRpcMethod, prepareRpcRequest } from "@/config/mezoRpcWrite"
 import type { EIP1193RequestFn } from "viem"
 import { http, type Transport } from "wagmi"
 
@@ -97,41 +98,84 @@ function getEndpointLabel(endpointIndex: number): string {
   return `${endpoint.label} (${endpoint.url})`
 }
 
+function createEndpointTransport(
+  url: string,
+  batched: boolean,
+): ReturnType<typeof http> {
+  return http(url, {
+    ...(batched ? { batch: { batchSize: JSON_RPC_BATCH_SIZE } } : {}),
+    fetchOptions: { cache: "no-store" },
+    retryCount: 0,
+  })
+}
+
 export function createMezoMainnetTransport(): Transport {
-  const transports = MEZO_MAINNET_RPC_ENDPOINTS.map((endpoint) =>
-    http(endpoint.url, {
-      batch: { batchSize: JSON_RPC_BATCH_SIZE },
-      fetchOptions: { cache: "no-store" },
-      retryCount: 0,
-    }),
+  const readTransports = MEZO_MAINNET_RPC_ENDPOINTS.map((endpoint) =>
+    createEndpointTransport(endpoint.url, true),
+  )
+  const writeTransports = MEZO_MAINNET_RPC_ENDPOINTS.map((endpoint) =>
+    createEndpointTransport(endpoint.url, false),
   )
 
   return ((parameters) => {
-    const runtimeTransports = transports.map((transport) =>
+    const runtimeReads = readTransports.map((transport) =>
+      transport({
+        ...parameters,
+        retryCount: 0,
+      }),
+    )
+    const runtimeWrites = writeTransports.map((transport) =>
       transport({
         ...parameters,
         retryCount: 0,
       }),
     )
     const cooldownUntil = new Array(MEZO_MAINNET_RPC_ENDPOINTS.length).fill(0)
-    let customRuntimeTransport: (typeof runtimeTransports)[number] | undefined
+    type RuntimeClient = (typeof runtimeReads)[number]
+    let customRuntimeRead: RuntimeClient | undefined
+    let customRuntimeWrite: RuntimeClient | undefined
     let customRuntimeTransportUrl: string | undefined
 
-    const getCustomRuntimeTransport = (url: string) => {
-      if (customRuntimeTransport && customRuntimeTransportUrl === url) {
-        return customRuntimeTransport
+    const getCustomRuntimePair = (url: string) => {
+      if (
+        customRuntimeRead &&
+        customRuntimeWrite &&
+        customRuntimeTransportUrl === url
+      ) {
+        return { read: customRuntimeRead, write: customRuntimeWrite }
       }
 
-      customRuntimeTransport = http(url, {
-        batch: { batchSize: JSON_RPC_BATCH_SIZE },
-        fetchOptions: { cache: "no-store" },
+      customRuntimeRead = createEndpointTransport(
+        url,
+        true,
+      )({
+        ...parameters,
         retryCount: 0,
-      })({
+      })
+      customRuntimeWrite = createEndpointTransport(
+        url,
+        false,
+      )({
         ...parameters,
         retryCount: 0,
       })
       customRuntimeTransportUrl = url
-      return customRuntimeTransport
+      return { read: customRuntimeRead, write: customRuntimeWrite }
+    }
+
+    function transportForMethod(
+      pair: { read: RuntimeClient; write: RuntimeClient },
+      method: string,
+    ): RuntimeClient {
+      return isMutationRpcMethod(method) ? pair.write : pair.read
+    }
+
+    async function dispatch(
+      pair: { read: RuntimeClient; write: RuntimeClient },
+      args: Parameters<EIP1193RequestFn>[0],
+    ) {
+      const prepared = prepareRpcRequest(args)
+      return transportForMethod(pair, prepared.method).request(prepared)
     }
 
     const request: EIP1193RequestFn = async (args) => {
@@ -141,8 +185,10 @@ export function createMezoMainnetTransport(): Transport {
         const customRpcUrl = readMezoMainnetCustomRpcUrl()
         if (customRpcUrl !== null) {
           try {
-            const result =
-              await getCustomRuntimeTransport(customRpcUrl).request(args)
+            const result = await dispatch(
+              getCustomRuntimePair(customRpcUrl),
+              args,
+            )
             publishActiveEndpoint(getMezoMainnetCustomRpcEndpoint(customRpcUrl))
             return result as never
           } catch (error) {
@@ -174,12 +220,12 @@ export function createMezoMainnetTransport(): Transport {
           cooldownUntil[preferredEndpointIndex] <= now
             ? [
                 preferredEndpointIndex,
-                ...runtimeTransports
+                ...runtimeReads
                   .map((_, index) => index)
                   .filter((index) => index !== preferredEndpointIndex),
               ]
             : [
-                ...runtimeTransports
+                ...runtimeReads
                   .map((_, index) => index)
                   .filter((index) => index !== preferredEndpointIndex),
                 preferredEndpointIndex,
@@ -202,10 +248,13 @@ export function createMezoMainnetTransport(): Transport {
           }
 
           try {
-            const result = await getArrayItem(
-              runtimeTransports,
-              endpointIndex,
-            ).request(args)
+            const result = await dispatch(
+              {
+                read: getArrayItem(runtimeReads, endpointIndex),
+                write: getArrayItem(runtimeWrites, endpointIndex),
+              },
+              args,
+            )
             publishActiveEndpoint(candidateEndpoint)
             return result as never
           } catch (error) {
@@ -242,23 +291,26 @@ export function createMezoMainnetTransport(): Transport {
         startIndex === -1 ? activeAutoRpcIndex : startIndex
       let lastError: unknown
 
-      for (let offset = 0; offset < runtimeTransports.length; offset += 1) {
+      for (let offset = 0; offset < runtimeReads.length; offset += 1) {
         const endpointIndex =
-          (normalizedStartIndex + offset) % runtimeTransports.length
+          (normalizedStartIndex + offset) % runtimeReads.length
         const endpoint = getArrayItem(MEZO_MAINNET_RPC_ENDPOINTS, endpointIndex)
 
         if (
           (cooldownUntil[endpointIndex] ?? 0) > now &&
-          offset < runtimeTransports.length - 1
+          offset < runtimeReads.length - 1
         ) {
           continue
         }
 
         try {
-          const result = await getArrayItem(
-            runtimeTransports,
-            endpointIndex,
-          ).request(args)
+          const result = await dispatch(
+            {
+              read: getArrayItem(runtimeReads, endpointIndex),
+              write: getArrayItem(runtimeWrites, endpointIndex),
+            },
+            args,
+          )
           activeAutoRpcIndex = endpointIndex
           publishActiveEndpoint(endpoint)
           return result as never
@@ -267,13 +319,13 @@ export function createMezoMainnetTransport(): Transport {
 
           if (
             !isRetryableRpcError(error) ||
-            offset === runtimeTransports.length - 1
+            offset === runtimeReads.length - 1
           ) {
             throw error
           }
 
           cooldownUntil[endpointIndex] = Date.now() + RATE_LIMIT_COOLDOWN_MS
-          activeAutoRpcIndex = (endpointIndex + 1) % runtimeTransports.length
+          activeAutoRpcIndex = (endpointIndex + 1) % runtimeReads.length
           console.warn("[RPC] Rotating Mezo mainnet RPC endpoint", {
             failedEndpoint: endpoint.url,
             nextEndpoint: getArrayItem(

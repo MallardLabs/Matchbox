@@ -1,12 +1,15 @@
 import { getContractConfig } from "@/config/contracts"
+import { toJsonRpcAccount } from "@/config/mezoRpcWrite"
 import { QUERY_PROFILES } from "@/config/queryProfiles"
 import { useNetwork } from "@/contexts/NetworkContext"
 import { useInfiniteQuery } from "@tanstack/react-query"
 import { useCallback, useMemo } from "react"
 import type { Address, Hex } from "viem"
+import { encodeFunctionData } from "viem"
 import {
   useAccount,
   useReadContract,
+  useSendTransaction,
   useWaitForTransactionReceipt,
   useWriteContract,
 } from "wagmi"
@@ -87,22 +90,30 @@ export function useAddValidatorIncentive(): ValidatorWriteState & {
   addIncentive: (gauge: Address, token: Address, amount: bigint) => void
 } {
   const { chainId } = useNetwork()
+  const { address } = useAccount()
   const contracts = getContractConfig(chainId)
-  const write = useWriteContract()
-  const receipt = useWaitForTransactionReceipt({ hash: write.data })
+  const send = useSendTransaction()
+  const receipt = useWaitForTransactionReceipt({ hash: send.data })
   return {
-    addIncentive: (gauge: Address, token: Address, amount: bigint) =>
-      write.writeContract({
-        ...contracts.validatorsVoter,
-        functionName: "addBribes",
-        args: [gauge, [token], [amount]],
-      }),
-    hash: write.data as Hex | undefined,
-    isPending: write.isPending,
+    addIncentive: (gauge: Address, token: Address, amount: bigint) => {
+      if (!address) return
+      send.sendTransaction({
+        account: toJsonRpcAccount(address),
+        chainId,
+        to: contracts.validatorsVoter.address,
+        data: encodeFunctionData({
+          abi: contracts.validatorsVoter.abi,
+          functionName: "addBribes",
+          args: [gauge, [token], [amount]],
+        }),
+      })
+    },
+    hash: send.data,
+    isPending: send.isPending,
     isConfirming: receipt.isLoading,
     isSuccess: receipt.isSuccess,
-    error: write.error,
-    reset: write.reset,
+    error: send.error,
+    reset: send.reset,
   }
 }
 
