@@ -26,6 +26,8 @@ const sourceFiles = [
   "src/utils/rewardOptimizer.test.ts",
   "src/lib/mezoGauges.ts",
   "src/lib/mezoGauges.test.ts",
+  "src/lib/remoteMezoPools.ts",
+  "src/lib/remoteMezoPools.test.ts",
   "src/lib/academy/simulate.ts",
   "src/lib/academy/simulate.test.ts",
   "src/lib/academy/epoch.ts",
@@ -45,6 +47,7 @@ const testEntries = [
   "utils/rewardPerVeMezo.test.js",
   "utils/rewardOptimizer.test.js",
   "lib/mezoGauges.test.js",
+  "lib/remoteMezoPools.test.js",
   "lib/academy/simulate.test.js",
   "config/mezoRpcWrite.test.js",
 ]

@@ -3,6 +3,8 @@ import { type Address, getAddress } from "viem"
 export type MezoGaugeProtocol = "Aerodrome" | "Uniswap v4" | "Curve"
 export type MezoGaugeNetwork = "base" | "ethereum"
 
+export type GeckoTerminalNetwork = "base" | "eth"
+
 export type MezoGaugeIdentity = {
   name: string
   protocol: MezoGaugeProtocol
@@ -12,6 +14,8 @@ export type MezoGaugeIdentity = {
   poolUrl: string
   action: string
   distributionEpochOffset: number
+  /** Venue pool id on GeckoTerminal (Aerodrome/Curve address or Uniswap v4 pool id). */
+  geckoPoolId: string
 }
 
 const WEEK_SECONDS = 604_800
@@ -32,6 +36,7 @@ export const MEZO_GAUGES: Record<Address, MezoGaugeIdentity> = {
       "https://aerodrome.finance/vote?filters=all&query=0xFF56D037D948faD1027a1AC82ae610e4b694c641",
     action: "Incentivize voters on this Aerodrome gauge",
     distributionEpochOffset: 1,
+    geckoPoolId: "0xFF56D037D948faD1027a1AC82ae610e4b694c641",
   },
   [getAddress("0x4440A9b2954cB98416C0122e2ea996C46555F4B6")]: {
     name: "MEZO/MUSD",
@@ -43,6 +48,7 @@ export const MEZO_GAUGES: Record<Address, MezoGaugeIdentity> = {
       "https://aerodrome.finance/vote?filters=all&query=0xEF458A3263d2a8C7f3ed9e949aE2F9B345D08b1F",
     action: "Incentivize voters on this Aerodrome gauge",
     distributionEpochOffset: 1,
+    geckoPoolId: "0xEF458A3263d2a8C7f3ed9e949aE2F9B345D08b1F",
   },
   [getAddress("0x2ced96e759ab481210d41c567eee5c42edb59a1d")]: {
     name: "MUSD/USDC",
@@ -54,6 +60,8 @@ export const MEZO_GAUGES: Record<Address, MezoGaugeIdentity> = {
       "https://app.uniswap.org/explore/pools/ethereum/0xa9bf5691768ef950a99efd74d722961ff2df3fec08d77ec784432c619bd283a0",
     action: "Incentivize liquidity providers on this pool gauge through Merkl",
     distributionEpochOffset: 1,
+    geckoPoolId:
+      "0xa9bf5691768ef950a99efd74d722961ff2df3fec08d77ec784432c619bd283a0",
   },
   [getAddress("0xc39a294024dca62f579c49d7c83a6c831d4976d0")]: {
     name: "MUSD/USDC/USDT",
@@ -65,11 +73,32 @@ export const MEZO_GAUGES: Record<Address, MezoGaugeIdentity> = {
       "https://www.curve.finance/dex/ethereum/pools/0xb5571e76693ba60110b5811dd650ffefce1c955f",
     action: "Incentivize liquidity providers on this pool gauge through Merkl",
     distributionEpochOffset: 1,
+    geckoPoolId: "0xb5571e76693ba60110b5811dd650ffefce1c955f",
   },
 }
 
 export function mezoGaugeAddresses(): Address[] {
   return Object.keys(MEZO_GAUGES).map((address) => getAddress(address))
+}
+
+export function geckoNetworkFor(
+  network: MezoGaugeNetwork,
+): GeckoTerminalNetwork {
+  return network === "base" ? "base" : "eth"
+}
+
+export type MezoGaugeVenueLookup = {
+  gauge: Address
+  geckoNetwork: GeckoTerminalNetwork
+  geckoPoolId: string
+}
+
+export function mezoGaugeVenueLookups(): MezoGaugeVenueLookup[] {
+  return Object.entries(MEZO_GAUGES).map(([gauge, identity]) => ({
+    gauge: getAddress(gauge),
+    geckoNetwork: geckoNetworkFor(identity.network),
+    geckoPoolId: identity.geckoPoolId,
+  }))
 }
 
 export type MezoGaugeOnChainItem = {

@@ -4,7 +4,9 @@ import { type Address, getAddress } from "viem"
 import {
   MEZO_GAUGES,
   formatDistributionDate,
+  geckoNetworkFor,
   mezoGaugeAddresses,
+  mezoGaugeVenueLookups,
   resolveDistributionDate,
   resolveMezoGaugeRows,
 } from "./mezoGauges"
@@ -77,4 +79,16 @@ test("formats distribution dates in en-US UTC", () => {
     formatDistributionDate(new Date("2026-09-17T00:00:00Z")),
     "Sep 17, 2026",
   )
+})
+
+test("attaches GeckoTerminal venue ids for every catalog gauge", () => {
+  const lookups = mezoGaugeVenueLookups()
+  assert.equal(lookups.length, 4)
+  for (const lookup of lookups) {
+    const identity = MEZO_GAUGES[lookup.gauge]
+    assert.notEqual(identity, undefined)
+    if (!identity) continue
+    assert.equal(lookup.geckoPoolId, identity.geckoPoolId)
+    assert.equal(lookup.geckoNetwork, geckoNetworkFor(identity.network))
+  }
 })

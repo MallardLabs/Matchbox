@@ -1,6 +1,7 @@
 import AddPoolIncentiveModal from "@/components/AddPoolIncentiveModal"
 import { AnimatedNumber } from "@/components/AnimatedNumber"
 import PoolCard from "@/components/PoolCard"
+import RemoteMezoGaugeCard from "@/components/RemoteMezoGaugeCard"
 import { SpringIn } from "@/components/SpringIn"
 import StandaloneVoteableCard from "@/components/StandaloneVoteableCard"
 import { useAllGaugeProfiles } from "@/hooks/useGaugeProfiles"
@@ -14,6 +15,7 @@ import {
   usePools,
 } from "@/hooks/usePools"
 import { usePoolsIncentivesApr } from "@/hooks/usePoolsIncentivesApr"
+import useRemoteMezoPools from "@/hooks/useRemoteMezoPools"
 import { useVotables } from "@/hooks/useVotables"
 import { useVoteableTargetMetadata } from "@/hooks/useVoteableTargetMetadata"
 import {
@@ -52,6 +54,8 @@ export default function PoolsPage(): JSX.Element {
     usePoolsIncentivesApr(pools)
   const { byPool: votablesByPool, standalone: standaloneVoteablesRaw } =
     useVotables()
+  const { pools: remoteMezoPools, isLoading: isLoadingRemoteMezoPools } =
+    useRemoteMezoPools()
   const { profiles: gaugeProfiles } = useAllGaugeProfiles()
   const { metadata: voteableTargetMetadata } = useVoteableTargetMetadata(
     standaloneVoteablesRaw.map((voteable) => voteable.targetId),
@@ -197,6 +201,24 @@ export default function PoolsPage(): JSX.Element {
     voteableTargetMetadata,
   ])
 
+  const visibleRemoteMezoPools = useMemo(() => {
+    if (typeFilter !== "all") return []
+    const q = search.trim().toLowerCase()
+    if (!q) return remoteMezoPools
+    return remoteMezoPools.filter((pool) => {
+      const identity = pool.mezo?.identity
+      return [
+        identity?.name,
+        identity?.protocol,
+        identity?.network,
+        identity?.action,
+        pool.venueName,
+        pool.gauge,
+        ...(identity?.tokens ?? []),
+      ].some((value) => value?.toLowerCase().includes(q))
+    })
+  }, [remoteMezoPools, search, typeFilter])
+
   const totals = useMemo(() => {
     let tvl = 0
     let volume = 0
@@ -218,7 +240,8 @@ export default function PoolsPage(): JSX.Element {
           pools --list
         </h1>
         <p className="text-sm text-[var(--content-secondary)]">
-          Fund Mezo liquidity pools directly to attract LPs and bootstrap depth.
+          Fund Mezo liquidity pools to attract LPs, plus vaults and remote MEZO
+          gauges on Aerodrome, Uniswap, and Curve.
         </p>
       </header>
 
@@ -395,7 +418,10 @@ export default function PoolsPage(): JSX.Element {
             Failed to load pools: {error.message}
           </p>
         </div>
-      ) : filteredAndSorted.length === 0 && standaloneVoteables.length === 0 ? (
+      ) : filteredAndSorted.length === 0 &&
+        standaloneVoteables.length === 0 &&
+        visibleRemoteMezoPools.length === 0 &&
+        !isLoadingRemoteMezoPools ? (
         <SpringIn delay={3} variant="card">
           <div className="rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface)] p-12 text-center">
             <p className="font-mono text-sm text-[var(--content-secondary)]">
@@ -448,6 +474,34 @@ export default function PoolsPage(): JSX.Element {
                   />
                 ))}
               </div>
+            </div>
+          ) : null}
+
+          {typeFilter === "all" &&
+          (visibleRemoteMezoPools.length > 0 || isLoadingRemoteMezoPools) ? (
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+                <h2 className="text-sm font-semibold text-[var(--content-primary)]">
+                  Remote MEZO Gauges
+                </h2>
+                <p className="text-2xs text-[var(--content-tertiary)]">
+                  Aerodrome, Uniswap v4, and Curve venues voted with veMEZO
+                </p>
+              </div>
+              {isLoadingRemoteMezoPools &&
+              visibleRemoteMezoPools.length === 0 ? (
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+                  <Skeleton width="100%" height="220px" animation />
+                  <Skeleton width="100%" height="220px" animation />
+                  <Skeleton width="100%" height="220px" animation />
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+                  {visibleRemoteMezoPools.map((pool) => (
+                    <RemoteMezoGaugeCard key={pool.gauge} pool={pool} />
+                  ))}
+                </div>
+              )}
             </div>
           ) : null}
         </div>
