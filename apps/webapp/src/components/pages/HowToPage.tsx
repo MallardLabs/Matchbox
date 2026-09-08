@@ -173,7 +173,7 @@ const veMEZOSteps: StepProps[] = [
     number: 3,
     title: "Evaluate gauges",
     description:
-      'The gauge table is sorted by APY by default. APY is calculated from total epoch incentives deposited divided by total veMEZO weight voting for the gauge, annualized (×52). Check "Optimal veMEZO" for how much veMEZO vote weight the gauge needs for max boost (5x)—using veBTC unboostedTotalVotingPower() and veMEZO totalVotingPower() from escrow, same as the Boost calculator.',
+      'On Boost Gauges, the table is sorted by APY by default. APY is epoch incentives divided by veMEZO weight, annualized (×52). Check "Optimal veMEZO" for the vote weight that maxes boost (5x). On MEZO Gauges, each row is an official remote venue: protocol, network, this-epoch incentives, current weight, and the UTC date when this epoch\'s emissions land. Those gauges do not boost veBTC.',
   },
   {
     number: 4,

@@ -37,7 +37,7 @@ Don't have veMEZO yet? Visit [Mezo Earn](https://mezo.org/docs/users/mezo-earn/l
 5. Browse gauges and their incentives
 6. Allocate your voting power
 7. Confirm the transaction
-8. Return to Dashboard to claim rewards after the epoch
+8. For Boost Gauges, return to Dashboard to claim bribe rewards after the epoch. MEZO Gauge incentive claims are not on Dashboard yet.
 
 ## Step-by-Step Voting Process
 
@@ -66,7 +66,7 @@ If you have multiple veMEZO NFTs, choose which one to vote with:
 
 ### Step 3: Browse Available Gauges
 
-The main area displays all active gauges. For each gauge, you can see:
+**Boost Gauges** lists veBTC boost gauges. For each you can see:
 
 | Metric | What It Tells You |
 |--------|-------------------|
@@ -75,6 +75,8 @@ The main area displays all active gauges. For each gauge, you can see:
 | **Incentives** | Tokens being offered this epoch |
 | **veMEZO Weight** | Total votes already allocated |
 | **Boost Level** | Current boost multiplier |
+
+**MEZO Gauges** lists the curated remote venues (Aerodrome, Uniswap v4, Curve). For each you can see protocol, network, this-epoch incentives, current veMEZO weight, and the UTC distribution date. There is no boost multiplier on this tab.
 
 ### Step 4: Evaluate Opportunities
 
