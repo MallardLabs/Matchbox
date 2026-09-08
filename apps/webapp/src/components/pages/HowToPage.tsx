@@ -167,7 +167,7 @@ const veMEZOSteps: StepProps[] = [
     number: 2,
     title: "Select your locks",
     description:
-      'On the veMEZO page, the carousel at the top shows all your veMEZO lock NFTs. Click a card to select it — you can pick multiple locks at once. Locks marked "Next Epoch" have already voted this epoch and will be available again after Thursday.',
+      'On the veMEZO page, the carousel at the top shows all your veMEZO lock NFTs. Click a card to select it — you can pick multiple locks at once. Locks marked "Next Epoch" have already voted this epoch on that tab\'s voter and will be available again after Thursday. Use Boost Gauges for veBTC boosts, or open the MEZO Gauges tab to direct MEZO emissions to official remote gauges (Aerodrome, Uniswap v4, Curve). The same lock can spend 100% on each voter independently.',
   },
   {
     number: 3,
@@ -346,7 +346,7 @@ export default function HowToPage() {
             command="boost --help"
             badge="For veMEZO Holders"
             badgeColor="#EF4444"
-            description="Vote on veBTC gauges with your locked MEZO. Earn bribe rewards (incentives) proportional to your voting weight each epoch."
+            description="Vote Boost Gauges with your locked MEZO, or use the MEZO Gauges tab to direct MEZO emissions to remote venues. Earn bribe rewards proportional to your voting weight each epoch."
           />
 
           {/* Quick Start */}
@@ -358,11 +358,12 @@ export default function HowToPage() {
               {[
                 "Lock MEZO on Mezo Earn to receive a veMEZO NFT",
                 "Navigate to the veMEZO page (/boost)",
+                "Use Boost Gauges for veBTC boosts, or the MEZO Gauges tab for remote Aerodrome, Uniswap, and Curve venues",
                 "Select your veMEZO lock(s) in the carousel",
-                "Browse gauges — sort by APY to find the best returns",
-                "Enter vote % allocations across gauges (total ≤ 100%)",
+                "Browse gauges — sort by APY to find the best Boost Gauges returns",
+                "Enter vote % allocations across gauges (Boost Gauges total ≤ 100%; MEZO Gauges exactly 100%)",
                 "Click Vote and sign the transaction(s)",
-                "After the epoch ends, go to Dashboard and claim bribe rewards",
+                "After the epoch ends, go to Dashboard and claim Boost Gauge bribe rewards",
               ].map((item, i) => (
                 <li
                   key={item}

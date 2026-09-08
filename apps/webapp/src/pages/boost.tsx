@@ -3,17 +3,20 @@ import { getAppUrl, getOgImageUrl } from "@/utils/seo"
 import dynamic from "next/dynamic"
 import Head from "next/head"
 
-const BoostPage = dynamic(() => import("@/components/pages/BoostPage"), {
-  ssr: false,
-  loading: () => <InitialLoader />,
-})
+const VeMEZOHubPage = dynamic(
+  () => import("@/components/pages/VeMEZOHubPage"),
+  {
+    ssr: false,
+    loading: () => <InitialLoader />,
+  },
+)
 
 export default function Boost() {
   const ogImageUrl = getOgImageUrl()
   const pageUrl = getAppUrl("/boost")
   const title = "veMEZO | Matchbox"
   const description =
-    "Maximize your yields by boosting gauges with your veMEZO. Participate in the Matchbox ecosystem and earn more rewards."
+    "Vote Boost Gauges and official MEZO Gauges with veMEZO. Direct emissions to veBTC boosts and remote venues on Aerodrome, Uniswap, and Curve."
 
   return (
     <>
@@ -37,7 +40,7 @@ export default function Boost() {
         <meta name="twitter:description" content={description} />
         <meta name="twitter:image" content={ogImageUrl} />
       </Head>
-      <BoostPage />
+      <VeMEZOHubPage />
     </>
   )
 }
