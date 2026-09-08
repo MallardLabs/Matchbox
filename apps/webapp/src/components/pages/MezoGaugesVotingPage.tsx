@@ -176,7 +176,7 @@ export default function MezoGaugesVotingPage(): JSX.Element {
   const isInVotingWindow =
     epochVoteStart !== undefined && epochVoteEnd !== undefined
       ? currentTime > epochVoteStart && currentTime <= epochVoteEnd
-      : true
+      : false
 
   const { data: lastVotedResults, isLoading: isLoadingLastVoted } =
     useReadContracts({
@@ -190,9 +190,9 @@ export default function MezoGaugesVotingPage(): JSX.Element {
   const selectedLockStates = selectedLocks.map((lock, index) => {
     const lastVoted = lastVotedResults?.[index]?.result
     const votedThisEpoch =
-      epochStart !== undefined &&
-      lastVoted !== undefined &&
-      lastVoted >= epochStart
+      epochStart === undefined || lastVoted === undefined
+        ? undefined
+        : lastVoted >= epochStart
     return {
       lock,
       votedThisEpoch,
@@ -203,7 +203,7 @@ export default function MezoGaugesVotingPage(): JSX.Element {
     state.eligible ? [state.lock] : [],
   )
   const alreadyVotedCount = selectedLockStates.filter(
-    (state) => state.votedThisEpoch,
+    (state) => state.votedThisEpoch === true,
   ).length
   const allocationsReadOnly =
     selectedLocks.length > 0 && alreadyVotedCount === selectedLocks.length
@@ -363,6 +363,7 @@ export default function MezoGaugesVotingPage(): JSX.Element {
     isConnected &&
     eligibleLocks.length > 0 &&
     isInVotingWindow &&
+    !isLoadingSelectedGaugeState &&
     allocationEntries.length === selectedRows.length &&
     allocationEntries.length > 0 &&
     isAllocationValid &&

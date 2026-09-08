@@ -179,7 +179,7 @@ const veMEZOSteps: StepProps[] = [
     number: 4,
     title: "Allocate votes",
     description:
-      "Enter a Vote % for each gauge you want to support. Your total allocation across all selected gauges must be ≤ 100%. You can concentrate on one gauge or spread across many — your bribe earnings are proportional to your allocation.",
+      "Enter a Vote % for each gauge you want to support. Boost Gauges may total ≤ 100%. MEZO Gauges must total exactly 100%. You can concentrate on one gauge or spread across many — your bribe earnings are proportional to your allocation.",
   },
   {
     number: 5,

@@ -32,18 +32,22 @@ async function fetchVenuePool(
   reserveUsd: number | null
   volume24hUsd: number | null
 }> {
-  const response = await fetch(
-    `${GECKOTERMINAL_API_BASE}${geckoPoolRequestPath(geckoNetwork, geckoPoolId)}`,
-    {
-      headers: {
-        Accept: "application/json;version=20230203",
+  try {
+    const response = await fetch(
+      `${GECKOTERMINAL_API_BASE}${geckoPoolRequestPath(geckoNetwork, geckoPoolId)}`,
+      {
+        headers: {
+          Accept: "application/json;version=20230203",
+        },
       },
-    },
-  )
-  if (!response.ok) {
+    )
+    if (!response.ok) {
+      return { venueName: null, reserveUsd: null, volume24hUsd: null }
+    }
+    return parseGeckoPoolResponse(await response.json())
+  } catch {
     return { venueName: null, reserveUsd: null, volume24hUsd: null }
   }
-  return parseGeckoPoolResponse(await response.json())
 }
 
 async function handler(request: Request) {

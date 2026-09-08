@@ -14,7 +14,6 @@ export type MezoGaugeIdentity = {
   poolUrl: string
   action: string
   distributionEpochOffset: number
-  /** Venue pool id on GeckoTerminal (Aerodrome/Curve address or Uniswap v4 pool id). */
   geckoPoolId: string
 }
 

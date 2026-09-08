@@ -206,15 +206,15 @@ export default function PoolsPage(): JSX.Element {
     const q = search.trim().toLowerCase()
     if (!q) return remoteMezoPools
     return remoteMezoPools.filter((pool) => {
-      const identity = pool.mezo?.identity
+      const identity = pool.identity
       return [
-        identity?.name,
-        identity?.protocol,
-        identity?.network,
-        identity?.action,
+        identity.name,
+        identity.protocol,
+        identity.network,
+        identity.action,
         pool.venueName,
         pool.gauge,
-        ...(identity?.tokens ?? []),
+        ...identity.tokens,
       ].some((value) => value?.toLowerCase().includes(q))
     })
   }, [remoteMezoPools, search, typeFilter])
@@ -488,20 +488,11 @@ export default function PoolsPage(): JSX.Element {
                   Aerodrome, Uniswap v4, and Curve venues voted with veMEZO
                 </p>
               </div>
-              {isLoadingRemoteMezoPools &&
-              visibleRemoteMezoPools.length === 0 ? (
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-                  <Skeleton width="100%" height="220px" animation />
-                  <Skeleton width="100%" height="220px" animation />
-                  <Skeleton width="100%" height="220px" animation />
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-                  {visibleRemoteMezoPools.map((pool) => (
-                    <RemoteMezoGaugeCard key={pool.gauge} pool={pool} />
-                  ))}
-                </div>
-              )}
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {visibleRemoteMezoPools.map((pool) => (
+                  <RemoteMezoGaugeCard key={pool.gauge} pool={pool} />
+                ))}
+              </div>
             </div>
           ) : null}
         </div>

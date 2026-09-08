@@ -26,25 +26,30 @@ type RemoteMezoGaugeCardProps = {
   pool: RemoteMezoPoolCard
 }
 
+function formatVenueUsd(value: number | null): string {
+  if (value === null) return "—"
+  return formatUsdValue(value)
+}
+
 export default function RemoteMezoGaugeCard({
   pool,
 }: RemoteMezoGaugeCardProps): JSX.Element {
-  const identity = pool.mezo?.identity
-  const title = identity?.name ?? pool.venueName ?? "Remote MEZO gauge"
-  const protocol = identity?.protocol ?? "Remote"
+  const identity = pool.identity
+  const title = identity.name
+  const protocol = identity.protocol
   const voteHref = "/boost?view=mezo-gauges"
 
   return (
     <article className="group relative flex h-full min-w-0 flex-col gap-4 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
       <div className="flex items-start justify-between gap-3">
         <a
-          href={identity?.poolUrl}
+          href={identity.poolUrl}
           target="_blank"
           rel="noreferrer"
           className="flex min-w-0 items-center gap-3 text-inherit no-underline"
         >
           <ul className="flex flex-shrink-0">
-            {(identity?.tokens ?? ["MEZO"]).map((token, index) => (
+            {identity.tokens.map((token, index) => (
               <li
                 key={token}
                 className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border border-[var(--border)] bg-[var(--surface-secondary)]"
@@ -63,20 +68,14 @@ export default function RemoteMezoGaugeCard({
               {title}
             </h3>
             <p className="mt-0.5 truncate text-2xs text-[var(--content-tertiary)]">
-              {identity?.action ?? "Official remote MEZO gauge"}
+              {identity.action}
             </p>
           </div>
         </a>
         <div className="flex flex-shrink-0 flex-col items-end gap-1">
-          {identity ? (
-            <Tag color={protocolColor(identity.protocol)} closeable={false}>
-              {protocol}
-            </Tag>
-          ) : (
-            <Tag color="gray" closeable={false}>
-              Remote
-            </Tag>
-          )}
+          <Tag color={protocolColor(identity.protocol)} closeable={false}>
+            {protocol}
+          </Tag>
           <Tag color="gray" closeable={false}>
             {networkLabel(pool.geckoNetwork)}
           </Tag>
@@ -87,13 +86,13 @@ export default function RemoteMezoGaugeCard({
         <div>
           <dt className="text-[var(--content-tertiary)]">TVL</dt>
           <dd className="font-mono tabular-nums text-[var(--content-primary)]">
-            {formatUsdValue(pool.reserveUsd)}
+            {formatVenueUsd(pool.reserveUsd)}
           </dd>
         </div>
         <div>
           <dt className="text-[var(--content-tertiary)]">24h Volume</dt>
           <dd className="font-mono tabular-nums text-[var(--content-primary)]">
-            {formatUsdValue(pool.volume24hUsd)}
+            {formatVenueUsd(pool.volume24hUsd)}
           </dd>
         </div>
         <div>
@@ -113,20 +112,14 @@ export default function RemoteMezoGaugeCard({
       </dl>
 
       <div className="mt-auto flex items-center justify-between gap-2 border-t border-[var(--border)] pt-3">
-        {identity ? (
-          <a
-            href={identity.poolUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="text-xs text-[var(--content-secondary)] no-underline hover:text-[#F7931A]"
-          >
-            Open on {protocol}
-          </a>
-        ) : (
-          <span className="text-xs text-[var(--content-tertiary)]">
-            Venue link unavailable
-          </span>
-        )}
+        <a
+          href={identity.poolUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="text-xs text-[var(--content-secondary)] no-underline hover:text-[#F7931A]"
+        >
+          Open on {protocol}
+        </a>
         <Link
           href={voteHref}
           className="text-xs font-semibold text-[#F7931A] no-underline"

@@ -4,6 +4,7 @@ import useMezoGauges from "@/hooks/useMezoGauges"
 import {
   type GeckoTerminalNetwork,
   MEZO_GAUGES,
+  type MezoGaugeIdentity,
   geckoNetworkFor,
   mezoGaugeAddresses,
 } from "@/lib/mezoGauges"
@@ -29,6 +30,7 @@ const remotePoolsResponseSchema = z.object({
 
 export type RemoteMezoPoolCard = {
   gauge: Address
+  identity: MezoGaugeIdentity
   geckoNetwork: GeckoTerminalNetwork
   geckoPoolId: string
   venueName: string | null
@@ -37,7 +39,9 @@ export type RemoteMezoPoolCard = {
   mezo: MezoGaugeRow | undefined
 }
 
-async function fetchRemotePools(): Promise<Omit<RemoteMezoPoolCard, "mezo">[]> {
+async function fetchRemotePools(): Promise<
+  Omit<RemoteMezoPoolCard, "mezo" | "identity">[]
+> {
   const response = await fetch("/api/remote-pools", { cache: "no-store" })
   if (!response.ok) {
     throw new Error(`Failed to fetch remote MEZO pools: ${response.status}`)
@@ -88,6 +92,7 @@ export default function useRemoteMezoPools(): {
       return [
         {
           gauge,
+          identity,
           geckoNetwork:
             venue?.geckoNetwork ?? geckoNetworkFor(identity.network),
           geckoPoolId: venue?.geckoPoolId ?? identity.geckoPoolId,
