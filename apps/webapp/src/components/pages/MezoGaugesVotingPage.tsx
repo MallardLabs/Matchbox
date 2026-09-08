@@ -3,12 +3,14 @@ import MezoGaugeVotingCard from "@/components/MezoGaugeVotingCard"
 import RewardOptimizerPanel, {
   type RewardOptimizerFeedback,
 } from "@/components/RewardOptimizerPanel"
+import Tooltip from "@/components/Tooltip"
 import { getContractConfig } from "@/config/contracts"
 import { useNetwork } from "@/contexts/NetworkContext"
 import { useVeMEZOLocks } from "@/hooks/useLocks"
 import useMezoGaugeVoting from "@/hooks/useMezoGaugeVoting"
 import useMezoGauges, { type MezoGaugeRow } from "@/hooks/useMezoGauges"
 import { useMezoPrice } from "@/hooks/useMezoPrice"
+import { resolveMezoGaugeUnpairEligibility } from "@/lib/mezoGaugeUnpair"
 import {
   type RewardOptimizerResult,
   calculateAnnualizedReturnBasisPoints,
@@ -33,6 +35,7 @@ import {
   Tag,
 } from "@mezo-org/mezo-clay"
 import { useEffect, useMemo, useRef, useState } from "react"
+import { formatUnits } from "viem"
 import { useAccount, useReadContract, useReadContracts } from "wagmi"
 
 function formatBasisPoints(value: bigint): string {
@@ -143,10 +146,14 @@ export default function MezoGaugesVotingPage(): JSX.Element {
   >(new Set())
   const [allocations, setAllocations] = useState<Record<string, string>>({})
   const [cartOpen, setCartOpen] = useState(false)
+  const [unpairOpen, setUnpairOpen] = useState(false)
   const [optimizerFeedback, setOptimizerFeedback] =
     useState<RewardOptimizerFeedback | null>(null)
   const multiVote = useMezoGaugeVoting()
   const restoredLockKey = useRef("")
+  const unpairCleanupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  )
 
   const selectedLocks = useMemo(
     () =>
@@ -178,17 +185,42 @@ export default function MezoGaugesVotingPage(): JSX.Element {
       ? currentTime > epochVoteStart && currentTime <= epochVoteEnd
       : false
 
-  const { data: lastVotedResults, isLoading: isLoadingLastVoted } =
-    useReadContracts({
-      contracts: selectedLocks.map((lock) => ({
+  const {
+    data: lockVoteResults,
+    isLoading: isLoadingLockVoteState,
+    refetch: refetchLockVoteState,
+  } = useReadContracts({
+    contracts: locks.flatMap((lock) => [
+      {
         ...contracts.thirdPartyVoter,
         functionName: "lastVoted" as const,
         args: [lock.tokenId] as const,
-      })),
-      query: { enabled: selectedLocks.length > 0 },
+      },
+      {
+        ...contracts.thirdPartyVoter,
+        functionName: "usedWeights" as const,
+        args: [lock.tokenId] as const,
+      },
+    ]),
+    query: { enabled: locks.length > 0 },
+  })
+  const lockVoteStateByToken = useMemo(() => {
+    const result = new Map<
+      string,
+      { lastVoted: bigint | undefined; usedWeight: bigint | undefined }
+    >()
+    locks.forEach((lock, index) => {
+      result.set(lock.tokenId.toString(), {
+        lastVoted: lockVoteResults?.[index * 2]?.result,
+        usedWeight: lockVoteResults?.[index * 2 + 1]?.result,
+      })
     })
-  const selectedLockStates = selectedLocks.map((lock, index) => {
-    const lastVoted = lastVotedResults?.[index]?.result
+    return result
+  }, [lockVoteResults, locks])
+  const selectedLockStates = selectedLocks.map((lock) => {
+    const lastVoted = lockVoteStateByToken.get(
+      lock.tokenId.toString(),
+    )?.lastVoted
     const votedThisEpoch =
       epochStart === undefined || lastVoted === undefined
         ? undefined
@@ -196,6 +228,7 @@ export default function MezoGaugesVotingPage(): JSX.Element {
     return {
       lock,
       votedThisEpoch,
+      usedWeight: lockVoteStateByToken.get(lock.tokenId.toString())?.usedWeight,
       eligible: votedThisEpoch === false && isInVotingWindow,
     }
   })
@@ -207,38 +240,26 @@ export default function MezoGaugesVotingPage(): JSX.Element {
   ).length
   const allocationsReadOnly =
     selectedLocks.length > 0 && alreadyVotedCount === selectedLocks.length
-
-  const {
-    data: selectedUsedWeightResults,
-    isLoading: isLoadingSelectedUsedWeights,
-  } = useReadContracts({
-    contracts: selectedLocks.map((lock) => ({
-      ...contracts.thirdPartyVoter,
-      functionName: "usedWeights" as const,
-      args: [lock.tokenId] as const,
-    })),
-    query: { enabled: selectedLocks.length > 0 },
-  })
   const aliveRows = rows ?? []
-  const { data: selectedVoteResults, isLoading: isLoadingSelectedVotes } =
-    useReadContracts({
-      contracts: selectedLocks.flatMap((lock) =>
-        aliveRows.map((row) => ({
-          ...contracts.thirdPartyVoter,
-          functionName: "votes" as const,
-          args: [lock.tokenId, row.gauge] as const,
-        })),
-      ),
-      query: {
-        enabled: selectedLocks.length > 0 && aliveRows.length > 0,
-      },
-    })
+  const {
+    data: selectedVoteResults,
+    isLoading: isLoadingSelectedVotes,
+    refetch: refetchSelectedVotes,
+  } = useReadContracts({
+    contracts: selectedLocks.flatMap((lock) =>
+      aliveRows.map((row) => ({
+        ...contracts.thirdPartyVoter,
+        functionName: "votes" as const,
+        args: [lock.tokenId, row.gauge] as const,
+      })),
+    ),
+    query: {
+      enabled: selectedLocks.length > 0 && aliveRows.length > 0,
+    },
+  })
   const isLoadingSelectedGaugeState =
     selectedLocks.length > 0 &&
-    (isLoadingEpochStart ||
-      isLoadingLastVoted ||
-      isLoadingSelectedUsedWeights ||
-      isLoadingSelectedVotes)
+    (isLoadingEpochStart || isLoadingLockVoteState || isLoadingSelectedVotes)
 
   const selectedVotesByGauge = useMemo(() => {
     const result = new Map<
@@ -257,19 +278,14 @@ export default function MezoGaugesVotingPage(): JSX.Element {
           vote:
             selectedVoteResults?.[lockIndex * aliveRows.length + rowIndex]
               ?.result ?? 0n,
-          usedWeight: selectedUsedWeightResults?.[lockIndex]?.result ?? 0n,
+          usedWeight: state.usedWeight ?? 0n,
           votingPower: state.lock.votingPower,
           eligible: state.eligible,
         })),
       )
     })
     return result
-  }, [
-    aliveRows,
-    selectedLockStates,
-    selectedUsedWeightResults,
-    selectedVoteResults,
-  ])
+  }, [aliveRows, selectedLockStates, selectedVoteResults])
 
   const currentAllocations = useMemo(
     () =>
@@ -284,6 +300,100 @@ export default function MezoGaugesVotingPage(): JSX.Element {
       ),
     [aliveRows, selectedVotesByGauge],
   )
+  const onChainAllocationRows = useMemo(
+    () =>
+      aliveRows.flatMap((row) => {
+        const basisPoints =
+          currentAllocations.get(row.gauge.toLowerCase()) ?? 0n
+        return basisPoints > 0n ? [{ row, basisPoints }] : []
+      }),
+    [aliveRows, currentAllocations],
+  )
+  const selectedLockUnpairStates = useMemo(
+    () =>
+      selectedLockStates.map((state, lockIndex) => ({
+        tokenId: state.lock.tokenId,
+        votedThisEpoch: state.votedThisEpoch,
+        usedWeight: state.usedWeight,
+        hasCatalogAllocations: aliveRows.some(
+          (_row, rowIndex) =>
+            (selectedVoteResults?.[lockIndex * aliveRows.length + rowIndex]
+              ?.result ?? 0n) > 0n,
+        ),
+      })),
+    [aliveRows, selectedLockStates, selectedVoteResults],
+  )
+  const { unpairableTokenIds, blockedMessage: unpairBlockedMessage } = useMemo(
+    () =>
+      resolveMezoGaugeUnpairEligibility({
+        selectedCount: selectedLocks.length,
+        isLoading: isLoadingSelectedGaugeState,
+        isInVotingWindow,
+        locks: selectedLockUnpairStates,
+      }),
+    [
+      isInVotingWindow,
+      isLoadingSelectedGaugeState,
+      selectedLockUnpairStates,
+      selectedLocks.length,
+    ],
+  )
+  const canUnpairSelectedLocks = unpairableTokenIds.length > 0
+  const hasPriorAllocations =
+    onChainAllocationRows.length > 0 ||
+    selectedLockUnpairStates.some(
+      (state) =>
+        (state.usedWeight !== undefined && state.usedWeight > 0n) ||
+        state.hasCatalogAllocations,
+    )
+  const totalVotingPower = useMemo(
+    () => selectedLocks.reduce((total, lock) => total + lock.votingPower, 0n),
+    [selectedLocks],
+  )
+  const allVotedThisEpoch =
+    selectedLocks.length > 0 && alreadyVotedCount === selectedLocks.length
+  const carouselLocks = useMemo(
+    () =>
+      locks.map((lock) => {
+        const voteState = lockVoteStateByToken.get(lock.tokenId.toString())
+        const lastVoted = voteState?.lastVoted
+        const votedThisEpoch =
+          epochStart === undefined || lastVoted === undefined
+            ? undefined
+            : lastVoted >= epochStart
+        return {
+          ...lock,
+          lastVoted,
+          usedWeight: voteState?.usedWeight,
+          hasVotedThisEpoch: votedThisEpoch,
+          canVote: votedThisEpoch === false && isInVotingWindow,
+          isLoadingUsedWeight: isLoadingLockVoteState,
+        }
+      }),
+    [
+      epochStart,
+      isInVotingWindow,
+      isLoadingLockVoteState,
+      lockVoteStateByToken,
+      locks,
+    ],
+  )
+
+  function clearUnpairCleanupTimer() {
+    if (unpairCleanupTimerRef.current) {
+      clearTimeout(unpairCleanupTimerRef.current)
+      unpairCleanupTimerRef.current = null
+    }
+  }
+
+  async function refetchMezoGaugeVoteState() {
+    restoredLockKey.current = ""
+    await Promise.allSettled([
+      refetchGauges(),
+      refetchLockVoteState(),
+      refetchSelectedVotes(),
+    ])
+  }
 
   const selectedLockKey = selectedLocks
     .map((lock) => lock.tokenId.toString())
@@ -489,7 +599,7 @@ export default function MezoGaugesVotingPage(): JSX.Element {
       allocationEntries.map((entry) => entry.row.gauge),
       allocationEntries.map((entry) => entry.basisPoints),
     )
-    if (result.successCount > 0) refetchGauges()
+    if (result.successCount > 0) await refetchMezoGaugeVoteState()
     if (result.errorCount === 0) {
       setCartOpen(false)
       setSelectedGaugeAddresses(new Set())
@@ -497,6 +607,43 @@ export default function MezoGaugesVotingPage(): JSX.Element {
       setOptimizerFeedback(null)
     }
   }
+
+  async function submitUnpair() {
+    if (!canUnpairSelectedLocks || multiVote.isInProgress) return
+    clearUnpairCleanupTimer()
+    setCartOpen(false)
+    setUnpairOpen(true)
+    multiVote.clear()
+    const result = await multiVote.resetAll(unpairableTokenIds)
+    await refetchMezoGaugeVoteState()
+    if (result.errorCount === 0) {
+      setSelectedGaugeAddresses(new Set())
+      setAllocations({})
+      setOptimizerFeedback(null)
+      unpairCleanupTimerRef.current = setTimeout(() => {
+        setUnpairOpen(false)
+        multiVote.clear()
+        unpairCleanupTimerRef.current = null
+      }, 1_200)
+    }
+  }
+
+  async function exportUnpairBatch() {
+    if (!canUnpairSelectedLocks || multiVote.isInProgress) return
+    clearUnpairCleanupTimer()
+    setCartOpen(false)
+    setUnpairOpen(true)
+    await multiVote.exportResetBatch(unpairableTokenIds)
+  }
+
+  useEffect(() => {
+    return () => {
+      if (unpairCleanupTimerRef.current) {
+        clearTimeout(unpairCleanupTimerRef.current)
+        unpairCleanupTimerRef.current = null
+      }
+    }
+  }, [])
 
   if (isLoadingGauges || (isConnected && isLoadingLocks)) {
     return (
@@ -552,15 +699,197 @@ export default function MezoGaugesVotingPage(): JSX.Element {
       ) : (
         <Card withBorder overrides={{}}>
           <div className="py-4">
-            <LockCarouselSelector
-              locks={locks}
-              selectedIndex={undefined}
-              multiSelect
-              selectedIndexes={selectedLockIndexes}
-              onToggle={toggleLock}
-              lockType="veMEZO"
-              label="Select veMEZO NFTs"
-            />
+            <div className="flex flex-col gap-4">
+              <LockCarouselSelector
+                locks={carouselLocks}
+                selectedIndex={undefined}
+                multiSelect
+                selectedIndexes={selectedLockIndexes}
+                onToggle={toggleLock}
+                lockType="veMEZO"
+                label="Select veMEZO NFTs"
+              />
+
+              {selectedLocks.length > 0 && (
+                <section className="flex flex-col gap-4 rounded-xl border border-[var(--border)] bg-[var(--surface-secondary)] p-4 sm:p-5">
+                  <dl className="grid grid-cols-1 gap-3 min-[520px]:grid-cols-2 xl:grid-cols-4">
+                    <div>
+                      <dt className="text-2xs font-medium uppercase tracking-wider text-[var(--content-tertiary)]">
+                        Locks
+                      </dt>
+                      <dd className="mt-1 font-mono text-lg font-semibold tabular-nums text-[var(--content-primary)]">
+                        {selectedLocks.length}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-2xs font-medium uppercase tracking-wider text-[var(--content-tertiary)]">
+                        Voting Power
+                      </dt>
+                      <dd className="mt-1 font-mono text-lg font-semibold tabular-nums text-[var(--content-primary)]">
+                        {formatUnits(totalVotingPower, 18).slice(0, 10)}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-2xs font-medium uppercase tracking-wider text-[var(--content-tertiary)]">
+                        Eligible to Vote
+                      </dt>
+                      <dd className="mt-1 text-lg font-semibold text-[var(--content-primary)]">
+                        {eligibleLocks.length} of {selectedLocks.length} lock
+                        {selectedLocks.length === 1 ? "" : "s"}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-2xs font-medium uppercase tracking-wider text-[var(--content-tertiary)]">
+                        Epoch Status
+                      </dt>
+                      <dd className="mt-1">
+                        {allVotedThisEpoch ? (
+                          <span className="text-lg font-semibold text-[var(--content-tertiary)]">
+                            Already Voted
+                          </span>
+                        ) : isInVotingWindow ? (
+                          <span className="text-lg font-semibold text-[var(--positive)]">
+                            Voting Open
+                          </span>
+                        ) : (
+                          <span className="text-lg font-semibold text-[var(--warning)]">
+                            Window Closed
+                          </span>
+                        )}
+                      </dd>
+                    </div>
+                  </dl>
+
+                  {eligibleLocks.length < selectedLocks.length &&
+                    eligibleLocks.length > 0 && (
+                      <Tag color="yellow" closeable={false}>
+                        {selectedLocks.length - eligibleLocks.length} lock
+                        {selectedLocks.length - eligibleLocks.length === 1
+                          ? ""
+                          : "s"}{" "}
+                        already voted — will be skipped
+                      </Tag>
+                    )}
+
+                  {hasPriorAllocations && (
+                    <div className="flex flex-col gap-2">
+                      <div>
+                        <p className="text-2xs font-medium uppercase tracking-wider text-[var(--content-tertiary)]">
+                          On-Chain Allocations
+                        </p>
+                        <p className="mt-0.5 text-2xs text-[var(--content-tertiary)]">
+                          {allVotedThisEpoch
+                            ? "Updated this epoch on MEZO Gauges"
+                            : alreadyVotedCount > 0
+                              ? "Some locks have not voted this epoch — allocations may be from a prior vote"
+                              : "From a previous MEZO Gauges vote — persists until you vote or unpair"}
+                        </p>
+                      </div>
+                      {onChainAllocationRows.length > 0 ? (
+                        <div className="overflow-x-auto">
+                          <table className="w-full min-w-[320px] text-xs">
+                            <caption className="sr-only">
+                              Current MEZO Gauges allocations for selected
+                              veMEZO locks
+                            </caption>
+                            <thead>
+                              <tr className="border-b border-[var(--border)] text-left text-2xs text-[var(--content-tertiary)]">
+                                <th className="pb-2 font-medium">Gauge</th>
+                                <th className="pb-2 text-right font-medium">
+                                  Weight
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {onChainAllocationRows.map(
+                                ({ row, basisPoints }) => (
+                                  <tr
+                                    key={row.gauge}
+                                    className="border-b border-[var(--border)] last:border-0"
+                                  >
+                                    <td className="py-2 pr-4 text-[var(--content-secondary)]">
+                                      <span className="font-medium text-[var(--content-primary)]">
+                                        {row.identity.name}
+                                      </span>
+                                      <span className="mt-0.5 block text-2xs text-[var(--content-tertiary)]">
+                                        {row.identity.protocol} ·{" "}
+                                        {row.identity.network}
+                                      </span>
+                                    </td>
+                                    <td className="py-2 text-right font-mono font-medium tabular-nums text-[var(--content-primary)]">
+                                      {formatBasisPoints(basisPoints)}%
+                                    </td>
+                                  </tr>
+                                ),
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : (
+                        <p className="text-xs text-[var(--content-secondary)]">
+                          These locks have used weight on MEZO Gauges that is
+                          not in the current catalog.
+                        </p>
+                      )}
+                      <div className="flex flex-col gap-3 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3 sm:flex-row sm:items-center sm:justify-between">
+                        <p className="flex items-start gap-1 text-xs text-[var(--content-secondary)]">
+                          {unpairBlockedMessage ??
+                            "Clear prior MEZO Gauges allocations. This does not change Boost Gauges or veBTC boost."}
+                          <Tooltip
+                            id="mezo-gauge-unpair-hint"
+                            content="Unpairing calls ThirdPartyVoter.reset for eligible locks. Locks that already voted this epoch cannot unpair until the next epoch."
+                          />
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          {multiVote.canExportSafeBatch &&
+                            canUnpairSelectedLocks &&
+                            unpairableTokenIds.length > 1 && (
+                              <Button
+                                kind="secondary"
+                                size="small"
+                                onClick={() => void exportUnpairBatch()}
+                                disabled={multiVote.isInProgress}
+                              >
+                                Export unpair batch
+                              </Button>
+                            )}
+                          {multiVote.canCopyBatchJson &&
+                            unpairableTokenIds.length > 1 && (
+                              <Button
+                                kind="tertiary"
+                                size="small"
+                                onClick={() =>
+                                  void multiVote.copyResetBatchJson(
+                                    unpairableTokenIds,
+                                  )
+                                }
+                                disabled={multiVote.isInProgress}
+                              >
+                                {multiVote.copiedBatchJson
+                                  ? "Copied"
+                                  : "Copy tx JSON"}
+                              </Button>
+                            )}
+                          <Button
+                            kind="secondary"
+                            size="small"
+                            onClick={() => void submitUnpair()}
+                            isLoading={unpairOpen && multiVote.isInProgress}
+                            disabled={
+                              !canUnpairSelectedLocks || multiVote.isInProgress
+                            }
+                          >
+                            {unpairableTokenIds.length > 1
+                              ? `Unpair ${unpairableTokenIds.length} Locks`
+                              : "Unpair"}
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </section>
+              )}
+            </div>
           </div>
         </Card>
       )}
@@ -682,6 +1011,99 @@ export default function MezoGaugesVotingPage(): JSX.Element {
       )}
 
       <Modal
+        isOpen={unpairOpen}
+        onClose={() => {
+          if (multiVote.isInProgress) return
+          clearUnpairCleanupTimer()
+          setUnpairOpen(false)
+          multiVote.clear()
+        }}
+        overrides={{
+          Dialog: {
+            style: {
+              maxWidth: "560px",
+              width: "100%",
+              padding: "0",
+            },
+          },
+        }}
+      >
+        <ModalBody $style={{ padding: "16px" }}>
+          <div className="flex flex-col gap-4">
+            <header>
+              <h2 className="text-balance text-lg font-semibold text-[var(--content-primary)]">
+                Unpair MEZO Gauges
+              </h2>
+              <p className="mt-1 text-pretty text-xs text-[var(--content-secondary)]">
+                Matchbox will reset each eligible veMEZO ballot on MEZO Gauges.
+                Boost Gauges and veBTC boost are unchanged.
+              </p>
+            </header>
+
+            <p className="text-xs text-[var(--content-secondary)]">
+              {multiVote.isInProgress
+                ? multiVote.executionMode === "safe-export"
+                  ? "Waiting for Safe..."
+                  : multiVote.executionMode === "batched"
+                    ? "Confirm batch in wallet"
+                    : "Signing transactions"
+                : multiVote.lockStates.some((state) => state.status === "error")
+                  ? `${multiVote.lockStates.filter((state) => state.status === "error").length} of ${multiVote.lockStates.length} failed`
+                  : multiVote.executionMode === "safe-export"
+                    ? "Safe batch exported"
+                    : "Unpair complete"}
+            </p>
+
+            {multiVote.lockStates.length > 0 && (
+              <ol className="flex flex-col gap-2">
+                {multiVote.lockStates.map((state) => (
+                  <li
+                    key={state.tokenId.toString()}
+                    className="flex items-center justify-between text-xs"
+                  >
+                    <span className="font-mono text-[var(--content-primary)]">
+                      veMEZO #{state.tokenId.toString()}
+                    </span>
+                    <span
+                      className={
+                        state.status === "error"
+                          ? "text-[var(--negative)]"
+                          : state.status === "success"
+                            ? "text-[var(--positive)]"
+                            : "text-[var(--content-secondary)]"
+                      }
+                    >
+                      {state.status}
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            )}
+
+            {multiVote.error && (
+              <p className="text-pretty text-xs text-[var(--negative)]">
+                {multiVote.error.message}
+              </p>
+            )}
+
+            <div className="flex justify-end border-t border-[var(--border)] pt-3">
+              <Button
+                kind="secondary"
+                onClick={() => {
+                  clearUnpairCleanupTimer()
+                  setUnpairOpen(false)
+                  multiVote.clear()
+                }}
+                disabled={multiVote.isInProgress}
+              >
+                Close
+              </Button>
+            </div>
+          </div>
+        </ModalBody>
+      </Modal>
+
+      <Modal
         isOpen={cartOpen}
         onClose={() => setCartOpen(false)}
         overrides={{
@@ -730,9 +1152,14 @@ export default function MezoGaugesVotingPage(): JSX.Element {
             </header>
 
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="text-pretty text-xs text-[var(--content-secondary)]">
+              <p className="flex items-center gap-1 text-pretty text-xs text-[var(--content-secondary)]">
                 This shared ballot will be applied to {eligibleLocks.length}{" "}
                 eligible veMEZO NFT{eligibleLocks.length === 1 ? "" : "s"}.
+                Prior allocations can be unpaired before voting.
+                <Tooltip
+                  id="mezo-gauge-cart-unpair-hint"
+                  content="Unpairing resets a prior MEZO Gauges ballot. It does not change Boost Gauges. Locks that already voted this epoch cannot unpair until the next epoch."
+                />
               </p>
               <Button
                 kind="secondary"
@@ -813,34 +1240,20 @@ export default function MezoGaugesVotingPage(): JSX.Element {
 
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex flex-wrap gap-2">
-                <Button
-                  kind="secondary"
-                  size="small"
-                  disabled={
-                    selectedLocks.length === 0 || multiVote.isInProgress
-                  }
-                  onClick={() =>
-                    void multiVote.pokeAll(
-                      selectedLocks.map((lock) => lock.tokenId),
-                    )
-                  }
-                >
-                  Poke selected
-                </Button>
-                <Button
-                  kind="secondary"
-                  size="small"
-                  disabled={
-                    selectedLocks.length === 0 || multiVote.isInProgress
-                  }
-                  onClick={() =>
-                    void multiVote.resetAll(
-                      selectedLocks.map((lock) => lock.tokenId),
-                    )
-                  }
-                >
-                  Reset selected
-                </Button>
+                {canUnpairSelectedLocks && (
+                  <Button
+                    kind="secondary"
+                    size="small"
+                    disabled={multiVote.isInProgress}
+                    isLoading={unpairOpen && multiVote.isInProgress}
+                    onClick={() => void submitUnpair()}
+                  >
+                    Unpair{" "}
+                    {unpairableTokenIds.length > 1
+                      ? `${unpairableTokenIds.length} Locks`
+                      : "MEZO Gauges"}
+                  </Button>
+                )}
               </div>
               <div className="flex flex-wrap justify-end gap-2">
                 {multiVote.canExportSafeBatch && eligibleLocks.length > 1 && (

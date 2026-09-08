@@ -48,6 +48,7 @@ From the Matchbox homepage or navigation bar, click **veMEZO**. Choose **Boost G
 You'll see the voting interface with:
 
 - Position selector (top)
+- On-chain allocations for the selected locks, with Unpair
 - Gauge list (main area)
 - Your voting summary (sidebar or bottom)
 
@@ -278,7 +279,7 @@ Spread votes across multiple gauges based on different criteria.
 
 ### Can I change my vote during an epoch?
 
-Yes, you can reset and reallocate your votes anytime within the voting window.
+Each lock can vote once per epoch on each tab. Select locks to see that tab's on-chain allocations. Unpair clears a prior ballot during the voting window if the lock has not already voted this epoch. Boost unpair also refreshes veBTC boosts; MEZO Gauges unpair only resets `ThirdPartyVoter`. After a vote or unpair this epoch, wait until Thursday.
 
 ### What happens if I don't vote?
 
