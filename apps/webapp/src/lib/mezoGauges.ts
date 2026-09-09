@@ -80,6 +80,26 @@ export function mezoGaugeAddresses(): Address[] {
   return Object.keys(MEZO_GAUGES).map((address) => getAddress(address))
 }
 
+export function mezoGaugeIdentity(
+  gauge: Address,
+): MezoGaugeIdentity | undefined {
+  try {
+    return MEZO_GAUGES[getAddress(gauge)]
+  } catch {
+    return undefined
+  }
+}
+
+export function mezoVenueTokenIconSymbol(symbol: string): string {
+  if (symbol === "USDC") return "mUSDC"
+  if (symbol === "USDT") return "mUSDT"
+  return symbol
+}
+
+export function mezoVenueTokenIconSymbols(tokens: readonly string[]): string[] {
+  return tokens.map(mezoVenueTokenIconSymbol)
+}
+
 export function geckoNetworkFor(
   network: MezoGaugeNetwork,
 ): GeckoTerminalNetwork {

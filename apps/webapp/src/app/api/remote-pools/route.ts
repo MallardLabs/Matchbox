@@ -38,6 +38,7 @@ async function fetchVenuePool(
       {
         headers: {
           Accept: "application/json;version=20230203",
+          "User-Agent": "Matchbox/1.0 (+https://app.matchbox.markets)",
         },
       },
     )

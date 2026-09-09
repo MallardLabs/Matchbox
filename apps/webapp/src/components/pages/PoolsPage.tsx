@@ -25,6 +25,7 @@ import {
   Skeleton,
   Tag,
 } from "@mezo-org/mezo-clay"
+import Link from "next/link"
 import { useMemo, useState } from "react"
 
 type SortColumn =
@@ -480,13 +481,16 @@ export default function PoolsPage(): JSX.Element {
           {typeFilter === "all" &&
           (visibleRemoteMezoPools.length > 0 || isLoadingRemoteMezoPools) ? (
             <div className="flex flex-col gap-3">
-              <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+              <div className="flex items-center justify-between gap-3">
                 <h2 className="text-sm font-semibold text-[var(--content-primary)]">
                   Remote MEZO Gauges
                 </h2>
-                <p className="text-2xs text-[var(--content-tertiary)]">
-                  Aerodrome, Uniswap v4, and Curve venues voted with veMEZO
-                </p>
+                <Link
+                  href="/boost?view=mezo-gauges"
+                  className="text-sm font-semibold text-[#F7931A] no-underline hover:underline"
+                >
+                  Vote with veMEZO →
+                </Link>
               </div>
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
                 {visibleRemoteMezoPools.map((pool) => (

@@ -1,26 +1,12 @@
-import { TokenIcon } from "@/components/TokenIcon"
+import { TokenStackIcon } from "@/components/PoolCard"
 import type { RemoteMezoPoolCard } from "@/hooks/useRemoteMezoPools"
 import { formatUsdValue } from "@/hooks/useTokenPrices"
 import {
-  type MezoGaugeProtocol,
   formatDistributionDate,
+  mezoVenueTokenIconSymbols,
 } from "@/lib/mezoGauges"
 import { formatMicroUsd } from "@/utils/validatorApy"
-import { Tag } from "@mezo-org/mezo-clay"
 import Link from "next/link"
-
-function networkLabel(network: RemoteMezoPoolCard["geckoNetwork"]): string {
-  if (network === "base") return "Base"
-  return "Ethereum"
-}
-
-function protocolColor(
-  protocol: MezoGaugeProtocol,
-): "blue" | "green" | "purple" {
-  if (protocol === "Aerodrome") return "green"
-  if (protocol === "Curve") return "blue"
-  return "purple"
-}
 
 type RemoteMezoGaugeCardProps = {
   pool: RemoteMezoPoolCard
@@ -35,51 +21,23 @@ export default function RemoteMezoGaugeCard({
   pool,
 }: RemoteMezoGaugeCardProps): JSX.Element {
   const identity = pool.identity
-  const title = identity.name
-  const protocol = identity.protocol
-  const voteHref = "/boost?view=mezo-gauges"
+  const detailHref = `/mezo-gauges/${pool.gauge}`
 
   return (
     <article className="group relative flex h-full min-w-0 flex-col gap-4 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
-      <div className="flex items-start justify-between gap-3">
-        <a
-          href={identity.poolUrl}
-          target="_blank"
-          rel="noreferrer"
+      <div className="flex min-w-0 items-start gap-3">
+        <Link
+          href={detailHref}
           className="flex min-w-0 items-center gap-3 text-inherit no-underline"
         >
-          <ul className="flex flex-shrink-0">
-            {identity.tokens.map((token, index) => (
-              <li
-                key={token}
-                className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border border-[var(--border)] bg-[var(--surface-secondary)]"
-                style={{ marginLeft: index === 0 ? 0 : -8 }}
-              >
-                <TokenIcon
-                  symbol={token}
-                  size={18}
-                  className="h-[18px] w-[18px]"
-                />
-              </li>
-            ))}
-          </ul>
-          <div className="min-w-0 flex-1">
-            <h3 className="truncate text-sm font-semibold text-[var(--content-primary)]">
-              {title}
-            </h3>
-            <p className="mt-0.5 truncate text-2xs text-[var(--content-tertiary)]">
-              {identity.action}
-            </p>
-          </div>
-        </a>
-        <div className="flex flex-shrink-0 flex-col items-end gap-1">
-          <Tag color={protocolColor(identity.protocol)} closeable={false}>
-            {protocol}
-          </Tag>
-          <Tag color="gray" closeable={false}>
-            {networkLabel(pool.geckoNetwork)}
-          </Tag>
-        </div>
+          <TokenStackIcon
+            symbols={mezoVenueTokenIconSymbols(identity.tokens)}
+            size={32}
+          />
+          <h3 className="truncate text-sm font-semibold text-[var(--content-primary)]">
+            {identity.name}
+          </h3>
+        </Link>
       </div>
 
       <dl className="grid grid-cols-2 gap-3 text-xs">
@@ -96,7 +54,7 @@ export default function RemoteMezoGaugeCard({
           </dd>
         </div>
         <div>
-          <dt className="text-[var(--content-tertiary)]">Mezo Incentives</dt>
+          <dt className="text-[var(--content-tertiary)]">Emissions</dt>
           <dd className="font-mono tabular-nums text-[var(--content-primary)]">
             {pool.mezo ? formatMicroUsd(pool.mezo.incentivesMicroUsd) : "—"}
           </dd>
@@ -111,21 +69,15 @@ export default function RemoteMezoGaugeCard({
         </div>
       </dl>
 
-      <div className="mt-auto flex items-center justify-between gap-2 border-t border-[var(--border)] pt-3">
+      <div className="mt-auto border-t border-[var(--border)] pt-3">
         <a
           href={identity.poolUrl}
           target="_blank"
           rel="noreferrer"
-          className="text-xs text-[var(--content-secondary)] no-underline hover:text-[#F7931A]"
+          className="text-sm font-semibold text-[#F7931A] no-underline hover:underline"
         >
-          Open on {protocol}
+          Open on {identity.protocol}
         </a>
-        <Link
-          href={voteHref}
-          className="text-xs font-semibold text-[#F7931A] no-underline"
-        >
-          Vote with veMEZO
-        </Link>
       </div>
     </article>
   )

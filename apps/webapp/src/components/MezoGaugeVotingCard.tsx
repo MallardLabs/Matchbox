@@ -1,10 +1,15 @@
+import { TokenStackIcon } from "@/components/PoolCard"
 import { TokenIcon } from "@/components/TokenIcon"
 import type { MezoGaugeRow } from "@/hooks/useMezoGauges"
-import { formatDistributionDate } from "@/lib/mezoGauges"
+import {
+  formatDistributionDate,
+  mezoVenueTokenIconSymbols,
+} from "@/lib/mezoGauges"
 import { cn } from "@/utils/cn"
 import { formatMicroUsd } from "@/utils/validatorApy"
 import { percentageToBasisPoints } from "@/utils/validatorVoting"
-import { Button, Input, Tag } from "@mezo-org/mezo-clay"
+import { Button, Input } from "@mezo-org/mezo-clay"
+import Link from "next/link"
 import type { ChangeEvent } from "react"
 import { formatUnits } from "viem"
 
@@ -31,11 +36,6 @@ function formatBasisPoints(value: bigint): string {
   const whole = value / 100n
   const fraction = (value % 100n).toString().padStart(2, "0")
   return `${whole}.${fraction}`
-}
-
-function networkLabel(network: MezoGaugeRow["identity"]["network"]): string {
-  if (network === "base") return "Base"
-  return "Ethereum"
 }
 
 export default function MezoGaugeVotingCard({
@@ -66,48 +66,20 @@ export default function MezoGaugeVotingCard({
         isSelected ? "border-[var(--positive)]" : "border-[var(--border)]",
       )}
     >
-      <header className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-2xs uppercase tracking-wider text-[var(--content-tertiary)]">
-            <a
-              href={row.identity.protocolUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="text-[var(--content-secondary)] no-underline hover:underline"
-            >
-              {row.identity.protocol}
-            </a>
-            <span aria-hidden="true"> · </span>
-            <span>{networkLabel(row.identity.network)}</span>
-          </p>
-          <a
-            href={row.identity.poolUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="mt-1 block truncate text-sm font-semibold text-[var(--content-primary)] no-underline hover:underline"
-          >
+      <header className="flex items-start gap-3">
+        <Link
+          href={`/mezo-gauges/${row.gauge}`}
+          className="flex min-w-0 items-center gap-3 text-inherit no-underline"
+        >
+          <TokenStackIcon
+            symbols={mezoVenueTokenIconSymbols(row.identity.tokens)}
+            size={32}
+          />
+          <h3 className="truncate text-sm font-semibold text-[var(--content-primary)]">
             {row.identity.name}
-          </a>
-          <p className="mt-1 text-pretty text-2xs text-[var(--content-secondary)]">
-            {row.identity.action}
-          </p>
-        </div>
-        <Tag color={row.isAlive ? "green" : "gray"} closeable={false}>
-          {row.isAlive ? "Active" : "Inactive"}
-        </Tag>
+          </h3>
+        </Link>
       </header>
-
-      <ul className="flex flex-wrap gap-1.5">
-        {row.identity.tokens.map((token) => (
-          <li
-            key={token}
-            className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface-secondary)] px-2 py-1 text-2xs text-[var(--content-secondary)]"
-          >
-            <TokenIcon symbol={token} size={14} />
-            <span>{token}</span>
-          </li>
-        ))}
-      </ul>
 
       <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-xs">
         <div>

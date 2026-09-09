@@ -6,7 +6,10 @@ import {
   formatDistributionDate,
   geckoNetworkFor,
   mezoGaugeAddresses,
+  mezoGaugeIdentity,
   mezoGaugeVenueLookups,
+  mezoVenueTokenIconSymbol,
+  mezoVenueTokenIconSymbols,
   resolveDistributionDate,
   resolveMezoGaugeRows,
 } from "./mezoGauges"
@@ -79,6 +82,31 @@ test("formats distribution dates in en-US UTC", () => {
     formatDistributionDate(new Date("2026-09-17T00:00:00Z")),
     "Sep 17, 2026",
   )
+})
+
+test("resolves catalog identity from checksummed or mixed-case addresses", () => {
+  const known = getAddress("0xC7e81dd77A4624F0DD14A8bB97Bc721b0CEE6e26")
+  assert.equal(mezoGaugeIdentity(known)?.name, "USDC/MUSD")
+  assert.equal(
+    mezoGaugeIdentity(known.toLowerCase() as Address)?.name,
+    "USDC/MUSD",
+  )
+  assert.equal(
+    mezoGaugeIdentity(getAddress("0x1111111111111111111111111111111111111111")),
+    undefined,
+  )
+})
+
+test("reuses mUSDC and mUSDT artwork for unlabeled USDC and USDT", () => {
+  assert.equal(mezoVenueTokenIconSymbol("USDC"), "mUSDC")
+  assert.equal(mezoVenueTokenIconSymbol("USDT"), "mUSDT")
+  assert.equal(mezoVenueTokenIconSymbol("MUSD"), "MUSD")
+  assert.equal(mezoVenueTokenIconSymbol("MEZO"), "MEZO")
+  assert.deepEqual(mezoVenueTokenIconSymbols(["MUSD", "USDC", "USDT"]), [
+    "MUSD",
+    "mUSDC",
+    "mUSDT",
+  ])
 })
 
 test("attaches GeckoTerminal venue ids for every catalog gauge", () => {
