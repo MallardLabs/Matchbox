@@ -57,10 +57,11 @@ export default function AddMezoGaugeIncentiveModal({
   }, [amount, token])
   const { isAllowlisted, isLoading: isCheckingAllowlist } =
     useMezoGaugeTokenAllowlisted(token?.address)
-  const { allowance, refetch: refetchAllowance } = useTokenAllowance(
-    token?.address,
-    voter,
-  )
+  const {
+    allowance,
+    isLoading: isLoadingAllowance,
+    refetch: refetchAllowance,
+  } = useTokenAllowance(token?.address, voter)
   const { data: balanceData, refetch: refetchBalance } = useReadContract({
     address: token?.address,
     abi: erc20Abi,
@@ -148,6 +149,11 @@ export default function AddMezoGaugeIncentiveModal({
               </p>
             )}
           </div>
+          {!address && (
+            <p className="text-xs text-[var(--content-secondary)]">
+              Connect a wallet to approve and deposit.
+            </p>
+          )}
           {token && !isCheckingAllowlist && isAllowlisted === false && (
             <p className="text-xs text-[var(--negative)]">
               This token is not allowlisted by ThirdPartyVoter.
@@ -177,11 +183,14 @@ export default function AddMezoGaugeIncentiveModal({
               else incentive.addIncentive(gauge, token.address, parsedAmount)
             }}
             disabled={
+              !address ||
               isBusy ||
               parsedAmount <= 0n ||
               hasInsufficientBalance ||
               hasNoGas ||
-              isAllowlisted !== true
+              isAllowlisted !== true ||
+              isLoadingAllowance ||
+              allowance === undefined
             }
           >
             {isBusy
