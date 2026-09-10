@@ -15,6 +15,39 @@ import type { PoolVotableSummary } from "@/hooks/useVotables"
 import { Button, Tag } from "@mezo-org/mezo-clay"
 import Link from "next/link"
 
+export function TokenStackIcon({
+  symbols,
+  size = 32,
+}: {
+  symbols: readonly string[]
+  size?: number
+}): JSX.Element {
+  const overlap = Math.round(size * 0.38)
+  const step = size - overlap
+  const width = symbols.length === 0 ? size : size + (symbols.length - 1) * step
+  return (
+    <div
+      className="relative inline-flex flex-shrink-0 items-center"
+      style={{ width, height: size }}
+      aria-hidden="true"
+    >
+      {symbols.map((symbol) => (
+        <span
+          key={symbol}
+          className="absolute top-0 inline-flex items-center justify-center overflow-hidden rounded-full border border-[var(--border)] bg-[var(--surface)]"
+          style={{
+            width: size,
+            height: size,
+            left: symbols.indexOf(symbol) * step,
+          }}
+        >
+          <TokenIcon symbol={symbol} size={size - 4} />
+        </span>
+      ))}
+    </div>
+  )
+}
+
 export function TokenPairIcon({
   symbol0,
   symbol1,
@@ -24,27 +57,7 @@ export function TokenPairIcon({
   symbol1: string
   size?: number
 }): JSX.Element {
-  const overlap = Math.round(size * 0.38)
-  return (
-    <div
-      className="relative inline-flex flex-shrink-0 items-center"
-      style={{ width: size + (size - overlap), height: size }}
-      aria-hidden="true"
-    >
-      <span
-        className="absolute left-0 top-0 inline-flex items-center justify-center overflow-hidden rounded-full border border-[var(--border)] bg-[var(--surface)]"
-        style={{ width: size, height: size }}
-      >
-        <TokenIcon symbol={symbol0} size={size - 4} />
-      </span>
-      <span
-        className="absolute top-0 inline-flex items-center justify-center overflow-hidden rounded-full border border-[var(--border)] bg-[var(--surface)]"
-        style={{ width: size, height: size, left: size - overlap }}
-      >
-        <TokenIcon symbol={symbol1} size={size - 4} />
-      </span>
-    </div>
-  )
+  return <TokenStackIcon symbols={[symbol0, symbol1]} size={size} />
 }
 
 function poolTypeLabel(pool: Pool): string {

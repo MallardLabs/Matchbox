@@ -7,6 +7,7 @@ import {
   NON_STAKING_GAUGE_ABI,
   POOLS_VOTER_ABI,
   type SupportedChainId,
+  THIRD_PARTY_VOTER_ABI,
   VALIDATORS_VOTER_ABI,
   VOTING_ESCROW_ABI,
 } from "@repo/shared/contracts"
@@ -46,6 +47,11 @@ export function getContractConfig(
     validatorsVoter: {
       address: addresses.validatorsVoter,
       abi: VALIDATORS_VOTER_ABI,
+      chainId,
+    },
+    thirdPartyVoter: {
+      address: addresses.thirdPartyVoter,
+      abi: THIRD_PARTY_VOTER_ABI,
       chainId,
     },
     nonStakingGauge: {

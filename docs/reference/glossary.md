@@ -203,7 +203,7 @@ An NFT representing locked Bitcoin on Mezo Network. Grants voting power in gover
 
 ### veMEZO (Voting Escrow MEZO)
 
-An NFT representing locked MEZO tokens on Mezo Network. Grants voting power to boost veBTC positions and earn incentives.
+An NFT representing locked MEZO tokens on Mezo Network. Grants voting power to boost veBTC positions and to vote official remote MEZO gauges (Aerodrome, Uniswap v4, Curve), earning incentives.
 
 ### Voting Escrow
 

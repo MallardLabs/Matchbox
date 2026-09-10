@@ -5,7 +5,7 @@ description: Learn about veMEZO - your locked MEZO position with voting power
 
 # Understanding veMEZO
 
-veMEZO (voting escrow MEZO) is an NFT that represents your locked MEZO tokens on Mezo Network. While veMEZO doesn't provide independent voting power for governance, it grants the ability to **boost veBTC positions** and earn rewards in the process.
+veMEZO (voting escrow MEZO) is an NFT that represents your locked MEZO tokens on Mezo Network. While veMEZO doesn't provide independent voting power for governance, it grants the ability to **boost veBTC positions** and to vote official **remote MEZO gauges** (Aerodrome, Uniswap v4, Curve) that direct MEZO emissions off-chain, earning rewards in the process.
 
 ## What is veMEZO?
 
@@ -114,7 +114,7 @@ Beyond active voting rewards, you earn from:
 
 ## Using veMEZO on Matchbox
 
-On Matchbox, veMEZO holders can:
+On Matchbox, veMEZO holders can vote two independent 100% ballots from the same lock: Boost Gauges and MEZO Gauges (remote venues).
 
 ### Browse Gauges
 

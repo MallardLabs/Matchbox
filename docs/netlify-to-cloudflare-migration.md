@@ -106,7 +106,14 @@ below.
 | Git repo / branch | `MallardLabs/MatchBox` / `main` | same |
 | Root directory | repo root | repo root |
 | Build command | `pnpm turbo run cloudflare:build --filter @repo/webapp` | `pnpm turbo run cloudflare:build --filter @repo/developer-platform` |
-| Deploy command | `pnpm --filter @repo/webapp exec opennextjs-cloudflare deploy` | `pnpm --filter @repo/developer-platform exec opennextjs-cloudflare deploy` |
+| Deploy command (production) | `pnpm --filter @repo/webapp exec wrangler deploy` | `pnpm --filter @repo/developer-platform exec wrangler deploy` |
+| Non-production deploy command | `pnpm --filter @repo/webapp exec wrangler versions upload` | `pnpm --filter @repo/developer-platform exec wrangler versions upload` |
+
+Preview builds default to `npx wrangler versions upload` from the **repo root**.
+That fails with "Missing entry-point" unless a root `wrangler.jsonc` exists
+(this repo now has one for `matchbox`) or the dashboard command is overridden
+as above so Wrangler runs inside `apps/webapp`. Do not leave the dashboard on
+the bare `npx wrangler versions upload` default without that root config.
 
 **Environment split** — get the exact values from the Netlify sites (Phase 0):
 
