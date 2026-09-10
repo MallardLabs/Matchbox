@@ -4,6 +4,7 @@ export type MezoGaugeProtocol = "Aerodrome" | "Uniswap v4" | "Curve"
 export type MezoGaugeNetwork = "base" | "ethereum"
 
 export type GeckoTerminalNetwork = "base" | "eth"
+export type DexScreenerChain = "base" | "ethereum"
 
 export type MezoGaugeIdentity = {
   name: string
@@ -106,17 +107,27 @@ export function geckoNetworkFor(
   return network === "base" ? "base" : "eth"
 }
 
+export function dexScreenerChainFor(
+  network: MezoGaugeNetwork,
+): DexScreenerChain {
+  return network === "base" ? "base" : "ethereum"
+}
+
 export type MezoGaugeVenueLookup = {
   gauge: Address
+  protocol: MezoGaugeProtocol
   geckoNetwork: GeckoTerminalNetwork
   geckoPoolId: string
+  dexScreenerChain: DexScreenerChain
 }
 
 export function mezoGaugeVenueLookups(): MezoGaugeVenueLookup[] {
   return Object.entries(MEZO_GAUGES).map(([gauge, identity]) => ({
     gauge: getAddress(gauge),
+    protocol: identity.protocol,
     geckoNetwork: geckoNetworkFor(identity.network),
     geckoPoolId: identity.geckoPoolId,
+    dexScreenerChain: dexScreenerChainFor(identity.network),
   }))
 }
 
