@@ -90,9 +90,9 @@ async function fetchPools(
 ): Promise<Pool[]> {
   const network = POOLS_NETWORK[chainId]
   if (!network) throw new Error(`Unsupported chainId ${chainId}`)
-  // Per-network path (not query string) so the browser HTTP cache and CDN
-  // never accidentally serve the wrong network's response after a toggle.
-  const url = `/api/pools/${network}?filter=${POOL_LIST_API_FILTER[listFilter]}`
+  // Filter is a path segment, not a query string. Netlify/CDN caches on this
+  // route have ignored `?filter=` and served Known for All.
+  const url = `/api/pools/${network}/${POOL_LIST_API_FILTER[listFilter]}`
   const response = await fetch(url, { cache: "no-store" })
   if (!response.ok) {
     throw new Error(`Failed to fetch pools: ${response.status}`)
