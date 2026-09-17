@@ -36,7 +36,9 @@ async function handler(request: Request) {
   const segments = url.pathname.split("/").filter(Boolean)
   const rawNetwork = segments[segments.length - 1]
   const network = rawNetwork === "testnet" ? "testnet" : "mainnet"
-  const filter = url.searchParams.get("filter") ?? "known"
+  // Earn-api `all` means known+tvl. Uncurated listing is `none`.
+  const rawFilter = url.searchParams.get("filter") ?? "known"
+  const filter = rawFilter === "all" ? "none" : rawFilter
 
   const upstream = `${UPSTREAM[network]}/pools?filter=${encodeURIComponent(filter)}`
   const origin = SPOOF_ORIGIN[network] ?? "https://mezo.org"

@@ -67,6 +67,15 @@ const POOLS_NETWORK: Record<number, "mainnet" | "testnet"> = {
   [CHAIN_ID.testnet]: "testnet",
 }
 
+export type PoolListFilter = "known" | "all"
+
+// Earn-api `filter=all` is known+tvl. Mezo's All tab, and this list, send
+// `none` so uncurated pairs (e.g. avMEZOm/avBTCm) are included.
+const POOL_LIST_API_FILTER: Record<PoolListFilter, string> = {
+  known: "known",
+  all: "none",
+}
+
 function extractTickSpacing(symbol: string | undefined): number {
   if (!symbol) return 0
   const parts = symbol.split("-")
@@ -75,12 +84,15 @@ function extractTickSpacing(symbol: string | undefined): number {
   return Number.isNaN(n) ? 0 : n
 }
 
-async function fetchPools(chainId: number): Promise<Pool[]> {
+async function fetchPools(
+  chainId: number,
+  listFilter: PoolListFilter,
+): Promise<Pool[]> {
   const network = POOLS_NETWORK[chainId]
   if (!network) throw new Error(`Unsupported chainId ${chainId}`)
   // Per-network path (not query string) so the browser HTTP cache and CDN
   // never accidentally serve the wrong network's response after a toggle.
-  const url = `/api/pools/${network}?filter=known`
+  const url = `/api/pools/${network}?filter=${POOL_LIST_API_FILTER[listFilter]}`
   const response = await fetch(url, { cache: "no-store" })
   if (!response.ok) {
     throw new Error(`Failed to fetch pools: ${response.status}`)
@@ -94,12 +106,12 @@ async function fetchPools(chainId: number): Promise<Pool[]> {
   )
 }
 
-export function usePools() {
+export function usePools(listFilter: PoolListFilter = "known") {
   const { chainId, isNetworkReady } = useNetwork()
 
   const { data, isLoading, error, refetch } = useQuery({
-    queryKey: ["pools", chainId],
-    queryFn: () => fetchPools(chainId),
+    queryKey: ["pools", chainId, listFilter],
+    queryFn: () => fetchPools(chainId, listFilter),
     staleTime: 30_000,
     refetchOnWindowFocus: false,
     enabled: isNetworkReady,
@@ -114,7 +126,7 @@ export function usePools() {
 }
 
 export function usePool(address: Address | undefined) {
-  const { pools, isLoading, error, refetch } = usePools()
+  const { pools, isLoading, error, refetch } = usePools("all")
   const pool = useMemo(() => {
     if (!address) return undefined
     const lower = address.toLowerCase()
