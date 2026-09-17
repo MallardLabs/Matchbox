@@ -7,6 +7,7 @@ import StandaloneVoteableCard from "@/components/StandaloneVoteableCard"
 import { useAllGaugeProfiles } from "@/hooks/useGaugeProfiles"
 import {
   type Pool,
+  type PoolListFilter,
   poolDailyFeesUsd,
   poolDailyVolumeUsd,
   poolEmissionsAprPercent,
@@ -50,7 +51,8 @@ function matchesPoolType(pool: Pool, filter: PoolTypeFilter): boolean {
 }
 
 export default function PoolsPage(): JSX.Element {
-  const { pools, isLoading, error } = usePools()
+  const [listFilter, setListFilter] = useState<PoolListFilter>("known")
+  const { pools, isLoading, error } = usePools(listFilter)
   const { map: incentivesMap, refetch: refetchIncentives } =
     usePoolsIncentivesApr(pools)
   const { byPool: votablesByPool, standalone: standaloneVoteablesRaw } =
@@ -311,6 +313,24 @@ export default function PoolsPage(): JSX.Element {
         <div className="flex flex-col gap-3">
           <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
             <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs text-[var(--content-secondary)]">
+                List:
+              </span>
+              <Tag
+                closeable={false}
+                onClick={() => setListFilter("known")}
+                color={listFilter === "known" ? "blue" : "gray"}
+              >
+                Known
+              </Tag>
+              <Tag
+                closeable={false}
+                onClick={() => setListFilter("all")}
+                color={listFilter === "all" ? "blue" : "gray"}
+              >
+                All
+              </Tag>
+              <span className="hidden h-4 w-px bg-[var(--border)] sm:block" />
               <span className="text-xs text-[var(--content-secondary)]">
                 Type:
               </span>
