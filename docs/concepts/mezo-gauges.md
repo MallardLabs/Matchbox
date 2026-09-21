@@ -20,7 +20,7 @@ MUSD liquidity on external venues:
 Vote windows follow the Thursday-aligned Mezo epoch clock and close at
 Wednesday 23:00 UTC. Voting happens on
 [mezo.org/earn/vote/mezo](https://mezo.org/earn/vote/mezo); the Matchbox
-dashboard at [/mezo-gauges](/mezo-gauges) is read-only.
+dashboard under [Activity → MEZO gauges](/activity?view=mezo-gauges) is read-only.
 
 ## What each dashboard section measures
 

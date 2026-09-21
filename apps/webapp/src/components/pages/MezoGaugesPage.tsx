@@ -56,7 +56,7 @@ export default function MezoGaugesPage(): JSX.Element {
 
   if (chainId === CHAIN_ID.testnet) {
     return (
-      <main>
+      <main className="mx-auto w-full max-w-6xl px-4 py-8 md:py-12">
         <Card title="MEZO gauges" withBorder overrides={{}}>
           <p className="py-4 text-sm text-[var(--content-secondary)]">
             MEZO gauges are only available on Mezo mainnet
@@ -67,7 +67,7 @@ export default function MezoGaugesPage(): JSX.Element {
   }
 
   return (
-    <main className="flex flex-col gap-6">
+    <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-8 md:py-12">
       <header>
         <h1 className="mb-2 text-2xl font-semibold text-[var(--content-primary)]">
           MEZO gauges
