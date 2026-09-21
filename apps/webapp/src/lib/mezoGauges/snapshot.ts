@@ -175,7 +175,7 @@ export async function buildParticipationSnapshot(options: {
       })),
       ...unlistedReads.map(({ gauge, weight, isAlive }) => ({
         address: gauge,
-        name: "Unlisted gauge",
+        name: `${gauge.slice(0, 6)}…${gauge.slice(-4)} (unlisted)`,
         protocol: "unknown",
         listed: false,
         isAlive,
