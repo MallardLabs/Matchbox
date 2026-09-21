@@ -155,6 +155,7 @@ const navItems: NavItem[] = [
   { href: "/boost", label: "veMEZO" },
   { href: "/incentives", label: "veBTC" },
   { href: "/pools", label: "pools" },
+  { href: "/mezo-gauges", label: "MEZO gauges" },
   {
     label: "more",
     children: [
