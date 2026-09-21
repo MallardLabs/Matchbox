@@ -4,8 +4,7 @@ import type { MezoGaugesSnapshot } from "@/lib/mezoGauges/schema"
 import { gaugeColor } from "./shared"
 
 /**
- * Stacked horizontal bar of gauge vote shares, with a visually-hidden text
- * list so the same data is available to assistive tech.
+ * Stacked horizontal bar of gauge vote shares with a color legend below it.
  */
 export function GaugeSplitBar({
   gauges,
@@ -19,31 +18,43 @@ export function GaugeSplitBar({
         ? -1
         : 1,
   )
+  const weighted = sorted.map((g, i) => ({ gauge: g, color: gaugeColor(i) }))
   return (
-    <span className="block min-w-[140px]">
+    <span className="block min-w-[180px]">
       <span
         className="flex h-3 w-full overflow-hidden rounded-full bg-[var(--surface-secondary)]"
         role="img"
         aria-label="Gauge vote share split"
       >
-        {sorted.map((g, i) => {
+        {weighted.map(({ gauge: g, color }) => {
           const pct = Number(g.shareBps) / 100
           if (pct <= 0) return null
           return (
             <span
               key={g.address}
-              title={`${g.name}: ${formatBps(BigInt(g.shareBps))}`}
-              style={{ width: `${pct}%`, backgroundColor: gaugeColor(i) }}
+              style={{ width: `${pct}%`, backgroundColor: color }}
             />
           )
         })}
       </span>
-      <ul className="sr-only">
-        {sorted.map((g) => (
-          <li key={g.address}>
-            {g.name}: {formatBps(BigInt(g.shareBps))}
-          </li>
-        ))}
+      <ul className="m-0 mt-1.5 flex list-none flex-wrap gap-x-2 gap-y-0.5 p-0">
+        {weighted.map(({ gauge: g, color }) => {
+          const pct = Number(g.shareBps) / 100
+          if (pct <= 0) return null
+          return (
+            <li
+              key={g.address}
+              className="flex items-center gap-1 whitespace-nowrap text-2xs text-[var(--content-tertiary)]"
+            >
+              <span
+                aria-hidden="true"
+                className="inline-block h-2 w-2 rounded-full"
+                style={{ backgroundColor: color }}
+              />
+              {g.name} {formatBps(BigInt(g.shareBps))}
+            </li>
+          )
+        })}
       </ul>
     </span>
   )
