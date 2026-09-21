@@ -12,7 +12,8 @@
     "typecheck": "tsc --noEmit",
     "cloudflare:build": "opennextjs-cloudflare build",
     "cloudflare:deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
-    "cloudflare:upload": "opennextjs-cloudflare build && opennextjs-cloudflare upload"
+    "cloudflare:upload": "opennextjs-cloudflare build && opennextjs-cloudflare upload",
+    "prebuild": "node scripts/mezo-gauges-merkl-seed.mjs"
   },
   "dependencies": {
     "@mezo-org/mezo-clay": "^0.1.0-dev.37",

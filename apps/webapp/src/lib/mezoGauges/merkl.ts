@@ -92,6 +92,39 @@ const claimsCache = new Map<string, MerklClaims>()
 // launching ~40 getLogs calls against the same rate-limited RPC.
 const claimsInFlight = new Map<string, Promise<MerklClaims>>()
 
+type ScanState = {
+  block: bigint
+  distributed: bigint
+  claimed: bigint
+  claimants: Set<string>
+}
+
+/**
+ * Cumulative totals committed with the repo, regenerated at build time by
+ * `scripts/mezo-gauges-merkl-seed.mjs`. Cold serverless instances resume
+ * from here — a full history scan is ~100 eth_getLogs calls and exceeds
+ * the function timeout, while a delta from a fresh seed is a handful.
+ */
+import merklSeed from "./merkl-seed.json"
+
+const SEED_STATE: ScanState | undefined =
+  typeof merklSeed.block === "string"
+    ? {
+        block: BigInt(merklSeed.block),
+        distributed: BigInt(merklSeed.distributed),
+        claimed: BigInt(merklSeed.claimed),
+        claimants: new Set(merklSeed.claimants),
+      }
+    : undefined
+
+/**
+ * Cumulative running totals for "latest" scans. The transfer log is
+ * append-only, so after the cold full scan each request only needs to scan
+ * the blocks since the last snapshot — a few hundred blocks instead of the
+ * full history (Boar RPC bills getLogs by range scanned).
+ */
+let latestScanState: ScanState | undefined
+
 export async function fetchMerklCampaigns(): Promise<
   Record<string, MerklCampaign[]>
 > {
@@ -192,21 +225,6 @@ async function getTransferLogs(
  * Distributor (rewards pushed in for campaigns), `claimed` is what the
  * distributor paid out to users.
  */
-/**
- * Cumulative running totals for "latest" scans. The transfer log is
- * append-only, so after the cold full scan each request only needs to scan
- * the blocks since the last snapshot — a few hundred blocks instead of the
- * full history (Boar RPC bills getLogs by range scanned).
- */
-let latestScanState:
-  | {
-      block: bigint
-      distributed: bigint
-      claimed: bigint
-      claimants: Set<string>
-    }
-  | undefined
-
 async function scanTransferLogs(
   client: PublicClient,
   fromBlock: bigint,
@@ -297,13 +315,17 @@ async function fetchMerklClaimsUncached(
   }
 
   try {
-    // Incremental: resume from the last scan when asking for "latest".
-    const resume =
+    // Incremental: resume from the best available base — the in-process
+    // scan state for "latest" requests, or the committed seed for anything
+    // newer than it (covers `at=` queries and cold serverless instances).
+    const resume: ScanState | undefined =
       requestedToBlock === undefined &&
       latestScanState !== undefined &&
       latestScanState.block < toBlock
         ? latestScanState
-        : undefined
+        : SEED_STATE !== undefined && SEED_STATE.block < toBlock
+          ? SEED_STATE
+          : undefined
     const fromBlock =
       resume !== undefined
         ? resume.block + 1n
@@ -333,7 +355,9 @@ async function fetchMerklClaimsUncached(
       claimants: claimants.size,
     }
     claimsCache.set(toBlock.toString(), result)
-    latestScanState = { block: toBlock, distributed, claimed, claimants }
+    if (latestScanState === undefined || toBlock > latestScanState.block) {
+      latestScanState = { block: toBlock, distributed, claimed, claimants }
+    }
     return result
   } catch (error) {
     try {
