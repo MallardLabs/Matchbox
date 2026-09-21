@@ -15,6 +15,7 @@ import { useVeMezoNewLocks } from "@/hooks/useVeMezoNewLocks"
 import { useVoteWindowCountdown } from "@/hooks/useVoteWindowCountdown"
 import { Card } from "@mezo-org/mezo-clay"
 import { CHAIN_ID } from "@repo/shared/contracts"
+import Link from "next/link"
 
 export default function MezoGaugesPage(): JSX.Element {
   const { chainId } = useNetwork()
@@ -81,16 +82,22 @@ export default function MezoGaugesPage(): JSX.Element {
             ? `vote window closed · next epoch starts in ${timeRemaining}`
             : `vote window closes in ${timeRemaining}`}
         </p>
-        <p className="mt-3">
-          <a
-            href="https://mezo.org/earn/vote/mezo"
-            target="_blank"
-            rel="noopener noreferrer"
+        <div className="mt-3 flex items-center gap-4">
+          <Link
+            href="/boost?view=mezo-gauges"
             className="inline-flex items-center gap-1 rounded-lg bg-[#F7931A] px-3 py-1.5 text-sm font-medium text-white no-underline hover:opacity-90"
           >
-            Vote on mezo.org
+            Vote with veMEZO
+          </Link>
+          <a
+            href="https://mezo.org/docs/users/mezo-earn/vote/mezo-gauges/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-sm text-[var(--content-secondary)] underline hover:text-[#F7931A]"
+          >
+            mezo.org voting docs
           </a>
-        </p>
+        </div>
       </header>
 
       <ParticipationStats

@@ -11,7 +11,7 @@ import { fetchThirdPartyRewardEvents } from "@/lib/mezoGauges/subgraph"
 import {
   BRIBE_ABI,
   CONTRACTS,
-  NON_STAKING_VOTER_ABI,
+  THIRD_PARTY_VOTER_ABI,
 } from "@repo/shared/contracts"
 import { createLogger } from "@repo/shared/logger"
 import { getAddress, zeroAddress } from "viem"
@@ -69,7 +69,7 @@ async function handler(request: Request): Promise<Response> {
         const bribe = await client
           .readContract({
             address: voter,
-            abi: NON_STAKING_VOTER_ABI,
+            abi: THIRD_PARTY_VOTER_ABI,
             functionName: "gaugeToBribe",
             args: [gauge],
           })

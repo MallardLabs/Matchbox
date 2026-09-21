@@ -1,74 +1,8 @@
-import { type Address, getAddress } from "viem"
+import { getAddress } from "viem"
 
-export type MezoGaugeProtocol = "Aerodrome" | "Uniswap v4" | "Curve"
-
-export type MezoGaugeNetwork = "base" | "ethereum"
-
-export type MezoGaugeConfig = {
-  name: string
-  protocol: MezoGaugeProtocol
-  network: MezoGaugeNetwork
-  tokens: string[]
-  poolAddress?: Address
-  poolId?: string
-  poolUrl: string
-  protocolUrl: string
-  merklUrl?: string
-  merklOpportunityId?: string
-}
-
-/**
- * The live MEZO gauges on the veMEZO ThirdPartyVoter, keyed by checksummed
- * gauge address. Nothing on chain distinguishes an admitted gauge from a test
- * one, so this map is the registry.
- */
-export const MEZO_GAUGES: Record<Address, MezoGaugeConfig> = {
-  [getAddress("0xC7e81dd77A4624F0DD14A8bB97Bc721b0CEE6e26")]: {
-    name: "USDC/MUSD",
-    protocol: "Aerodrome",
-    network: "base",
-    tokens: ["USDC", "MUSD"],
-    poolAddress: getAddress("0xFF56D037D948faD1027a1AC82ae610e4b694c641"),
-    poolUrl:
-      "https://aerodrome.finance/vote?filters=all&query=0xFF56D037D948faD1027a1AC82ae610e4b694c641",
-    protocolUrl: "https://aerodrome.finance",
-  },
-  [getAddress("0x4440A9b2954cB98416C0122e2ea996C46555F4B6")]: {
-    name: "MEZO/MUSD",
-    protocol: "Aerodrome",
-    network: "base",
-    tokens: ["MEZO", "MUSD"],
-    poolAddress: getAddress("0xEF458A3263d2a8C7f3ed9e949aE2F9B345D08b1F"),
-    poolUrl:
-      "https://aerodrome.finance/vote?filters=all&query=0xEF458A3263d2a8C7f3ed9e949aE2F9B345D08b1F",
-    protocolUrl: "https://aerodrome.finance",
-  },
-  [getAddress("0x2ced96e759ab481210d41c567eee5c42edb59a1d")]: {
-    name: "MUSD/USDC",
-    protocol: "Uniswap v4",
-    network: "ethereum",
-    tokens: ["MUSD", "USDC"],
-    poolId:
-      "0xa9bf5691768ef950a99efd74d722961ff2df3fec08d77ec784432c619bd283a0",
-    poolUrl:
-      "https://app.uniswap.org/explore/pools/ethereum/0xa9bf5691768ef950a99efd74d722961ff2df3fec08d77ec784432c619bd283a0",
-    protocolUrl: "https://app.uniswap.org/",
-    merklUrl: "https://app.merkl.xyz/opportunities/17628316464603186847",
-    merklOpportunityId: "17628316464603186847",
-  },
-  [getAddress("0xc39a294024dca62f579c49d7c83a6c831d4976d0")]: {
-    name: "MUSD/USDC/USDT",
-    protocol: "Curve",
-    network: "ethereum",
-    tokens: ["MUSD", "USDC", "USDT"],
-    poolAddress: getAddress("0xb5571e76693ba60110b5811dd650ffefce1c955f"),
-    poolUrl:
-      "https://www.curve.finance/dex/ethereum/pools/0xb5571e76693ba60110b5811dd650ffefce1c955f",
-    protocolUrl: "https://www.curve.finance/",
-    merklUrl: "https://app.merkl.xyz/opportunities/3555713731488585898",
-    merklOpportunityId: "3555713731488585898",
-  },
-}
+// The gauge registry lives in the flat lib/mezoGauges.ts module, shared with
+// the voting UI and detail pages; re-exported here for the measurement layer.
+export { MEZO_GAUGES } from "../mezoGauges"
 
 export const TOKEN_ADDRESSES = {
   musd: getAddress("0xdD468A1DDc392dcdbEf6db6e34E89AA338F9F186"),

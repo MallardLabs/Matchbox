@@ -1,6 +1,6 @@
 import {
   CONTRACTS,
-  NON_STAKING_VOTER_ABI,
+  THIRD_PARTY_VOTER_ABI,
   VOTING_ESCROW_ABI,
 } from "@repo/shared/contracts"
 import { type Address, type PublicClient, getAddress } from "viem"
@@ -33,7 +33,7 @@ export async function buildParticipationSnapshot(options: {
     await Promise.all([
       client.readContract({
         address: voter,
-        abi: NON_STAKING_VOTER_ABI,
+        abi: THIRD_PARTY_VOTER_ABI,
         functionName: "totalWeight",
         ...blockOpts,
       }),
@@ -61,7 +61,7 @@ export async function buildParticipationSnapshot(options: {
             client
               .readContract({
                 address: voter,
-                abi: NON_STAKING_VOTER_ABI,
+                abi: THIRD_PARTY_VOTER_ABI,
                 functionName: "weights",
                 args: [gauge],
                 ...blockOpts,
@@ -70,7 +70,7 @@ export async function buildParticipationSnapshot(options: {
             client
               .readContract({
                 address: voter,
-                abi: NON_STAKING_VOTER_ABI,
+                abi: THIRD_PARTY_VOTER_ABI,
                 functionName: "isAlive",
                 args: [gauge],
                 ...blockOpts,
@@ -102,7 +102,7 @@ export async function buildParticipationSnapshot(options: {
         client
           .readContract({
             address: voter,
-            abi: NON_STAKING_VOTER_ABI,
+            abi: THIRD_PARTY_VOTER_ABI,
             functionName: "weights",
             args: [address],
             ...blockOpts,
@@ -111,7 +111,7 @@ export async function buildParticipationSnapshot(options: {
         client
           .readContract({
             address: voter,
-            abi: NON_STAKING_VOTER_ABI,
+            abi: THIRD_PARTY_VOTER_ABI,
             functionName: "isAlive",
             args: [address],
             ...blockOpts,

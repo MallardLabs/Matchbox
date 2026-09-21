@@ -7,6 +7,7 @@ import type {
 } from "@/lib/mezoGauges/schema"
 import { Card, Skeleton, Tag } from "@mezo-org/mezo-clay"
 import { CONTRACTS } from "@repo/shared/contracts"
+import Link from "next/link"
 
 import { SectionError, formatCompactNumber } from "./shared"
 
@@ -35,15 +36,24 @@ function GaugeRow({
   return (
     <tr className="border-b border-[var(--border)] last:border-0">
       <th scope="row" className="py-2 pr-4 text-left font-normal">
-        {config?.poolUrl ? (
-          <a
-            href={config.poolUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-[var(--content-primary)] no-underline hover:text-[#F7931A] hover:underline"
-          >
-            {gauge.name}
-          </a>
+        {config ? (
+          <>
+            <Link
+              href={`/mezo-gauges/${gauge.address}`}
+              className="text-[var(--content-primary)] no-underline hover:text-[#F7931A] hover:underline"
+            >
+              {gauge.name}
+            </Link>
+            <a
+              href={config.poolUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label={`${gauge.name} pool on ${config.protocol}`}
+              className="ml-1 text-[var(--content-tertiary)] no-underline hover:text-[#F7931A]"
+            >
+              ↗
+            </a>
+          </>
         ) : (
           <span className="font-mono text-[var(--content-primary)]">
             {gauge.name === "Unlisted gauge"
