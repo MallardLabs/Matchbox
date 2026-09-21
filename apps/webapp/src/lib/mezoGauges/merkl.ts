@@ -24,9 +24,29 @@ const TRANSFER_TOPIC =
 const DISTRIBUTOR_LOWER = MERKL_DISTRIBUTOR.toLowerCase()
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
 
+// Boar RPC caps eth_getLogs at a 10,000-block range ("maximum [from, to]
+// blocks distance: 10000").
 const GET_LOGS_CHUNK = 10_000n
+const GET_LOGS_MIN_CHUNK = 2_000n
+// Boar RPC rate-limits to ~10 requests/second per IP; keep concurrency low
+// and retry rate-limited requests with backoff.
+const GET_LOGS_CONCURRENCY = 5
+const RATE_LIMIT_RETRIES = 5
+const RATE_LIMIT_BACKOFF_MS = 600
 
-/** Campaigns began around the launch window; scan from 6 Aug 2026 00:00 UTC. */
+/**
+ * Latest-block scans bucket `toBlock` down to this granularity so the
+ * in-process cache survives the ~4s block cadence.
+ */
+const LATEST_SCAN_BUCKET = 50n
+
+/**
+ * Wrapped-veMEZO distributor activity predates the gauge campaigns
+ * (first distributor balance > 0 around block 10.94M, mid/late August).
+ * 6 Aug 2026 00:00 UTC is the verified floor — an earlier scan from this
+ * timestamp reproduced the SUP-202 baseline exactly (1,349,270 distributed /
+ * 500,190 claimed). Anything earlier contains zero transfers.
+ */
 const CLAIMS_SCAN_FROM_TS = 1_786_022_400
 
 const campaignsResponseSchema = z.array(
@@ -68,6 +88,9 @@ export type MerklClaims = {
 }
 
 const claimsCache = new Map<string, MerklClaims>()
+// In-flight dedup: concurrent requests share one scan instead of each
+// launching ~40 getLogs calls against the same rate-limited RPC.
+const claimsInFlight = new Map<string, Promise<MerklClaims>>()
 
 export async function fetchMerklCampaigns(): Promise<
   Record<string, MerklCampaign[]>
@@ -116,56 +139,105 @@ function topicAddress(topic: string | undefined): string {
   return topic ? `0x${topic.slice(26).toLowerCase()}` : ""
 }
 
+function isRateLimitError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error)
+  return (
+    message.includes("rate limit") ||
+    message.includes("Too many requests") ||
+    message.includes("429")
+  )
+}
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
+async function getTransferLogs(
+  client: PublicClient,
+  from: bigint,
+  to: bigint,
+  retriesLeft = RATE_LIMIT_RETRIES,
+): Promise<z.infer<typeof transferLogSchema>[]> {
+  try {
+    const raw = await client.request({
+      method: "eth_getLogs",
+      params: [
+        {
+          address: MERKL_REWARD_TOKEN,
+          topics: [TRANSFER_TOPIC],
+          fromBlock: `0x${from.toString(16)}`,
+          toBlock: `0x${to.toString(16)}`,
+        },
+      ],
+    })
+    return z.array(transferLogSchema).parse(raw)
+  } catch (error) {
+    if (isRateLimitError(error) && retriesLeft > 0) {
+      await sleep(
+        RATE_LIMIT_BACKOFF_MS * (RATE_LIMIT_RETRIES - retriesLeft + 1),
+      )
+      return getTransferLogs(client, from, to, retriesLeft - 1)
+    }
+    // Some RPCs cap eth_getLogs range; halve until the chunk is small enough.
+    if (to - from <= GET_LOGS_MIN_CHUNK) throw error
+    const mid = from + (to - from) / 2n
+    const [a, b] = await Promise.all([
+      getTransferLogs(client, from, mid),
+      getTransferLogs(client, mid + 1n, to),
+    ])
+    return [...a, ...b]
+  }
+}
+
 /**
  * Wrapped-veMEZO flows: `distributed` is everything transferred TO the Merkl
  * Distributor (rewards pushed in for campaigns), `claimed` is what the
  * distributor paid out to users.
  */
-export async function fetchMerklClaims(options: {
-  client: PublicClient
-  toBlock?: bigint | undefined
-}): Promise<MerklClaims> {
-  const { client } = options
-  const toBlock = options.toBlock ?? (await client.getBlockNumber())
-  const cacheKey = toBlock.toString()
-  const cached = claimsCache.get(cacheKey)
-  if (cached) return cached
+/**
+ * Cumulative running totals for "latest" scans. The transfer log is
+ * append-only, so after the cold full scan each request only needs to scan
+ * the blocks since the last snapshot — a few hundred blocks instead of the
+ * full history (Boar RPC bills getLogs by range scanned).
+ */
+let latestScanState:
+  | {
+      block: bigint
+      distributed: bigint
+      claimed: bigint
+      claimants: Set<string>
+    }
+  | undefined
 
-  const unavailable: MerklClaims = {
-    status: "unavailable",
-    distributor: MERKL_DISTRIBUTOR,
-    rewardToken: MERKL_REWARD_TOKEN,
-    distributed: "0",
-    claimed: "0",
-    unclaimed: "0",
-    claimRateBps: "0",
-    claimants: 0,
-  }
-
-  try {
-    const fromBlock = (await findBlockAtOrBefore(client, CLAIMS_SCAN_FROM_TS))
-      .number
-
-    let distributed = 0n
-    let claimed = 0n
-    const claimants = new Set<string>()
-    for (let from = fromBlock; from <= toBlock; from += GET_LOGS_CHUNK) {
-      const to =
+async function scanTransferLogs(
+  client: PublicClient,
+  fromBlock: bigint,
+  toBlock: bigint,
+): Promise<{
+  distributed: bigint
+  claimed: bigint
+  claimants: Set<string>
+}> {
+  const ranges: { from: bigint; to: bigint }[] = []
+  for (let from = fromBlock; from <= toBlock; from += GET_LOGS_CHUNK) {
+    ranges.push({
+      from,
+      to:
         from + GET_LOGS_CHUNK - 1n > toBlock
           ? toBlock
-          : from + GET_LOGS_CHUNK - 1n
-      const raw = await client.request({
-        method: "eth_getLogs",
-        params: [
-          {
-            address: MERKL_REWARD_TOKEN,
-            topics: [TRANSFER_TOPIC],
-            fromBlock: `0x${from.toString(16)}`,
-            toBlock: `0x${to.toString(16)}`,
-          },
-        ],
-      })
-      for (const log of z.array(transferLogSchema).parse(raw)) {
+          : from + GET_LOGS_CHUNK - 1n,
+    })
+  }
+
+  let distributed = 0n
+  let claimed = 0n
+  const claimants = new Set<string>()
+  for (let i = 0; i < ranges.length; i += GET_LOGS_CONCURRENCY) {
+    const batches = await Promise.all(
+      ranges
+        .slice(i, i + GET_LOGS_CONCURRENCY)
+        .map((r) => getTransferLogs(client, r.from, r.to)),
+    )
+    for (const logs of batches) {
+      for (const log of logs) {
         const sender = topicAddress(log.topics[1])
         const recipient = topicAddress(log.topics[2])
         const amount = BigInt(log.data)
@@ -178,6 +250,74 @@ export async function fetchMerklClaims(options: {
         }
       }
     }
+  }
+  return { distributed, claimed, claimants }
+}
+
+export async function fetchMerklClaims(options: {
+  client: PublicClient
+  toBlock?: bigint | undefined
+}): Promise<MerklClaims> {
+  const { client } = options
+  // Bucket "latest" scans so the cache is not invalidated by every new block.
+  let toBlock = options.toBlock
+  if (toBlock === undefined) {
+    const latest = await client.getBlockNumber()
+    toBlock = latest - (latest % LATEST_SCAN_BUCKET)
+  }
+  const cacheKey = toBlock.toString()
+  const cached = claimsCache.get(cacheKey)
+  if (cached) return cached
+  const inFlight = claimsInFlight.get(cacheKey)
+  if (inFlight) return inFlight
+
+  const pending = fetchMerklClaimsUncached(client, toBlock, options.toBlock)
+  claimsInFlight.set(cacheKey, pending)
+  try {
+    return await pending
+  } finally {
+    claimsInFlight.delete(cacheKey)
+  }
+}
+
+async function fetchMerklClaimsUncached(
+  client: PublicClient,
+  toBlock: bigint,
+  requestedToBlock: bigint | undefined,
+): Promise<MerklClaims> {
+  const unavailable: MerklClaims = {
+    status: "unavailable",
+    distributor: MERKL_DISTRIBUTOR,
+    rewardToken: MERKL_REWARD_TOKEN,
+    distributed: "0",
+    claimed: "0",
+    unclaimed: "0",
+    claimRateBps: "0",
+    claimants: 0,
+  }
+
+  try {
+    // Incremental: resume from the last scan when asking for "latest".
+    const resume =
+      requestedToBlock === undefined &&
+      latestScanState !== undefined &&
+      latestScanState.block < toBlock
+        ? latestScanState
+        : undefined
+    const fromBlock =
+      resume !== undefined
+        ? resume.block + 1n
+        : (await findBlockAtOrBefore(client, CLAIMS_SCAN_FROM_TS)).number
+
+    const delta =
+      fromBlock <= toBlock
+        ? await scanTransferLogs(client, fromBlock, toBlock)
+        : { distributed: 0n, claimed: 0n, claimants: new Set<string>() }
+
+    const distributed = (resume?.distributed ?? 0n) + delta.distributed
+    const claimed = (resume?.claimed ?? 0n) + delta.claimed
+    const claimants = new Set(resume?.claimants ?? [])
+    for (const c of delta.claimants) claimants.add(c)
 
     const unclaimed = distributed > claimed ? distributed - claimed : 0n
     const claimRateBps =
@@ -192,13 +332,19 @@ export async function fetchMerklClaims(options: {
       claimRateBps: claimRateBps.toString(),
       claimants: claimants.size,
     }
-    claimsCache.set(cacheKey, result)
+    claimsCache.set(toBlock.toString(), result)
+    latestScanState = { block: toBlock, distributed, claimed, claimants }
     return result
   } catch (error) {
-    logger.warn({
-      message: "Merkl claims scan failed",
-      error: error instanceof Error ? error.message : "unknown",
-    })
+    try {
+      logger.warn({
+        message: "Merkl claims scan failed",
+        error: error instanceof Error ? error.message : "unknown",
+      })
+    } catch {
+      // pino's transport worker can be dead in dev; logging must never
+      // take the request down
+    }
     return unavailable
   }
 }
