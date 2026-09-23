@@ -17,7 +17,7 @@ import {
   ModalHeader,
 } from "@mezo-org/mezo-clay"
 import { useRouter } from "next/router"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { type Address, formatUnits, parseUnits } from "viem"
 import { useAccount, useReadContract } from "wagmi"
 
@@ -114,11 +114,13 @@ export function AddGaugeIncentiveModal({
 
   const {
     addIncentives,
+    hash: incentiveTransactionHash,
     isPending: isAddingIncentives,
     isConfirming: isConfirmingIncentives,
     isSuccess: isAddIncentivesSuccess,
     error: addIncentivesError,
   } = useAddIncentives()
+  const refreshedTransactionHash = useRef<string>()
 
   useEffect(() => {
     if (!isOpen) {
@@ -139,7 +141,14 @@ export function AddGaugeIncentiveModal({
   }, [isApprovalSuccess, refetchAllowance, resetApproval])
 
   useEffect(() => {
-    if (isAddIncentivesSuccess) {
+    if (
+      isAddIncentivesSuccess &&
+      incentiveTransactionHash &&
+      refreshedTransactionHash.current !== incentiveTransactionHash
+    ) {
+      // Parent query updates recreate callbacks. Consume the receipt before
+      // refreshing so those renders cannot start another request loop.
+      refreshedTransactionHash.current = incentiveTransactionHash
       void refetchTokenBalance()
       void refetchAllowance()
       onIncentivesAdded?.()
@@ -147,6 +156,7 @@ export function AddGaugeIncentiveModal({
     }
   }, [
     isAddIncentivesSuccess,
+    incentiveTransactionHash,
     onClose,
     onIncentivesAdded,
     refetchAllowance,
