@@ -8,8 +8,10 @@ import { gaugeColor } from "./shared"
  */
 export function GaugeSplitBar({
   gauges,
+  totalWeight,
 }: {
   gauges: MezoGaugesSnapshot["gauges"]
+  totalWeight: string
 }): JSX.Element {
   type Gauge = MezoGaugesSnapshot["gauges"][number]
   const readable = gauges.filter(
@@ -24,10 +26,17 @@ export function GaugeSplitBar({
         : 1,
   )
   const weighted = sorted.map((g, i) => ({ gauge: g, color: gaugeColor(i) }))
-  const unreadablePct = Math.max(
-    0,
-    100 - readable.reduce((s, g) => s + Number(g.shareBps) / 100, 0),
+  const hasFailedReads = gauges.some((gauge) => gauge.status === "error")
+  const total = BigInt(totalWeight)
+  const readableWeight = readable.reduce(
+    (sum, gauge) => sum + BigInt(gauge.weight),
+    0n,
   )
+  const unreadableBps =
+    hasFailedReads && total > 0n && readableWeight < total
+      ? ((total - readableWeight) * 10_000n) / total
+      : 0n
+  const unreadablePct = Number(unreadableBps) / 100
   return (
     <span className="block min-w-[180px]">
       <span
@@ -84,7 +93,7 @@ export function GaugeSplitBar({
                 opacity: 0.4,
               }}
             />
-            unreadable {unreadablePct.toFixed(2)}%
+            unreadable {formatBps(unreadableBps)}
           </li>
         )}
       </ul>

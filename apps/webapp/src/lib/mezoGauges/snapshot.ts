@@ -9,7 +9,7 @@ import { MEZO_GAUGES } from "./constants"
 import { epochIndexFor, epochStartFor } from "./epochs"
 import { aggregateVotes, participationBps, shareBps } from "./participation"
 import { type MezoGaugesSnapshot, mezoGaugesSnapshotSchema } from "./schema"
-import { fetchActiveThirdPartyVotes } from "./subgraph"
+import { fetchActiveThirdPartyVotes, fetchVeMezoOwners } from "./subgraph"
 
 export { mezoGaugesSnapshotSchema, type MezoGaugesSnapshot }
 
@@ -20,12 +20,12 @@ export async function buildParticipationSnapshot(options: {
   const { client } = options
   const voter = CONTRACTS.mainnet.thirdPartyVoter
   const veMezo = CONTRACTS.mainnet.veMEZO
-  const blockNumber = options.blockNumber
-  const blockOpts = blockNumber !== undefined ? { blockNumber } : {}
-
   const block = await client.getBlock(
-    blockNumber !== undefined ? { blockNumber } : { blockTag: "latest" },
+    options.blockNumber !== undefined
+      ? { blockNumber: options.blockNumber }
+      : { blockTag: "latest" },
   )
+  const blockOpts = { blockNumber: block.number }
 
   const gaugeAddresses = Object.keys(MEZO_GAUGES) as Address[]
 
@@ -95,6 +95,13 @@ export async function buildParticipationSnapshot(options: {
     )
   }
 
+  const owners = await fetchVeMezoOwners({
+    tokenIds: votes
+      .filter((vote) => vote.currentWeight > 0n)
+      .map((vote) => vote.tokenId),
+    blockNumber: block.number,
+  })
+
   // Gauges that received votes but aren't in the registry (e.g. killed
   // community gauges) still hold weight; read them on-chain too.
   const unlistedGauges = [
@@ -135,7 +142,7 @@ export async function buildParticipationSnapshot(options: {
   const aggregated = aggregateVotes(
     votes.map((v) => ({
       tokenId: v.tokenId,
-      owner: v.owner,
+      owner: owners.get(v.tokenId.toString()) ?? v.owner,
       gauge: v.gauge,
       currentWeight: v.currentWeight,
     })),

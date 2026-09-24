@@ -45,7 +45,11 @@ async function handler(request: Request): Promise<Response> {
     return Response.json(mezoGaugesHistorySchema.parse({ entries }), {
       headers: {
         ...MEZO_GAUGES_CORS_HEADERS,
-        "Cache-Control": "public, s-maxage=300",
+        "Cache-Control": entries.every((entry) =>
+          entry.snapshot.gauges.every((gauge) => gauge.status === "ok"),
+        )
+          ? "public, s-maxage=300"
+          : "no-store",
       },
     })
   } catch (error) {
