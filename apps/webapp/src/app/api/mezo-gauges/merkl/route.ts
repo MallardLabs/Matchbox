@@ -7,9 +7,6 @@ import {
   createMezoMainnetClient,
 } from "@/lib/mezoGauges/rpc"
 import { mezoGaugesMerklSchema } from "@/lib/mezoGauges/schema"
-import { createLogger } from "@repo/shared/logger"
-
-const logger = createLogger("mezo-gauges-merkl-api")
 
 async function handler(request: Request): Promise<Response> {
   if (request.method === "OPTIONS") {
@@ -43,10 +40,7 @@ async function handler(request: Request): Promise<Response> {
       },
     })
   } catch (error) {
-    logger.error({
-      message: "Unable to build mezo gauges merkl data",
-      error: error instanceof Error ? error.message : "unknown",
-    })
+    console.error("Unable to build mezo gauges merkl data", error)
     return Response.json(
       { error: "Unable to build merkl data" },
       { status: 502, headers: MEZO_GAUGES_CORS_HEADERS },
