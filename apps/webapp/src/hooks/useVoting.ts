@@ -606,10 +606,12 @@ export function useTokenAllowance(
   isLoading: boolean
   refetch: RefetchFn
 } {
+  const { chainId } = useNetwork()
   const { address: userAddress } = useAccount()
 
   const { data, isLoading, refetch } = useReadContract({
     address: tokenAddress,
+    chainId,
     abi: [
       {
         inputs: [

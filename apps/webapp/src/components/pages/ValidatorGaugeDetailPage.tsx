@@ -42,7 +42,7 @@ import {
   isAddress,
   zeroAddress,
 } from "viem"
-import { useAccount } from "wagmi"
+import { useAccount, useSwitchChain } from "wagmi"
 
 type Props = { address: string }
 
@@ -345,7 +345,7 @@ export default function ValidatorGaugeDetailPage({
   address,
 }: Props): JSX.Element {
   const gaugeAddress = isAddress(address) ? getAddress(address) : undefined
-  const { chainId, switchNetwork } = useNetwork()
+  const { chainId, networkName } = useNetwork()
   const { address: connectedAddress, chainId: walletChainId } = useAccount()
   const validatorState = useValidatorByGauge(gaugeAddress)
   const validator = validatorState.validator
@@ -364,6 +364,7 @@ export default function ValidatorGaugeDetailPage({
   const rewardHistory = useValidatorRewardHistory(gaugeAddress, true)
   const claim = useClaimValidatorRewards()
   const beneficiarySwitch = useSwitchValidatorBeneficiary(gaugeAddress)
+  const walletSwitch = useSwitchChain()
   const incentivesState = usePoolBribeIncentives(validator?.bribe)
   const { price: btcPrice } = useBtcPrice()
   const { price: mezoPrice } = useMezoPrice()
@@ -825,21 +826,27 @@ export default function ValidatorGaugeDetailPage({
                       onClick={() =>
                         walletOnSelectedNetwork
                           ? setSwitchConfirmOpen(true)
-                          : switchNetwork()
+                          : walletSwitch.switchChain({ chainId })
                       }
                       disabled={
-                        walletOnSelectedNetwork && !validNextBeneficiary
+                        walletSwitch.isPending ||
+                        (walletOnSelectedNetwork && !validNextBeneficiary)
                       }
                     >
                       {walletOnSelectedNetwork
                         ? "Switch Beneficiary"
-                        : "Switch Network"}
+                        : `Switch wallet to ${networkName}`}
                     </Button>
                   </div>
                   {beneficiaryInput && !validNextBeneficiary ? (
                     <p className="mt-2 text-xs text-[var(--negative)]">
                       Enter a valid, nonzero address different from the current
                       beneficiary.
+                    </p>
+                  ) : null}
+                  {walletSwitch.error ? (
+                    <p className="mt-2 text-pretty text-xs text-[var(--negative)]">
+                      {walletSwitch.error.message}
                     </p>
                   ) : null}
                   {beneficiarySwitch.error ? (
