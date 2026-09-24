@@ -6,6 +6,21 @@ import { SectionError, formatCompactUsd, gaugeColor } from "./shared"
 
 const TOKEN_DECIMALS: Record<string, number> = { USDC: 6, MUSD: 18, MEZO: 18 }
 
+function tokenUnits(amount: string, token: string): bigint {
+  const decimals = TOKEN_DECIMALS[token] ?? 18
+  return BigInt(amount) * 10n ** BigInt(18 - decimals)
+}
+
+function formatTokenAmount(amount: string, token: string): string {
+  const divisor = 10n ** BigInt(TOKEN_DECIMALS[token] ?? 18)
+  const units = BigInt(amount)
+  const whole = (units / divisor).toLocaleString("en-US")
+  const fraction = (((units % divisor) * 100n) / divisor)
+    .toString()
+    .padStart(2, "0")
+  return `${whole}.${fraction} ${token}`
+}
+
 const SOURCE_LABELS: Record<string, string> = {
   defillama: "DefiLlama",
   "curve-api": "Curve API",
@@ -129,21 +144,24 @@ export function LiquidityTable({
                     )
                   }
 
-                  const totalUnits = venue.composition.reduce(
-                    (sum, c) =>
-                      sum +
-                      Number(c.amount) / 10 ** (TOKEN_DECIMALS[c.token] ?? 18),
-                    0,
-                  )
-                  const musdShare = (() => {
-                    const musd = venue.composition.find(
-                      (c) => c.token === "MUSD",
+                  const stablePair =
+                    venue.composition.length === 2 &&
+                    venue.composition.every(
+                      (c) => c.token === "MUSD" || c.token === "USDC",
                     )
-                    if (!musd || totalUnits <= 0) return 0
-                    return (Number(musd.amount) / 1e18 / totalUnits) * 100
-                  })()
-                  const musdHeavy =
-                    venue.composition.length === 2 && musdShare > 80
+                  const totalUnits = stablePair
+                    ? venue.composition.reduce(
+                        (sum, c) => sum + tokenUnits(c.amount, c.token),
+                        0n,
+                      )
+                    : 0n
+                  const musd = venue.composition.find((c) => c.token === "MUSD")
+                  const musdShareBps =
+                    stablePair && musd && totalUnits > 0n
+                      ? (tokenUnits(musd.amount, musd.token) * 10_000n) /
+                        totalUnits
+                      : 0n
+                  const musdHeavy = musdShareBps > 8_000n
 
                   return (
                     <tr
@@ -175,18 +193,17 @@ export function LiquidityTable({
                         {formatCompactUsd(venue.tvlUsd)}
                       </td>
                       <td className="py-2 pr-4">
-                        {venue.composition.length > 0 ? (
+                        {stablePair && totalUnits > 0n ? (
                           <span className="flex h-3 w-32 overflow-hidden rounded-full bg-[var(--surface-secondary)]">
                             {venue.composition.map((c, i) => {
-                              const units =
-                                Number(c.amount) /
-                                10 ** (TOKEN_DECIMALS[c.token] ?? 18)
-                              const pct =
-                                totalUnits > 0 ? (units / totalUnits) * 100 : 0
+                              const bps =
+                                (tokenUnits(c.amount, c.token) * 10_000n) /
+                                totalUnits
+                              const pct = Number(bps) / 100
                               return (
                                 <span
                                   key={c.token}
-                                  title={`${c.token}: ${pct.toFixed(1)}%`}
+                                  title={`${c.token}: ${pct}% of token units`}
                                   style={{
                                     width: `${pct}%`,
                                     backgroundColor: gaugeColor(i),
@@ -194,6 +211,12 @@ export function LiquidityTable({
                                 />
                               )
                             })}
+                          </span>
+                        ) : venue.composition.length > 0 ? (
+                          <span className="font-mono text-xs">
+                            {venue.composition
+                              .map((c) => formatTokenAmount(c.amount, c.token))
+                              .join(" · ")}
                           </span>
                         ) : (
                           "—"

@@ -36,7 +36,7 @@ async function handler(request: Request): Promise<Response> {
       headers: {
         ...MEZO_GAUGES_CORS_HEADERS,
         "Cache-Control":
-          at !== null
+          at !== null && snapshot.gauges.every((gauge) => gauge.status === "ok")
             ? "public, s-maxage=31536000, immutable"
             : "public, s-maxage=60",
       },

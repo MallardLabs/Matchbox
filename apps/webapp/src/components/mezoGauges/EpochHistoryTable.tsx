@@ -102,7 +102,10 @@ export function EpochHistoryTable({
                           : "—"}
                       </td>
                       <td className="py-2 pr-4">
-                        <GaugeSplitBar gauges={s.gauges} />
+                        <GaugeSplitBar
+                          gauges={s.gauges}
+                          totalWeight={s.totalWeight}
+                        />
                       </td>
                       <td className="py-2">
                         <a

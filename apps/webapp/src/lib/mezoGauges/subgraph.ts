@@ -90,6 +90,48 @@ export async function fetchActiveThirdPartyVotes(
   return votes
 }
 
+const lockOwnerSchema = z.object({
+  id: z.string(),
+  owner: z.string().nullable(),
+})
+
+/** Resolve NFT owners at the snapshot block, independently of vote actors. */
+export async function fetchVeMezoOwners(options: {
+  tokenIds: bigint[]
+  blockNumber: bigint
+}): Promise<Map<string, string>> {
+  const owners = new Map<string, string>()
+  const escrow = CONTRACTS.mainnet.veMEZO.toLowerCase()
+  const ids = [...new Set(options.tokenIds.map((id) => id.toString()))]
+  const batchSize = 200
+  for (let start = 0; start < ids.length; start += batchSize) {
+    const batch = ids.slice(start, start + batchSize)
+    const requestedIds = batch.map((id) => `${escrow}-${id}`)
+    const data = await querySubgraph(`
+      query {
+        lockPositions(
+          first: ${batch.length},
+          where: { id_in: ${JSON.stringify(requestedIds)} },
+          block: { number: ${options.blockNumber.toString()} }
+        ) {
+          id
+          owner
+        }
+      }
+    `)
+    const rows = z.array(lockOwnerSchema).parse(data.lockPositions ?? [])
+    for (const row of rows) {
+      if (row.owner !== null) {
+        owners.set(row.id.slice(escrow.length + 1), row.owner)
+      }
+    }
+    if (batch.some((id) => !owners.has(id))) {
+      throw new Error("Subgraph did not return every voting NFT owner")
+    }
+  }
+  return owners
+}
+
 const gaugeSchema = z.object({
   address: z.string(),
   isAlive: z.boolean(),
