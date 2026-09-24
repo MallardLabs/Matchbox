@@ -143,7 +143,7 @@ export function GaugesTable({
   }
 
   const closedEpochs = (emissions?.distributedByEpoch ?? []).filter(
-    (e) => e.epochStart < (emissions?.currentEpochStart ?? 0),
+    (e) => e.voteEpochStart < (emissions?.currentEpochStart ?? 0),
   )
   const lastClosed = closedEpochs.at(-1)
   const lastEpochAmounts = new Map(

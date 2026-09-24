@@ -30,4 +30,13 @@ export function epochClosesSinceLaunch(nowTs: number): number[] {
   return closes
 }
 
+/**
+ * Rewards distribute at the epoch flip: a distribution event at `timestamp`
+ * lands in epoch N+1's first blocks but pays for epoch N's votes. Returns the
+ * vote epoch the payout belongs to.
+ */
+export function rewardedVoteEpochFor(timestamp: number): number {
+  return epochStartFor(timestamp) - WEEK
+}
+
 export { epochStartFor, WEEK }

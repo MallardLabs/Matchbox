@@ -1,7 +1,11 @@
 export { handler as GET, handler as OPTIONS }
 
 import { LAUNCH_EPOCH_START, MEZO_GAUGES } from "@/lib/mezoGauges/constants"
-import { WEEK, epochStartFor } from "@/lib/mezoGauges/epochs"
+import {
+  WEEK,
+  epochStartFor,
+  rewardedVoteEpochFor,
+} from "@/lib/mezoGauges/epochs"
 import {
   MEZO_GAUGES_CORS_HEADERS,
   createMezoMainnetClient,
@@ -53,13 +57,16 @@ async function handler(request: Request): Promise<Response> {
       toTs: now,
     })
 
+    // Rewards distribute at the epoch flip (events land in the first blocks
+    // of epoch N+1 but pay for epoch N's votes), so bucket each event by the
+    // vote epoch it rewards, not the epoch containing its timestamp.
     const byEpoch = new Map<number, Map<string, bigint>>()
     for (const event of events) {
-      const epochStart = epochStartFor(event.timestamp)
+      const voteEpochStart = rewardedVoteEpochFor(event.timestamp)
       const gauge = event.gauge.toLowerCase()
-      const epochMap = byEpoch.get(epochStart) ?? new Map()
+      const epochMap = byEpoch.get(voteEpochStart) ?? new Map()
       epochMap.set(gauge, (epochMap.get(gauge) ?? 0n) + event.amount)
-      byEpoch.set(epochStart, epochMap)
+      byEpoch.set(voteEpochStart, epochMap)
     }
 
     const gaugeAddresses = Object.keys(MEZO_GAUGES).map((a) => getAddress(a))
@@ -127,7 +134,7 @@ async function handler(request: Request): Promise<Response> {
         currentEpochStart,
         distributedByEpoch: [...byEpoch.entries()]
           .sort(([a], [b]) => a - b)
-          .map(([epochStart, gauges]) => {
+          .map(([voteEpochStart, gauges]) => {
             const rows = [...gauges.entries()].map(([gauge, amount]) => ({
               gauge,
               name: LISTED_BY_LOWER.get(gauge) ?? gauge,
@@ -136,7 +143,7 @@ async function handler(request: Request): Promise<Response> {
             }))
             const total = rows.reduce((sum, r) => sum + BigInt(r.amount), 0n)
             return {
-              epochStart,
+              voteEpochStart,
               total: total.toString(),
               gauges: rows,
             }

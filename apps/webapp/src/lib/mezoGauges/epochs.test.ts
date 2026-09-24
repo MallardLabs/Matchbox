@@ -6,6 +6,7 @@ import { LAUNCH_EPOCH_START } from "./constants"
 import {
   epochClosesSinceLaunch,
   epochIndexFor,
+  rewardedVoteEpochFor,
   voteWindowCloseFor,
 } from "./epochs"
 
@@ -19,6 +20,14 @@ test("epochIndexFor numbers E0 from launch", () => {
   assert.equal(epochIndexFor(LAUNCH_EPOCH_START), 0)
   assert.equal(epochIndexFor(LAUNCH_EPOCH_START + WEEK), 1)
   assert.equal(epochIndexFor(LAUNCH_EPOCH_START + 2 * WEEK), 2)
+})
+
+test("rewardedVoteEpochFor attributes flip-time distributions to the prior vote epoch", () => {
+  // E1 starts 1_788_998_400 (10 Sep); the 10 Sep 00:19 distribution pays
+  // for E0's votes.
+  const e1Start = LAUNCH_EPOCH_START + WEEK
+  assert.equal(rewardedVoteEpochFor(e1Start + 1_140), LAUNCH_EPOCH_START)
+  assert.equal(rewardedVoteEpochFor(e1Start + 2 * WEEK), e1Start + WEEK)
 })
 
 test("epochClosesSinceLaunch excludes the open epoch", () => {

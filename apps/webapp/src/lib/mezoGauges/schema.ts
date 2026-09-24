@@ -59,7 +59,11 @@ export const mezoGaugesEmissionsSchema = z.object({
   currentEpochStart: z.number(),
   distributedByEpoch: z.array(
     z.object({
-      epochStart: z.number(),
+      /**
+       * The vote epoch these rewards pay for — distributions execute at the
+       * epoch flip, so the event timestamp's epoch is one ahead of this.
+       */
+      voteEpochStart: z.number(),
       total: z.string(),
       gauges: z.array(
         z.object({
