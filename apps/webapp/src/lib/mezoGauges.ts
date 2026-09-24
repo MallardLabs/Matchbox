@@ -16,6 +16,12 @@ export type MezoGaugeIdentity = {
   action: string
   distributionEpochOffset: number
   geckoPoolId: string
+  /** Destination pool contract, when the gauge funds an on-chain pool. */
+  poolAddress?: Address
+  /** Uniswap v4 pool id, when the venue is keyed by pool id rather than address. */
+  poolId?: string
+  merklUrl?: string
+  merklOpportunityId?: string
 }
 
 const WEEK_SECONDS = 604_800
@@ -37,6 +43,7 @@ export const MEZO_GAUGES: Record<Address, MezoGaugeIdentity> = {
     action: "Incentivize voters on this Aerodrome gauge",
     distributionEpochOffset: 1,
     geckoPoolId: "0xFF56D037D948faD1027a1AC82ae610e4b694c641",
+    poolAddress: getAddress("0xFF56D037D948faD1027a1AC82ae610e4b694c641"),
   },
   [getAddress("0x4440A9b2954cB98416C0122e2ea996C46555F4B6")]: {
     name: "MEZO/MUSD",
@@ -49,6 +56,7 @@ export const MEZO_GAUGES: Record<Address, MezoGaugeIdentity> = {
     action: "Incentivize voters on this Aerodrome gauge",
     distributionEpochOffset: 1,
     geckoPoolId: "0xEF458A3263d2a8C7f3ed9e949aE2F9B345D08b1F",
+    poolAddress: getAddress("0xEF458A3263d2a8C7f3ed9e949aE2F9B345D08b1F"),
   },
   [getAddress("0x2ced96e759ab481210d41c567eee5c42edb59a1d")]: {
     name: "MUSD/USDC",
@@ -62,6 +70,10 @@ export const MEZO_GAUGES: Record<Address, MezoGaugeIdentity> = {
     distributionEpochOffset: 1,
     geckoPoolId:
       "0xa9bf5691768ef950a99efd74d722961ff2df3fec08d77ec784432c619bd283a0",
+    poolId:
+      "0xa9bf5691768ef950a99efd74d722961ff2df3fec08d77ec784432c619bd283a0",
+    merklUrl: "https://app.merkl.xyz/opportunities/17628316464603186847",
+    merklOpportunityId: "17628316464603186847",
   },
   [getAddress("0xc39a294024dca62f579c49d7c83a6c831d4976d0")]: {
     name: "MUSD/USDC/USDT",
@@ -74,6 +86,9 @@ export const MEZO_GAUGES: Record<Address, MezoGaugeIdentity> = {
     action: "Incentivize liquidity providers on this pool gauge through Merkl",
     distributionEpochOffset: 1,
     geckoPoolId: "0xb5571e76693ba60110b5811dd650ffefce1c955f",
+    poolAddress: getAddress("0xb5571e76693ba60110b5811dd650ffefce1c955f"),
+    merklUrl: "https://app.merkl.xyz/opportunities/3555713731488585898",
+    merklOpportunityId: "3555713731488585898",
   },
 }
 

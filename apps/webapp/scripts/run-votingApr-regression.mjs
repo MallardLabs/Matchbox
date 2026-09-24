@@ -39,6 +39,13 @@ const sourceFiles = [
   "src/types/mezoActivity.ts",
   "src/config/mezoRpcWrite.ts",
   "src/config/mezoRpcWrite.test.ts",
+  "src/lib/mezoGauges/constants.ts",
+  "src/lib/mezoGauges/epochs.ts",
+  "src/lib/mezoGauges/epochs.test.ts",
+  "src/lib/mezoGauges/participation.ts",
+  "src/lib/mezoGauges/participation.test.ts",
+  "src/lib/mezoGauges/schema.ts",
+  "src/lib/mezoGauges/snapshot.test.ts",
 ]
 
 const testEntries = [
@@ -53,6 +60,9 @@ const testEntries = [
   "lib/remoteMezoPools.test.js",
   "lib/academy/simulate.test.js",
   "config/mezoRpcWrite.test.js",
+  "lib/mezoGauges/epochs.test.js",
+  "lib/mezoGauges/participation.test.js",
+  "lib/mezoGauges/snapshot.test.js",
 ]
 
 rmSync(outDir, { recursive: true, force: true })
