@@ -53,8 +53,10 @@ console.log(
 )
 console.log("gauge split:")
 for (const g of s.gauges) {
-  console.log(
-    `  ${g.name.padEnd(18)} ${e18(g.weight).padStart(16)} veMEZO  ${pct(g.shareBps).padStart(7)}  ${g.isAlive ? "alive" : "dead"}`,
-  )
+  const detail =
+    g.status === "error" || g.weight === null
+      ? "read error"
+      : `${e18(g.weight).padStart(16)} veMEZO  ${pct(g.shareBps).padStart(7)}  ${g.isAlive ? "alive" : "dead"}`
+  console.log(`  ${g.name.padEnd(18)} ${detail}`)
 }
 console.log(`reconciled:        ${s.reconciled} (diff ${s.reconciliationDiff})`)

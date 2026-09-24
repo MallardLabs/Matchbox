@@ -25,14 +25,14 @@ function tokenSymbol(address: string): string {
 function GaugeRow({
   gauge,
   lastEpochAmount,
-  bribeRewards,
+  bribe,
 }: {
   gauge: MezoGaugesSnapshot["gauges"][number]
   lastEpochAmount: bigint | null
-  bribeRewards: { token: string; amount: string }[] | undefined
+  bribe: MezoGaugesEmissions["currentEpochBribes"][number] | undefined
 }): JSX.Element {
   const config = MEZO_GAUGES[gauge.address as keyof typeof MEZO_GAUGES]
-  const incentives = (bribeRewards ?? []).filter((r) => BigInt(r.amount) > 0n)
+  const incentives = (bribe?.rewards ?? []).filter((r) => BigInt(r.amount) > 0n)
   return (
     <tr className="border-b border-[var(--border)] last:border-0">
       <th scope="row" className="py-2 pr-4 text-left font-normal">
@@ -86,31 +86,42 @@ function GaugeRow({
         </span>
       </th>
       <td className="py-2 pr-4">
-        <Tag closeable={false} color={gauge.isAlive ? "green" : "red"}>
-          {gauge.isAlive ? "alive" : "killed"}
-        </Tag>
+        {gauge.status === "error" ? (
+          <Tag closeable={false} color="yellow">
+            error
+          </Tag>
+        ) : (
+          <Tag closeable={false} color={gauge.isAlive ? "green" : "red"}>
+            {gauge.isAlive ? "alive" : "killed"}
+          </Tag>
+        )}
       </td>
       <td className="py-2 pr-4 font-mono tabular-nums">
-        {formatCompactNumber(BigInt(gauge.weight))}
+        {gauge.weight === null
+          ? "—"
+          : formatCompactNumber(BigInt(gauge.weight))}
       </td>
       <td className="py-2 pr-4 font-mono tabular-nums">
-        {formatBps(BigInt(gauge.shareBps))}
+        {gauge.shareBps === null ? "—" : formatBps(BigInt(gauge.shareBps))}
       </td>
       <td className="py-2 pr-4 font-mono tabular-nums">
         {lastEpochAmount === null ? "—" : formatCompactNumber(lastEpochAmount)}
       </td>
       <td className="py-2 font-mono tabular-nums">
-        {incentives.length === 0
-          ? "—"
-          : incentives.map((r) => (
-              <span
-                key={r.token}
-                className="mr-2 inline-flex items-center gap-1"
-              >
-                <TokenIcon symbol={tokenSymbol(r.token)} size={14} />
-                {formatCompactNumber(BigInt(r.amount))}
-              </span>
-            ))}
+        {bribe?.status === "error" ? (
+          <Tag closeable={false} color="yellow">
+            error
+          </Tag>
+        ) : incentives.length === 0 ? (
+          "—"
+        ) : (
+          incentives.map((r) => (
+            <span key={r.token} className="mr-2 inline-flex items-center gap-1">
+              <TokenIcon symbol={tokenSymbol(r.token)} size={14} />
+              {formatCompactNumber(BigInt(r.amount))}
+            </span>
+          ))
+        )}
       </td>
     </tr>
   )
@@ -155,7 +166,7 @@ export function GaugesTable({
   const bribesByGauge = new Map(
     (emissions?.currentEpochBribes ?? []).map((b) => [
       b.gauge.toLowerCase(),
-      b.rewards,
+      b,
     ]),
   )
 
@@ -211,7 +222,7 @@ export function GaugesTable({
                   lastEpochAmount={
                     lastEpochAmounts.get(g.address.toLowerCase()) ?? null
                   }
-                  bribeRewards={bribesByGauge.get(g.address.toLowerCase())}
+                  bribe={bribesByGauge.get(g.address.toLowerCase())}
                 />
               ))}
             </tbody>
@@ -236,7 +247,7 @@ export function GaugesTable({
                       lastEpochAmount={
                         lastEpochAmounts.get(g.address.toLowerCase()) ?? null
                       }
-                      bribeRewards={bribesByGauge.get(g.address.toLowerCase())}
+                      bribe={bribesByGauge.get(g.address.toLowerCase())}
                     />
                   ))}
                 </tbody>

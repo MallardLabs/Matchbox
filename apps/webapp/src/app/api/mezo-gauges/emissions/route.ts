@@ -73,58 +73,65 @@ async function handler(request: Request): Promise<Response> {
     const voter = CONTRACTS.mainnet.thirdPartyVoter
     const currentBribes = await Promise.all(
       gaugeAddresses.map(async (gauge) => {
-        const bribe = await client
-          .readContract({
+        try {
+          const bribe = await client.readContract({
             address: voter,
             abi: THIRD_PARTY_VOTER_ABI,
             functionName: "gaugeToBribe",
             args: [gauge],
           })
-          .catch(() => zeroAddress)
-        if (bribe === zeroAddress) {
-          return {
-            gauge,
-            bribe,
-            rewards: [] as { token: string; amount: string }[],
+          if (bribe === zeroAddress) {
+            return {
+              gauge,
+              status: "ok" as const,
+              bribe,
+              rewards: [] as { token: string; amount: string }[],
+            }
           }
-        }
-        const rewardsLength = await client
-          .readContract({
+          const rewardsLength = await client.readContract({
             address: bribe,
             abi: BRIBE_ABI,
             functionName: "rewardsListLength",
           })
-          .catch(() => 0n)
-        const tokens = await Promise.all(
-          Array.from({ length: Number(rewardsLength) }, (_, i) =>
-            client
-              .readContract({
+          const tokens = await Promise.all(
+            Array.from({ length: Number(rewardsLength) }, (_, i) =>
+              client.readContract({
                 address: bribe,
                 abi: BRIBE_ABI,
                 functionName: "rewards",
                 args: [BigInt(i)],
-              })
-              .catch(() => zeroAddress),
-          ),
-        )
-        const rewards = await Promise.all(
-          tokens
-            .filter((t) => t !== zeroAddress)
-            .map(async (token) => ({
-              token,
-              amount: (
-                await client
-                  .readContract({
+              }),
+            ),
+          )
+          const rewards = await Promise.all(
+            tokens
+              .filter((t) => t !== zeroAddress)
+              .map(async (token) => ({
+                token,
+                amount: (
+                  await client.readContract({
                     address: bribe,
                     abi: BRIBE_ABI,
                     functionName: "tokenRewardsPerEpoch",
                     args: [token, BigInt(currentEpochStart)],
                   })
-                  .catch(() => 0n)
-              ).toString(),
-            })),
-        )
-        return { gauge, bribe, rewards }
+                ).toString(),
+              })),
+          )
+          return { gauge, status: "ok" as const, bribe, rewards }
+        } catch (error) {
+          logger.warn({
+            message: "Bribe read failed for gauge",
+            gauge,
+            error: error instanceof Error ? error.message : "unknown",
+          })
+          return {
+            gauge,
+            status: "error" as const,
+            bribe: zeroAddress,
+            rewards: [] as { token: string; amount: string }[],
+          }
+        }
       }),
     )
 

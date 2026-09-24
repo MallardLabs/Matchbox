@@ -11,7 +11,12 @@ export function GaugeSplitBar({
 }: {
   gauges: MezoGaugesSnapshot["gauges"]
 }): JSX.Element {
-  const sorted = [...gauges].sort((a, b) =>
+  type Gauge = MezoGaugesSnapshot["gauges"][number]
+  const readable = gauges.filter(
+    (g): g is Gauge & { weight: string; shareBps: string } =>
+      g.status === "ok" && g.weight !== null && g.shareBps !== null,
+  )
+  const sorted = [...readable].sort((a, b) =>
     BigInt(a.weight) === BigInt(b.weight)
       ? 0
       : BigInt(a.weight) > BigInt(b.weight)

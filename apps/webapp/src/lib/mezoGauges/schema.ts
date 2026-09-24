@@ -6,9 +6,14 @@ const gaugeSnapshotSchema = z.object({
   protocol: z.string(),
   /** Whether the gauge is in the MEZO_GAUGES registry. */
   listed: z.boolean(),
-  isAlive: z.boolean(),
-  weight: z.string(),
-  shareBps: z.string(),
+  /**
+   * "error" when the on-chain read for this gauge failed — isAlive/weight/
+   * shareBps are then null rather than silently reported as killed/0.
+   */
+  status: z.enum(["ok", "error"]),
+  isAlive: z.boolean().nullable(),
+  weight: z.string().nullable(),
+  shareBps: z.string().nullable(),
 })
 
 export const mezoGaugesSnapshotSchema = z.object({
@@ -78,6 +83,8 @@ export const mezoGaugesEmissionsSchema = z.object({
   currentEpochBribes: z.array(
     z.object({
       gauge: z.string(),
+      /** "error" when the bribe reads failed — rewards is then empty. */
+      status: z.enum(["ok", "error"]),
       bribe: z.string(),
       rewards: z.array(z.object({ token: z.string(), amount: z.string() })),
     }),

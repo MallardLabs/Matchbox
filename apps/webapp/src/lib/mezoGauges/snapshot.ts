@@ -57,33 +57,43 @@ export async function buildParticipationSnapshot(options: {
       }),
       Promise.all(
         gaugeAddresses.map(async (gauge) => {
-          const [weight, isAlive] = await Promise.all([
-            client
-              .readContract({
+          try {
+            const [weight, isAlive] = await Promise.all([
+              client.readContract({
                 address: voter,
                 abi: THIRD_PARTY_VOTER_ABI,
                 functionName: "weights",
                 args: [gauge],
                 ...blockOpts,
-              })
-              .catch(() => 0n),
-            client
-              .readContract({
+              }),
+              client.readContract({
                 address: voter,
                 abi: THIRD_PARTY_VOTER_ABI,
                 functionName: "isAlive",
                 args: [gauge],
                 ...blockOpts,
-              })
-              .catch(() => false),
-          ])
-          return { gauge, weight, isAlive }
+              }),
+            ])
+            return { gauge, weight, isAlive, status: "ok" as const }
+          } catch {
+            return { gauge, status: "error" as const }
+          }
         }),
       ),
       fetchActiveThirdPartyVotes({
         blockNumber: block.number,
       }),
     ])
+
+  // The subgraph is the only source for per-wallet votes. If it goes stale
+  // (e.g. vote handlers removed upstream) it can return zero rows while the
+  // voter contract still holds weight — refuse rather than render an empty
+  // dashboard that looks real.
+  if (votes.length === 0 && totalWeight > 0n) {
+    throw new Error(
+      "Subgraph returned no active votes while on-chain totalWeight is nonzero",
+    )
+  }
 
   // Gauges that received votes but aren't in the registry (e.g. killed
   // community gauges) still hold weight; read them on-chain too.
@@ -98,27 +108,27 @@ export async function buildParticipationSnapshot(options: {
   const unlistedReads = await Promise.all(
     unlistedGauges.map(async (gauge) => {
       const address = getAddress(gauge)
-      const [weight, isAlive] = await Promise.all([
-        client
-          .readContract({
+      try {
+        const [weight, isAlive] = await Promise.all([
+          client.readContract({
             address: voter,
             abi: THIRD_PARTY_VOTER_ABI,
             functionName: "weights",
             args: [address],
             ...blockOpts,
-          })
-          .catch(() => 0n),
-        client
-          .readContract({
+          }),
+          client.readContract({
             address: voter,
             abi: THIRD_PARTY_VOTER_ABI,
             functionName: "isAlive",
             args: [address],
             ...blockOpts,
-          })
-          .catch(() => false),
-      ])
-      return { gauge: address, weight, isAlive }
+          }),
+        ])
+        return { gauge: address, weight, isAlive, status: "ok" as const }
+      } catch {
+        return { gauge: address, status: "error" as const }
+      }
     }),
   )
 
@@ -164,23 +174,31 @@ export async function buildParticipationSnapshot(options: {
       gauges: w.gauges,
     })),
     gauges: [
-      ...gaugeReads.map(({ gauge, weight, isAlive }) => ({
-        address: gauge,
-        name: MEZO_GAUGES[gauge]?.name ?? gauge,
-        protocol: MEZO_GAUGES[gauge]?.protocol ?? "unknown",
+      ...gaugeReads.map((read) => ({
+        address: read.gauge,
+        name: MEZO_GAUGES[read.gauge]?.name ?? read.gauge,
+        protocol: MEZO_GAUGES[read.gauge]?.protocol ?? "unknown",
         listed: true,
-        isAlive,
-        weight: weight.toString(),
-        shareBps: shareBps(weight, totalWeight).toString(),
+        status: read.status,
+        isAlive: read.status === "ok" ? read.isAlive : null,
+        weight: read.status === "ok" ? read.weight.toString() : null,
+        shareBps:
+          read.status === "ok"
+            ? shareBps(read.weight, totalWeight).toString()
+            : null,
       })),
-      ...unlistedReads.map(({ gauge, weight, isAlive }) => ({
-        address: gauge,
-        name: `${gauge.slice(0, 6)}…${gauge.slice(-4)} (unlisted)`,
+      ...unlistedReads.map((read) => ({
+        address: read.gauge,
+        name: `${read.gauge.slice(0, 6)}…${read.gauge.slice(-4)} (unlisted)`,
         protocol: "unknown",
         listed: false,
-        isAlive,
-        weight: weight.toString(),
-        shareBps: shareBps(weight, totalWeight).toString(),
+        status: read.status,
+        isAlive: read.status === "ok" ? read.isAlive : null,
+        weight: read.status === "ok" ? read.weight.toString() : null,
+        shareBps:
+          read.status === "ok"
+            ? shareBps(read.weight, totalWeight).toString()
+            : null,
       })),
     ],
     subgraphTotalWeight: aggregated.totalWeight.toString(),

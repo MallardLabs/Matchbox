@@ -34,6 +34,7 @@ const valid = {
       name: "USDC/MUSD",
       protocol: "Aerodrome",
       listed: true,
+      status: "ok",
       isAlive: true,
       weight: "2000000000000000000000",
       shareBps: "8214",
