@@ -95,12 +95,34 @@ export async function buildParticipationSnapshot(options: {
     )
   }
 
+  const votingTokenIds = [
+    ...new Set(
+      votes
+        .filter((vote) => vote.currentWeight > 0n)
+        .map((vote) => vote.tokenId.toString()),
+    ),
+  ]
   const owners = await fetchVeMezoOwners({
-    tokenIds: votes
-      .filter((vote) => vote.currentWeight > 0n)
-      .map((vote) => vote.tokenId),
+    tokenIds: votingTokenIds.map(BigInt),
     blockNumber: block.number,
   })
+  // LockPosition is not complete for older NFTs in the deployed subgraph.
+  // Resolve missing owners from the escrow at the same block instead of
+  // falling back to Vote.owner, which records the vote actor.
+  await Promise.all(
+    votingTokenIds
+      .filter((id) => !owners.has(id))
+      .map(async (id) => {
+        const owner = await client.readContract({
+          address: veMezo,
+          abi: VOTING_ESCROW_ABI,
+          functionName: "ownerOf",
+          args: [BigInt(id)],
+          ...blockOpts,
+        })
+        owners.set(id, owner)
+      }),
+  )
 
   // Gauges that received votes but aren't in the registry (e.g. killed
   // community gauges) still hold weight; read them on-chain too.
