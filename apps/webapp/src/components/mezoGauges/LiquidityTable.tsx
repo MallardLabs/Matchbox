@@ -12,10 +12,12 @@ const SOURCE_LABELS: Record<string, string> = {
   "onchain-composition": "on-chain",
 }
 
+// Keys are lowercase gauge addresses; lookups must lowercase too — the
+// MEZO_GAUGES registry keys are EIP-55 checksummed.
 const BASELINE_BY_GAUGE: Record<string, string> = {
-  "0xC7e81dd77A4624F0DD14A8bB97Bc721b0CEE6e26":
+  "0xc7e81dd77a4624f0dd14a8bb97bc721b0cee6e26":
     BASELINE.liquidityUsd.aerodromeUsdcMusd,
-  "0x4440A9b2954cB98416C0122e2ea996C46555F4B6":
+  "0x4440a9b2954cb98416c0122e2ea996c46555f4b6":
     BASELINE.liquidityUsd.aerodromeMezoMusd,
   "0x2ced96e759ab481210d41c567eee5c42edb59a1d": BASELINE.liquidityUsd.uniswapV4,
   "0xc39a294024dca62f579c49d7c83a6c831d4976d0": BASELINE.liquidityUsd.curve,
@@ -204,7 +206,10 @@ export function LiquidityTable({
                         {formatCompactUsd(venue.volume7dUsd)}
                       </td>
                       <td className="py-2 pr-4 font-mono tabular-nums">
-                        {usdDelta(venue.tvlUsd, BASELINE_BY_GAUGE[gauge])}
+                        {usdDelta(
+                          venue.tvlUsd,
+                          BASELINE_BY_GAUGE[gauge.toLowerCase()],
+                        )}
                       </td>
                       <td className="py-2 text-2xs text-[var(--content-tertiary)]">
                         {SOURCE_LABELS[venue.source] ?? venue.source}

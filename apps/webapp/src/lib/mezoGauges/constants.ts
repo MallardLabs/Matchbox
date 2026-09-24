@@ -38,7 +38,7 @@ export const BASELINE = {
   wallets: 6,
   liquidityUsd: {
     curve: "646651",
-    uniswapV4: "57848",
+    uniswapV4: "94996",
     aerodromeUsdcMusd: "1109735",
     aerodromeMezoMusd: "13099",
   },
