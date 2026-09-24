@@ -24,6 +24,15 @@ const CHUNK = 10_000n
 const CONCURRENCY = 5
 const SCAN_FROM_TS = 1_786_022_400 // 6 Aug 2026 — verified transfer-free floor
 const BUCKET = 50n
+
+// Checkpoint timestamps: the 7 Sep baseline plus every epoch vote-window
+// close (epochs start Thursday 00:00 UTC, windows close Wed 23:00 UTC).
+// Historical `at=` queries resume from the nearest checkpoint instead of
+// rescanning from SCAN_FROM_TS, which exceeds the function timeout.
+const WEEK = 604_800
+const LAUNCH_EPOCH_START = 1_788_393_600
+const CLOSE_OFFSET = WEEK - 3_600
+const BASELINE_TS = 1_788_787_200
 const OUT = join(
   dirname(fileURLToPath(import.meta.url)),
   "../src/lib/mezoGauges/merkl-seed.json",
@@ -56,24 +65,46 @@ async function getLogs(client, from, to, retries = 5) {
 
 const topicAddr = (t) => (t ? `0x${t.slice(26).toLowerCase()}` : "")
 
-async function main() {
-  const client = createPublicClient({ transport: http(RPC_URL) })
+async function findBlockAtOrBefore(client, timestamp) {
   const latest = await client.getBlockNumber()
-  const toBlock = latest - (latest % BUCKET)
-
-  // binary search: last block at or before the scan floor timestamp
-  const latestBlock = await client.getBlock({ blockTag: "latest" })
   let lo = 1n
   let hi = latest
   while (lo < hi) {
     const mid = (lo + hi) / 2n
     const b = await client.getBlock({ blockNumber: mid })
-    if (Number(b.timestamp) <= SCAN_FROM_TS) lo = mid + 1n
+    if (Number(b.timestamp) <= timestamp) lo = mid + 1n
     else hi = mid
     await sleep(150)
   }
-  const fromBlock = lo - 1n
+  return lo - 1n
+}
+
+async function main() {
+  const client = createPublicClient({ transport: http(RPC_URL) })
+  const latest = await client.getBlockNumber()
+  const toBlock = latest - (latest % BUCKET)
+
+  const fromBlock = await findBlockAtOrBefore(client, SCAN_FROM_TS)
   console.log(`scanning ${REWARD_TOKEN} transfers ${fromBlock} → ${toBlock}`)
+
+  // Checkpoint timestamps that have already passed.
+  const now = Math.floor(Date.now() / 1000)
+  const checkpointTs = [BASELINE_TS]
+  for (
+    let epochStart = LAUNCH_EPOCH_START;
+    epochStart + CLOSE_OFFSET <= now;
+    epochStart += WEEK
+  ) {
+    checkpointTs.push(epochStart + CLOSE_OFFSET)
+  }
+  const checkpoints = []
+  for (const ts of checkpointTs) {
+    const block = await findBlockAtOrBefore(client, ts)
+    if (block > fromBlock && block < toBlock) {
+      checkpoints.push({ timestamp: ts, block })
+    }
+  }
+  console.log(`checkpoints: ${checkpoints.map((c) => c.block).join(", ")}`)
 
   const ranges = []
   for (let from = fromBlock; from <= toBlock; from += CHUNK) {
@@ -83,40 +114,72 @@ async function main() {
     })
   }
 
-  let distributed = 0n
-  let claimed = 0n
-  const claimants = new Set()
+  // Collect every transfer log once, then fold into cumulative totals at
+  // each checkpoint block and at toBlock.
+  const logs = []
   for (let i = 0; i < ranges.length; i += CONCURRENCY) {
     const batches = await Promise.all(
       ranges.slice(i, i + CONCURRENCY).map((r) => getLogs(client, r.from, r.to)),
     )
-    for (const logs of batches) {
-      for (const log of logs) {
-        const sender = topicAddr(log.topics[1])
-        const recipient = topicAddr(log.topics[2])
-        const amount = BigInt(log.data)
-        if (recipient === DISTRIBUTOR) distributed += amount
-        if (sender === DISTRIBUTOR) {
-          claimed += amount
-          if (recipient !== ZERO) claimants.add(recipient)
-        }
-      }
-    }
+    for (const batch of batches) logs.push(...batch)
     process.stdout.write(
       `\r${Math.min(i + CONCURRENCY, ranges.length)}/${ranges.length} chunks`,
     )
   }
   console.log()
 
+  logs.sort((a, b) =>
+    BigInt(a.blockNumber) < BigInt(b.blockNumber)
+      ? -1
+      : BigInt(a.blockNumber) > BigInt(b.blockNumber)
+        ? 1
+        : 0,
+  )
+
+  const state = () => ({ distributed: 0n, claimed: 0n, claimants: new Set() })
+  const apply = (s, log) => {
+    const sender = topicAddr(log.topics[1])
+    const recipient = topicAddr(log.topics[2])
+    const amount = BigInt(log.data)
+    if (recipient === DISTRIBUTOR) s.distributed += amount
+    if (sender === DISTRIBUTOR) {
+      s.claimed += amount
+      if (recipient !== ZERO) s.claimants.add(recipient)
+    }
+  }
+  const emit = (s, block, timestamp) => ({
+    block: block.toString(),
+    ...(timestamp !== undefined ? { timestamp } : {}),
+    distributed: s.distributed.toString(),
+    claimed: s.claimed.toString(),
+    claimants: [...s.claimants],
+  })
+
+  const running = state()
+  const emitted = []
+  let cursor = 0
+  for (const cp of checkpoints) {
+    while (
+      cursor < logs.length &&
+      BigInt(logs[cursor].blockNumber) <= cp.block
+    ) {
+      apply(running, logs[cursor])
+      cursor += 1
+    }
+    emitted.push(emit(running, cp.block, cp.timestamp))
+  }
+  while (cursor < logs.length) {
+    apply(running, logs[cursor])
+    cursor += 1
+  }
+
   writeFileSync(
     OUT,
     `${JSON.stringify(
       {
-        block: toBlock.toString(),
+        ...emit(running, toBlock),
         generatedAt: new Date().toISOString(),
-        distributed: distributed.toString(),
-        claimed: claimed.toString(),
-        claimants: [...claimants],
+        checkpoints: emitted,
       },
       null,
       2,

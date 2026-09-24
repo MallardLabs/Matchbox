@@ -107,15 +107,29 @@ type ScanState = {
  */
 import merklSeed from "./merkl-seed.json"
 
+const toScanState = (raw: {
+  block: string
+  distributed: string
+  claimed: string
+  claimants: string[]
+}): ScanState => ({
+  block: BigInt(raw.block),
+  distributed: BigInt(raw.distributed),
+  claimed: BigInt(raw.claimed),
+  claimants: new Set(raw.claimants),
+})
+
 const SEED_STATE: ScanState | undefined =
-  typeof merklSeed.block === "string"
-    ? {
-        block: BigInt(merklSeed.block),
-        distributed: BigInt(merklSeed.distributed),
-        claimed: BigInt(merklSeed.claimed),
-        claimants: new Set(merklSeed.claimants),
-      }
-    : undefined
+  typeof merklSeed.block === "string" ? toScanState(merklSeed) : undefined
+
+/**
+ * Cumulative states at the baseline and each past epoch close, committed
+ * alongside the seed. `at=` queries resume from the newest checkpoint at or
+ * before the target block — a bounded delta scan that fits the timeout.
+ */
+const CHECKPOINT_STATES: ScanState[] = (merklSeed.checkpoints ?? [])
+  .map(toScanState)
+  .sort((a, b) => (a.block < b.block ? -1 : a.block > b.block ? 1 : 0))
 
 /**
  * Cumulative running totals for "latest" scans. The transfer log is
@@ -316,16 +330,21 @@ async function fetchMerklClaimsUncached(
 
   try {
     // Incremental: resume from the best available base — the in-process
-    // scan state for "latest" requests, or the committed seed for anything
-    // newer than it (covers `at=` queries and cold serverless instances).
+    // scan state for "latest" requests, otherwise the newest committed
+    // checkpoint (seed or per-epoch-close) at or before the target block.
+    const committedBase = [
+      ...CHECKPOINT_STATES,
+      ...(SEED_STATE !== undefined ? [SEED_STATE] : []),
+    ]
+      .filter((c) => c.block <= toBlock)
+      .sort((a, b) => (a.block < b.block ? -1 : a.block > b.block ? 1 : 0))
+      .at(-1)
     const resume: ScanState | undefined =
       requestedToBlock === undefined &&
       latestScanState !== undefined &&
-      latestScanState.block < toBlock
+      latestScanState.block <= toBlock
         ? latestScanState
-        : SEED_STATE !== undefined && SEED_STATE.block < toBlock
-          ? SEED_STATE
-          : undefined
+        : committedBase
     const fromBlock =
       resume !== undefined
         ? resume.block + 1n
