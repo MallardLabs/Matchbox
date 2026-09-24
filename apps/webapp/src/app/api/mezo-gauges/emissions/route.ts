@@ -17,10 +17,7 @@ import {
   CONTRACTS,
   THIRD_PARTY_VOTER_ABI,
 } from "@repo/shared/contracts"
-import { createLogger } from "@repo/shared/logger"
 import { getAddress, zeroAddress } from "viem"
-
-const logger = createLogger("mezo-gauges-emissions-api")
 
 const LISTED_BY_LOWER = new Map(
   Object.entries(MEZO_GAUGES).map(([address, config]) => [
@@ -122,11 +119,7 @@ async function handler(request: Request): Promise<Response> {
           )
           return { gauge, status: "ok" as const, bribe, rewards }
         } catch (error) {
-          logger.warn({
-            message: "Bribe read failed for gauge",
-            gauge,
-            error: error instanceof Error ? error.message : "unknown",
-          })
+          console.warn("Bribe read failed for gauge", gauge, error)
           return {
             gauge,
             status: "error" as const,
@@ -167,10 +160,7 @@ async function handler(request: Request): Promise<Response> {
       },
     )
   } catch (error) {
-    logger.error({
-      message: "Unable to build mezo gauges emissions",
-      error: error instanceof Error ? error.message : "unknown",
-    })
+    console.error("Unable to build mezo gauges emissions", error)
     return Response.json(
       { error: "Unable to build emissions" },
       { status: 502, headers: MEZO_GAUGES_CORS_HEADERS },

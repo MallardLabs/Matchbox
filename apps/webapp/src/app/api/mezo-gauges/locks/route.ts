@@ -9,9 +9,6 @@ import { WEEK, epochStartFor } from "@/lib/mezoGauges/epochs"
 import { MEZO_GAUGES_CORS_HEADERS } from "@/lib/mezoGauges/rpc"
 import { mezoGaugesLocksSchema } from "@/lib/mezoGauges/schema"
 import { fetchVeMezoLockCreations } from "@/lib/mezoGauges/subgraph"
-import { createLogger } from "@repo/shared/logger"
-
-const logger = createLogger("mezo-gauges-locks-api")
 
 async function handler(request: Request): Promise<Response> {
   if (request.method === "OPTIONS") {
@@ -69,10 +66,7 @@ async function handler(request: Request): Promise<Response> {
       },
     )
   } catch (error) {
-    logger.error({
-      message: "Unable to build mezo gauges locks",
-      error: error instanceof Error ? error.message : "unknown",
-    })
+    console.error("Unable to build mezo gauges locks", error)
     return Response.json(
       { error: "Unable to build locks" },
       { status: 502, headers: MEZO_GAUGES_CORS_HEADERS },
