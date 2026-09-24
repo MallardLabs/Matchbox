@@ -24,6 +24,10 @@ export function GaugeSplitBar({
         : 1,
   )
   const weighted = sorted.map((g, i) => ({ gauge: g, color: gaugeColor(i) }))
+  const unreadablePct = Math.max(
+    0,
+    100 - readable.reduce((s, g) => s + Number(g.shareBps) / 100, 0),
+  )
   return (
     <span className="block min-w-[180px]">
       <span
@@ -41,6 +45,16 @@ export function GaugeSplitBar({
             />
           )
         })}
+        {unreadablePct > 0 && (
+          <span
+            title="Share not readable"
+            style={{
+              width: `${unreadablePct}%`,
+              backgroundColor: "var(--content-tertiary)",
+              opacity: 0.4,
+            }}
+          />
+        )}
       </span>
       <ul className="m-0 mt-1.5 flex list-none flex-wrap gap-x-2 gap-y-0.5 p-0">
         {weighted.map(({ gauge: g, color }) => {
@@ -60,6 +74,19 @@ export function GaugeSplitBar({
             </li>
           )
         })}
+        {unreadablePct > 0 && (
+          <li className="flex items-center gap-1 whitespace-nowrap text-2xs text-[var(--content-tertiary)]">
+            <span
+              aria-hidden="true"
+              className="inline-block h-2 w-2 rounded-full"
+              style={{
+                backgroundColor: "var(--content-tertiary)",
+                opacity: 0.4,
+              }}
+            />
+            unreadable {unreadablePct.toFixed(2)}%
+          </li>
+        )}
       </ul>
     </span>
   )

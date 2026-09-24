@@ -65,16 +65,27 @@ async function getLogs(client, from, to, retries = 5) {
 
 const topicAddr = (t) => (t ? `0x${t.slice(26).toLowerCase()}` : "")
 
+// Checkpoint searches probe many of the same blocks; memoize timestamps so
+// each getBlock happens once across all calls.
+const blockTsCache = new Map()
+async function blockTimestamp(client, blockNumber) {
+  const cached = blockTsCache.get(blockNumber)
+  if (cached !== undefined) return cached
+  const b = await client.getBlock({ blockNumber })
+  const ts = Number(b.timestamp)
+  blockTsCache.set(blockNumber, ts)
+  await sleep(100)
+  return ts
+}
+
 async function findBlockAtOrBefore(client, timestamp) {
   const latest = await client.getBlockNumber()
   let lo = 1n
   let hi = latest
   while (lo < hi) {
     const mid = (lo + hi) / 2n
-    const b = await client.getBlock({ blockNumber: mid })
-    if (Number(b.timestamp) <= timestamp) lo = mid + 1n
+    if ((await blockTimestamp(client, mid)) <= timestamp) lo = mid + 1n
     else hi = mid
-    await sleep(150)
   }
   return lo - 1n
 }

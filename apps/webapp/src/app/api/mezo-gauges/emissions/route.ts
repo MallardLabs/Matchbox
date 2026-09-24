@@ -63,6 +63,8 @@ async function handler(request: Request): Promise<Response> {
     const byEpoch = new Map<number, Map<string, bigint>>()
     for (const event of events) {
       const voteEpochStart = rewardedVoteEpochFor(event.timestamp)
+      // Distributions paying for pre-launch epochs aren't part of the cohort.
+      if (voteEpochStart < LAUNCH_EPOCH_START) continue
       const gauge = event.gauge.toLowerCase()
       const epochMap = byEpoch.get(voteEpochStart) ?? new Map()
       epochMap.set(gauge, (epochMap.get(gauge) ?? 0n) + event.amount)
