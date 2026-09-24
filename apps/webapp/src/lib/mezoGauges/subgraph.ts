@@ -125,9 +125,6 @@ export async function fetchVeMezoOwners(options: {
         owners.set(row.id.slice(escrow.length + 1), row.owner)
       }
     }
-    if (batch.some((id) => !owners.has(id))) {
-      throw new Error("Subgraph did not return every voting NFT owner")
-    }
   }
   return owners
 }
