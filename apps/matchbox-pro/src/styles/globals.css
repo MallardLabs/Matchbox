@@ -1,0 +1,108 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Tokens mirror docs/matchbox-pro/mboxpro3.pen (journey screens J01–J10). */
+:root {
+  color-scheme: light;
+  --canvas: #ffffff;
+  --surface: #ffffff;
+  --raised: #fafaf7;
+  --inset: #f7f7f4;
+  --inset-2: #f1f1ed;
+  --ink: #1a1a18;
+  --ink-2: #3a3a36;
+  --secondary: #6e6e69;
+  --muted: #8d8d88;
+  --faint: #b0b0aa;
+  --line: #e8e8e4;
+  --line-2: #d9d7d1;
+  --accent: #f7931a;
+  --accent-ink: #b86524;
+  --accent-soft: #fff6ec;
+  --accent-soft-2: #ffe4c4;
+  --accent-line: #e8d2b3;
+  --on-accent: #ffffff;
+  --mezo: #e84d71;
+  --mezo-brand: #ff004d;
+  --expired: #c4c2bc;
+  --pos: #2f9d5c;
+  --warn: #b86524;
+  --neg: #c23b3b;
+}
+
+.dark {
+  color-scheme: dark;
+  --canvas: #141210;
+  --surface: #1b1917;
+  --raised: #232019;
+  --inset: #1f1c19;
+  --inset-2: #29251f;
+  --ink: #f1ede6;
+  --ink-2: #d6d0c6;
+  --secondary: #a69f94;
+  --muted: #857d71;
+  --faint: #5f584e;
+  --line: #2b2722;
+  --line-2: #3c362e;
+  --accent: #f7931a;
+  --accent-ink: #ffa94d;
+  --accent-soft: #f7931a14;
+  --accent-soft-2: #f7931a2e;
+  --accent-line: #5a3d1c;
+  --on-accent: #1a140c;
+  --mezo: #e84d71;
+  --mezo-brand: #ff004d;
+  --expired: #4a453e;
+  --pos: #5fbe8e;
+  --warn: #e3ae4a;
+  --neg: #e2604e;
+}
+
+html,
+body,
+#root {
+  min-height: 100dvh;
+}
+
+body {
+  margin: 0;
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: "Figtree Variable", Figtree, ui-sans-serif, system-ui, sans-serif;
+  font-feature-settings: "tnum" 1;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--accent) 28%, transparent);
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes sheet-in {
+  from {
+    transform: translateY(24px);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
