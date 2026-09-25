@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#FFFFFF" />
+    <link rel="icon" type="image/png" href="/matchbox-icon-light.png" />
+    <link rel="preconnect" href="https://rpc-internal.mezo.org" crossorigin />
+    <title>Matchbox Pro Preview</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <!-- Runs before any module chunk so deps that read process/global at import time work. -->
+    <script>
+      globalThis.global = globalThis
+      globalThis.process = globalThis.process || {
+        env: {},
+        version: "v22.0.0",
+        browser: true,
+        nextTick: function (fn) {
+          queueMicrotask(fn)
+        },
+        pid: 0,
+        noDeprecation: true,
+      }
+    </script>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

@@ -1,41 +1,61 @@
 import type { Config } from "tailwindcss"
 
-const config: Config = {
-  content: [
-    "./src/pages/**/*.{js,ts,jsx,tsx,mdx}",
-    "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
-  ],
+const tokens = [
+  "canvas",
+  "surface",
+  "raised",
+  "inset",
+  "inset-2",
+  "ink",
+  "ink-2",
+  "secondary",
+  "muted",
+  "faint",
+  "line",
+  "line-2",
+  "accent",
+  "accent-ink",
+  "accent-soft",
+  "accent-soft-2",
+  "accent-line",
+  "on-accent",
+  "mezo",
+  "mezo-brand",
+  "expired",
+  "pos",
+  "warn",
+  "neg",
+] as const
+
+export default {
+  content: ["./index.html", "./src/**/*.{ts,tsx}"],
   darkMode: "class",
   theme: {
     extend: {
-      colors: {
-        canvas: "var(--canvas)",
-        panel: "var(--panel)",
-        raised: "var(--raised)",
-        subtle: "var(--subtle)",
-        ink: "var(--ink)",
-        secondary: "var(--secondary)",
-        muted: "var(--muted)",
-        line: "var(--line)",
-        accent: {
-          DEFAULT: "#f7931a",
-          strong: "#e9800e",
-          soft: "var(--accent-soft)",
-        },
-        positive: "var(--positive)",
-        "positive-soft": "var(--positive-soft)",
-        warning: "var(--warning)",
-        "warning-soft": "var(--warning-soft)",
-        negative: "var(--negative)",
-        "negative-soft": "var(--negative-soft)",
-      },
+      colors: Object.fromEntries(
+        tokens.map((token) => [
+          token,
+          `color-mix(in srgb, var(--${token}) calc(<alpha-value> * 100%), transparent)`,
+        ]),
+      ),
       fontFamily: {
-        sans: ["IBM Plex Sans", "ui-sans-serif", "system-ui", "sans-serif"],
-        mono: ["IBM Plex Mono", "SFMono-Regular", "Consolas", "monospace"],
+        sans: ["Figtree Variable", "Figtree", "ui-sans-serif", "system-ui", "sans-serif"],
+        mono: ["DM Mono", "ui-monospace", "SFMono-Regular", "monospace"],
+      },
+      fontWeight: {
+        400: "400",
+        500: "500",
+        550: "550",
+        600: "600",
+        650: "650",
+        700: "700",
+      },
+      boxShadow: {
+        sheet: "0 -12px 40px rgb(0 0 0 / 0.10)",
+        pop: "0 8px 24px rgb(0 0 0 / 0.08)",
+        knob: "0 1px 2px rgb(0 0 0 / 0.08)",
       },
     },
   },
   plugins: [],
-}
-
-export default config
+} satisfies Config
