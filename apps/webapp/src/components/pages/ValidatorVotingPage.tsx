@@ -7,7 +7,7 @@ import ValidatorGaugeVotingCard from "@/components/ValidatorGaugeVotingCard"
 import { getContractConfig } from "@/config/contracts"
 import { useNetwork } from "@/contexts/NetworkContext"
 import { useVeBTCLocks } from "@/hooks/useLocks"
-import useMultiValidatorVoting from "@/hooks/useMultiValidatorVoting"
+import useMultiVeBTCBallotVoting from "@/hooks/useMultiVeBTCBallotVoting"
 import { usePagination } from "@/hooks/usePagination"
 import { useValidatorMetrics } from "@/hooks/useValidatorMetrics"
 import {
@@ -183,7 +183,7 @@ export default function ValidatorVotingPage(): JSX.Element {
   const [cartOpen, setCartOpen] = useState(false)
   const [optimizerFeedback, setOptimizerFeedback] =
     useState<RewardOptimizerFeedback | null>(null)
-  const multiVote = useMultiValidatorVoting()
+  const multiVote = useMultiVeBTCBallotVoting("validators")
 
   const selectedLocks = useMemo(
     () =>
