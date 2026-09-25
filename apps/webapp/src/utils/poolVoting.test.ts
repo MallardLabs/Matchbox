@@ -3,7 +3,9 @@ import test from "node:test"
 import {
   type PoolVoteSortEntry,
   addNullableMicroUsd,
+  aprNumberToBasisPoints,
   comparePoolVoteSortEntries,
+  formatCompactMicroUsd,
   pricedRewardMicroUsd,
   sumUsdStringsMicroUsd,
   totalRewardMicroUsd,
@@ -109,4 +111,18 @@ test("sorts pools by TVL and volume and breaks ties by name", () => {
     tied.map((item) => item.name),
     ["A", "B"],
   )
+})
+
+test("formats headline USD figures compactly", () => {
+  assert.equal(formatCompactMicroUsd(0n), "$0.00")
+  assert.equal(formatCompactMicroUsd(999_990_000n), "$999.99")
+  assert.equal(formatCompactMicroUsd(1_500_000_000n), "$1.5K")
+  assert.equal(formatCompactMicroUsd(1_239_000_000_000n), "$1.23M")
+  assert.equal(formatCompactMicroUsd(2_000_000_000_000_000n), "$2B")
+})
+
+test("rounds API APR numbers to non-negative basis points", () => {
+  assert.equal(aprNumberToBasisPoints(1234.6), 1235n)
+  assert.equal(aprNumberToBasisPoints(-5), 0n)
+  assert.equal(aprNumberToBasisPoints(Number.NaN), 0n)
 })

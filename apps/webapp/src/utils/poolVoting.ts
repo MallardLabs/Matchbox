@@ -118,3 +118,33 @@ export function comparePoolVoteSortEntries(
   if (nameComparison !== 0) return nameComparison
   return a.pool.toLowerCase().localeCompare(b.pool.toLowerCase())
 }
+
+const COMPACT_USD_UNITS = [
+  { threshold: 1_000_000_000n, suffix: "B" },
+  { threshold: 1_000_000n, suffix: "M" },
+  { threshold: 1_000n, suffix: "K" },
+] as const
+
+// Headline figures such as TVL and volume read better compact ($1.24M), and
+// integer division keeps the rounding deterministic.
+export function formatCompactMicroUsd(value: bigint): string {
+  const wholeUsd = value / 1_000_000n
+  for (const unit of COMPACT_USD_UNITS) {
+    if (wholeUsd < unit.threshold) continue
+    const hundredths = (value * 100n) / (unit.threshold * 1_000_000n)
+    const whole = hundredths / 100n
+    const fraction = (hundredths % 100n)
+      .toString()
+      .padStart(2, "0")
+      .replace(/0+$/, "")
+    return `$${whole}${fraction ? `.${fraction}` : ""}${unit.suffix}`
+  }
+  const cents = value / 10_000n
+  return `$${cents / 100n}.${(cents % 100n).toString().padStart(2, "0")}`
+}
+
+// The pools API reports LP APRs as basis-point numbers; the ballot works in
+// integer basis points.
+export function aprNumberToBasisPoints(value: number): bigint {
+  return Number.isFinite(value) && value > 0 ? BigInt(Math.round(value)) : 0n
+}
