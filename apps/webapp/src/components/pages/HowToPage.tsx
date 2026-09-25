@@ -167,19 +167,19 @@ const veMEZOSteps: StepProps[] = [
     number: 2,
     title: "Select your locks",
     description:
-      'On the veMEZO page, the carousel at the top shows all your veMEZO lock NFTs. Click a card to select it — you can pick multiple locks at once. Locks marked "Next Epoch" have already voted this epoch and will be available again after Thursday.',
+      'On the veMEZO page, the carousel at the top shows all your veMEZO lock NFTs. Click a card to select it — you can pick multiple locks at once. Locks marked "Next Epoch" have already voted this epoch on that tab\'s voter and will be available again after Thursday. Selected locks show on-chain allocations for the open tab; Unpair clears a prior ballot on that tab only. Boost unpair also refreshes affected veBTC boosts. MEZO Gauges unpair only resets the remote-gauge voter. Locks that already voted this epoch cannot unpair until the next epoch. Use Boost Gauges for veBTC boosts, or open the MEZO Gauges tab to direct MEZO emissions to official remote gauges (Aerodrome, Uniswap v4, Curve). The same lock can spend 100% on each voter independently.',
   },
   {
     number: 3,
     title: "Evaluate gauges",
     description:
-      'The gauge table is sorted by APY by default. APY is calculated from total epoch incentives deposited divided by total veMEZO weight voting for the gauge, annualized (×52). Check "Optimal veMEZO" for how much veMEZO vote weight the gauge needs for max boost (5x)—using veBTC unboostedTotalVotingPower() and veMEZO totalVotingPower() from escrow, same as the Boost calculator.',
+      'On Boost Gauges, the table is sorted by APY by default. APY is epoch incentives divided by veMEZO weight, annualized (×52). Check "Optimal veMEZO" for the vote weight that maxes boost (5x). On MEZO Gauges, each row is an official remote venue: protocol, network, this-epoch incentives, current weight, and the UTC date when this epoch\'s emissions land. Those gauges do not boost veBTC.',
   },
   {
     number: 4,
     title: "Allocate votes",
     description:
-      "Enter a Vote % for each gauge you want to support. Your total allocation across all selected gauges must be ≤ 100%. You can concentrate on one gauge or spread across many — your bribe earnings are proportional to your allocation.",
+      "Enter a Vote % for each gauge you want to support. Boost Gauges may total ≤ 100%. MEZO Gauges must total exactly 100%. You can concentrate on one gauge or spread across many — your bribe earnings are proportional to your allocation.",
   },
   {
     number: 5,
@@ -243,7 +243,7 @@ const faqItems: FAQItemProps[] = [
   {
     question: "Can I change my vote during an epoch?",
     answer:
-      "Yes. Click Reset in the voting cart to clear your current allocations, then re-vote. You can do this once per lock per epoch — after resetting, you can vote again once more.",
+      "On-chain votes persist until you vote or unpair. Select locks on Boost Gauges or MEZO Gauges to see where that tab's vote went, then Unpair to clear a prior ballot. Unpair is blocked after a vote this epoch and outside the voting window. Boost unpair also refreshes veBTC boosts; MEZO Gauges unpair only resets the remote-gauge voter. You can vote once per lock per epoch on each tab.",
   },
   {
     question: "What determines the APY shown on a gauge?",
@@ -346,7 +346,7 @@ export default function HowToPage() {
             command="boost --help"
             badge="For veMEZO Holders"
             badgeColor="#EF4444"
-            description="Vote on veBTC gauges with your locked MEZO. Earn bribe rewards (incentives) proportional to your voting weight each epoch."
+            description="Vote Boost Gauges with your locked MEZO, or use the MEZO Gauges tab to direct MEZO emissions to remote venues. Earn bribe rewards proportional to your voting weight each epoch."
           />
 
           {/* Quick Start */}
@@ -358,11 +358,13 @@ export default function HowToPage() {
               {[
                 "Lock MEZO on Mezo Earn to receive a veMEZO NFT",
                 "Navigate to the veMEZO page (/boost)",
+                "Use Boost Gauges for veBTC boosts, or the MEZO Gauges tab for remote Aerodrome, Uniswap, and Curve venues",
                 "Select your veMEZO lock(s) in the carousel",
-                "Browse gauges — sort by APY to find the best returns",
-                "Enter vote % allocations across gauges (total ≤ 100%)",
+                "Review on-chain allocations and Unpair a prior ballot if needed",
+                "Browse gauges — sort by APY to find the best Boost Gauges returns",
+                "Enter vote % allocations across gauges (Boost Gauges total ≤ 100%; MEZO Gauges exactly 100%)",
                 "Click Vote and sign the transaction(s)",
-                "After the epoch ends, go to Dashboard and claim bribe rewards",
+                "After the epoch ends, go to Dashboard and claim Boost Gauge bribe rewards",
               ].map((item, i) => (
                 <li
                   key={item}

@@ -17,7 +17,7 @@ import {
 } from "@mezo-org/mezo-clay"
 import { useEffect, useMemo, useState } from "react"
 import { type Address, erc20Abi, formatUnits, parseUnits } from "viem"
-import { useAccount, useBalance, useReadContract } from "wagmi"
+import { useAccount, useBalance, useReadContract, useSwitchChain } from "wagmi"
 
 type Props = {
   gauge: Address
@@ -34,8 +34,10 @@ export default function AddValidatorIncentiveModal({
   onClose,
   onAdded,
 }: Props): JSX.Element {
-  const { chainId } = useNetwork()
-  const { address } = useAccount()
+  const { chainId, networkName } = useNetwork()
+  const { address, chainId: walletChainId } = useAccount()
+  const needsWalletSwitch = !!address && walletChainId !== chainId
+  const walletSwitch = useSwitchChain()
   const voter = getContractConfig(chainId).validatorsVoter.address
   const { data: nativeBalance } = useBalance({
     address,
@@ -62,6 +64,7 @@ export default function AddValidatorIncentiveModal({
   const { data: balanceData, refetch: refetchBalance } = useReadContract({
     address: token?.address,
     abi: erc20Abi,
+    chainId,
     functionName: "balanceOf",
     args: address ? [address] : undefined,
     query: { enabled: !!token && !!address },
@@ -93,8 +96,9 @@ export default function AddValidatorIncentiveModal({
     onClose()
   }
 
-  const writeError = approval.error ?? incentive.error
+  const writeError = walletSwitch.error ?? approval.error ?? incentive.error
   const isBusy =
+    walletSwitch.isPending ||
     approval.isPending ||
     approval.isConfirming ||
     incentive.isPending ||
@@ -169,6 +173,10 @@ export default function AddValidatorIncentiveModal({
           )}
           <Button
             onClick={() => {
+              if (needsWalletSwitch) {
+                walletSwitch.switchChain({ chainId })
+                return
+              }
               if (!token || parsedAmount <= 0n) return
               if (needsApproval)
                 approval.approve(token.address, voter, parsedAmount)
@@ -176,17 +184,20 @@ export default function AddValidatorIncentiveModal({
             }}
             disabled={
               isBusy ||
-              parsedAmount <= 0n ||
-              hasInsufficientBalance ||
-              hasNoGas ||
-              isAllowlisted !== true
+              (!needsWalletSwitch &&
+                (parsedAmount <= 0n ||
+                  hasInsufficientBalance ||
+                  hasNoGas ||
+                  isAllowlisted !== true))
             }
           >
             {isBusy
               ? "Confirming..."
-              : needsApproval
-                ? `Approve ${token?.symbol ?? "token"}`
-                : "Add Incentives"}
+              : needsWalletSwitch
+                ? `Switch wallet to ${networkName}`
+                : needsApproval
+                  ? `Approve ${token?.symbol ?? "token"}`
+                  : "Add Incentives"}
           </Button>
         </div>
       </ModalBody>

@@ -359,13 +359,81 @@ export type ProjectedTokenReward = {
 }
 
 /**
- * Calculate upcoming/projected APY based on user's vote proportion vs total votes
- * This shows what the user will earn next epoch based on their current vote allocations.
+ * Per-gauge incentive pool, normalized so both voter registries can share the
+ * projection maths: boost gauges weigh votes in veMEZO, validator gauges in
+ * veBTC, but the share calculation is identical either way.
+ */
+export type VotedGaugeIncentives = {
+  totalWeight: bigint
+  totalIncentivesUSD: number
+  incentivesByToken: TokenIncentive[]
+}
+
+export type ProjectedRewards = {
+  projectedIncentivesUSD: number
+  projectedRewardsByToken: ProjectedTokenReward[]
+}
+
+/**
+ * Split each voted gauge's incentive pool by the caller's share of that gauge's
+ * weight.
  *
- * Formula:
  * For each gauge the user voted on:
  *   userShare = userVoteWeight / totalGaugeWeight
  *   userIncentives += gaugeIncentivesUSD * userShare
+ */
+export function calculateProjectedRewards(
+  voteAllocations: VoteAllocation[],
+  getGaugeIncentives: (gaugeKey: string) => VotedGaugeIncentives | undefined,
+): ProjectedRewards {
+  let projectedIncentivesUSD = 0
+  const tokenRewardsMap = new Map<string, ProjectedTokenReward>()
+
+  for (const allocation of voteAllocations) {
+    const gaugeData = getGaugeIncentives(allocation.gaugeAddress.toLowerCase())
+
+    if (
+      !gaugeData ||
+      gaugeData.totalWeight <= 0n ||
+      gaugeData.totalIncentivesUSD <= 0
+    ) {
+      continue
+    }
+
+    const userShare = Number(allocation.weight) / Number(gaugeData.totalWeight)
+    projectedIncentivesUSD += gaugeData.totalIncentivesUSD * userShare
+
+    for (const tokenIncentive of gaugeData.incentivesByToken) {
+      const userTokenAmount = BigInt(
+        Math.floor(Number(tokenIncentive.amount) * userShare),
+      )
+      const userTokenUSD = tokenIncentive.usdValue * userShare
+
+      const existing = tokenRewardsMap.get(tokenIncentive.tokenAddress)
+      if (existing) {
+        existing.amount += userTokenAmount
+        existing.usdValue += userTokenUSD
+      } else {
+        tokenRewardsMap.set(tokenIncentive.tokenAddress, {
+          tokenAddress: tokenIncentive.tokenAddress,
+          symbol: tokenIncentive.symbol,
+          amount: userTokenAmount,
+          decimals: tokenIncentive.decimals,
+          usdValue: userTokenUSD,
+        })
+      }
+    }
+  }
+
+  return {
+    projectedIncentivesUSD,
+    projectedRewardsByToken: Array.from(tokenRewardsMap.values()),
+  }
+}
+
+/**
+ * Calculate upcoming/projected APY based on user's vote proportion vs total votes
+ * This shows what the user will earn next epoch based on their current vote allocations.
  *
  * upcomingAPY = (userIncentives / usedWeightUSD) * 52 * 100
  */
@@ -389,60 +457,25 @@ export function useUpcomingVotingAPY(
       }
     }
 
-    // Calculate user's proportional share of incentives across all voted gauges
-    let totalUserIncentivesUSD = 0
-    const tokenRewardsMap = new Map<string, ProjectedTokenReward>()
-
-    for (const allocation of voteAllocations) {
-      const gaugeKey = allocation.gaugeAddress.toLowerCase()
-      const gaugeData = apyMap.get(gaugeKey)
-
-      if (
-        gaugeData &&
-        gaugeData.totalVeMEZOWeight > 0n &&
-        gaugeData.totalIncentivesUSD > 0
-      ) {
-        // Calculate user's share of this gauge's incentives
-        const userShare =
-          Number(allocation.weight) / Number(gaugeData.totalVeMEZOWeight)
-        const userIncentivesFromGauge = gaugeData.totalIncentivesUSD * userShare
-        totalUserIncentivesUSD += userIncentivesFromGauge
-
-        // Calculate user's share of each token from this gauge
-        for (const tokenIncentive of gaugeData.incentivesByToken) {
-          const userTokenAmount = BigInt(
-            Math.floor(Number(tokenIncentive.amount) * userShare),
-          )
-          const userTokenUSD = tokenIncentive.usdValue * userShare
-
-          const existing = tokenRewardsMap.get(tokenIncentive.tokenAddress)
-          if (existing) {
-            existing.amount += userTokenAmount
-            existing.usdValue += userTokenUSD
-          } else {
-            tokenRewardsMap.set(tokenIncentive.tokenAddress, {
-              tokenAddress: tokenIncentive.tokenAddress,
-              symbol: tokenIncentive.symbol,
-              amount: userTokenAmount,
-              decimals: tokenIncentive.decimals,
-              usdValue: userTokenUSD,
-            })
-          }
-        }
-      }
-    }
-
-    const projectedRewardsByToken = Array.from(tokenRewardsMap.values())
-
-    const upcomingAPY = calculateAPYFromData(
-      totalUserIncentivesUSD,
-      usedWeight,
-      mezoPrice,
-    )
+    const { projectedIncentivesUSD, projectedRewardsByToken } =
+      calculateProjectedRewards(voteAllocations, (gaugeKey) => {
+        const gaugeData = apyMap.get(gaugeKey)
+        return gaugeData
+          ? {
+              totalWeight: gaugeData.totalVeMEZOWeight,
+              totalIncentivesUSD: gaugeData.totalIncentivesUSD,
+              incentivesByToken: gaugeData.incentivesByToken,
+            }
+          : undefined
+      })
 
     return {
-      upcomingAPY,
-      projectedIncentivesUSD: totalUserIncentivesUSD,
+      upcomingAPY: calculateAPYFromData(
+        projectedIncentivesUSD,
+        usedWeight,
+        mezoPrice,
+      ),
+      projectedIncentivesUSD,
       projectedRewardsByToken,
     }
   }, [voteAllocations, apyMap, usedWeight, mezoPrice])

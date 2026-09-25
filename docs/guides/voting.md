@@ -7,6 +7,17 @@ description: Step-by-step guide to voting with your veMEZO on Matchbox
 
 This guide walks you through the process of using your veMEZO to vote on gauges and earn incentive rewards on Matchbox.
 
+## Two independent veMEZO ballots
+
+The veMEZO page (`/boost`) has two tabs. The same lock can spend **100% on each voter independently** — never mix gauge addresses or lastVoted/usedWeights across them.
+
+| Tab | Voter | What it does |
+|-----|-------|----------------|
+| **Boost Gauges** (default) | `BoostVoter` | Votes on veBTC boost gauges |
+| **MEZO Gauges** (`?view=mezo-gauges`) | `ThirdPartyVoter` | Votes official **remote gauges** that direct MEZO emissions to Aerodrome (Base), Uniswap v4 (Ethereum), and Curve (Ethereum) |
+
+MEZO Gauges are **not** Mezo DEX pool gauges (`PoolsVoter`) and **not** validator gauges. Each remote protocol distributes this epoch's emissions according to its own rules; the distribution date is when those emissions land.
+
 ## Prerequisites
 
 Before you begin, make sure you have:
@@ -20,22 +31,24 @@ Don't have veMEZO yet? Visit [Mezo Earn](https://mezo.org/docs/users/mezo-earn/l
 ## Quick Start
 
 1. Connect your wallet
-2. Go to the **Boost** page
-3. Select your veMEZO position
-4. Browse gauges and their incentives
-5. Allocate your voting power
-6. Confirm the transaction
-7. Return to Dashboard to claim rewards after the epoch
+2. Go to the **veMEZO** page (`/boost`)
+3. Choose **Boost Gauges** or **MEZO Gauges**
+4. Select your veMEZO position
+5. Browse gauges and their incentives
+6. Allocate your voting power
+7. Confirm the transaction
+8. For Boost Gauges, return to Dashboard to claim bribe rewards after the epoch. MEZO Gauge incentive claims are not on Dashboard yet.
 
 ## Step-by-Step Voting Process
 
-### Step 1: Navigate to the Boost Page
+### Step 1: Navigate to the veMEZO Page
 
-From the Matchbox homepage or navigation bar, click **Boost** (or "Vote to Boost").
+From the Matchbox homepage or navigation bar, click **veMEZO**. Choose **Boost Gauges** (default) or **MEZO Gauges** for official remote venues.
 
 You'll see the voting interface with:
 
 - Position selector (top)
+- On-chain allocations for the selected locks, with Unpair
 - Gauge list (main area)
 - Your voting summary (sidebar or bottom)
 
@@ -54,7 +67,7 @@ If you have multiple veMEZO NFTs, choose which one to vote with:
 
 ### Step 3: Browse Available Gauges
 
-The main area displays all active gauges. For each gauge, you can see:
+**Boost Gauges** lists veBTC boost gauges. For each you can see:
 
 | Metric | What It Tells You |
 |--------|-------------------|
@@ -63,6 +76,8 @@ The main area displays all active gauges. For each gauge, you can see:
 | **Incentives** | Tokens being offered this epoch |
 | **veMEZO Weight** | Total votes already allocated |
 | **Boost Level** | Current boost multiplier |
+
+**MEZO Gauges** lists the curated remote venues (Aerodrome, Uniswap v4, Curve). For each you can see protocol, network, this-epoch incentives, current veMEZO weight, and the UTC distribution date. There is no boost multiplier on this tab.
 
 ### Step 4: Evaluate Opportunities
 
@@ -264,7 +279,7 @@ Spread votes across multiple gauges based on different criteria.
 
 ### Can I change my vote during an epoch?
 
-Yes, you can reset and reallocate your votes anytime within the voting window.
+Each lock can vote once per epoch on each tab. Select locks to see that tab's on-chain allocations. Unpair clears a prior ballot during the voting window if the lock has not already voted this epoch. Boost unpair also refreshes veBTC boosts; MEZO Gauges unpair only resets `ThirdPartyVoter`. After a vote or unpair this epoch, wait until Thursday.
 
 ### What happens if I don't vote?
 

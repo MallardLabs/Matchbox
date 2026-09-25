@@ -11,6 +11,7 @@ import {
   CHAIN_ID,
   CONTRACTS,
   type SupportedChainId,
+  VALIDATORS_VOTER_ABI,
 } from "@repo/shared/contracts"
 import type { NextRequest } from "next/server"
 import { http, type Address, createPublicClient, fallback } from "viem"
@@ -165,6 +166,76 @@ function isSupportedChainId(value: number): value is SupportedChainId {
   return value === CHAIN_ID.mainnet || value === CHAIN_ID.testnet
 }
 
+type VoterTopology = {
+  gaugeAddresses: Address[]
+  gaugeToBribe: Map<string, Address | null>
+}
+
+/**
+ * Enumerate a voter's gauges and resolve each one's bribe contract. Both
+ * BoostVoter and ValidatorsVoter expose the same `length`/`gauges`/`gaugeToBribe`
+ * surface, so one reader covers both registries.
+ */
+async function readVoterTopology(
+  client: ReturnType<typeof createPublicClient>,
+  voterAddress: Address,
+  voterAbi: typeof BOOST_VOTER_ABI | typeof VALIDATORS_VOTER_ABI,
+): Promise<VoterTopology> {
+  const lengthData = await client
+    .readContract({
+      address: voterAddress,
+      abi: voterAbi,
+      functionName: "length",
+    })
+    .catch(() => 0n)
+
+  const gaugeContracts = Array.from(
+    { length: Number(lengthData ?? 0n) },
+    (_, index) => ({
+      address: voterAddress,
+      abi: voterAbi,
+      functionName: "gauges" as const,
+      args: [BigInt(index)],
+    }),
+  )
+
+  const gaugeResults = await multicallInChunks(client, gaugeContracts)
+  const gaugeAddresses = gaugeResults
+    .map((result) =>
+      result.status === "success"
+        ? (result.result as Address | undefined)
+        : undefined,
+    )
+    .filter((value): value is Address => !!value && value !== ZERO_ADDRESS)
+
+  const bribeResults = await multicallInChunks(
+    client,
+    gaugeAddresses.map((gaugeAddress) => ({
+      address: voterAddress,
+      abi: voterAbi,
+      functionName: "gaugeToBribe" as const,
+      args: [gaugeAddress],
+    })),
+  )
+
+  const gaugeToBribe = new Map<string, Address | null>()
+  gaugeAddresses.forEach((gaugeAddress, index) => {
+    const bribeAddress =
+      bribeResults[index]?.status === "success"
+        ? (bribeResults[index]?.result as Address | undefined)
+        : undefined
+
+    gaugeToBribe.set(
+      gaugeAddress.toLowerCase(),
+      bribeAddress && bribeAddress !== ZERO_ADDRESS
+        ? (bribeAddress.toLowerCase() as Address)
+        : null,
+    )
+  })
+
+  return { gaugeAddresses, gaugeToBribe }
+}
+
 async function computeGaugeTopology(
   chainId: SupportedChainId,
   rpcEndpointId?: string | null,
@@ -178,66 +249,34 @@ async function computeGaugeTopology(
   })
 
   const now = BigInt(Math.floor(Date.now() / 1000))
-  const [lengthData, epochStartData] = await Promise.all([
-    client.readContract({
-      address: contractAddresses.boostVoter,
-      abi: BOOST_VOTER_ABI,
-      functionName: "length",
-    }),
-    client.readContract({
-      address: contractAddresses.boostVoter,
-      abi: BOOST_VOTER_ABI,
-      functionName: "epochStart",
-      args: [now],
-    }),
-  ])
-
-  const gaugeCount = Number(lengthData ?? 0n)
+  // Both voters derive epoch boundaries from ProtocolTimeLibrary week floors, so
+  // one read covers the whole response.
+  const epochStartData = await client.readContract({
+    address: contractAddresses.boostVoter,
+    abi: BOOST_VOTER_ABI,
+    functionName: "epochStart",
+    args: [now],
+  })
   const epochStart = (epochStartData as bigint | undefined) ?? 0n
 
-  const gaugeContracts = Array.from({ length: gaugeCount }, (_, index) => ({
-    address: contractAddresses.boostVoter,
-    abi: BOOST_VOTER_ABI,
-    functionName: "gauges" as const,
-    args: [BigInt(index)],
-  }))
+  const [boostTopology, validatorTopology] = await Promise.all([
+    readVoterTopology(client, contractAddresses.boostVoter, BOOST_VOTER_ABI),
+    readVoterTopology(
+      client,
+      contractAddresses.validatorsVoter,
+      VALIDATORS_VOTER_ABI,
+    ),
+  ])
 
-  const gaugeResults = await multicallInChunks(client, gaugeContracts)
-  const gaugeAddresses = gaugeResults
-    .map((result) =>
-      result.status === "success"
-        ? (result.result as Address | undefined)
-        : undefined,
-    )
-    .filter((value): value is Address => !!value && value !== ZERO_ADDRESS)
-
-  const bribeContracts = gaugeAddresses.map((gaugeAddress) => ({
-    address: contractAddresses.boostVoter,
-    abi: BOOST_VOTER_ABI,
-    functionName: "gaugeToBribe" as const,
-    args: [gaugeAddress],
-  }))
-
-  const bribeResults = await multicallInChunks(client, bribeContracts)
-  const gaugeToBribe = new Map<string, Address | null>()
-  const uniqueBribes = new Set<Address>()
-
-  gaugeAddresses.forEach((gaugeAddress, index) => {
-    const bribeAddress =
-      bribeResults[index]?.status === "success"
-        ? (bribeResults[index]?.result as Address | undefined)
-        : undefined
-
-    if (bribeAddress && bribeAddress !== ZERO_ADDRESS) {
-      const normalized = bribeAddress.toLowerCase() as Address
-      gaugeToBribe.set(gaugeAddress.toLowerCase(), normalized)
-      uniqueBribes.add(normalized)
-    } else {
-      gaugeToBribe.set(gaugeAddress.toLowerCase(), null)
-    }
-  })
-
-  const bribeAddresses = Array.from(uniqueBribes)
+  const bribeAddresses = Array.from(
+    new Set(
+      [boostTopology, validatorTopology].flatMap((topology) =>
+        Array.from(topology.gaugeToBribe.values()).filter(
+          (bribeAddress): bribeAddress is Address => bribeAddress !== null,
+        ),
+      ),
+    ),
+  )
 
   const rewardLengthContracts = bribeAddresses.map((bribeAddress) => ({
     address: bribeAddress,
@@ -376,13 +415,10 @@ async function computeGaugeTopology(
     )
   })
 
-  return {
-    chainId,
-    generatedAt: new Date().toISOString(),
-    epochStart: epochStart.toString(),
-    gauges: gaugeAddresses.map((gaugeAddress) => {
-      const gaugeKey = gaugeAddress.toLowerCase()
-      const bribeAddress = gaugeToBribe.get(gaugeKey) ?? null
+  const toEntries = (topology: VoterTopology) =>
+    topology.gaugeAddresses.map((gaugeAddress) => {
+      const bribeAddress =
+        topology.gaugeToBribe.get(gaugeAddress.toLowerCase()) ?? null
       const rewardTokens =
         bribeAddress !== null
           ? (bribeToRewardTokens.get(bribeAddress.toLowerCase()) ?? []).map(
@@ -409,7 +445,14 @@ async function computeGaugeTopology(
         bribeAddress,
         rewardTokens,
       }
-    }),
+    })
+
+  return {
+    chainId,
+    generatedAt: new Date().toISOString(),
+    epochStart: epochStart.toString(),
+    gauges: toEntries(boostTopology),
+    validatorGauges: toEntries(validatorTopology),
   }
 }
 

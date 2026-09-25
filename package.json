@@ -14,7 +14,9 @@
     "backfill:validator-profiles": "node ./apps/webapp/scripts/backfill-validator-profiles.mjs",
     "check:trellium": "node ./scripts/check-trellium-boundary.mjs",
     "release:trellium:prepare": "node ./scripts/prepare-trellium-release.mjs",
-    "release:trellium:publish": "node ./scripts/publish-trellium-release.mjs"
+    "release:trellium:publish": "node ./scripts/publish-trellium-release.mjs",
+    "cf:webapp:deploy": "pnpm --filter @repo/webapp exec wrangler deploy",
+    "cf:webapp:upload": "pnpm --filter @repo/webapp exec wrangler versions upload"
   },
   "devDependencies": {
     "canvas": "^3.2.1",

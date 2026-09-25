@@ -2,7 +2,7 @@ import {
   ClaimRewards,
   NotifyReward,
 } from "../generated/templates/BribeVotingReward/BribeVotingReward"
-import { BribeToPool } from "../generated/schema"
+import { resolveRewardMapping } from "./legacy-pool-rewards"
 import {
   baseActivity,
   BRIBE_VOTING_REWARD,
@@ -19,8 +19,7 @@ import {
 } from "./helpers"
 
 export function handleBribeNotifyReward(event: NotifyReward): void {
-  const bribeAddress = event.address.toHexString()
-  const mapping = BribeToPool.load(bribeAddress)
+  const mapping = resolveRewardMapping(event.address)
   if (mapping == null) {
     return
   }
@@ -80,8 +79,7 @@ export function handleBribeNotifyReward(event: NotifyReward): void {
 }
 
 export function handleBribeClaimRewards(event: ClaimRewards): void {
-  const bribeAddress = event.address.toHexString()
-  const mapping = BribeToPool.load(bribeAddress)
+  const mapping = resolveRewardMapping(event.address)
 
   const activity = baseActivity(
     event,

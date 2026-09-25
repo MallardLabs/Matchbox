@@ -1,0 +1,48 @@
+export { handler as GET, handler as OPTIONS }
+
+import { findBlockAtOrBefore } from "@/lib/mezoGauges/blocks"
+import {
+  MEZO_GAUGES_CORS_HEADERS,
+  createMezoMainnetClient,
+} from "@/lib/mezoGauges/rpc"
+import { buildParticipationSnapshot } from "@/lib/mezoGauges/snapshot"
+
+async function handler(request: Request): Promise<Response> {
+  if (request.method === "OPTIONS") {
+    return new Response(null, {
+      status: 204,
+      headers: MEZO_GAUGES_CORS_HEADERS,
+    })
+  }
+
+  const atParam = new URL(request.url).searchParams.get("at")
+  const at = atParam === null ? null : Number(atParam)
+  if (atParam !== null && (!Number.isFinite(at) || (at ?? 0) <= 0)) {
+    return Response.json(
+      { error: "Invalid at parameter" },
+      { status: 400, headers: MEZO_GAUGES_CORS_HEADERS },
+    )
+  }
+
+  try {
+    const client = createMezoMainnetClient()
+    const blockNumber =
+      at !== null ? (await findBlockAtOrBefore(client, at)).number : undefined
+    const snapshot = await buildParticipationSnapshot({ client, blockNumber })
+    return Response.json(snapshot, {
+      headers: {
+        ...MEZO_GAUGES_CORS_HEADERS,
+        "Cache-Control":
+          at !== null && snapshot.gauges.every((gauge) => gauge.status === "ok")
+            ? "public, s-maxage=31536000, immutable"
+            : "public, s-maxage=60",
+      },
+    })
+  } catch (error) {
+    console.error("Unable to build mezo gauges snapshot", error)
+    return Response.json(
+      { error: "Unable to build snapshot" },
+      { status: 502, headers: MEZO_GAUGES_CORS_HEADERS },
+    )
+  }
+}

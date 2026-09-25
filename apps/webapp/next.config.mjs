@@ -1,4 +1,5 @@
 import { initOpenNextCloudflareForDev } from "@opennextjs/cloudflare"
+import { PHASE_PRODUCTION_BUILD } from "next/constants.js"
 
 initOpenNextCloudflareForDev()
 
@@ -23,4 +24,19 @@ const nextConfig = {
   },
 }
 
-export default nextConfig
+export default function configureNext(phase) {
+  if (phase === PHASE_PRODUCTION_BUILD) {
+    const required = [
+      "NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID",
+      "NEXT_PUBLIC_SUPABASE_URL",
+      "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+    ]
+    const missing = required.filter((name) => !process.env[name]?.trim())
+    if (missing.length > 0) {
+      throw new Error(
+        `Missing required build variables: ${missing.join(", ")}. Set these in the build environment before building. Next.js embeds NEXT_PUBLIC_* values in browser assets; Worker runtime variables cannot repair an already-built app.`,
+      )
+    }
+  }
+  return nextConfig
+}

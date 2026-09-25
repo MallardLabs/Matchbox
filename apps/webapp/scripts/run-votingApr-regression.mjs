@@ -24,6 +24,12 @@ const sourceFiles = [
   "src/utils/rewardPerVeMezo.test.ts",
   "src/utils/rewardOptimizer.ts",
   "src/utils/rewardOptimizer.test.ts",
+  "src/lib/mezoGauges.ts",
+  "src/lib/mezoGauges.test.ts",
+  "src/lib/mezoGaugeUnpair.ts",
+  "src/lib/mezoGaugeUnpair.test.ts",
+  "src/lib/remoteMezoPools.ts",
+  "src/lib/remoteMezoPools.test.ts",
   "src/lib/academy/simulate.ts",
   "src/lib/academy/simulate.test.ts",
   "src/lib/academy/epoch.ts",
@@ -33,6 +39,13 @@ const sourceFiles = [
   "src/types/mezoActivity.ts",
   "src/config/mezoRpcWrite.ts",
   "src/config/mezoRpcWrite.test.ts",
+  "src/lib/mezoGauges/constants.ts",
+  "src/lib/mezoGauges/epochs.ts",
+  "src/lib/mezoGauges/epochs.test.ts",
+  "src/lib/mezoGauges/participation.ts",
+  "src/lib/mezoGauges/participation.test.ts",
+  "src/lib/mezoGauges/schema.ts",
+  "src/lib/mezoGauges/snapshot.test.ts",
 ]
 
 const testEntries = [
@@ -42,8 +55,14 @@ const testEntries = [
   "utils/validatorApy.test.js",
   "utils/rewardPerVeMezo.test.js",
   "utils/rewardOptimizer.test.js",
+  "lib/mezoGauges.test.js",
+  "lib/mezoGaugeUnpair.test.js",
+  "lib/remoteMezoPools.test.js",
   "lib/academy/simulate.test.js",
   "config/mezoRpcWrite.test.js",
+  "lib/mezoGauges/epochs.test.js",
+  "lib/mezoGauges/participation.test.js",
+  "lib/mezoGauges/snapshot.test.js",
 ]
 
 rmSync(outDir, { recursive: true, force: true })

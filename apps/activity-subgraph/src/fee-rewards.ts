@@ -2,7 +2,7 @@ import {
   ClaimRewards,
   NotifyReward,
 } from "../generated/templates/FeeVotingReward/FeeVotingReward"
-import { BribeToPool } from "../generated/schema"
+import { resolveRewardMapping } from "./legacy-pool-rewards"
 import {
   baseActivity,
   FEE_VOTING_REWARD,
@@ -18,12 +18,11 @@ import {
   VOTE_FEE_CLAIMED,
 } from "./helpers"
 
-// Fee reward contracts are mapped with the same BribeToPool entity (id =
-// fee contract address) so pool/gauge can be resolved on claims.
+// Fee reward contracts share the BribeToPool entity (id = fee contract address)
+// so pool/gauge can be resolved on claims.
 
 export function handleFeeNotifyReward(event: NotifyReward): void {
-  const feeAddress = event.address.toHexString()
-  const mapping = BribeToPool.load(feeAddress)
+  const mapping = resolveRewardMapping(event.address)
   if (mapping == null) {
     return
   }
@@ -83,8 +82,7 @@ export function handleFeeNotifyReward(event: NotifyReward): void {
 }
 
 export function handleFeeClaimRewards(event: ClaimRewards): void {
-  const feeAddress = event.address.toHexString()
-  const mapping = BribeToPool.load(feeAddress)
+  const mapping = resolveRewardMapping(event.address)
 
   const activity = baseActivity(
     event,

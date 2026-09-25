@@ -56,6 +56,7 @@ Learn more about each concept:
 - [veBTC](/concepts/vebtc) - Understanding your locked BTC position
 - [veMEZO](/concepts/vemezo) - Understanding your locked MEZO position
 - [Gauges](/concepts/gauges) - How gauges work and how to optimize them
+- [MEZO gauges](/concepts/mezo-gauges) - How veMEZO directs emissions to MUSD liquidity
 - [Epochs](/concepts/epochs) - Weekly timing and voting windows
 
 ## Key Terms at a Glance

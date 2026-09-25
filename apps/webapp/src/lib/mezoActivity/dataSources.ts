@@ -365,6 +365,7 @@ async function fetchExplorerActivityRaw(
         ...(gaugeAddress ? { gaugeAddress } : {}),
         ...(pokeMethod ? { pokeMethod } : {}),
         ...(contract ? { contract } : {}),
+        ...(event.rewardType ? { rewardType: event.rewardType } : {}),
         ...(event.metadata ? { metadata: event.metadata } : {}),
         ...(event.period ? { period: BigInt(event.period) } : {}),
         ...(event.newPeriod ? { newPeriod: BigInt(event.newPeriod) } : {}),

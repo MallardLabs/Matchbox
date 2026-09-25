@@ -14,8 +14,8 @@ import type { Address } from "viem"
 import { erc20Abi, formatUnits } from "viem"
 import { useReadContracts } from "wagmi"
 
-export type IncentiveHistoryDomain = "vebtc" | "pools"
-export type IncentiveHistoryScope = "both" | IncentiveHistoryDomain
+export type IncentiveHistoryDomain = "vebtc" | "pools" | "validators"
+export type IncentiveHistoryScope = "all" | IncentiveHistoryDomain
 
 export type IncentiveHistoryToken = {
   domain: IncentiveHistoryDomain
@@ -40,11 +40,9 @@ export type IncentiveHistoryEpoch = {
   epochStart: number
   epochEnd: number
   label: string
-  vebtcUsd: number
-  poolsUsd: number
+  usdByDomain: Record<IncentiveHistoryDomain, number>
+  eventsByDomain: Record<IncentiveHistoryDomain, number>
   totalUsd: number
-  vebtcEvents: number
-  poolsEvents: number
   totalEvents: number
   unpricedEvents: number
   tokens: IncentiveHistoryToken[]
@@ -64,13 +62,34 @@ function epochStartFor(timestamp: number): number {
   return Math.floor(timestamp / WEEK_SECONDS) * WEEK_SECONDS
 }
 
+/**
+ * Only count incentives someone actually posted.
+ *
+ * FeesVotingReward deposits arrive as INCENTIVE_ADDED too, but they are trading
+ * fees being routed to voters rather than a bid for their votes. Counting them
+ * inflated the pools figures by ~98%, so they are excluded here.
+ *
+ * Keyed off `rewardType` when the indexer supplies it, falling back to the
+ * emitting contract, so an event missing the field degrades to the right answer
+ * instead of emptying the panel.
+ */
+function isPostedIncentive(item: MezoActivityItem): boolean {
+  if (item.rewardType) return item.rewardType === "Bribe"
+  return item.contract !== "feeVotingReward"
+}
+
 function domainForItem(
   item: MezoActivityItem,
 ): IncentiveHistoryDomain | undefined {
-  if (item.boostContext === "mezoVeBtcPairBoost") return "vebtc"
-  if (item.boostContext === "matchboxGaugeBoost") return "pools"
+  // The emitting contract is the authoritative signal for which voter a deposit
+  // belongs to. `boostContext` names a boost mechanism, not a voter — it is
+  // UNKNOWN for validator gauges and shared between the pools voter and the fee
+  // reward contracts — so it is only a fallback for events without a contract.
+  if (item.contract === "validatorsVoter") return "validators"
   if (item.contract === "boostVoter") return "vebtc"
   if (item.contract === "poolsVoter") return "pools"
+  if (item.boostContext === "mezoVeBtcPairBoost") return "vebtc"
+  if (item.boostContext === "matchboxGaugeBoost") return "pools"
   return undefined
 }
 
@@ -79,11 +98,9 @@ function createEpoch(epochStart: number, label: string): IncentiveHistoryEpoch {
     epochStart,
     epochEnd: epochStart + WEEK_SECONDS,
     label,
-    vebtcUsd: 0,
-    poolsUsd: 0,
+    usdByDomain: { vebtc: 0, pools: 0, validators: 0 },
+    eventsByDomain: { vebtc: 0, pools: 0, validators: 0 },
     totalUsd: 0,
-    vebtcEvents: 0,
-    poolsEvents: 0,
     totalEvents: 0,
     unpricedEvents: 0,
     tokens: [],
@@ -256,6 +273,7 @@ export function useActivityIncentiveHistory(): {
 
     for (const item of query.data ?? []) {
       if (item.actionType !== "incentiveAdded") continue
+      if (!isPostedIncentive(item)) continue
       const domain = domainForItem(item)
       if (!domain) continue
 
@@ -264,8 +282,7 @@ export function useActivityIncentiveHistory(): {
       if (!epoch) continue
 
       epoch.totalEvents += 1
-      if (domain === "vebtc") epoch.vebtcEvents += 1
-      else epoch.poolsEvents += 1
+      epoch.eventsByDomain[domain] += 1
 
       const amount = item.amount ?? 0n
       const tokenAddress = item.tokenAddress
@@ -282,11 +299,8 @@ export function useActivityIncentiveHistory(): {
 
       if (usdValue === null) {
         epoch.unpricedEvents += 1
-      } else if (domain === "vebtc") {
-        epoch.vebtcUsd += usdValue
-        epoch.totalUsd += usdValue
       } else {
-        epoch.poolsUsd += usdValue
+        epoch.usdByDomain[domain] += usdValue
         epoch.totalUsd += usdValue
       }
 
