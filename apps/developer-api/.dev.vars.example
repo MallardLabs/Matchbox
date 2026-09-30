@@ -1,7 +1,18 @@
+# Local secrets for `wrangler dev`. Copy to `.dev.vars` (git-ignored).
+# Production values are set with `wrangler secret put <NAME>`.
+
+# Supabase (service role; data store only). Not needed with PLATFORM_STORE=memory.
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=replace-me
-API_KEY_PEPPER=replace-with-at-least-32-random-bytes
-API_GATEWAY_SECRET=replace-with-a-different-random-secret
-MEZO_RPC_URL=https://mezo-mainnet.boar.network
-DEVELOPER_PLATFORM_ENABLED=false
-DEVELOPER_PROFILE_API_ENABLED=false
+
+# Same value as the developer console uses to issue keys (>= 32 random chars).
+API_KEY_PEPPER=replace-with-at-least-32-random-characters
+
+# Reconciliation cron RPC endpoints.
+MEZO_MAINNET_RPC_URL=https://mezo-mainnet.boar.network
+MEZO_TESTNET_RPC_URL=https://rpc.test.mezo.org
+
+# Local-only overrides (never set these in production).
+ENVIRONMENT=development
+GAUGE_PROFILE_API_ENABLED=true
+# PLATFORM_STORE=memory

@@ -1,0 +1,38 @@
+{
+  "name": "@repo/platform-server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./rate-limiter": {
+      "types": "./src/rate-limiter.ts",
+      "default": "./src/rate-limiter.ts"
+    }
+  },
+  "scripts": {
+    "lint": "biome check src/",
+    "lint:fix": "biome check --write src/",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@repo/logger": "workspace:*",
+    "@repo/platform-contracts": "workspace:*",
+    "@supabase/supabase-js": "^2.108.2",
+    "hono": "^4.10.7",
+    "ipaddr.js": "^2.2.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "@cloudflare/workers-types": "^4.20260620.1",
+    "@repo/biome-config": "workspace:*",
+    "@repo/typescript-config": "workspace:*",
+    "typescript": "^5.9.3",
+    "vitest": "^2.1.9"
+  }
+}

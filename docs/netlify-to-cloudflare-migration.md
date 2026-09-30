@@ -4,8 +4,11 @@ Status: proposed. This is the working runbook for moving the Matchbox frontends
 off Netlify and onto Cloudflare Workers, moving DNS to Cloudflare, and the
 decision record on Hyperdrive.
 
-Related: [developer-platform.md](developer-platform.md) describes the current
-production topology this plan supersedes.
+Related: [developer-platform.md](developer-platform.md) is the runbook for the
+developer platform v2 Workers (`matchbox-id`, `matchbox-developer-console`,
+`matchbox-developer-api`), which replaced the beta `apps/developer-platform`
+Next.js app, its Netlify API proxy and the webapp `/id-bridge`. The
+developer-platform rows below are historical.
 
 ## 0. Why
 
@@ -21,16 +24,16 @@ production topology this plan supersedes.
 
 ## 1. Current state (verified 2026-07-15)
 
-| Thing | State |
-| --- | --- |
-| Netlify account | Free tier (`nf_team_dev`) |
-| Webapp (`apps/webapp`, Next.js 14) | Netlify `matchb0x` → `matchbox.markets`, `app.matchbox.markets` |
-| Developer platform (`apps/developer-platform`) | Netlify `matchboxdeveloper` → `id.matchbox.markets` |
-| Docs (Astro) | Netlify `matchdocs` → proxied via `/docs/*`, `/_astro/*`, `/pagefind/*` rewrites |
-| Developer API (`apps/developer-api`) | Already Cloudflare Worker `matchbox-developer-api` (+ Durable Object) |
-| Supabase | `us-east-2` (Ohio), Postgres 17, free plan |
-| DB access | 100% `@supabase/supabase-js` (PostgREST/HTTPS). No `pg`/`postgres.js`/Drizzle/Prisma |
-| ISR usage in webapp | None (no `revalidate`/`getStaticProps`/`generateStaticParams`) |
+| Thing                                                               | State                                                                                      |
+| ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| Netlify account                                                     | Free tier (`nf_team_dev`)                                                                  |
+| Webapp (`apps/webapp`, Next.js 14)                                  | Netlify `matchb0x` → `matchbox.markets`, `app.matchbox.markets`                            |
+| Developer platform (`apps/developer-platform`, beta; since deleted) | Netlify `matchboxdeveloper` → `id.matchbox.markets` (and the `api.matchbox.markets` proxy) |
+| Docs (Astro)                                                        | Netlify `matchdocs` → proxied via `/docs/*`, `/_astro/*`, `/pagefind/*` rewrites           |
+| Developer API (`apps/developer-api`)                                | Already Cloudflare Worker `matchbox-developer-api` (+ Durable Object)                      |
+| Supabase                                                            | `us-east-2` (Ohio), Postgres 17, free plan                                                 |
+| DB access                                                           | 100% `@supabase/supabase-js` (PostgREST/HTTPS). No `pg`/`postgres.js`/Drizzle/Prisma       |
+| ISR usage in webapp                                                 | None (no `revalidate`/`getStaticProps`/`generateStaticParams`)                             |
 
 Decisions locked in:
 
@@ -41,14 +44,13 @@ Decisions locked in:
 
 ## 2. Hyperdrive decision — do NOT adopt
 
-Hyperdrive accelerates **direct Postgres wire-protocol connections** (TCP 5432 /
-6543) by pooling and caching them at Cloudflare's edge. Every database call in
+Hyperdrive accelerates **direct Postgres wire-protocol connections** (TCP 5432 / 6543) by pooling and caching them at Cloudflare's edge. Every database call in
 this repo goes through `@supabase/supabase-js`, which speaks **PostgREST over
 HTTPS**. There is no Postgres connection for Hyperdrive to sit in front of, so it
 provides zero benefit here.
 
 Revisit only if a direct-Postgres client (e.g. Drizzle/postgres.js) is ever added
-inside a Worker. The latency lever that *does* apply — Supabase in `us-east-2`
+inside a Worker. The latency lever that _does_ apply — Supabase in `us-east-2`
 vs. Cloudflare's global edge — is edge-caching read-heavy API responses
 (Cache API / KV), not Hyperdrive.
 
@@ -100,13 +102,17 @@ below.
 > local Windows build only passed `next build` because `dist/` was already
 > present from a prior `pnpm build`.
 
-| Setting | webapp | developer-platform |
-| --- | --- | --- |
-| Worker name | `matchbox` | `matchbox-developer-platform` |
-| Git repo / branch | `MallardLabs/MatchBox` / `main` | same |
-| Root directory | repo root | repo root |
-| Build command | `pnpm turbo run cloudflare:build --filter @repo/webapp` | `pnpm turbo run cloudflare:build --filter @repo/developer-platform` |
-| Deploy command (production) | `pnpm --filter @repo/webapp exec wrangler deploy` | `pnpm --filter @repo/developer-platform exec wrangler deploy` |
+The developer-platform column is historical: the v2 Workers deploy with
+`pnpm --filter <package> run deploy` (see
+[developer-platform.md](developer-platform.md) §4.4).
+
+| Setting                       | webapp                                                     | developer-platform (beta, removed)                                     |
+| ----------------------------- | ---------------------------------------------------------- | ---------------------------------------------------------------------- |
+| Worker name                   | `matchbox`                                                 | `matchbox-developer-platform`                                          |
+| Git repo / branch             | `MallardLabs/MatchBox` / `main`                            | same                                                                   |
+| Root directory                | repo root                                                  | repo root                                                              |
+| Build command                 | `pnpm turbo run cloudflare:build --filter @repo/webapp`    | `pnpm turbo run cloudflare:build --filter @repo/developer-platform`    |
+| Deploy command (production)   | `pnpm --filter @repo/webapp exec wrangler deploy`          | `pnpm --filter @repo/developer-platform exec wrangler deploy`          |
 | Non-production deploy command | `pnpm --filter @repo/webapp exec wrangler versions upload` | `pnpm --filter @repo/developer-platform exec wrangler versions upload` |
 
 Preview builds default to `npx wrangler versions upload` from the **repo root**.
@@ -128,18 +134,22 @@ the bare `npx wrangler versions upload` default without that root config.
 
 Both Workers deploy to `*.workers.dev` on first build (no DNS dependency).
 
-### Phase 2 — Developer platform (`id.matchbox.markets`)
+### Phase 2 — Developer platform (`id.`, `developer.`, `api.matchbox.markets`)
 
-Config is deploy-ready (own `wrangler.jsonc`, Worker `matchbox-developer-platform`).
-Its `custom_domain` routes are **commented out** until DNS is on Cloudflare —
-re-enable them at Phase 4 cutover. Otherwise identical to Phase 1/1b.
+Superseded. The beta Worker `matchbox-developer-platform` is not deployed
+going forward. `id.`, `developer.` and `api.matchbox.markets` are served by
+the v2 Workers `matchbox-id`, `matchbox-developer-console` and
+`matchbox-developer-api`, whose custom-domain routes are declared in their
+`wrangler.jsonc`. Rollout and cutover:
+[developer-platform.md](developer-platform.md) §3 and §11.
 
 ### Phase 3 — DNS to Cloudflare
 
-> **Verify authority first.** [developer-platform.md](developer-platform.md) §1
-> states Spaceship is authoritative DNS (records point at Netlify targets); the
+> **Verify authority first.** The beta developer-platform runbook stated
+> Spaceship was authoritative DNS (records pointing at Netlify targets); the
 > operator recalls nameservers delegated to Netlify DNS. Check the live NS
 > records for `matchbox.markets` before touching anything — the cutover differs:
+>
 > - Netlify DNS (NS delegated to Netlify): change NS at Spaceship → Cloudflare.
 > - Spaceship DNS: change NS at Spaceship → Cloudflare (cleanest for Workers
 >   custom domains, which expect a Cloudflare-managed zone).
@@ -153,8 +163,9 @@ re-enable them at Phase 4 cutover. Otherwise identical to Phase 1/1b.
 ### Phase 4 — Cutover (per hostname, reversible)
 
 1. Add Custom Domains / Routes on the Workers: `matchbox.markets` + `www` +
-   `app.matchbox.markets` → webapp Worker; `id.matchbox.markets` →
-   developer-platform Worker.
+   `app.matchbox.markets` → webapp Worker. `id.`, `developer.` and `api.`
+   attach to the v2 Workers on deploy
+   ([developer-platform.md](developer-platform.md) §11).
 2. Cloudflare auto-provisions SSL. Verify HTTPS, `/docs` proxy, wallet/auth
    flows, and Supabase reads/writes on the live domain.
 3. Do apex + `app` first; verify; then `id`. Roll back any hostname instantly by
@@ -162,9 +173,11 @@ re-enable them at Phase 4 cutover. Otherwise identical to Phase 1/1b.
 
 ### Phase 5 — Decommission
 
-After a few stable days: remove custom domains from `matchb0x` /
-`matchboxdeveloper` on Netlify; keep the sites as warm rollback, then delete.
-Developer API is unchanged.
+After a few stable days: remove custom domains from `matchb0x` on Netlify;
+keep the site as warm rollback, then delete. Decommission `matchboxdeveloper`
+and the beta Worker `matchbox-developer-platform` per
+[developer-platform.md](developer-platform.md) §11 (there is no rollback to
+the beta developer platform).
 
 ## 4. Repo-specific gotchas
 

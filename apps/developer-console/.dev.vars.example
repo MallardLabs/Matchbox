@@ -1,0 +1,26 @@
+# Local secrets for `wrangler dev` / `vite dev`. Copy to `.dev.vars`
+# (git-ignored). Production values are set with `wrangler secret put <NAME>`.
+
+# Supabase (service role; data store only). Not needed with PLATFORM_STORE=memory.
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=replace-me
+
+# HMAC peppers (>= 32 random chars each). API_KEY_PEPPER must match the
+# developer-api Worker; CLIENT_SECRET_PEPPER must match matchbox-id;
+# SESSION_PEPPER hashes console sessions, email codes and invitation tokens.
+API_KEY_PEPPER=replace-with-at-least-32-random-characters
+CLIENT_SECRET_PEPPER=replace-with-at-least-32-random-characters
+SESSION_PEPPER=replace-with-at-least-32-random-characters
+
+# Analytics Engine SQL API (read-only token). Without them, usage uses
+# synthetic data in memory mode and returns 503 otherwise.
+CF_ACCOUNT_ID=
+CF_ANALYTICS_TOKEN=
+
+# Local-only overrides (never set these in production).
+ENVIRONMENT=development
+DEVELOPER_CONSOLE_ENABLED=true
+# Memory store with seeded demo data + POST /api/auth/dev-sign-in.
+PLATFORM_STORE=memory
+WEBAUTHN_RP_ID=localhost
+WEBAUTHN_ORIGIN=http://localhost:5175

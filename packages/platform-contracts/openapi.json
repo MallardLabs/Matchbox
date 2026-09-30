@@ -1,0 +1,1335 @@
+{
+  "openapi": "3.1.0",
+  "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
+  "info": {
+    "title": "Matchbox API",
+    "version": "2.0.0",
+    "description": "Read Matchbox gauge profiles for Mezo boost and validator gauges. Generated from `@repo/platform-contracts`.",
+    "contact": {
+      "url": "https://developer.matchbox.markets"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://api.matchbox.markets"
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "Meta"
+    },
+    {
+      "name": "Networks"
+    },
+    {
+      "name": "Gauge profiles"
+    }
+  ],
+  "paths": {
+    "/v1/health": {
+      "get": {
+        "operationId": "getHealth",
+        "tags": ["Meta"],
+        "summary": "Service health",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Service is up.",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Unique id for this request; include it in support requests.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/networks": {
+      "get": {
+        "operationId": "listNetworks",
+        "tags": ["Networks"],
+        "summary": "Networks this key can read",
+        "responses": {
+          "200": {
+            "description": "Readable networks.",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Unique id for this request; include it in support requests.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "ETag": {
+                "description": "Weak validator for `If-None-Match`.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "`private, max-age=30`.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "RateLimit-Limit": {
+                "description": "Requests allowed in the current window.",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the current window.",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the current window resets.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NetworkList"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceDisabled"
+          }
+        }
+      }
+    },
+    "/v1/gauge-profiles": {
+      "get": {
+        "operationId": "listGaugeProfiles",
+        "tags": ["Gauge profiles"],
+        "summary": "List gauge profiles",
+        "description": "Ordered by `updatedAt` descending, then `gaugeAddress`. Follow `nextCursor` until it is null.",
+        "parameters": [
+          {
+            "name": "network",
+            "in": "query",
+            "required": true,
+            "description": "Must match the key's environment network.",
+            "schema": {
+              "$ref": "#/components/schemas/NetworkSlug"
+            }
+          },
+          {
+            "name": "profileType",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/GaugeProfileType"
+            }
+          },
+          {
+            "name": "tag",
+            "in": "query",
+            "required": false,
+            "description": "Only profiles with this tag (a lower-case slug).",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9-]{0,39}$"
+            }
+          },
+          {
+            "name": "updatedSince",
+            "in": "query",
+            "required": false,
+            "description": "Only profiles updated at or after this time.",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "address",
+            "in": "query",
+            "required": false,
+            "description": "Gauge addresses to fetch (repeatable, up to 50).",
+            "style": "form",
+            "explode": true,
+            "schema": {
+              "type": "array",
+              "maxItems": 50,
+              "items": {
+                "type": "string",
+                "pattern": "^0x[0-9a-fA-F]{40}$"
+              }
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Opaque `nextCursor` from the previous page.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1024
+            }
+          },
+          {
+            "name": "If-None-Match",
+            "in": "header",
+            "required": false,
+            "description": "`ETag` from a previous response; returns 304 when unchanged.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of gauge profiles.",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Unique id for this request; include it in support requests.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "ETag": {
+                "description": "Weak validator for `If-None-Match`.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "`private, max-age=30`.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "RateLimit-Limit": {
+                "description": "Requests allowed in the current window.",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the current window.",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the current window resets.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GaugeProfileList"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not modified (`If-None-Match` matched the current `ETag`).",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Unique id for this request; include it in support requests.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "RateLimit-Limit": {
+                "description": "Requests allowed in the current window.",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the current window.",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the current window resets.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceDisabled"
+          }
+        }
+      }
+    },
+    "/v1/gauge-profiles/{network}/{gaugeAddress}": {
+      "get": {
+        "operationId": "getGaugeProfile",
+        "tags": ["Gauge profiles"],
+        "summary": "Get a gauge profile",
+        "parameters": [
+          {
+            "name": "network",
+            "in": "path",
+            "required": true,
+            "description": "`mezo` for live keys, `mezo-testnet` for test keys. Other values return 403 `network_not_allowed`.",
+            "schema": {
+              "$ref": "#/components/schemas/NetworkSlug"
+            }
+          },
+          {
+            "name": "gaugeAddress",
+            "in": "path",
+            "required": true,
+            "description": "Gauge contract address (any case).",
+            "schema": {
+              "type": "string",
+              "pattern": "^0x[0-9a-fA-F]{40}$"
+            }
+          },
+          {
+            "name": "If-None-Match",
+            "in": "header",
+            "required": false,
+            "description": "`ETag` from a previous response; returns 304 when unchanged.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The gauge profile.",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Unique id for this request; include it in support requests.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "ETag": {
+                "description": "Weak validator for `If-None-Match`.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "`private, max-age=30`.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "RateLimit-Limit": {
+                "description": "Requests allowed in the current window.",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the current window.",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the current window resets.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GaugeProfileDetail"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not modified (`If-None-Match` matched the current `ETag`).",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Unique id for this request; include it in support requests.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "RateLimit-Limit": {
+                "description": "Requests allowed in the current window.",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the current window.",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the current window resets.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceDisabled"
+          }
+        }
+      }
+    },
+    "/v1/vebtc/{network}/{tokenId}/gauge-profile": {
+      "get": {
+        "operationId": "getGaugeProfileByVebtc",
+        "tags": ["Gauge profiles"],
+        "summary": "Get the boost gauge profile for a veBTC token",
+        "parameters": [
+          {
+            "name": "network",
+            "in": "path",
+            "required": true,
+            "description": "`mezo` for live keys, `mezo-testnet` for test keys. Other values return 403 `network_not_allowed`.",
+            "schema": {
+              "$ref": "#/components/schemas/NetworkSlug"
+            }
+          },
+          {
+            "name": "tokenId",
+            "in": "path",
+            "required": true,
+            "description": "veBTC token id (decimal).",
+            "schema": {
+              "$ref": "#/components/schemas/DecimalString"
+            }
+          },
+          {
+            "name": "If-None-Match",
+            "in": "header",
+            "required": false,
+            "description": "`ETag` from a previous response; returns 304 when unchanged.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The boost gauge profile.",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Unique id for this request; include it in support requests.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "ETag": {
+                "description": "Weak validator for `If-None-Match`.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "`private, max-age=30`.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "RateLimit-Limit": {
+                "description": "Requests allowed in the current window.",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the current window.",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the current window resets.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GaugeProfileDetail"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not modified (`If-None-Match` matched the current `ETag`).",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Unique id for this request; include it in support requests.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "RateLimit-Limit": {
+                "description": "Requests allowed in the current window.",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the current window.",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the current window resets.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceDisabled"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "mbx_{pk|sk}_{test|live}_<id>_<secret>",
+        "description": "Send `Authorization: Bearer <key>`.\n\n- **Publishable keys** (`mbx_pk_test_…`, `mbx_pk_live_…`) are safe in browsers. The request `Origin` must be registered on the key's environment.\n- **Secret keys** (`mbx_sk_test_…`, `mbx_sk_live_…`) are server-only. Requests carrying an `Origin` header are rejected; an optional CIDR allowlist applies.\n\nTest keys read `mezo-testnet`; live keys read `mezo` and require an approved environment. Revocation takes effect within 15 seconds."
+      }
+    },
+    "responses": {
+      "InvalidRequest": {
+        "description": "`invalid_request`: malformed parameters.",
+        "headers": {
+          "X-Request-Id": {
+            "description": "Unique id for this request; include it in support requests.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorBody"
+            }
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "`unauthorized`: missing, malformed, expired or revoked key.",
+        "headers": {
+          "X-Request-Id": {
+            "description": "Unique id for this request; include it in support requests.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorBody"
+            }
+          }
+        }
+      },
+      "Forbidden": {
+        "description": "`forbidden`, `origin_not_allowed` or `network_not_allowed`.",
+        "headers": {
+          "X-Request-Id": {
+            "description": "Unique id for this request; include it in support requests.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorBody"
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "`not_found`.",
+        "headers": {
+          "X-Request-Id": {
+            "description": "Unique id for this request; include it in support requests.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorBody"
+            }
+          }
+        }
+      },
+      "RateLimited": {
+        "description": "`rate_limited`.",
+        "headers": {
+          "X-Request-Id": {
+            "description": "Unique id for this request; include it in support requests.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          "RateLimit-Limit": {
+            "description": "Requests allowed in the current window.",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          "RateLimit-Remaining": {
+            "description": "Requests left in the current window.",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          "RateLimit-Reset": {
+            "description": "Seconds until the current window resets.",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          "Retry-After": {
+            "description": "Seconds to wait before retrying.",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorBody"
+            }
+          }
+        }
+      },
+      "InternalError": {
+        "description": "`internal_error`.",
+        "headers": {
+          "X-Request-Id": {
+            "description": "Unique id for this request; include it in support requests.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorBody"
+            }
+          }
+        }
+      },
+      "ServiceDisabled": {
+        "description": "`service_disabled`: the API is temporarily off.",
+        "headers": {
+          "X-Request-Id": {
+            "description": "Unique id for this request; include it in support requests.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorBody"
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "NetworkSlug": {
+        "type": "string",
+        "enum": ["mezo", "mezo-testnet"]
+      },
+      "EnvironmentKind": {
+        "type": "string",
+        "enum": ["test", "live"]
+      },
+      "Network": {
+        "type": "object",
+        "properties": {
+          "slug": {
+            "$ref": "#/components/schemas/NetworkSlug"
+          },
+          "chainId": {
+            "anyOf": [
+              {
+                "type": "number",
+                "const": 31612
+              },
+              {
+                "type": "number",
+                "const": 31611
+              }
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "environmentKind": {
+            "$ref": "#/components/schemas/EnvironmentKind"
+          }
+        },
+        "required": ["slug", "chainId", "name", "environmentKind"]
+      },
+      "NetworkList": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Network"
+            }
+          }
+        },
+        "required": ["data"]
+      },
+      "Health": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "ok"
+          },
+          "version": {
+            "type": "string"
+          },
+          "flags": {
+            "type": "object",
+            "properties": {
+              "gaugeProfileApi": {
+                "type": "boolean"
+              }
+            },
+            "required": ["gaugeProfileApi"]
+          }
+        },
+        "required": ["status", "version", "flags"]
+      },
+      "Address": {
+        "type": "string",
+        "pattern": "^0x[0-9a-f]{40}$"
+      },
+      "DecimalString": {
+        "type": "string",
+        "pattern": "^(0|[1-9][0-9]*)$"
+      },
+      "GaugeProfileType": {
+        "type": "string",
+        "enum": ["boost-gauge", "validator-gauge"]
+      },
+      "GaugeProfileChainState": {
+        "type": "object",
+        "properties": {
+          "isAlive": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "nftOwner": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Address"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "beneficiary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Address"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "poolAddress": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Address"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "checkedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "blockNumber": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DecimalString"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "isAlive",
+          "nftOwner",
+          "beneficiary",
+          "poolAddress",
+          "checkedAt",
+          "blockNumber"
+        ]
+      },
+      "BoostGaugeProfile": {
+        "type": "object",
+        "properties": {
+          "profileType": {
+            "type": "string",
+            "const": "boost-gauge"
+          },
+          "vebtcTokenId": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DecimalString"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "network": {
+            "$ref": "#/components/schemas/NetworkSlug"
+          },
+          "gaugeAddress": {
+            "$ref": "#/components/schemas/Address"
+          },
+          "displayName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "avatarUrl": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "websiteUrl": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "socialLinks": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "incentiveStrategy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "votingStrategy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "isFeatured": {
+            "type": "boolean"
+          },
+          "chain": {
+            "$ref": "#/components/schemas/GaugeProfileChainState"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "profileType",
+          "vebtcTokenId",
+          "network",
+          "gaugeAddress",
+          "displayName",
+          "description",
+          "avatarUrl",
+          "websiteUrl",
+          "socialLinks",
+          "tags",
+          "incentiveStrategy",
+          "votingStrategy",
+          "isFeatured",
+          "chain",
+          "updatedAt",
+          "createdAt"
+        ]
+      },
+      "ValidatorGaugeProfile": {
+        "type": "object",
+        "properties": {
+          "profileType": {
+            "type": "string",
+            "const": "validator-gauge"
+          },
+          "operatorAddress": {
+            "$ref": "#/components/schemas/Address"
+          },
+          "network": {
+            "$ref": "#/components/schemas/NetworkSlug"
+          },
+          "gaugeAddress": {
+            "$ref": "#/components/schemas/Address"
+          },
+          "displayName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "avatarUrl": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "websiteUrl": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "socialLinks": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "incentiveStrategy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "votingStrategy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "isFeatured": {
+            "type": "boolean"
+          },
+          "chain": {
+            "$ref": "#/components/schemas/GaugeProfileChainState"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "profileType",
+          "operatorAddress",
+          "network",
+          "gaugeAddress",
+          "displayName",
+          "description",
+          "avatarUrl",
+          "websiteUrl",
+          "socialLinks",
+          "tags",
+          "incentiveStrategy",
+          "votingStrategy",
+          "isFeatured",
+          "chain",
+          "updatedAt",
+          "createdAt"
+        ]
+      },
+      "GaugeProfile": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/BoostGaugeProfile"
+          },
+          {
+            "$ref": "#/components/schemas/ValidatorGaugeProfile"
+          }
+        ],
+        "discriminator": {
+          "propertyName": "profileType",
+          "mapping": {
+            "boost-gauge": "#/components/schemas/BoostGaugeProfile",
+            "validator-gauge": "#/components/schemas/ValidatorGaugeProfile"
+          }
+        }
+      },
+      "SourceMeta": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "string",
+            "const": "matchbox-profiles"
+          },
+          "profileUpdatedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "chainCheckedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "chainBlock": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DecimalString"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "source",
+          "profileUpdatedAt",
+          "chainCheckedAt",
+          "chainBlock"
+        ]
+      },
+      "GaugeProfileList": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GaugeProfile"
+            }
+          },
+          "nextCursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "meta": {
+            "$ref": "#/components/schemas/SourceMeta"
+          }
+        },
+        "required": ["data", "nextCursor", "meta"]
+      },
+      "GaugeProfileDetail": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/GaugeProfile"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/SourceMeta"
+          }
+        },
+        "required": ["data", "meta"]
+      },
+      "ErrorCode": {
+        "type": "string",
+        "enum": [
+          "invalid_request",
+          "unauthorized",
+          "forbidden",
+          "not_found",
+          "conflict",
+          "step_up_required",
+          "rate_limited",
+          "service_disabled",
+          "origin_not_allowed",
+          "network_not_allowed",
+          "internal_error"
+        ]
+      },
+      "ErrorBody": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "$ref": "#/components/schemas/ErrorCode"
+              },
+              "message": {
+                "type": "string"
+              },
+              "requestId": {
+                "type": "string"
+              },
+              "docsUrl": {
+                "type": "string",
+                "format": "uri"
+              },
+              "issues": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["path", "message"]
+                }
+              }
+            },
+            "required": ["code", "message", "requestId", "docsUrl"]
+          }
+        },
+        "required": ["error"]
+      }
+    }
+  }
+}

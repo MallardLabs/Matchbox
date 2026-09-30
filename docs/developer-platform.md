@@ -1,919 +1,495 @@
-# Matchbox Developer Platform README
+# Matchbox Developer Platform v2 — operations runbook
 
-This is the step-by-step guide for running, deploying, and operating the Matchbox Developer Platform:
+Deploy, configure, operate and roll back the developer platform. Design and
+as-built decisions live in
+[developer-platform/ARCHITECTURE.md](developer-platform/ARCHITECTURE.md) (source
+of truth). Per-app detail: [matchbox-id](../apps/matchbox-id/README.md),
+[developer-console](../apps/developer-console/README.md),
+[developer-api](../apps/developer-api/README.md),
+[SDK](../packages/developer-sdk/README.md).
 
-- `id.matchbox.markets` - Matchbox ID, wallet-first sign-in, OAuth-style consent, and Connected Apps.
-- `developer.matchbox.markets` - developer organizations, registered apps, API keys, docs, and usage.
-- `api.matchbox.markets/v1` - the public Developer API for gauges and consent-protected profile data.
+## 1. What exists
 
-The important mental model: developer accounts use Google or email magic links, but end-user identity is wallet-first. Discord is profile data and a path into the web flow; it is not the authority that grants API access.
+| Path                          | Package                    | Worker                       | Host                         | Role                                                                             |
+| ----------------------------- | -------------------------- | ---------------------------- | ---------------------------- | -------------------------------------------------------------------------------- |
+| `apps/matchbox-id`            | `@repo/matchbox-id`        | `matchbox-id`                | `id.matchbox.markets`        | OIDC provider (SIWE wallet sign-in), consent, connected apps, sessions           |
+| `apps/developer-console`      | `@repo/developer-console`  | `matchbox-developer-console` | `developer.matchbox.markets` | Passkey developer console: orgs, apps, environments, keys, usage; staff `/admin` |
+| `apps/developer-api`          | `@repo/developer-api`      | `matchbox-developer-api`     | `api.matchbox.markets`       | Gauge Profile API (`/v1/*`), chain-state reconciliation cron                     |
+| `packages/ui`                 | `@repo/ui`                 | —                            | —                            | React component + token library                                                  |
+| `packages/platform-contracts` | `@repo/platform-contracts` | —                            | —                            | Zod schemas, OpenAPI document, scopes, rate-limit policies                       |
+| `packages/platform-server`    | `@repo/platform-server`    | —                            | —                            | Worker helpers: Supabase admin, flags, crypto, middleware, `RateLimiter` DO      |
+| `packages/logger`             | `@repo/logger`             | —                            | —                            | Structured logger                                                                |
+| `packages/developer-sdk`      | `@matchbox-markets/sdk`    | —                            | —                            | API client + `./oidc` helpers (1.0.0-beta.1)                                     |
 
-## 0. What was implemented
+Migrations (apply in order; all additive):
 
-The implementation spans the existing app, a new identity/developer frontend, a new Cloudflare Worker API, a Supabase schema migration, and a TypeScript SDK.
+1. `supabase/migrations/20260930000001_create_developer_platform_v2.sql` —
+   `mbx_id_*`, `mbx_dev_*`, `mbx_platform_audit_events`,
+   `mbx_api_gauge_chain_state`, view `mbx_api_gauge_profiles`, Discord grant
+   invalidation trigger.
+2. `supabase/migrations/20260930000002_developer_console_functions.sql` —
+   console transactional functions, recovery-passkey step-up block.
+3. `supabase/migrations/20260930000003_matchbox_id_functions.sql` — SIWE
+   network binding, refresh-token families, purge function.
 
-| Area | Location | Purpose |
-| --- | --- | --- |
-| Matchbox ID and developer portal | `apps/developer-platform` | Next.js app serving `id.matchbox.markets`, `developer.matchbox.markets`, and a Netlify proxy for `api.matchbox.markets` |
-| Developer API | `apps/developer-api` | Cloudflare Worker with Durable Object rate limits |
-| TypeScript SDK | `packages/developer-sdk` | `@matchbox-markets/sdk` client for partners |
-| Supabase schema | `supabase/migrations/20260620000001_create_developer_platform.sql` | Developer orgs, apps, keys, grants, auth codes, audit events, and profile hardening |
-| Gauge profile write function | `supabase/functions/upsert-gauge-profile` | Ownership-gated gauge profile updates |
-| Managed gauge editor function | `supabase/functions/manage-gauge-profile-editor` | Controller-gated off-chain editor grants for contract-owned veBTC gauges |
-| Wallet continuity bridge | `apps/webapp/src/pages/id-bridge.tsx` | Lets Matchbox ID detect a wallet already connected on `app.matchbox.markets` |
-| Existing app hook updates | `apps/webapp/src/hooks/useGaugeProfiles.ts` | Routes profile writes through the ownership-gated function |
+Each file has a manual rollback block in its header comment.
 
-The public v1 API exposes:
-
-- `GET /v1/gauges/{gaugeAddress}`
-- `GET /v1/vebtc/{tokenId}/gauge`
-- `GET /v1/profiles/by-wallet/{walletAddress}`
-- `POST /v1/authorizations/exchange`
-
-Profile access is consent-protected. There is intentionally no Discord-to-wallet lookup endpoint, no bulk profile export, no fuzzy search, and no listing endpoint.
-
-## 1. Production topology
-
-The recommended topology keeps Spaceship authoritative for DNS and keeps the existing Matchbox app on Netlify.
-
-```text
-app.matchbox.markets
-  Existing Matchbox Netlify site
-  Includes /id-bridge for best-effort wallet continuity
-
-id.matchbox.markets
-developer.matchbox.markets
-api.matchbox.markets
-  New developer-platform Netlify site
-  id/developers render Next.js pages
-  api reverse-proxies requests to the Worker
-
-matchbox-developer-api.<cloudflare-account>.workers.dev
-  Cloudflare Worker + Durable Object quota limiter
-  Talks to Supabase and Mezo RPC
-```
-
-Yes: the API itself is a separate Cloudflare Workers deployment.
-
-Because the domain stays on Spaceship DNS, `api.matchbox.markets` should be attached to the new Netlify site and proxied to the Worker's `workers.dev` URL by the developer-platform middleware. Cloudflare's direct Worker custom-domain flow expects a Cloudflare-managed zone. You do not need to move nameservers to Cloudflare.
-
-Do not point a Spaceship CNAME directly at a `workers.dev` hostname. Use the Netlify custom-domain target for `api.matchbox.markets`, same as `id` and `developers`.
-
-## 2. Feature flags and safety model
-
-There are two independent kill switches:
-
-| Flag | Where | Effect |
-| --- | --- | --- |
-| `DEVELOPER_PLATFORM_ENABLED` | Netlify developer-platform site and Cloudflare Worker | Enables the portal and public API operations |
-| `DEVELOPER_PROFILE_API_ENABLED` | Netlify developer-platform site and Cloudflare Worker | Enables consent-protected profile reads |
-
-Default both to `false` for first deployment.
-
-Recommended rollout:
-
-1. Deploy schema, functions, frontend, Worker, and DNS with both flags disabled.
-2. Internally test wallet sign-in, app registration, exact redirect validation, and consent.
-3. Enable `DEVELOPER_PLATFORM_ENABLED` for developer signup and approved-app gauge access.
-4. Keep `DEVELOPER_PROFILE_API_ENABLED=false` until the consent flow has been reviewed.
-5. Enable profile access only for selected partners.
-6. Expand the private beta while monitoring quota pressure, denied access, revocations, RPC health, and latency.
-
-## 3. Required accounts and credentials
-
-You need:
-
-- Supabase project access.
-- Supabase service-role key.
-- Supabase anon key.
-- Google OAuth credentials for developer sign-in.
-- Supabase Web3/Ethereum auth enabled for Matchbox ID.
-- WalletConnect/Reown project ID.
-- Cloudflare account for the Worker.
-- Netlify access for:
-  - the existing Matchbox app site;
-  - a new developer-platform site.
-- Spaceship DNS access for `matchbox.markets`.
-
-Generate two high-entropy secrets:
-
-- `API_KEY_PEPPER` - shared by the developer portal and Worker; used to HMAC API keys.
-- `API_GATEWAY_SECRET` - shared by the Netlify proxy and Worker; lets the Worker trust forwarded client IPs from `api.matchbox.markets`.
-
-Generate each secret separately:
-
-```powershell
-$bytes = New-Object byte[] 48
-[Security.Cryptography.RandomNumberGenerator]::Fill($bytes)
-[Convert]::ToBase64String($bytes)
-```
-
-Keep both in a password manager. Never expose either as a `NEXT_PUBLIC_*` value.
-
-## 4. Local development
-
-Install dependencies from the repository root:
-
-```powershell
-pnpm install
-```
-
-Create local environment files.
-
-For the developer portal:
-
-```powershell
-Copy-Item apps\developer-platform\.env.example apps\developer-platform\.env.local
-```
-
-Fill in:
+## 2. Topology
 
 ```text
-NEXT_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=...
-SUPABASE_SERVICE_ROLE_KEY=...
-API_KEY_PEPPER=...same value as Worker...
-DEVELOPER_API_ORIGIN=http://127.0.0.1:8787
-API_GATEWAY_SECRET=...same value as Worker...
-NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID=...
-NEXT_PUBLIC_APP_URL=http://localhost:3000
-NEXT_PUBLIC_ID_URL=http://localhost:3001
-NEXT_PUBLIC_DEVELOPER_URL=http://localhost:3001
-DEVELOPER_PLATFORM_ENABLED=false
-DEVELOPER_PROFILE_API_ENABLED=false
+id.matchbox.markets         → Worker matchbox-id                 Hono + Vite SPA, DO RateLimiter, cron
+developer.matchbox.markets  → Worker matchbox-developer-console  Hono + Vite SPA, DO RateLimiter, send_email EMAIL
+api.matchbox.markets        → Worker matchbox-developer-api      Hono, DO RateLimiter, Analytics Engine REQUEST_LOG, cron
+                                  │
+                                  └─ Supabase Postgres (service role over PostgREST; data store only)
 ```
 
-For the Worker:
+- Custom domains are declared in each `wrangler.jsonc`
+  (`"custom_domain": true`); the `matchbox.markets` zone is on Cloudflare.
+- Supabase: service role only. RLS on every `mbx_*` relation, no
+  anon/authenticated policies or privileges. No Supabase Auth.
+- Analytics Engine: the API writes one data point per request to dataset
+  `mbx_api_requests` (binding `REQUEST_LOG`); the console reads it through the
+  Analytics Engine SQL API using `CF_ACCOUNT_ID` + `CF_ANALYTICS_TOKEN`.
+- Email: console binding `EMAIL` (`send_email`), sender
+  `no-reply@matchbox.markets` (sign-up/recovery codes, invitations, review
+  notices). A missing binding in production is logged as an error.
+- Cron triggers:
+  - `matchbox-id` `17 * * * *` — purges expired nonces, authorization
+    requests, codes, tokens and empty token families (`mbx_id_purge_expired`).
+  - `matchbox-developer-api` `*/10 * * * *` — reconciles
+    `mbx_api_gauge_chain_state` (Multicall3, one block per network).
+- `workers_dev: true` is set for the console and API; `matchbox-id` does not
+  set it.
+- Existing tables v2 reads: `gauge_profiles`, `validator_profiles` (via the
+  view), `discord_wallet_links` (Discord claims; the trigger is created only if
+  the table exists).
 
-```powershell
-Copy-Item apps\developer-api\.dev.vars.example apps\developer-api\.dev.vars
-```
+## 3. Feature flags and rollout order
 
-Fill in:
+Flags are Worker `vars` (`"true"`/`"false"`); all are `"false"` in the
+checked-in wrangler files.
 
-```text
-SUPABASE_URL=https://YOUR_PROJECT.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=...
-API_KEY_PEPPER=...same value as portal...
-API_GATEWAY_SECRET=...same value as portal...
-MEZO_RPC_URL=https://mezo-mainnet.boar.network
-DEVELOPER_PLATFORM_ENABLED=false
-DEVELOPER_PROFILE_API_ENABLED=false
-```
+| Flag                        | Worker                     | Off behaviour                                                                                            |
+| --------------------------- | -------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `DEVELOPER_CONSOLE_ENABLED` | matchbox-developer-console | `/api/*` → `503 service_disabled`; SPA shows unavailable                                                 |
+| `GAUGE_PROFILE_API_ENABLED` | matchbox-developer-api     | `/v1/*` except `/v1/health` and `/openapi.json` → `503 service_disabled`                                 |
+| `MATCHBOX_ID_ENABLED`       | matchbox-id                | `/api/*`, `/oauth/*`, `/.well-known/*` → `503 service_disabled`; SPA shows unavailable                   |
+| `DISCORD_CLAIMS_ENABLED`    | matchbox-id                | `discord:*` scopes dropped from discovery, refused at authorize (`invalid_scope`), omitted from userinfo |
 
-Run the surfaces in separate terminals:
+Changing a flag: edit `wrangler.jsonc` and deploy (durable), or edit the
+variable in the dashboard (Worker → Settings → Variables), which deploys a new
+version immediately. The next `wrangler deploy` overwrites dashboard vars with
+the file's values, so commit the flag state you want to keep. **Any deploy
+from a checkout with `"false"` turns that product off.**
 
-```powershell
-pnpm --filter @repo/webapp dev
-pnpm --filter @repo/developer-platform dev
-pnpm --filter @repo/developer-api dev
-```
+Safe rollout order:
 
-Expected local ports:
+1. Keep every flag `"false"`.
+2. Apply migrations 0001 → 0002 → 0003 (`supabase db push` from a linked CLI,
+   or run each file once, in order, in the Supabase SQL editor). Test against
+   realistic data first per
+   [agent-instructions/supabase-migrations.md](../agent-instructions/supabase-migrations.md).
+3. Complete the Cloudflare prerequisites (§5).
+4. Set secrets on all three Workers (§4). Invalid or missing config makes the
+   console and API answer `500 internal_error` even while disabled; Matchbox ID
+   validates its config only when enabled.
+5. Deploy the three Workers (§4.4). Each deploy attaches its custom domain,
+   which needs the host's Netlify CNAME removed first (§11).
+6. Smoke-test the disabled state (§7.1).
+7. Enable the console: `DEVELOPER_CONSOLE_ENABLED` → `"true"`, deploy. Sign up
+   with the staff member's email (email code → passkey).
+8. Create the staff row (SQL editor):
 
-- Existing Matchbox app: usually `http://localhost:3000`.
-- Matchbox ID/developer portal: `http://localhost:3001`.
-- Developer API Worker: usually `http://127.0.0.1:8787`.
-
-Useful local checks:
-
-```powershell
-pnpm --filter @repo/developer-platform typecheck
-pnpm --filter @repo/developer-platform lint
-pnpm --filter @repo/developer-platform test
-
-pnpm --filter @repo/developer-api typecheck
-pnpm --filter @repo/developer-api lint
-pnpm --filter @repo/developer-api test
-pnpm --filter @repo/developer-api build
-
-pnpm --filter @matchbox-markets/sdk typecheck
-pnpm --filter @matchbox-markets/sdk lint
-pnpm --filter @matchbox-markets/sdk test
-pnpm --filter @matchbox-markets/sdk build
-```
-
-## 5. Supabase setup
-
-### 5.1 Apply the migration
-
-Apply:
-
-```text
-supabase/migrations/20260620000001_create_developer_platform.sql
-```
-
-If the project is linked to the Supabase CLI:
-
-```powershell
-supabase db push
-```
-
-Otherwise:
-
-1. Open Supabase Dashboard.
-2. Go to SQL Editor.
-3. Paste the migration.
-4. Run it once.
-
-The migration is designed defensively, but treat this as a production security migration. It creates the developer-platform tables and hardens existing gauge profile writes.
-
-Important: this migration removes permissive anonymous gauge-profile and avatar writes. Deploy the replacement Edge Function before relying on production profile editing.
-
-### 5.2 Deploy the ownership-gated gauge profile function
-
-Deploy:
-
-```powershell
-supabase functions deploy upsert-gauge-profile --no-verify-jwt
-supabase secrets set MEZO_RPC_URL=https://mezo-mainnet.boar.network
-```
-
-The function performs its own nonce, wallet signature, and on-chain ownership checks. It intentionally does not rely on Supabase's gateway JWT check.
-
-### 5.3 Enable managed veBTC profile editors
-
-Apply `20260807000001_add_gauge_profile_editors.sql`, then deploy both profile
-functions and enable the server-side gate:
-
-```powershell
-supabase functions deploy upsert-gauge-profile --no-verify-jwt
-supabase functions deploy manage-gauge-profile-editor --no-verify-jwt
-supabase secrets set ENABLE_MANAGED_GAUGE_EDITORS=true `
-  MEZO_MAINNET_RPC_URL=https://rpc-http.mezo.boar.network
-```
-
-After the migration and functions are healthy, set
-`NEXT_PUBLIC_MANAGED_GAUGE_EDITORS_ENABLED=true` in the webapp deployment and
-redeploy it. Keep both flags disabled during rollback.
-
-`MEZO_TESTNET_RPC_URL` is optional and defaults to the public Mezo testnet RPC.
-The profile functions never reuse a mainnet RPC for a testnet authorization.
-
-The edge function resolves the gauge, veBTC NFT owner, and one-level `owner()`
-controller from Mezo on every request. A Safe or other ERC-1271 controller must
-verify the whole message under its normal threshold. The resulting grant permits
-only Matchbox profile and avatar updates; it grants no on-chain authority. Grants
-stop matching automatically if the NFT owner or controller changes, and the new
-controller can revoke them explicitly.
-
-### 5.4 Configure Supabase Auth
-
-In Supabase Dashboard -> Authentication:
-
-1. Enable email magic links.
-2. Configure Google OAuth for developer accounts.
-3. Enable Web3/Ethereum sign-in for Matchbox ID.
-4. Set the production site URL to:
-
-   ```text
-   https://id.matchbox.markets
+   ```sql
+   INSERT INTO public.mbx_dev_staff (account_id, role)
+   SELECT id, 'operator'
+   FROM public.mbx_dev_accounts
+   WHERE email = lower('staff@example.com')
+   ON CONFLICT (account_id) DO UPDATE SET role = EXCLUDED.role;
    ```
 
-5. Add allowed redirect URLs:
+   Columns: `account_id` (PK → `mbx_dev_accounts.id`, cascade delete),
+   `role` (`reviewer | operator`), `created_at` (defaults to now). `operator`
+   includes `reviewer`. Reviewers read the queue, apps and audit log and decide
+   reviews; app status changes and quota overrides need `operator`. Staff
+   writes also need a fresh passkey step-up. Confirm `/admin` loads.
 
-   ```text
-   https://id.matchbox.markets/**
-   https://developer.matchbox.markets/**
-   http://localhost:3001/**
-   ```
+9. Enable the API: `GAUGE_PROFILE_API_ENABLED` → `"true"`, deploy. Create a
+   test app and key in the console; run §7.2.
+10. Enable Matchbox ID: `MATCHBOX_ID_ENABLED` → `"true"`, deploy. Run §7.3 and
+    a full sign-in against a test environment.
+11. Discord claims last: `DISCORD_CLAIMS_ENABLED` → `"true"`, deploy — after
+    confirming `discord_wallet_links` is populated by the Discord bot and a
+    `discord:*` review has been approved in `/admin`.
 
-6. Add the Supabase Google callback URL from the dashboard to your Google OAuth client.
+## 4. Secrets
 
-## 6. Redeploy the existing Matchbox app
+Set with `wrangler secret put <NAME>` (prompts for the value; creates and
+deploys a new version). Never put secrets in `vars`.
 
-The existing app now includes:
-
-```text
-https://app.matchbox.markets/id-bridge
+```sh
+pnpm --filter @repo/matchbox-id exec wrangler secret put SESSION_PEPPER
+pnpm --filter @repo/developer-console exec wrangler secret put API_KEY_PEPPER
+pnpm --filter @repo/developer-api exec wrangler secret list
 ```
 
-This route is used by Matchbox ID in a hidden iframe to discover whether the user already has a connected wallet on the existing Matchbox app origin.
+### 4.1 Per Worker
 
-The bridge:
+| Secret                                         | matchbox-id | developer-console | developer-api | Notes                                                                                       |
+| ---------------------------------------------- | :---------: | :---------------: | :-----------: | ------------------------------------------------------------------------------------------- |
+| `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`    |      ✓      |         ✓         |       ✓       | Service role key                                                                            |
+| `API_KEY_PEPPER`                               |             |         ✓         |       ✓       | **Same value** on both. The API requires ≥ 32 chars                                         |
+| `CLIENT_SECRET_PEPPER`                         |      ✓      |         ✓         |               | **Same value** on both                                                                      |
+| `SESSION_PEPPER`                               |      ✓      |         ✓         |               | Independent per Worker; use distinct values                                                 |
+| `OIDC_SIGNING_KEYS`                            |      ✓      |                   |               | JSON array of private ES256 JWKs with `kid`; index 0 signs, all are published in JWKS       |
+| `CF_ACCOUNT_ID`, `CF_ANALYTICS_TOKEN`          |             |         ✓         |               | Analytics Engine SQL API, read-only token. Unset → usage endpoints answer 503               |
+| `MEZO_MAINNET_RPC_URL`, `MEZO_TESTNET_RPC_URL` |      ✓      |                   |       ✓       | ID: SIWE ERC-1271/6492 checks (has defaults). API: cron; a network without a URL is skipped |
 
-- can see the existing app's wallet state because it runs on `app.matchbox.markets`;
-- reports only the connected address to `id.matchbox.markets`;
-- forwards only narrowly allowlisted wallet methods needed for SIWE:
-  - `eth_requestAccounts`
-  - `eth_accounts`
-  - `eth_chainId`
-  - `personal_sign`
-- never signs automatically;
-- never submits a transaction;
-- falls back cleanly to normal wallet connection when browser privacy settings block the bridge.
+Vars already in the wrangler files: `ENVIRONMENT=production`, `ISSUER` (ID);
+`WEBAUTHN_RP_ID`, `WEBAUTHN_ORIGIN`, `PUBLIC_API_ORIGIN`, `ID_ORIGIN`
+(console); `API_VERSION`, `PUBLISHABLE_QUOTA_SHARE` (API). Leave
+`PLATFORM_STORE` unset in production (`memory` is refused when
+`ENVIRONMENT=production`).
 
-Add this variable to the existing Matchbox Netlify site:
+Keep every secret's current value in the team password manager: Cloudflare
+cannot show a secret back, and OIDC key rotation needs the existing
+`OIDC_SIGNING_KEYS` value.
 
-```text
-NEXT_PUBLIC_ID_URL=https://id.matchbox.markets
+Generate fresh v2 peppers; do not reuse the beta `API_KEY_PEPPER` (it was also
+held in Netlify env).
+
+### 4.2 Generating values
+
+Peppers (32 random bytes, base64url, 43 chars):
+
+```sh
+# bash
+node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
+openssl rand -base64 32 | tr '+/' '-_' | tr -d '=\n'; echo
 ```
-
-Confirm the existing app also has:
-
-```text
-NEXT_PUBLIC_SUPABASE_URL=...
-NEXT_PUBLIC_SUPABASE_ANON_KEY=...
-NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID=...
-```
-
-Redeploy the existing Matchbox app.
-
-Smoke test:
 
 ```powershell
-curl.exe https://app.matchbox.markets/id-bridge
+# PowerShell 5.1+
+node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
+$b = New-Object byte[] 32; [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b); [Convert]::ToBase64String($b)
 ```
 
-In a browser, visiting the route directly should show a protected bridge explanation. In an iframe under `id.matchbox.markets`, it should act as the wallet continuity bridge.
+Pipe straight into a secret (bash):
 
-## 7. Deploy the Cloudflare Worker API
-
-The Worker lives at:
-
-```text
-apps/developer-api
+```sh
+node -e "process.stdout.write(require('crypto').randomBytes(32).toString('base64url'))" \
+  | pnpm --filter @repo/developer-api exec wrangler secret put API_KEY_PEPPER
 ```
 
-Authenticate Wrangler:
+For the shared peppers, generate once and set the same value on both Workers.
 
-```powershell
-pnpm --filter @repo/developer-api exec wrangler login
+OIDC signing keys (prints a one-element JSON array):
+
+```sh
+pnpm --silent --filter @repo/matchbox-id keys:generate
 ```
 
-Set Worker secrets:
+Paste the output at the `wrangler secret put OIDC_SIGNING_KEYS` prompt.
 
-```powershell
-pnpm --filter @repo/developer-api exec wrangler secret put SUPABASE_URL
-pnpm --filter @repo/developer-api exec wrangler secret put SUPABASE_SERVICE_ROLE_KEY
-pnpm --filter @repo/developer-api exec wrangler secret put API_KEY_PEPPER
-pnpm --filter @repo/developer-api exec wrangler secret put API_GATEWAY_SECRET
-pnpm --filter @repo/developer-api exec wrangler secret put MEZO_RPC_URL
+### 4.3 OIDC signing key rotation
+
+Index 0 signs; every key in the array is published at `/oauth/jwks`
+(`Cache-Control: public, max-age=300`). Access and ID tokens live 10 min.
+
+1. `pnpm --silent --filter @repo/matchbox-id keys:generate` → new key `N`.
+2. Pre-publish: set the secret to `[OLD, N]` (old still signs, `N` is
+   published). Wait ≥ 5 min for JWKS caches.
+3. Set `[N, OLD]` — `N` now signs.
+4. Wait > 15 min (10 min token lifetime + 5 min JWKS cache).
+5. Set `[N]`.
+6. Update the password manager entry.
+
+Compromised key: set `[N]` immediately. Tokens signed with the old key stop
+verifying at relying parties; users re-authorize.
+
+### 4.4 Build and deploy
+
+Use `pnpm run deploy` (`pnpm deploy` is a pnpm built-in command).
+
+```sh
+pnpm lint && pnpm typecheck && pnpm test
+pnpm turbo run build --filter=@repo/developer-api...   # builds @repo/shared first
+pnpm --filter @repo/developer-api run deploy           # wrangler deploy
+pnpm --filter @repo/developer-console run deploy       # vite build && wrangler deploy
+pnpm --filter @repo/matchbox-id run deploy             # vite build && wrangler deploy
 ```
 
-Deploy:
+- The API's Durable Object migration `v2` deletes the beta `ApiQuotaLimiter`
+  class and adds `RateLimiter`.
+- Logs: `pnpm --filter <package> exec wrangler tail`.
+- Bad version: `pnpm --filter <package> exec wrangler rollback`.
+- Workers Builds (CI) projects for these Workers are not defined in the repo.
+  If used, configure each in the dashboard with deploy command
+  `pnpm --filter <package> run deploy` (plus the `@repo/shared` build for the
+  API).
 
-```powershell
-pnpm --filter @repo/developer-api exec wrangler deploy
+## 5. Cloudflare prerequisites
+
+- **Custom domains** — created by `wrangler deploy` from the wrangler routes.
+  A custom domain cannot be created on a hostname that still has a CNAME
+  record: delete the Netlify CNAME for `id.`, `developer.` and `api.` at
+  cutover.
+  <https://developers.cloudflare.com/workers/configuration/routing/custom-domains/>
+- **Email Sending** — onboard `matchbox.markets` under Email Service → Email
+  Sending (adds `cf-bounce` MX, SPF, DKIM and a `_dmarc` record) so the console
+  can send from `no-reply@matchbox.markets`. Review existing SPF/DMARC records
+  on the zone before accepting. New accounts start with a conservative daily
+  sending quota.
+  <https://developers.cloudflare.com/email-service/get-started/send-emails/> ·
+  <https://developers.cloudflare.com/email-service/configuration/send-bindings/> ·
+  <https://developers.cloudflare.com/email-service/platform/limits/>
+- **Analytics Engine dataset** `mbx_api_requests` — created implicitly by the
+  API Worker's first write; nothing to provision. After the first API request,
+  confirm with `SHOW TABLES` against the SQL API.
+  <https://developers.cloudflare.com/analytics/analytics-engine/>
+- **Analytics read token** (`CF_ANALYTICS_TOKEN`) — custom API token with
+  Account → Account Analytics → Read, limited to the Matchbox account.
+  `CF_ACCOUNT_ID` is that account's id.
+  <https://developers.cloudflare.com/analytics/analytics-engine/sql-api/> ·
+  <https://developers.cloudflare.com/fundamentals/api/get-started/create-token/>
+- Reference: secrets
+  <https://developers.cloudflare.com/workers/configuration/secrets/>, cron
+  triggers
+  <https://developers.cloudflare.com/workers/configuration/cron-triggers/>.
+
+## 6. Local development
+
+Each app runs alone on its own seeded in-memory store
+(`PLATFORM_STORE=memory`); stores are per Worker and share no data. First,
+`cp .dev.vars.example .dev.vars` in each app (git-ignored).
+
+### developer-console — `http://localhost:5175`
+
+```sh
+pnpm --filter @repo/developer-console dev
 ```
 
-The first deployment also creates the Durable Object migration for per-key quotas.
+- `.dev.vars.example` already sets `PLATFORM_STORE=memory`,
+  `DEVELOPER_CONSOLE_ENABLED=true`, `WEBAUTHN_RP_ID=localhost`.
+- Seed: account `dev@matchbox.local` (staff `reviewer`), org "Mallard Labs",
+  an approved live gauge-profile app, an app with an open `discord:profile`
+  review.
+- Sign in with the dev sign-in button (`POST /api/auth/dev-sign-in`; memory
+  store outside production only; the session is already stepped up).
+- Usage charts are synthetic unless `CF_ACCOUNT_ID`/`CF_ANALYTICS_TOKEN` are
+  set.
 
-Record the resulting `workers.dev` URL, for example:
+### matchbox-id — `http://localhost:5180`
 
-```text
-https://matchbox-developer-api.YOUR_ACCOUNT.workers.dev
+```sh
+pnpm --silent --filter @repo/matchbox-id keys:generate   # paste into OIDC_SIGNING_KEYS in .dev.vars
+pnpm --filter @repo/matchbox-id dev
 ```
 
-Smoke test the Worker directly:
+- Seeded clients: test `mbx_test_ExampleTestClient0000001` (public, redirects
+  `http://localhost:5174/callback`, `http://127.0.0.1:5174/callback`); live
+  `mbx_live_ExampleLiveClient0000001` (confidential, redirect
+  `https://localhost:5174/callback`, dev secret in
+  `src/worker/store/memory-store.ts`).
+- Seeded wallet `0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266` (Hardhat account
+  #0, public test key) with a linked Discord. There is no dev sign-in: SIWE
+  needs a wallet signature.
+- Pass `issuer: "http://localhost:5180"` to the SDK OIDC helpers.
 
-```powershell
-curl.exe https://matchbox-developer-api.YOUR_ACCOUNT.workers.dev/health
-curl.exe https://matchbox-developer-api.YOUR_ACCOUNT.workers.dev/openapi.json
+### developer-api — `http://localhost:8787`
+
+```sh
+pnpm --filter @repo/developer-api dev:memory      # sample profiles + fixed keys, no Supabase
+pnpm --filter @repo/developer-api dev:seed-keys   # prints the memory-mode keys
+pnpm --filter @repo/developer-api dev             # Supabase-backed; needs .dev.vars secrets
 ```
 
-With both feature flags disabled, `/health` should respond and report disabled state. Protected API operations should not be usable yet.
+- Publishable test-key origins: `http://localhost:3000`,
+  `http://localhost:5173`.
+- Cron: `pnpm --filter @repo/developer-api exec wrangler dev --test-scheduled`,
+  then `curl http://localhost:8787/__scheduled`.
 
-## 8. Deploy the developer-platform Netlify site
+To run any app against Supabase, remove `PLATFORM_STORE=memory` and fill
+`SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` (use a non-production project).
 
-Create a new Netlify site from the same Git repository. This must be separate from the existing Matchbox app site.
+## 7. Smoke tests
 
-Use these Netlify build settings:
+PowerShell: use `curl.exe`.
 
-| Setting | Value |
-| --- | --- |
-| Base directory | `apps/developer-platform` |
-| Build command | use the included `netlify.toml` command |
-| Publish directory | `apps/developer-platform/.next` |
-| Production branch | same production branch used for Matchbox |
+### 7.1 Disabled state (after first deploy)
 
-Add these environment variables to the new Netlify site:
-
-```text
-NEXT_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=...
-SUPABASE_SERVICE_ROLE_KEY=...
-API_KEY_PEPPER=...same value as Worker...
-DEVELOPER_API_ORIGIN=https://matchbox-developer-api.YOUR_ACCOUNT.workers.dev
-API_GATEWAY_SECRET=...same value as Worker...
-NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID=...
-NEXT_PUBLIC_APP_URL=https://app.matchbox.markets
-NEXT_PUBLIC_ID_URL=https://id.matchbox.markets
-NEXT_PUBLIC_DEVELOPER_URL=https://developer.matchbox.markets
-DEVELOPER_PLATFORM_ENABLED=false
-DEVELOPER_PROFILE_API_ENABLED=false
+```sh
+curl -i https://api.matchbox.markets/v1/health          # 200 {"status":"ok","version":"2.0.0","flags":{"gaugeProfileApi":false}}
+curl -i https://api.matchbox.markets/openapi.json       # 200, OpenAPI 3.1
+curl -i https://api.matchbox.markets/v1/networks        # 503 service_disabled
+curl -i https://id.matchbox.markets/.well-known/openid-configuration   # 503 service_disabled
+curl -i https://developer.matchbox.markets/api/me       # 503 service_disabled
+curl -I https://developer.matchbox.markets/             # 200 (SPA, unavailable state)
 ```
 
-Deploy once before adding custom domains. Confirm the generated `*.netlify.app` URL loads.
+`500 internal_error` means invalid config: `wrangler tail` shows the problem
+list (names only, never values).
 
-The app uses host-aware routing:
+### 7.2 API enabled
 
-- `id.matchbox.markets` routes to Matchbox ID.
-- `developer.matchbox.markets` routes to the developer console.
-- `api.matchbox.markets` proxies to `DEVELOPER_API_ORIGIN`.
-
-## 9. Configure Spaceship DNS and Netlify domains
-
-In the new Netlify site, add three custom domains:
-
-```text
-id.matchbox.markets
-developer.matchbox.markets
-api.matchbox.markets
+```sh
+curl -i https://api.matchbox.markets/v1/networks        # 401 unauthorized
+curl -i -H "Authorization: Bearer $MBX_TEST_SK" https://api.matchbox.markets/v1/networks
+curl -i -H "Authorization: Bearer $MBX_TEST_SK" "https://api.matchbox.markets/v1/gauge-profiles?network=mezo-testnet&limit=5"
+curl -i -H "Authorization: Bearer $MBX_TEST_SK" "https://api.matchbox.markets/v1/gauge-profiles?network=mezo"   # 403 network_not_allowed
+curl -i -H "Authorization: Bearer $MBX_TEST_SK" -H "Origin: https://example.com" https://api.matchbox.markets/v1/networks   # 403 origin_not_allowed
 ```
 
-Netlify will show the DNS target for the site. It is usually a hostname ending in `netlify.app`.
+Check `X-Request-Id`, `RateLimit-*` and `ETag` headers, then confirm the
+requests appear in the console Usage view.
 
-In Spaceship DNS, create three records:
+### 7.3 Matchbox ID enabled
 
-| Type | Host | Value |
-| --- | --- | --- |
-| CNAME | `id` | Netlify-provided target for the new site |
-| CNAME | `developers` | same Netlify target |
-| CNAME | `api` | same Netlify target |
-
-Before adding them, remove any conflicting A, AAAA, or CNAME records for those hosts.
-
-Leave TTL on Automatic/default unless you have a specific reason to lower it temporarily.
-
-Do not change the domain nameservers.
-
-Wait for Netlify to verify DNS and provision TLS for all three hosts.
-
-## 10. Disabled-state smoke test
-
-With both feature flags still disabled, verify:
-
-```powershell
-curl.exe https://api.matchbox.markets/health
-curl.exe https://api.matchbox.markets/openapi.json
+```sh
+curl -s https://id.matchbox.markets/.well-known/openid-configuration   # "issuer":"https://id.matchbox.markets"
+curl -s https://id.matchbox.markets/oauth/jwks                         # one key per OIDC_SIGNING_KEYS entry
 ```
 
-Then check in the browser:
+Then run code + PKCE with the SDK against a test environment: sign in,
+consent, exchange, `verifyIdToken`, userinfo, refresh, revoke. Confirm the
+grant shows on `https://id.matchbox.markets/` and can be revoked there.
 
-- `https://id.matchbox.markets/apps`
-- `https://developer.matchbox.markets/developers`
-- `https://developer.matchbox.markets/docs`
+### 7.4 Console enabled
 
-Expected behavior:
+Sign up (code arrives from `no-reply@matchbox.markets`), register a passkey,
+create an org and an app, create a test API key (step-up prompt), rotate and
+revoke it, open `/admin` as staff.
 
-- The surfaces render.
-- Operations that require the platform flag are disabled.
-- The API health response reports `platformEnabled: false`.
-- The Netlify proxy reaches the Worker.
-- Logs do not expose service-role keys, API keys, profile response bodies, or authorization codes.
+## 8. Partner quickstart
 
-## 11. Enable internal platform testing
+1. Sign up at `https://developer.matchbox.markets` (email code → passkey) and
+   create an organization.
+2. Create an app; its test (`mezo-testnet`) and live (`mezo`) environments are
+   created with it.
+3. Test environment → API keys: secret (`mbx_sk_test_…`, server-only) or
+   publishable (`mbx_pk_test_…`, browsers; register the origin first). Keys
+   are shown once.
+4. Read gauge profiles:
 
-Enable:
+   ```ts
+   import { createMatchboxClient } from "@matchbox-markets/sdk";
 
-```text
-DEVELOPER_PLATFORM_ENABLED=true
-```
-
-Set it in two places:
-
-1. The new Netlify developer-platform site, then redeploy.
-2. The Worker environment, then redeploy.
-
-If you are using the checked-in Worker config for the flag, update `apps/developer-api/wrangler.jsonc` and run:
-
-```powershell
-pnpm --filter @repo/developer-api exec wrangler deploy
-```
-
-Keep this disabled:
-
-```text
-DEVELOPER_PROFILE_API_ENABLED=false
-```
-
-Now test the developer path:
-
-1. Go to `https://developer.matchbox.markets/developers`.
-2. Sign in with Google or email magic link.
-3. Confirm a personal organization is created.
-4. Register an app.
-5. Add exact redirect URIs.
-6. Add app origins.
-7. Submit for review.
-
-Approve a private-beta app manually in Supabase after review:
-
-```sql
-UPDATE public.developer_apps
-SET status = 'approved',
-    approved_scopes = ARRAY['gauges:read']::TEXT[]
-WHERE client_id = 'mbx_client_REPLACE_ME';
-```
-
-Create a publishable or server key in the developer console.
-
-Test gauge access:
-
-```powershell
-curl.exe `
-  -H "Authorization: Bearer mbx_sk_live_REPLACE_ME" `
-  https://api.matchbox.markets/v1/gauges/0xREPLACE_GAUGE_ADDRESS
-```
-
-Test key rotation:
-
-1. Create a second key.
-2. Switch the test client to the second key.
-3. Revoke the first key.
-4. Confirm the first key immediately fails.
-
-## 12. Test Matchbox ID authorization
-
-Build a test authorization URL:
-
-```text
-https://id.matchbox.markets/authorize?client_id=mbx_client_REPLACE_ME&redirect_uri=https%3A%2F%2Fpartner.example%2Fcallback&state=test-state-123
-```
-
-The `redirect_uri` must exactly match one of the app's registered redirect URIs. No partial matching, wildcard matching, or "close enough" matching should pass.
-
-Test flow:
-
-1. Connect a wallet at `https://app.matchbox.markets`.
-2. Open the authorization URL in the same browser.
-3. Matchbox ID should best-effort detect the connected wallet through `/id-bridge`.
-4. Click Continue.
-5. Confirm the wallet prompt is an EIP-4361 message bound to `id.matchbox.markets`.
-6. Confirm it is gasless and not a transaction.
-7. Reject once and verify recovery.
-8. Sign successfully.
-9. Review the exact fields shown on the consent screen.
-10. Authorize the app.
-11. Confirm redirect preserves `state`.
-12. Confirm the redirect includes a short-lived authorization `code`.
-
-Then exchange the code from a server-side context:
-
-```powershell
-curl.exe `
-  -X POST https://api.matchbox.markets/v1/authorizations/exchange `
-  -H "Authorization: Bearer mbx_sk_live_REPLACE_ME" `
-  -H "Content-Type: application/json" `
-  --data '{ "code": "REPLACE_CODE", "redirectUri": "https://partner.example/callback" }'
-```
-
-Expected:
-
-- First exchange succeeds.
-- Second exchange with the same code fails.
-- Expired codes fail.
-- Codes exchanged with the wrong app key fail.
-- Codes exchanged with the wrong redirect URI fail.
-
-## 13. Test Connected Apps and revocation
-
-Go to:
-
-```text
-https://id.matchbox.markets/apps
-```
-
-Test:
-
-1. Sign in with the same wallet.
-2. Confirm authorized apps are listed.
-3. Confirm granted fields are visible.
-4. Confirm app website, privacy policy, and terms links are visible where configured.
-5. Revoke a grant.
-6. Confirm the confirmation dialog is keyboard accessible.
-7. Confirm revocation takes effect immediately.
-8. Confirm profile reads for that wallet/app now return:
-
-   ```json
-   {
-     "error": {
-       "code": "profile_not_available"
-     }
+   const matchbox = createMatchboxClient({
+     apiKey: process.env.MATCHBOX_API_KEY ?? "",
+   });
+   const page = await matchbox.gaugeProfiles.list({
+     network: "mezo-testnet",
+     limit: 50,
+   });
+   for await (const profile of matchbox.gaugeProfiles.iterate({
+     network: "mezo-testnet",
+   })) {
+     console.log(profile.gaugeAddress, profile.displayName);
    }
    ```
 
-Unknown wallets, unlinked wallets, and non-consenting wallets should all return the same 404 shape. This is deliberate privacy behavior.
-
-## 14. Enable selected profile partners
-
-Only after consent-flow review, enable:
-
-```text
-DEVELOPER_PROFILE_API_ENABLED=true
-```
-
-Set it in both:
-
-1. The new Netlify developer-platform site, followed by redeploy.
-2. The Worker environment, followed by redeploy.
-
-Approve `profile:read` only for reviewed apps:
-
-```sql
-UPDATE public.developer_apps
-SET approved_scopes = ARRAY['gauges:read', 'profile:read']::TEXT[]
-WHERE client_id = 'mbx_client_REPLACE_ME';
-```
-
-Changing approved scopes increments the app scope version, so existing grants do not silently gain additional access. Users must consent again to the new scope version.
-
-Test profile access:
-
-```powershell
-curl.exe `
-  -H "Authorization: Bearer mbx_sk_live_REPLACE_ME" `
-  https://api.matchbox.markets/v1/profiles/by-wallet/0xREPLACE_WALLET
-```
-
-Expected access requirements:
-
-- Secret key only.
-- App must be approved.
-- Key must include `profile:read`.
-- App must include approved `profile:read`.
-- Wallet must have an active grant for that app and scope version.
-- Profile API flag must be enabled.
-
-Publishable keys must not access profile endpoints.
-
-## 15. Partner-facing quickstart
-
-Once private beta partners are approved, the partner flow is:
-
-1. Sign in at `https://developer.matchbox.markets/developers`.
-2. Create or select an organization.
-3. Register an app.
-4. Add exact redirect URIs.
-5. Add browser origins if using publishable gauge keys from a browser.
-6. Submit the app for review.
-7. After approval, create an API key.
-8. For public gauge reads, call gauge endpoints with a key that has `gauges:read`.
-9. For profile reads, send users through:
-
-   ```text
-   https://id.matchbox.markets/authorize?client_id=...&redirect_uri=...&state=...
-   ```
-
-10. Exchange the returned code server-side:
-
-    ```text
-    POST https://api.matchbox.markets/v1/authorizations/exchange
-    ```
-
-11. Store the returned wallet/profile association in the partner app only as permitted by their privacy policy and Matchbox's beta terms.
-
-Example SDK usage:
-
-```ts
-import { MatchboxClient } from "@matchbox-markets/sdk";
-
-const matchbox = new MatchboxClient({
-  apiKey: process.env.MATCHBOX_API_KEY!,
-});
-
-const gauge = await matchbox.getGauge("0x...");
-```
-
-Profile lookup:
-
-```ts
-const profile = await matchbox.getProfileByWallet("0x...");
-```
-
-SDK package:
-
-```text
-packages/developer-sdk
-```
-
-OpenAPI contract:
-
-```text
-apps/developer-api/openapi.json
-```
-
-Interactive docs:
-
-```text
-https://developer.matchbox.markets/docs
-```
-
-## 16. Security checklist
-
-Before widening the beta, verify:
-
-- Service-role key is only present server-side.
-- `API_KEY_PEPPER` is only present in server environments.
-- `API_GATEWAY_SECRET` matches between Netlify and Worker.
-- No secrets are `NEXT_PUBLIC_*`.
-- Supabase redirect URLs are exact and production-safe.
-- App redirect URI validation is exact.
-- Authorization codes are single-use and expire within five minutes.
-- Profile responses use `Cache-Control: private, no-store`.
-- Authorization exchange responses use `Cache-Control: private, no-store`.
-- Gauge responses may be edge cached briefly and include ETags.
-- Logs contain request IDs but no profile response bodies.
-- Publishable keys are origin restricted and `gauges:read` only.
-- Secret keys are rejected from browser origins.
-- Optional CIDR allowlists are enforced against the true client IP.
-- Suspended apps cannot use keys or grants.
-- Revoked grants take effect immediately.
-- Wallet/Discord relinking revokes affected grants.
-- CSP, clickjacking protection, CSRF protection, secure cookies, and API-key redaction are active.
-
-## 17. Test checklist
-
-### Wallet and SIWE
-
-- Nonce replay fails.
-- Wrong domain fails.
-- Expired SIWE message fails.
-- Wallet switching is handled.
-- Rejected signatures recover cleanly.
-- Unsupported networks show clear errors.
-- Mobile-wallet return paths work.
-- Existing Matchbox wallet continuity works where browser policy allows.
-- Normal Connect Wallet fallback works where continuity is blocked.
-
-### OAuth-style authorization
-
-- Exact redirect matching.
-- `state` preservation.
-- Cancel redirects correctly.
-- Authorization code is short-lived.
-- Authorization code is single-use.
-- Code is bound to app, redirect URI, and wallet.
-- App suspension invalidates use.
-- Scope change requires fresh consent.
-- Revocation immediately blocks profile access.
-
-### API keys and quotas
-
-- Publishable keys can only access gauge endpoints.
-- Publishable keys require approved browser origins.
-- Secret keys cannot be used from unapproved browser origins.
-- CIDR allowlist works for secret keys.
-- Revoked keys fail immediately.
-- Expired keys fail.
-- Per-minute and daily quota failures are shaped consistently.
-- Usage metadata and last-used metadata update.
-
-### API contracts
-
-- Gauge responses match OpenAPI.
-- Profile responses match OpenAPI.
-- Error responses match OpenAPI.
-- SDK contract tests pass.
-- ETags work for gauge endpoints.
-- Profile and authorization responses are not cached.
-
-### Accessibility and UI
-
-- Consent flow works with keyboard only.
-- Connected Apps revocation dialog restores focus.
-- Screen-reader labels describe wallet, app, scopes, and actions.
-- Reduced motion is respected.
-- Loading skeletons do not shift layout.
-- Inline errors are visible and actionable.
-- Color contrast passes WCAG expectations.
-
-### Supabase and data integrity
-
-- Migration can run on populated data.
-- Migration can be defensively rerun.
-- RLS boundaries hold for anonymous and authenticated users.
-- Direct anonymous gauge profile writes fail.
-- Direct anonymous avatar writes fail.
-- Ownership-gated Edge Function accepts the owner.
-- Ownership-gated Edge Function rejects non-owners.
-
-## 18. Emergency controls
-
-Use the narrowest control that solves the incident.
-
-| Incident | Action |
-| --- | --- |
-| Profile API concern | Set `DEVELOPER_PROFILE_API_ENABLED=false` in Netlify and Worker, redeploy both |
-| Whole platform concern | Set `DEVELOPER_PLATFORM_ENABLED=false` in Netlify and Worker, redeploy both |
-| Bad partner app | Set app status to `suspended` |
-| Leaked API key | Revoke that key |
-| Bad user grant | Revoke that grant |
-| Pepper compromise | Rotate `API_KEY_PEPPER`; this invalidates all existing API keys |
-| Gateway secret compromise | Rotate `API_GATEWAY_SECRET` in both Netlify and Worker |
-
-Useful suspension SQL:
-
-```sql
-UPDATE public.developer_apps
-SET status = 'suspended'
-WHERE client_id = 'mbx_client_REPLACE_ME';
-```
-
-## 19. Troubleshooting
-
-### `api.matchbox.markets` returns a Netlify page instead of API JSON
-
-Check:
-
-- The custom domain is attached to the developer-platform Netlify site, not the existing app.
-- `DEVELOPER_API_ORIGIN` is set to the Worker `workers.dev` URL.
-- `API_GATEWAY_SECRET` is set in Netlify and Worker.
-- The developer-platform middleware is deployed.
-
-### Worker direct URL works, but `api.matchbox.markets` fails
-
-This is usually Netlify proxy configuration or DNS.
-
-Check:
-
-- Spaceship CNAME for `api` points to the Netlify target.
-- Netlify TLS is provisioned for `api.matchbox.markets`.
-- `DEVELOPER_API_ORIGIN` has no trailing path.
-- Netlify function/edge logs show the proxy request.
-
-### Wallet continuity does not auto-detect the existing wallet
-
-This is best effort. It can fail when:
-
-- the user is in a different browser/profile;
-- third-party iframe storage is blocked;
-- the wallet session expired;
-- WalletConnect requires a fresh pairing;
-- extension policy blocks provider access in iframes.
-
-This is okay. The normal Connect Wallet button remains the fallback. The user must always sign the EIP-4361 message explicitly.
-
-### Authorization says redirect URI is invalid
-
-Check that the URL in the request exactly matches a registered redirect URI. Exact means:
-
-- same scheme;
-- same host;
-- same path;
-- same trailing slash behavior;
-- same query string if one was registered.
-
-### Profile endpoint returns 404 for a wallet that "should work"
-
-This is the expected privacy-preserving failure for many cases. Check:
-
-- `DEVELOPER_PROFILE_API_ENABLED=true` in both deployments.
-- App is approved.
-- App has `profile:read` in approved scopes.
-- Secret key has `profile:read`.
-- Key is not revoked or expired.
-- Grant exists for the wallet and app.
-- Grant scope version matches the app's current scope version.
-- Wallet is still linked to the verified Discord association referenced by the grant.
-
-The API intentionally does not distinguish unknown, unlinked, and non-consenting wallets.
-
-### Key works locally but not in production
-
-Check:
-
-- The portal and Worker share the exact same `API_KEY_PEPPER`.
-- You copied the full secret once when it was created.
-- The key prefix matches the database identifier.
-- The key has the required scopes.
-- The app is approved and not suspended.
-- The key has not expired.
-- CIDR allowlist includes the request source.
-
-### Gauge endpoint returns stale or missing data
-
-Check:
-
-- Mezo RPC health.
-- Gauge address casing and chain.
-- v1 is Mezo mainnet-only.
-- Edge cache TTL.
-- ETag behavior.
-- Supabase records for gauge profiles.
-
-## 20. Known v1 boundaries
-
-These are intentional for v1:
-
-- Gauge v1 is Mezo mainnet-only.
-- A wallet may authorize multiple apps.
-- Each app sees only the fields presented during consent.
-- Grants remain active until revoked or invalidated by relinking/scope changes.
-- Billing is out of scope.
-- Webhooks are out of scope.
-- Bulk export is out of scope.
-- Additional SDK languages are out of scope.
-- Full teammate invite UX is not complete yet, though organizations, memberships, and roles are represented in the schema.
-
-## 21. Vendor references
-
-- [Cloudflare Workers custom domains](https://developers.cloudflare.com/workers/configuration/routing/custom-domains/)
-- [Cloudflare Wrangler configuration](https://developers.cloudflare.com/workers/wrangler/configuration/)
-- [Cloudflare Durable Objects](https://developers.cloudflare.com/durable-objects/)
-- [Netlify external DNS](https://docs.netlify.com/manage/domains/configure-domains/configure-external-dns/)
-- [Netlify monorepo configuration](https://docs.netlify.com/configure-builds/monorepos/)
-- [Supabase Web3 authentication](https://supabase.com/docs/guides/auth/auth-web3)
-- [Supabase CLI migrations](https://supabase.com/docs/reference/cli/supabase-db-push)
-- [EIP-4361: Sign-In with Ethereum](https://eips.ethereum.org/EIPS/eip-4361)
+   Test keys read `mezo-testnet` only (validator gauges; boost gauges are
+   mainnet-only). Live keys need the live environment approved: a submission
+   for `gauge-profiles:read` alone is auto-approved when the owner email is
+   verified, the app has a website URL and the app is `active`.
+
+5. Sign in with Matchbox: register redirect URIs on the environment (test
+   accepts `https://` and `http://localhost` / `http://127.0.0.1`; live
+   `https://` only), take the client id (`mbx_test_…`), create a client secret
+   for confidential clients, then use `@matchbox-markets/sdk/oidc`:
+   `createPkcePair`, `createState`, `createNonce`, `buildAuthorizeUrl`,
+   `exchangeCode`, `verifyIdToken`, `fetchUserinfo`, `refreshTokens`,
+   `revokeToken`. Scopes `openid`, `wallet`; `discord:id` and
+   `discord:profile` need a manual review. Refresh tokens rotate: always store
+   the newest.
+
+Full reference: the console Docs section and
+[packages/developer-sdk/README.md](../packages/developer-sdk/README.md).
+
+## 9. Security checklist
+
+- [ ] All Workers run `ENVIRONMENT=production` with `PLATFORM_STORE` unset
+      (memory store and dev sign-in are refused in production).
+- [ ] Peppers freshly generated from ≥ 32 random bytes; shared peppers
+      identical across each pair; `SESSION_PEPPER` distinct per Worker.
+- [ ] `OIDC_SIGNING_KEYS` and all peppers held only in Cloudflare secrets and
+      the password manager.
+- [ ] `CF_ANALYTICS_TOKEN` is Account Analytics Read only, one account.
+- [ ] Migrations applied; `anon`/`authenticated` have no access to `mbx_*`
+      (spot-check a `mbx_*` read with the anon key: it must fail).
+- [ ] Stale beta secrets removed from `matchbox-developer-api`
+      (`wrangler secret list`; delete `API_GATEWAY_SECRET` and `MEZO_RPC_URL`
+      if present).
+- [ ] `WEBAUTHN_RP_ID=developer.matchbox.markets`,
+      `WEBAUTHN_ORIGIN=https://developer.matchbox.markets`,
+      `ISSUER=https://id.matchbox.markets`.
+- [ ] Email Sending domain verified (SPF, DKIM, DMARC).
+- [ ] Staff rows limited to named people; `operator` only where needed.
+- [ ] Intended flag state committed in each `wrangler.jsonc`.
+
+## 10. Emergency controls
+
+| Situation                        | Action                                                                                                                                                 | Effect                                                                                                    |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------- |
+| Product misbehaving              | Flag → `"false"` (dashboard var for speed, then commit)                                                                                                | `503 service_disabled`                                                                                    |
+| Bad deploy                       | `wrangler rollback`                                                                                                                                    | Previous version                                                                                          |
+| Abusive or compromised app       | Console `/admin` → app status `suspended` (operator + step-up)                                                                                         | API refuses its keys (≤ 15 s key cache); ID refuses authorize/token/userinfo. Nothing revoked; reversible |
+| Leaked API key                   | Owner revokes in the console. Staff fallback (SQL, no audit event): `UPDATE public.mbx_dev_api_keys SET revoked_at = now() WHERE prefix = '<prefix>';` | 401 within 15 s                                                                                           |
+| Leaked client secret             | Owner revokes/rotates in the console                                                                                                                   | Token endpoint rejects it                                                                                 |
+| Revoke all OIDC tokens of an env | SQL: `SELECT public.mbx_dev_revoke_environment_tokens('<environment uuid>', '<kebab-case-reason>');`                                                   | Revokes token families and access tokens; bumps `scope_version` (forces re-consent)                       |
+| OIDC signing key compromise      | §4.3, compromised key                                                                                                                                  | All outstanding tokens invalid                                                                            |
+| Quota abuse                      | `/admin` quota override on the environment (operator)                                                                                                  | Applies within 60 s (override cache)                                                                      |
+
+Pepper rotation consequences (there is no dual-pepper overlap):
+
+- `API_KEY_PEPPER` — every API key fails (401); all partners must create new
+  keys. Change on console and API together.
+- `CLIENT_SECRET_PEPPER` — every client secret fails at `/oauth/token`;
+  confidential clients need new secrets. Change on console and ID together.
+- `SESSION_PEPPER` (ID) — wallet sessions, pending codes and refresh tokens
+  stop matching: users sign in again and apps re-authorize. Access tokens run
+  out within 10 min.
+- `SESSION_PEPPER` (console) — console sessions, pending email codes, sign-up
+  state and invitation tokens become invalid: developers sign in again;
+  resend invitations.
+
+## 11. Beta cutover
+
+- Old `developer_*` tables are untouched; drop them in a later migration once
+  v2 is stable. Beta API keys and OAuth clients do **not** carry over:
+  partners re-register in the console.
+- Removed beta surfaces: `apps/developer-platform`, custom
+  `/v1/authorizations/exchange`, `/v1/profiles/by-wallet`, webapp `/id-bridge`.
+- Per host (`developer.`, `id.`, `api.`): delete the Netlify CNAME, deploy the
+  Worker (creates the custom domain and certificate), run §7.1. Expect a short
+  gap per host.
+- `api.matchbox.markets` is served today by the beta Netlify proxy in front of
+  `matchbox-developer-api`; it moves to that Worker's custom domain. Same
+  Worker name, so the deploy replaces the beta code.
+- Once `id.` and `developer.` resolve to the new Workers, decommission Worker
+  `matchbox-developer-platform`
+  (`npx wrangler delete --name matchbox-developer-platform`, or the dashboard)
+  and Netlify site `matchboxdeveloper` (remove its custom domains, then
+  delete).
+
+## 12. Known boundaries and follow-ups
+
+- Staff are added by SQL only; there is no staff UI and no staff-side API-key
+  revoke (SQL fallback above).
+- Revocation latency: API keys ≤ 15 s; quota overrides ≤ 60 s. Rate limiters
+  fail open if the Durable Object is unavailable.
+- `discord:*` without a linked Discord fails with `access_denied`
+  (`discord-not-linked`); optional scopes are not supported.
+- `pool_address` in chain state is always null.
+- Matchbox MCP hosting is out of scope.
+- `matchbox-id` has no `workers_dev` setting, so its first live test is on
+  `id.matchbox.markets`; SIWE domain, WebAuthn RP ID and issuer are bound to
+  the production hosts anyway.
+- `turbo.json` `globalEnv` still lists beta variables
+  (`DEVELOPER_API_ORIGIN`, `API_GATEWAY_SECRET`,
+  `DEVELOPER_PLATFORM_ENABLED`, `DEVELOPER_PROFILE_API_ENABLED`,
+  `NEXT_PUBLIC_ID_URL`, `NEXT_PUBLIC_DEVELOPER_URL`); nothing in `apps/` or
+  `packages/` reads them.
+- No documented npm release step for `@matchbox-markets/sdk`.
+- No Workers Builds configuration in the repo for the three Workers.
