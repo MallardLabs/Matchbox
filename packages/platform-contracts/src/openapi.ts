@@ -10,6 +10,7 @@ import {
   gaugeProfileListMaxLimit,
   gaugeProfileListSchema,
   gaugeProfileSchema,
+  gaugeProfileTagFilterSchema,
   gaugeProfileTypeSchema,
   healthResponseSchema,
   networkListSchema,
@@ -262,8 +263,8 @@ export function createOpenApiDocument() {
               name: "tag",
               in: "query",
               required: false,
-              description: "Only profiles with this tag.",
-              schema: parameterSchema(z.string().min(1).max(64)),
+              description: "Only profiles with this tag (a lower-case slug).",
+              schema: parameterSchema(gaugeProfileTagFilterSchema),
             },
             {
               name: "updatedSince",

@@ -424,6 +424,15 @@ export const consoleSessionListResponseSchema = z.object({
   data: z.array(consoleSessionSchema),
 })
 
+/** POST /api/me/sessions/revoke-others ("sign out everywhere else"). */
+export const revokeOtherSessionsResponseSchema = z.object({
+  revoked: z.number().int().nonnegative(),
+})
+
+export type RevokeOtherSessionsResponse = z.infer<
+  typeof revokeOtherSessionsResponseSchema
+>
+
 // ---------------------------------------------------------------------------
 // Organizations, members, invitations
 // ---------------------------------------------------------------------------

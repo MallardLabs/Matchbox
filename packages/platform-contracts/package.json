@@ -4,6 +4,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./api-request-log": {
+      "types": "./src/api-request-log.ts",
+      "default": "./src/api-request-log.ts"
+    },
     "./audit": {
       "types": "./src/audit.ts",
       "default": "./src/audit.ts"

@@ -44,6 +44,8 @@ export type LinkedDiscord = z.infer<typeof linkedDiscordSchema>
 export const identityAccountSchema = z.object({
   walletAddress: addressSchema,
   discord: linkedDiscordSchema.nullable(),
+  /** Network the current session's SIWE signature was verified on. */
+  signedInNetwork: networkSlugSchema.nullable(),
 })
 
 export type IdentityAccount = z.infer<typeof identityAccountSchema>
@@ -203,3 +205,34 @@ export const sessionListResponseSchema = z.object({
 export type SessionListResponse = z.infer<typeof sessionListResponseSchema>
 
 export const idPathParamsSchema = z.object({ id: uuidSchema })
+
+// Matchbox ID SPA view of an authorization request --------------------------
+// Additive to `authorizationRequestDetailSchema`: what the consent screen
+// needs beyond the detail contract.
+
+export const consentAppViewSchema = consentAppSchema.extend({
+  /** Live environment whose review is approved. */
+  verified: z.boolean(),
+})
+
+export type ConsentAppView = z.infer<typeof consentAppViewSchema>
+
+export const authorizationRequestViewSchema =
+  authorizationRequestDetailSchema.extend({
+    app: consentAppViewSchema,
+    /** Host of the registered redirect URI. */
+    redirectHost: z.string(),
+    /** False when an active grant already covers every requested scope. */
+    consentRequired: z.boolean(),
+    /** `prompt=login` and the session started before the request. */
+    reauthenticationRequired: z.boolean(),
+    /**
+     * The session's contract-account signature was verified on another
+     * network: sign in again with a SIWE message for `network`'s chain id.
+     */
+    networkSignInRequired: z.boolean(),
+  })
+
+export type AuthorizationRequestView = z.infer<
+  typeof authorizationRequestViewSchema
+>

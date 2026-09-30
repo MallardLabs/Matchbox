@@ -171,10 +171,29 @@ export const gaugeProfileCursorCodec = createCursorCodec(
   gaugeProfileCursorSchema,
 )
 
+/**
+ * `tag` filter: a lower-case slug. Anything else (commas, braces, quotes)
+ * would change the meaning of the PostgREST array filter it feeds.
+ */
+export const gaugeProfileTagFilterSchema = z
+  .string()
+  .regex(/^[a-z0-9][a-z0-9-]{0,39}$/, "Expected a lower-case tag slug")
+
+// Profile tags are free text ("DeFi Yield"); the `tag` filter matches their
+// slug ("defi-yield"). Mirrors the `tag_slugs` column of the
+// mbx_api_gauge_profiles view.
+export function tagSlug(tag: string): string {
+  return tag
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+}
+
 export const gaugeProfileListQuerySchema = z.object({
   network: networkSlugSchema,
   profileType: gaugeProfileTypeSchema.optional(),
-  tag: z.string().trim().min(1).max(64).optional(),
+  tag: z.string().trim().pipe(gaugeProfileTagFilterSchema).optional(),
+
   updatedSince: isoDateTimeSchema.optional(),
   address: z
     .array(addressInputSchema)

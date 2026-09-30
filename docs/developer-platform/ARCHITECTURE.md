@@ -96,7 +96,9 @@ only as `HMAC-SHA256(pepper, value)` hex (`*_hash`).
   `created_at`. Single use, 10 min.
 - `mbx_id_sessions` — `id`, `account_id`, `token_hash` unique, `created_at`,
   `expires_at` (7 d), `last_seen_at`, `revoked_at`, `user_agent`,
-  `ip_prefix` (IPv4 /24, IPv6 /48 — never full IP).
+  `ip_prefix` (IPv4 /24, IPv6 /48 — never full IP), `siwe_chain_id bigint`,
+  `signer_kind` (`eoa | contract`; both NULL for pre-binding sessions —
+  migration `20260930000003`). See §7 "Network binding".
 - `mbx_id_pairwise_subjects` — `(account_id, sector_id)` PK, `subject` unique
   (`mbx_` + 32 base64url random chars).
 - `mbx_id_grants` — `id`, `account_id`, `app_id`, `environment_id`,
@@ -112,6 +114,19 @@ only as `HMAC-SHA256(pepper, value)` hex (`*_hash`).
 - `mbx_id_refresh_tokens` — `id`, `token_hash` unique, `grant_id`,
   `family_id`, `parent_id null`, `scopes`, `expires_at` (30 d), `created_at`,
   `rotated_at`, `revoked_at`. Reuse of a rotated token revokes the family.
+- `mbx_id_token_families` (migration `20260930000003`) — `family_id` PK,
+  `grant_id null`, `created_at`, `revoked_at`. The family-level revocation
+  record. All token writes go through `SECURITY INVOKER` functions
+  (service_role only) that lock the family row:
+  `mbx_id_issue_code_tokens` (first code redemption creates the family and
+  its first refresh + access token; returns `family-revoked` if a replay
+  got there first), `mbx_id_rotate_refresh_token` (marks the old token
+  rotated and inserts the successor refresh + access token atomically; a
+  second rotation of the same token revokes the family instead) and
+  `mbx_id_revoke_token_family` (marks the family, revokes its refresh tokens
+  and `jti`-prefixed access tokens). `mbx_id_purge_expired(now, batch)`
+  deletes expired nonces/requests (+1 h), codes/tokens (+1 d) and empty
+  families (> 2 d) in bounded batches for the hourly Worker cron.
 - `mbx_id_access_tokens` — `jti` PK, `grant_id`, `expires_at` (10 min),
   `revoked_at`. Access tokens are ES256 JWTs; userinfo checks jti + grant.
 
@@ -264,6 +279,9 @@ Additions to the column lists above, all additive:
 - `rate-limits.ts` — `rateLimitPolicies` by environment kind and endpoint
   class (`gauge-profiles`, `unauthenticated`, `oidc-token`, `siwe`,
   `userinfo`).
+- `api-request-log.ts` — Analytics Engine layout for `mbx_api_requests`
+  (`API_REQUEST_LOG_LAYOUT`, `apiRequestLogSchema`, `apiRequestLogDataPoint`,
+  `apiRequestLogDataset`, `apiRequestCacheStatusSchema`); see §6.
 - `openapi.ts` + `scripts/generate-openapi.ts` — builds the public OpenAPI 3.1
   document from the schemas (`z.toJSONSchema`, draft-2020-12) and writes
   `packages/platform-contracts/openapi.json`. A test asserts the checked-in
@@ -317,19 +335,75 @@ Rules:
   `RateLimit-Limit`, `RateLimit-Remaining`, `RateLimit-Reset`, and
   `Retry-After` on 429. CORS headers on **every** response including errors
   (publishable keys only echo registered origins).
-- Rate limits: Durable Object `RateLimiter` keyed by `environment_id`
-  (burst per-minute + daily), plus a second key `pk:<key>:<ip-prefix>` for
-  publishable keys. Defaults by endpoint class in
+- Rate limits: Durable Object `RateLimiter` keyed by `environment_id` and
+  key kind (burst per-minute + daily; publishable keys get their own,
+  smaller share so browser traffic cannot starve server traffic), plus a
+  second key `pk:<key>:<ip-prefix>` for publishable keys. Defaults by
+  endpoint class in
   `@repo/platform-contracts` `rateLimitPolicies` (test: 60/min, 5 000/day;
   live: 300/min, 100 000/day; publishable+IP: 60/min), overridable per
   environment by `mbx_dev_quota_overrides` (cached 60 s). Unauthenticated or
   malformed requests hit a per-IP-prefix limiter before any DB lookup.
-- Usage/logs: write one Analytics Engine data point per request to dataset
-  `mbx_api_requests` (`indexes: [environment_id]`, blobs: request id, key id,
-  route template, method, status, cache status, colo, country; doubles:
-  latency ms, status code). No DB writes on the request path; `last_used_at`
+- Usage/logs: write one Analytics Engine data point per request (binding
+  `REQUEST_LOG`) to dataset `mbx_api_requests`. The layout is owned by
+  `@repo/platform-contracts/api-request-log` (`API_REQUEST_LOG_LAYOUT`,
+  `apiRequestLogSchema`, `apiRequestLogDataPoint`); the console reads it
+  with the same constants. No DB writes on the request path; `last_used_at`
   is updated at most once per key per 5 min via `ctx.waitUntil`.
+
+  | Column | Field | Values |
+  | --- | --- | --- |
+  | `index1` | environment id | `"anonymous"` when no key verified |
+  | `blob1` | request id | `req_…` (= `X-Request-Id`) |
+  | `blob2` | key id | `""` when unknown |
+  | `blob3` | route template | `/v1/gauge-profiles/{network}/{gaugeAddress}`, `preflight`, `unmatched` |
+  | `blob4` | method | |
+  | `blob5` | status | `"200"` |
+  | `blob6` | cache status | `not-modified` (304), `full` (2xx body), `none` |
+  | `blob7` | colo | `""` when absent |
+  | `blob8` | country | `""` when absent |
+  | `blob9` | environment kind | `test` / `live` / `""` |
+  | `double1` | latency ms | |
+  | `double2` | status code | |
 - Errors never echo upstream detail; logs carry request id.
+
+### 6.1 Implementation notes (as built)
+
+- `createApp(deps)` (`apps/developer-api/src/app.ts`) takes `{ store,
+  rateLimits, analytics, now, flags, config }`; `src/index.ts` validates the
+  bindings with zod once per isolate and answers 500 `internal_error` when
+  they are invalid. `PLATFORM_STORE=memory` (sample data, fixed dev keys) is
+  refused when `ENVIRONMENT=production`.
+- Rate-limit buckets: `env:<environmentId>:secret` (gauge-profiles policy +
+  overrides), `env:<environmentId>:publishable` (the same policy scaled by
+  `PUBLISHABLE_QUOTA_SHARE`, default `0.5`, floored, min 1 — anyone holding
+  the public key can spend it, so it cannot drain the secret-key quota),
+  `pk:<keyId>:<ipPrefix>` (publishable), `ip:<ipPrefix>`
+  (missing/malformed/failed keys, `unauthenticated` policy) and
+  `lookup:<ipPrefix>` (120/min, 20 000/day) consumed before each key-cache
+  miss reaches the DB. The limiter fails open when the Durable Object is
+  unavailable (logged).
+- `tag` must be a lower-case slug (`^[a-z0-9][a-z0-9-]{0,39}$`, contract
+  `gaugeProfileTagFilterSchema`); the store re-checks it before it reaches
+  PostgREST's `cs.{…}` filter. Stored tags are free text today, so tags such
+  as `DeFi` are not filterable until they are normalised.
+- Live keys also need `gauge-profiles:read` in the environment's
+  `approved_scopes`; test keys need no scope. Suspended/retired apps → 403
+  `forbidden`; revoked/expired keys → 401 `unauthorized`; a secret key with
+  an `Origin` header → 403 `origin_not_allowed`; CIDR miss → 403
+  `forbidden`.
+- CORS: preflight is answered for any origin. Actual responses echo the
+  origin only for a publishable key whose registered origins contain it;
+  secret-key responses never carry `Access-Control-Allow-Origin`; responses
+  with no verified key echo the origin on errors only (no data); health and
+  `openapi.json` use `*`. `Vary: Origin, Authorization` everywhere.
+- Chain-state cron: Multicall3 (`0xcA11…CA11`) pinned to one block per
+  network; boost gauges read `BoostVoter.isAlive`,
+  `boostableTokenIdToGauge(tokenId)` (the token is stored only when it maps
+  back to the gauge), veBTC `ownerOf`, and gauge `rewardsBeneficiary`;
+  validator gauges read `ValidatorsVoter.isAlive` + `rewardsBeneficiary`.
+  `pool_address` stays null. `/v1/vebtc/...` resolves the token via chain
+  state first, then the profile's own `vebtc_token_id`.
 
 ## 7. Matchbox ID (`id.matchbox.markets`)
 
@@ -368,9 +442,38 @@ and the decision proceeds without it only if the app marks it optional
 (`optionalScopes` param is out of scope — v1 fails with `access_denied`
 reason `discord-not-linked`).
 
-Security: CSRF via `SameSite=Strict` session cookie + `Origin` check on all
-non-GET `/api/*`; CSP with `frame-ancestors 'none'`; no iframe bridge;
-per-IP-prefix + per-account limits on `/api/siwe/*` and `/oauth/token`.
+Security: the `__Host-mbx_id` session cookie is `SameSite=Lax` (Strict would
+hide the session from the cross-site top-level redirect into
+`/oauth/authorize`, breaking `prompt=none` and consent skipping); CSRF on
+`/api/*` is the `Origin` check on every non-GET request
+(`requireSameOrigin`); CSP with `frame-ancestors 'none'`; no iframe bridge;
+per-IP-prefix + per-account limits on `/api/siwe/*`; per-IP-prefix +
+per-client limits on `/oauth/token`, `/oauth/userinfo` and
+`/oauth/authorize` (authorize: 60/min, 2 000/day per IP prefix before any
+lookup, then the client's `oidc-token` policy before a request row is
+stored). Per-client limits honour `mbx_dev_quota_overrides` (cached 60 s).
+The consent decision re-checks that the stored `redirect_uri` is still
+registered and otherwise sends the SPA error page (`invalid_redirect_uri`).
+An hourly cron (`triggers.crons`) purges expired rows.
+
+Access tokens: ES256 `at+jwt` with `iss` = issuer and `aud` = the
+`client_id`; userinfo and revocation require the `at+jwt` header, `aud` ==
+`client_id`, and a grant for that client (an ID token is not an access
+token).
+
+Network binding: `/api/siwe/verify` records the SIWE `chainId` and the
+signer kind on the session — `eoa` when the signature ecrecovers to the
+wallet (the key controls the address on every chain), otherwise `contract`
+(ERC-1271 / ERC-6492, verified against that chain only; the same address
+on another network may belong to someone else). A contract session may
+only authorize environments on its SIWE chain's network: silent approval
+is skipped (`prompt=none` → `login_required`), the consent view sets
+`networkSignInRequired` and the SPA sends the user to
+`/sign-in?chain=<chainId>&force=true` ("Sign in on <network>"), and an
+approve decision is refused. Connected apps and device lists are scoped the
+same way. `wallet_network` is the environment network, which the session is
+thereby verified for.
+
 
 SPA pages: `/` (account: wallet, linked Discord, connected apps, sessions),
 `/sign-in`, `/authorize`, `/apps` (connected apps; kept for old links),
@@ -425,6 +528,14 @@ keys, OIDC integration, rate limits, errors, pagination, changelog), Admin.
   `refreshTokens`, `revokeToken`, `fetchUserinfo`, `verifyIdToken` (via
   `jose` + remote JWKS).
 - No React or wallet dependency. ESM + CJS via tsup.
+- As built (1.0.0-beta.1): `src/generated/schema.ts` is checked in and
+  regenerated with `pnpm --filter @matchbox-markets/sdk generate`; a test
+  fails when it is stale. Client options `{ apiKey, baseUrl?, fetch?,
+  maxRetries? (2), maxRetryDelayMs? (10 000) }`; responses are shape-checked
+  with type guards (no zod dependency). OIDC lives on the `./oidc` subpath
+  (plus `createState`, `createNonce`, `pkceChallenge`, `oidcEndpoints`,
+  `OidcError`); `verifyIdToken` checks ES256 signature, `iss`, `aud`,
+  `exp`/`iat`, `nonce` and `azp`. The CJS build bundles `jose` (ESM-only).
 
 ## 10. UI (`@repo/ui`)
 

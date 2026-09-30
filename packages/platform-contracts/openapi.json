@@ -162,11 +162,10 @@
             "name": "tag",
             "in": "query",
             "required": false,
-            "description": "Only profiles with this tag.",
+            "description": "Only profiles with this tag (a lower-case slug).",
             "schema": {
               "type": "string",
-              "minLength": 1,
-              "maxLength": 64
+              "pattern": "^[a-z0-9][a-z0-9-]{0,39}$"
             }
           },
           {

@@ -8,6 +8,7 @@ import {
   gaugeProfileSchema,
   parseGaugeProfileListQuery,
   sourceMetaFor,
+  tagSlug,
   vebtcGaugeProfileParamsSchema,
 } from "./gauge-profiles"
 
@@ -162,11 +163,25 @@ describe("parseGaugeProfileListQuery", () => {
       "network=mezo&profileType=pool",
       "network=mezo&updatedSince=yesterday",
       `network=mezo&${Array.from({ length: 51 }, () => `address=${gauge}`).join("&")}`,
+      // Tags feed a PostgREST array filter: slugs only.
+      "network=mezo&tag=a,b",
+      "network=mezo&tag=%7D",
+      "network=mezo&tag=%22x%22",
+      "network=mezo&tag=DeFi",
+      "network=mezo&tag=-x",
+      `network=mezo&tag=${"a".repeat(41)}`,
     ]) {
       expect(parseGaugeProfileListQuery(new URLSearchParams(query)).ok).toBe(
         false,
       )
     }
+  })
+
+  it("accepts slug tags", () => {
+    const result = parseGaugeProfileListQuery(
+      new URLSearchParams("network=mezo&tag=%20defi-2%20"),
+    )
+    expect(result.ok && result.query.tag).toBe("defi-2")
   })
 
   it("decodes cursors and rejects tampered ones", () => {
@@ -213,5 +228,14 @@ describe("path params", () => {
           .success,
       ).toBe(false)
     }
+  })
+})
+
+describe("tagSlug", () => {
+  it("slugs free-text profile tags for case-insensitive filtering", () => {
+    expect(tagSlug("DeFi")).toBe("defi")
+    expect(tagSlug("  Long Term / Yield ")).toBe("long-term-yield")
+    expect(tagSlug("already-slugged")).toBe("already-slugged")
+    expect(tagSlug("---")).toBe("")
   })
 })
