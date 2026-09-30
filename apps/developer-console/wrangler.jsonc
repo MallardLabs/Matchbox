@@ -39,4 +39,26 @@
     "PUBLIC_API_ORIGIN": "https://api.matchbox.markets",
     "ID_ORIGIN": "https://id.matchbox.markets",
   },
+  // Staging on workers.dev (no custom domain). Build + deploy with
+  // `CLOUDFLARE_ENV=staging pnpm --filter @repo/developer-console run deploy`.
+  // Non-inheritable keys are repeated; secrets are set per environment.
+  "env": {
+    "staging": {
+      "workers_dev": true,
+      "routes": [],
+      "durable_objects": {
+        "bindings": [{ "name": "RATE_LIMITER", "class_name": "RateLimiter" }],
+      },
+      "migrations": [{ "tag": "v1", "new_sqlite_classes": ["RateLimiter"] }],
+      "send_email": [{ "name": "EMAIL" }],
+      "vars": {
+        "ENVIRONMENT": "preview",
+        "DEVELOPER_CONSOLE_ENABLED": "true",
+        "WEBAUTHN_RP_ID": "matchbox-developer-console-staging.mallard.workers.dev",
+        "WEBAUTHN_ORIGIN": "https://matchbox-developer-console-staging.mallard.workers.dev",
+        "PUBLIC_API_ORIGIN": "https://matchbox-developer-api-staging.mallard.workers.dev",
+        "ID_ORIGIN": "https://matchbox-id-staging.mallard.workers.dev",
+      },
+    },
+  },
 }

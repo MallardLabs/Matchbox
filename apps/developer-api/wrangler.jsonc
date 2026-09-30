@@ -38,4 +38,28 @@
     // Publishable keys' share of each environment's quota (0, 1].
     "PUBLISHABLE_QUOTA_SHARE": "0.5",
   },
+  // Staging on workers.dev (no custom domain):
+  // `pnpm --filter @repo/developer-api exec wrangler deploy --env staging`.
+  // A new Worker, so it starts from its own migration history. It shares
+  // the mbx_api_requests dataset; rows are keyed by staging environment ids.
+  "env": {
+    "staging": {
+      "workers_dev": true,
+      "routes": [],
+      "durable_objects": {
+        "bindings": [{ "name": "RATE_LIMITER", "class_name": "RateLimiter" }],
+      },
+      "migrations": [{ "tag": "v1", "new_sqlite_classes": ["RateLimiter"] }],
+      "analytics_engine_datasets": [
+        { "binding": "REQUEST_LOG", "dataset": "mbx_api_requests" },
+      ],
+      "triggers": { "crons": ["*/10 * * * *"] },
+      "vars": {
+        "ENVIRONMENT": "preview",
+        "GAUGE_PROFILE_API_ENABLED": "true",
+        "API_VERSION": "2.0.0",
+        "PUBLISHABLE_QUOTA_SHARE": "0.5",
+      },
+    },
+  },
 }
