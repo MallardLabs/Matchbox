@@ -1,0 +1,42 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "matchbox-developer-console",
+  "main": "src/worker/index.ts",
+  "compatibility_date": "2026-09-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "routes": [
+    { "pattern": "developer.matchbox.markets", "custom_domain": true },
+  ],
+  // SPA from Vite. The Worker runs first for every path except hashed
+  // build assets so SPA documents get its CSP and security headers; non-API
+  // paths fall through to env.ASSETS.
+  "assets": {
+    "directory": "dist/client",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/*", "!/assets/*"],
+  },
+  "durable_objects": {
+    "bindings": [{ "name": "RATE_LIMITER", "class_name": "RateLimiter" }],
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["RateLimiter"] }],
+  // Cloudflare Email Service (sign-up/recovery codes, invitations, reviews).
+  "send_email": [{ "name": "EMAIL" }],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+    "logs": { "enabled": true, "invocation_logs": true },
+  },
+  // Secrets (wrangler secret put): SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
+  // API_KEY_PEPPER, CLIENT_SECRET_PEPPER, SESSION_PEPPER, CF_ACCOUNT_ID,
+  // CF_ANALYTICS_TOKEN.
+  "vars": {
+    "ENVIRONMENT": "production",
+    "DEVELOPER_CONSOLE_ENABLED": "false",
+    "WEBAUTHN_RP_ID": "developer.matchbox.markets",
+    "WEBAUTHN_ORIGIN": "https://developer.matchbox.markets",
+    "PUBLIC_API_ORIGIN": "https://api.matchbox.markets",
+    "ID_ORIGIN": "https://id.matchbox.markets",
+  },
+}
