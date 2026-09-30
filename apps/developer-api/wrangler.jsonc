@@ -2,41 +2,40 @@
   "$schema": "../../node_modules/wrangler/config-schema.json",
   "name": "matchbox-developer-api",
   "main": "src/index.ts",
-  "compatibility_date": "2026-06-20",
+  "compatibility_date": "2026-09-01",
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
+  "routes": [{ "pattern": "api.matchbox.markets", "custom_domain": true }],
   "durable_objects": {
-    "bindings": [
-      {
-        "name": "API_QUOTAS",
-        "class_name": "ApiQuotaLimiter",
-      },
-    ],
+    "bindings": [{ "name": "RATE_LIMITER", "class_name": "RateLimiter" }],
   },
   "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["ApiQuotaLimiter"] },
     {
-      "tag": "v1",
-      "new_sqlite_classes": ["ApiQuotaLimiter"],
+      "tag": "v2",
+      "deleted_classes": ["ApiQuotaLimiter"],
+      "new_sqlite_classes": ["RateLimiter"],
     },
   ],
+  // One data point per request; layout in @repo/platform-contracts/api-request-log.
+  "analytics_engine_datasets": [
+    { "binding": "REQUEST_LOG", "dataset": "mbx_api_requests" },
+  ],
+  // Chain-state reconciliation (mbx_api_gauge_chain_state).
+  "triggers": { "crons": ["*/10 * * * *"] },
   "observability": {
-    "enabled": false,
+    "enabled": true,
     "head_sampling_rate": 1,
-    "logs": {
-      "enabled": true,
-      "head_sampling_rate": 1,
-      "persist": true,
-      "invocation_logs": true,
-    },
-    "traces": {
-      "enabled": true,
-      "persist": true,
-      "head_sampling_rate": 1,
-    },
+    "logs": { "enabled": true, "invocation_logs": true },
+    "traces": { "enabled": true, "head_sampling_rate": 1 },
   },
+  // Secrets (wrangler secret put): SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
+  // API_KEY_PEPPER, MEZO_MAINNET_RPC_URL, MEZO_TESTNET_RPC_URL.
   "vars": {
-    "DEVELOPER_PLATFORM_ENABLED": "true",
-    "DEVELOPER_PROFILE_API_ENABLED": "false",
-    "MEZO_RPC_URL": "https://mezo-mainnet.boar.network",
+    "ENVIRONMENT": "production",
+    "GAUGE_PROFILE_API_ENABLED": "false",
+    "API_VERSION": "2.0.0",
+    // Publishable keys' share of each environment's quota (0, 1].
+    "PUBLISHABLE_QUOTA_SHARE": "0.5",
   },
 }
