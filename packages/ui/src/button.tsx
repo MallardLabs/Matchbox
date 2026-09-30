@@ -11,7 +11,7 @@ export const buttonStyles = tv({
   variants: {
     variant: {
       primary:
-        "bg-accent font-700 text-on-accent hover:brightness-95 active:brightness-90",
+        "bg-accent font-700 text-on-accent hover:brightness-95 active:brightness-90 disabled:bg-inset disabled:text-muted disabled:opacity-100 aria-disabled:bg-inset aria-disabled:text-muted aria-disabled:opacity-100",
       secondary:
         "border border-line bg-surface font-600 text-ink hover:border-line-2 hover:bg-raised",
       ghost: "font-550 text-secondary hover:bg-inset hover:text-ink",
