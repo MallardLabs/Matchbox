@@ -909,7 +909,13 @@ SELECT
   COALESCE(gauge.is_featured, false) AS is_featured,
   COALESCE(gauge.created_at, gauge.updated_at, to_timestamp(0)) AS created_at,
   COALESCE(gauge.updated_at, gauge.created_at, to_timestamp(0)) AS updated_at,
-  lower(gauge.owner_address) AS profile_updated_by
+  lower(gauge.owner_address) AS profile_updated_by,
+  -- Slugged copies of the free-text tags ("DeFi Yield" -> "defi-yield") so
+  -- the API's `tag` filter can match case-insensitively.
+  ARRAY(
+    SELECT DISTINCT trim(BOTH '-' FROM regexp_replace(lower(tag), '[^a-z0-9]+', '-', 'g'))
+    FROM unnest(COALESCE(gauge.tags, ARRAY[]::TEXT[])) AS tag
+  ) AS tag_slugs
 FROM public.gauge_profiles AS gauge
 UNION ALL
 SELECT
@@ -932,7 +938,11 @@ SELECT
   false,
   validator.created_at,
   validator.updated_at,
-  lower(validator.last_editor_address)
+  lower(validator.last_editor_address),
+  ARRAY(
+    SELECT DISTINCT trim(BOTH '-' FROM regexp_replace(lower(tag), '[^a-z0-9]+', '-', 'g'))
+    FROM unnest(COALESCE(validator.tags, ARRAY[]::TEXT[])) AS tag
+  )
 FROM public.validator_profiles AS validator
 WHERE validator.chain_id IN (31611, 31612);
 
