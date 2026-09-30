@@ -1,0 +1,93 @@
+{
+  "name": "@repo/platform-contracts",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./audit": {
+      "types": "./src/audit.ts",
+      "default": "./src/audit.ts"
+    },
+    "./common": {
+      "types": "./src/common.ts",
+      "default": "./src/common.ts"
+    },
+    "./console": {
+      "types": "./src/console.ts",
+      "default": "./src/console.ts"
+    },
+    "./credentials": {
+      "types": "./src/credentials.ts",
+      "default": "./src/credentials.ts"
+    },
+    "./cursor": {
+      "types": "./src/cursor.ts",
+      "default": "./src/cursor.ts"
+    },
+    "./encoding": {
+      "types": "./src/encoding.ts",
+      "default": "./src/encoding.ts"
+    },
+    "./errors": {
+      "types": "./src/errors.ts",
+      "default": "./src/errors.ts"
+    },
+    "./gauge-profiles": {
+      "types": "./src/gauge-profiles.ts",
+      "default": "./src/gauge-profiles.ts"
+    },
+    "./identity": {
+      "types": "./src/identity.ts",
+      "default": "./src/identity.ts"
+    },
+    "./network": {
+      "types": "./src/network.ts",
+      "default": "./src/network.ts"
+    },
+    "./oidc": {
+      "types": "./src/oidc.ts",
+      "default": "./src/oidc.ts"
+    },
+    "./openapi": {
+      "types": "./src/openapi.ts",
+      "default": "./src/openapi.ts"
+    },
+    "./openapi.json": "./openapi.json",
+    "./rate-limits": {
+      "types": "./src/rate-limits.ts",
+      "default": "./src/rate-limits.ts"
+    },
+    "./redirects": {
+      "types": "./src/redirects.ts",
+      "default": "./src/redirects.ts"
+    },
+    "./scopes": {
+      "types": "./src/scopes.ts",
+      "default": "./src/scopes.ts"
+    }
+  },
+  "files": [
+    "src",
+    "openapi.json"
+  ],
+  "scripts": {
+    "generate:openapi": "tsx scripts/generate-openapi.ts",
+    "lint": "biome check src/ scripts/",
+    "lint:fix": "biome check --write src/ scripts/",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "@repo/biome-config": "workspace:*",
+    "@repo/typescript-config": "workspace:*",
+    "@types/node": "^24.13.2",
+    "prettier": "^3.4.1",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3",
+    "vitest": "^2.1.9"
+  }
+}
