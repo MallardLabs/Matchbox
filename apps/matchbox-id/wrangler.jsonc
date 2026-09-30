@@ -1,0 +1,28 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "matchbox-id",
+  "main": "./src/worker/index.ts",
+  "compatibility_date": "2026-09-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "routes": [{ "pattern": "id.matchbox.markets", "custom_domain": true }],
+  "assets": {
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*", "/oauth/*", "/.well-known/*"],
+  },
+  "durable_objects": {
+    "bindings": [{ "name": "RATE_LIMITER", "class_name": "RateLimiter" }],
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["RateLimiter"] }],
+  "observability": {
+    "enabled": true,
+  },
+  // Hourly purge of expired nonces, authorization requests, codes and tokens.
+  "triggers": { "crons": ["17 * * * *"] },
+  "vars": {
+    "ENVIRONMENT": "production",
+    "MATCHBOX_ID_ENABLED": "false",
+    "DISCORD_CLAIMS_ENABLED": "false",
+    "ISSUER": "https://id.matchbox.markets",
+  },
+}
