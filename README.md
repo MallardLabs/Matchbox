@@ -10,8 +10,9 @@ pnpm dev
 
 ## Developer Platform
 
-The Matchbox Developer Platform and Matchbox ID deployment/runbook lives at:
+Matchbox ID (`apps/matchbox-id`, `id.matchbox.markets`), the developer console
+(`apps/developer-console`, `developer.matchbox.markets`) and the Gauge Profile
+API (`apps/developer-api`, `api.matchbox.markets`) run as Cloudflare Workers.
 
-- [docs/developer-platform.md](docs/developer-platform.md)
-
-It covers the separate Cloudflare Worker API, the Netlify-hosted identity/developer portal, Spaceship DNS setup, Supabase migration/auth configuration, feature flags, rollout, smoke tests, and emergency controls.
+- Operations runbook: [docs/developer-platform.md](docs/developer-platform.md)
+- Architecture: [docs/developer-platform/ARCHITECTURE.md](docs/developer-platform/ARCHITECTURE.md)
