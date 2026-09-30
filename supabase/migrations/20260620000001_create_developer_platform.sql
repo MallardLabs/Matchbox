@@ -3,7 +3,7 @@
 -- All secret-bearing tables are service-role only. Portal access is mediated by
 -- server routes and the public API Worker.
 
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
+CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;
 
 CREATE TABLE IF NOT EXISTS public.developer_accounts (
   auth_user_id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS public.developer_organization_memberships (
 CREATE TABLE IF NOT EXISTS public.developer_apps (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id UUID NOT NULL REFERENCES public.developer_organizations(id) ON DELETE CASCADE,
-  client_id TEXT NOT NULL UNIQUE DEFAULT ('mbx_app_' || encode(gen_random_bytes(18), 'hex')),
+  client_id TEXT NOT NULL UNIQUE DEFAULT ('mbx_app_' || encode(extensions.gen_random_bytes(18), 'hex')),
   name TEXT NOT NULL CHECK (char_length(name) BETWEEN 1 AND 80),
   description TEXT NOT NULL DEFAULT '' CHECK (char_length(description) <= 500),
   purpose TEXT NOT NULL DEFAULT '' CHECK (char_length(purpose) <= 1000),
