@@ -81,6 +81,7 @@ export async function buildParticipationSnapshot(options: {
         }),
       ),
       fetchActiveThirdPartyVotes({
+        blockNumber: block.number,
         blockTimestamp: Number(block.timestamp),
       }),
     ])

@@ -1,4 +1,4 @@
-import { CONTRACTS } from "@repo/shared/contracts"
+import { CHAIN_ID, CONTRACTS } from "@repo/shared/contracts"
 import { z } from "zod"
 
 import {
@@ -12,9 +12,16 @@ import {
   timeseriesToSeconds,
   tokenIdFromStakeId,
 } from "@/lib/mezoEarn"
+import { isWarehouseSource } from "@/lib/warehouse"
 
 import { THIRD_PARTY_VOTER_SUBGRAPH_ADDRESS } from "./constants"
 import { replayVoteEvents } from "./participation"
+import {
+  fetchWarehouseThirdPartyRewardEvents,
+  fetchWarehouseThirdPartyVotes,
+  fetchWarehouseVeMezoLockCreations,
+  fetchWarehouseVeMezoOwners,
+} from "./warehouse"
 
 const SUBGRAPH_FIRST_MAX = 1000
 
@@ -67,13 +74,18 @@ export type SubgraphVote = {
 
 /**
  * Active third-party votes at a block, rebuilt by replaying every Voted /
- * Abstained event up to the block's timestamp from Mezo's earn-votes
- * subgraph. Its `votePositions` time-travel is pruned to ~1,000 blocks, and
- * the replay matches live positions exactly.
+ * Abstained event up to the block. The warehouse replays its own rows by
+ * block number. Otherwise Mezo's earn-votes subgraph is replayed up to the
+ * block's timestamp: its `votePositions` time-travel is pruned to ~1,000
+ * blocks, and the replay matches live positions exactly.
  */
 export async function fetchActiveThirdPartyVotes(options: {
+  blockNumber: bigint
   blockTimestamp: number
 }): Promise<SubgraphVote[]> {
+  if (isWarehouseSource(CHAIN_ID.mainnet)) {
+    return fetchWarehouseThirdPartyVotes({ blockNumber: options.blockNumber })
+  }
   const events: z.infer<typeof voteEventSchema>[] = []
   const upTo = secondsToTimeseries(options.blockTimestamp)
   let lastId = ""
@@ -145,6 +157,9 @@ export async function fetchActiveThirdPartyVotes(options: {
 export async function fetchVeMezoOwners(options: {
   tokenIds: bigint[]
 }): Promise<Map<string, string>> {
+  if (isWarehouseSource(CHAIN_ID.mainnet)) {
+    return fetchWarehouseVeMezoOwners(options.tokenIds)
+  }
   return fetchStakeOwners(options.tokenIds, CONTRACTS.mainnet.veMEZO)
 }
 
@@ -190,6 +205,9 @@ export async function fetchThirdPartyRewardEvents(options: {
   fromTs: number
   toTs: number
 }): Promise<ThirdPartyRewardEvent[]> {
+  if (isWarehouseSource(CHAIN_ID.mainnet)) {
+    return fetchWarehouseThirdPartyRewardEvents(options)
+  }
   const events: ThirdPartyRewardEvent[] = []
   for (const actionType of ["REWARD_DISTRIBUTED", "REWARD_NOTIFIED"] as const) {
     for (let skip = 0; ; skip += SUBGRAPH_FIRST_MAX) {
@@ -248,6 +266,10 @@ export async function fetchVeMezoLockCreations(options: {
   fromTs: number
   toTs: number
 }): Promise<VeMezoLockCreation[]> {
+  // The warehouse matches the explorer: locks from block 7,739,500 on.
+  if (isWarehouseSource(CHAIN_ID.mainnet)) {
+    return fetchWarehouseVeMezoLockCreations(options)
+  }
   const veMezo = CONTRACTS.mainnet.veMEZO.toLowerCase()
   const locks: VeMezoLockCreation[] = []
   let lastId = ""

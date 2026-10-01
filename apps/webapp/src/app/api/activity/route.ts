@@ -134,6 +134,9 @@ async function handler(request: Request): Promise<Response> {
       },
       // Sources that failed for this response; the data is partial.
       ...(result.degraded.length > 0 ? { degraded: result.degraded } : {}),
+      ...(result.indexedThrough
+        ? { indexedThrough: result.indexedThrough }
+        : {}),
     },
   }
 
@@ -142,6 +145,9 @@ async function handler(request: Request): Promise<Response> {
     headers: {
       "Content-Type": "application/json",
       "Cache-Control": "no-store, max-age=0",
+      ...(result.indexedThrough
+        ? { "X-Activity-Indexed-Block": result.indexedThrough.block }
+        : {}),
       ...CORS_HEADERS,
     },
   })

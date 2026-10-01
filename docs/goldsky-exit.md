@@ -104,6 +104,25 @@ Neon project `fragrant-math-82213579`. Build and verify on the dev branch
   - every field matches on all rows
 - Any intended difference is listed in this file with a reason.
 
+### Parity result (2026-10-01, dev branch)
+
+`matchbox.activity_events` matches frozen 3.4.0 through block 12,073,396 on
+all 147,270 rows across 42 action types. There are no missing, extra or
+differing fields. `lock_positions` (6,133), `votes` (7,870) and
+`bribe_to_pool` (54) also match field for field. Through `/api/activity`,
+warehouse and explorer responses are identical in order, ids and fields.
+
+Intended differences:
+
+- **Ties inside one transaction:** graph-node breaks timestamp ties by
+  string id (`-12-` sorts before `-8-`). The warehouse orders by
+  `(timestamp, block_number, log_index, id)`, which is chain order. Rows
+  can split differently at a page edge. The same window fetched whole is
+  identical.
+- **Locks before block 7,739,500:** raw holds them, but projection starts
+  at the explorer's start block, as the explorer did. The all-time lock
+  total is 2,825, against 2,882 in Mezo's earn-locks.
+
 ### Read path (webapp)
 
 - `MEZO_ACTIVITY_SOURCE=explorer|warehouse` selects the source. The default
