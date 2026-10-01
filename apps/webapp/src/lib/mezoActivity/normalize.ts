@@ -36,7 +36,9 @@ export function sortActivityDesc(
     }
     const aIdx = a.logIndex ?? -1
     const bIdx = b.logIndex ?? -1
-    return bIdx - aIdx
+    if (aIdx !== bIdx) return bIdx - aIdx
+    // Rows without block/log position (earn-votes) still need a stable order.
+    return b.id.localeCompare(a.id, "en", { numeric: true })
   })
 }
 

@@ -1,3 +1,4 @@
+import { fetchEarnVoteActivity } from "@/lib/mezoActivity/earnVotes"
 import {
   normalizeAddress,
   sortActivityDesc,
@@ -291,9 +292,15 @@ async function fetchExplorerActivityRaw(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ query }),
   })
-  if (!response.ok) return []
+  if (!response.ok) {
+    throw new Error(`Explorer subgraph request failed with ${response.status}`)
+  }
   const json = (await response.json()) as ExplorerActivityResponse
-  if (json.errors?.length) return []
+  if (json.errors?.length) {
+    throw new Error(
+      `Explorer subgraph errors: ${json.errors.map((e) => e.message).join("; ")}`,
+    )
+  }
   const events = json.data?.activityEvents ?? []
   return events.flatMap((event) => {
     const actionType = ACTION_TYPE_MAP[event.actionType]
@@ -419,24 +426,130 @@ async function fetchExplorerActivity(
   return fetchExplorerActivityRaw(options)
 }
 
-export async function fetchMezoActivity(options: SourceOptions): Promise<{
+// Votes and abstains come from Mezo's earn-votes subgraph on mainnet; the
+// explorer no longer serves them.
+const EARN_VOTE_ACTION_TYPES = new Set(["BOOST_VOTE", "BOOST_ABSTAIN"])
+
+function includesEarnVotes(options: SourceOptions): boolean {
+  if (options.chainId !== CHAIN_ID.mainnet) return false
+  if (!options.actionTypes || options.actionTypes.length === 0) return true
+  return options.actionTypes.some((type) => EARN_VOTE_ACTION_TYPES.has(type))
+}
+
+function explorerActionTypesFor(
+  actionTypes: string[] | undefined,
+): string[] | undefined {
+  const requested =
+    actionTypes && actionTypes.length > 0
+      ? actionTypes
+      : Object.keys(ACTION_TYPE_MAP)
+  const remaining = requested.filter(
+    (actionType) => !EARN_VOTE_ACTION_TYPES.has(actionType),
+  )
+  return remaining.length > 0 ? remaining : undefined
+}
+
+export type ActivitySourceName = "explorer" | "votes"
+
+export type MezoActivityResult = {
   data: MezoActivityItem[]
   hasMore: boolean
   page: number
-}> {
-  const explorerItems = await fetchExplorerActivity(options)
-  const merged = sortActivityDesc(explorerItems)
-  // When limit ≥ 1000 we couldn't peek ahead (capped at 1000). Treat a full
-  // page as "maybe more" so callers can page forward.
-  const hasMore =
-    options.limit >= SUBGRAPH_FIRST_MAX
-      ? merged.length >= SUBGRAPH_FIRST_MAX
-      : merged.length > options.limit
-  const data = merged.slice(0, options.limit)
+  // Sources that failed; the data is partial when this is non-empty.
+  degraded: ActivitySourceName[]
+}
 
+function sortActivity(
+  items: MezoActivityItem[],
+  orderDirection: "asc" | "desc" | undefined,
+): MezoActivityItem[] {
+  const sorted = sortActivityDesc(items)
+  return orderDirection === "asc" ? sorted.reverse() : sorted
+}
+
+export async function fetchMezoActivity(
+  options: SourceOptions,
+): Promise<MezoActivityResult> {
+  if (!includesEarnVotes(options)) {
+    // Single source: the explorer pages with `skip`, so any depth works.
+    const explorerItems = await fetchExplorerActivity(options)
+    const merged = sortActivity(explorerItems, options.orderDirection)
+    // When limit ≥ 1000 we couldn't peek ahead (capped at 1000). Treat a full
+    // page as "maybe more" so callers can page forward.
+    const hasMore =
+      options.limit >= SUBGRAPH_FIRST_MAX
+        ? merged.length >= SUBGRAPH_FIRST_MAX
+        : merged.length > options.limit
+    return {
+      data: merged.slice(0, options.limit),
+      hasMore,
+      page: options.page,
+      degraded: [],
+    }
+  }
+
+  // Two sources can't share a `skip`, so read the first (page + 1) × limit
+  // rows of each, merge, then slice the page. Depth is capped at 1000 rows.
+  const page = options.page > 0 ? options.page : 0
+  const limit = options.limit > 0 ? options.limit : 0
+  const windowLimit = Math.min((page + 1) * limit, SUBGRAPH_FIRST_MAX)
+  const peekLimit =
+    windowLimit >= SUBGRAPH_FIRST_MAX ? windowLimit : windowLimit + 1
+  const explorerTypes = explorerActionTypesFor(options.actionTypes)
+  const [votes, explorer] = await Promise.allSettled([
+    peekLimit > 0
+      ? fetchEarnVoteActivity({
+          chainId: options.chainId,
+          fromTimestamp: options.fromTimestamp,
+          toTimestamp: options.toTimestamp,
+          limit: peekLimit,
+          orderDirection: options.orderDirection,
+          actionTypes: options.actionTypes,
+          actor: options.actor,
+          gauge: options.gauge,
+          source: options.source,
+        })
+      : Promise.resolve([]),
+    explorerTypes && peekLimit > 0
+      ? fetchExplorerActivity({
+          ...options,
+          page: 0,
+          limit: peekLimit,
+          actionTypes: explorerTypes,
+        })
+      : Promise.resolve([]),
+  ])
+  if (votes.status === "rejected" && explorer.status === "rejected") {
+    throw new AggregateError(
+      [votes.reason, explorer.reason],
+      "All activity sources failed",
+    )
+  }
+  const degraded: ActivitySourceName[] = []
+  if (votes.status === "rejected") {
+    console.error("Activity votes source failed", votes.reason)
+    degraded.push("votes")
+  }
+  if (explorer.status === "rejected") {
+    console.error("Activity explorer source failed", explorer.reason)
+    degraded.push("explorer")
+  }
+  const voteItems = votes.status === "fulfilled" ? votes.value : []
+  const explorerItems = explorer.status === "fulfilled" ? explorer.value : []
+  const merged = sortActivity(
+    [...voteItems, ...explorerItems],
+    options.orderDirection,
+  )
+  const start = page * limit
+  const end = start + limit
+  const hasMore =
+    merged.length > end ||
+    (windowLimit >= SUBGRAPH_FIRST_MAX &&
+      (voteItems.length >= windowLimit || explorerItems.length >= windowLimit))
   return {
-    data,
+    data: merged.slice(start, end),
     hasMore,
     page: options.page,
+    degraded,
   }
 }

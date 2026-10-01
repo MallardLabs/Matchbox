@@ -75,18 +75,37 @@ async function handler(request: Request): Promise<Response> {
   }
   const actor = rawActor && isAddress(rawActor) ? rawActor : undefined
 
-  const result = await fetchMezoActivity({
-    chainId,
-    fromTimestamp,
-    toTimestamp,
-    limit,
-    page,
-    orderDirection,
-    actor,
-    gauge,
-    source,
-    ...(actionTypes && actionTypes.length > 0 ? { actionTypes } : {}),
-  })
+  let result: Awaited<ReturnType<typeof fetchMezoActivity>>
+  try {
+    result = await fetchMezoActivity({
+      chainId,
+      fromTimestamp,
+      toTimestamp,
+      limit,
+      page,
+      orderDirection,
+      actor,
+      gauge,
+      source,
+      ...(actionTypes && actionTypes.length > 0 ? { actionTypes } : {}),
+    })
+  } catch (error) {
+    console.error("Activity sources unavailable", error)
+    return new Response(
+      JSON.stringify({
+        success: false,
+        error: "Activity sources unavailable",
+      }),
+      {
+        status: 502,
+        headers: {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store, max-age=0",
+          ...CORS_HEADERS,
+        },
+      },
+    )
+  }
 
   const response = {
     success: true,
@@ -113,6 +132,8 @@ async function handler(request: Request): Promise<Response> {
         fromTimestamp,
         toTimestamp,
       },
+      // Sources that failed for this response; the data is partial.
+      ...(result.degraded.length > 0 ? { degraded: result.degraded } : {}),
     },
   }
 
