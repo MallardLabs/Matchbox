@@ -15,6 +15,9 @@
 *.css      text eol=lf
 *.html     text eol=lf
 
+# Pencil design files are encrypted; never convert their line endings.
+*.pen      binary
+
 AGENT.md export-ignore
 CLAUDE.md export-ignore
 RELEASING.md export-ignore

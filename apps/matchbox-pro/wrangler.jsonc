@@ -1,0 +1,18 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "matchbox-pro",
+  "compatibility_date": "2026-04-03",
+  "compatibility_flags": ["nodejs_compat"],
+  "main": "src/worker/index.ts",
+  "assets": {
+    "directory": "dist/client",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application"
+  },
+  "observability": {
+    "enabled": true
+  },
+  "vars": {
+    "BASE_RPC_URL": "https://mainnet.base.org"
+  }
+}
