@@ -190,7 +190,9 @@ export class RpcClient {
     }
     this.endpoints = options.endpoints
     this.network = options.network
-    this.fetchImpl = options.fetch ?? fetch
+    // Workers throws "Illegal invocation" when fetch is called with a `this`
+    // other than globalThis, as `this.fetchImpl(...)` would do.
+    this.fetchImpl = options.fetch ?? fetch.bind(globalThis)
     this.sleep = options.sleep ?? defaultSleep
     this.attemptsPerEndpoint = options.attemptsPerEndpoint ?? 3
     this.baseDelayMs = options.baseDelayMs ?? 500
