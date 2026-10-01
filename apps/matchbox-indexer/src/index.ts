@@ -8,9 +8,9 @@ import {
 } from "./decode/index"
 import { type IngestDeps, headStatus, ingestToHead } from "./ingest/ingest"
 import { networkConfig } from "./ingest/networks"
+import type { Network } from "./ingest/networks"
 import { RpcClient } from "./ingest/rpc"
 import { PgIngestStore } from "./ingest/store"
-import type { Network } from "./types"
 
 const logger = createLogger("matchbox-indexer")
 

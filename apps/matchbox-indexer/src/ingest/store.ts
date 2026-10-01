@@ -1,8 +1,52 @@
 import type { Pool, PoolClient } from "pg"
 import type { Address, Hex } from "viem"
+import { z } from "zod"
 import { storedInput } from "../decode/calldata"
-import type { Network, RawLog, RawTx, RegisteredContract } from "../types"
 import { type PoolLink, mergeContract } from "./discovery"
+import { type Network, networkSchema } from "./networks"
+import {
+  type RawLog,
+  type RawTx,
+  lowerAddressSchema,
+  lowerHexSchema,
+} from "./rpc"
+
+export const contractKindSchema = z.enum([
+  "votingEscrow",
+  "boostVoter",
+  "poolsVoter",
+  "thirdPartyVoter",
+  "validatorsVoter",
+  "splitter",
+  "minter",
+  "rebaseDistributor",
+  "merkleDistributor",
+  "musdSavingsRate",
+  "pcv",
+  "poolFactory",
+  "pool",
+  "gauge",
+  "bribeVotingReward",
+  "feeVotingReward",
+])
+
+export type ContractKind = z.output<typeof contractKindSchema>
+
+// A contract the indexer fetches logs for, as stored in matchbox.contracts.
+// Static entries come from config; discovered entries come from GaugeCreated
+// and PoolCreated.
+export type RegisteredContract = {
+  network: Network
+  address: Address
+  kind: ContractKind
+  // Subgraph data source or template name, e.g. "VeMEZO", "Gauge".
+  template: string
+  parent: Address | null
+  pool: Address | null
+  gauge: Address | null
+  createdBlock: bigint
+  createdTx: Hex | null
+}
 
 export const LOGS_STREAM = "logs"
 
@@ -20,7 +64,7 @@ export type WindowCommit = {
   poolLinks: PoolLink[]
 }
 
-export interface IngestStore {
+export type IngestStore = {
   loadContracts(network: Network): Promise<RegisteredContract[]>
   upsertContracts(
     contracts: RegisteredContract[],
@@ -70,31 +114,42 @@ export function dedupeContracts(
   return [...byKey.values()]
 }
 
-type ContractRow = {
-  network: Network
-  address: string
-  kind: RegisteredContract["kind"]
-  template: string
-  parent: string | null
-  pool: string | null
-  gauge: string | null
-  created_block: string
-  created_tx: string | null
-}
+// Postgres bigint columns are selected as ::text.
+const blockTextSchema = z
+  .string()
+  .regex(/^\d+$/)
+  .transform((value) => BigInt(value))
 
-function fromRow(row: ContractRow): RegisteredContract {
+const contractRowSchema = z.object({
+  network: networkSchema,
+  address: lowerAddressSchema,
+  kind: contractKindSchema,
+  template: z.string(),
+  parent: lowerAddressSchema.nullable(),
+  pool: lowerAddressSchema.nullable(),
+  gauge: lowerAddressSchema.nullable(),
+  created_block: blockTextSchema,
+  created_tx: lowerHexSchema.nullable(),
+})
+
+function fromRow(row: unknown): RegisteredContract {
+  const parsed = contractRowSchema.parse(row)
   return {
-    network: row.network,
-    address: row.address as Address,
-    kind: row.kind,
-    template: row.template,
-    parent: row.parent as Address | null,
-    pool: row.pool as Address | null,
-    gauge: row.gauge as Address | null,
-    createdBlock: BigInt(row.created_block),
-    createdTx: row.created_tx as Hex | null,
+    network: parsed.network,
+    address: parsed.address,
+    kind: parsed.kind,
+    template: parsed.template,
+    parent: parsed.parent,
+    pool: parsed.pool,
+    gauge: parsed.gauge,
+    createdBlock: parsed.created_block,
+    createdTx: parsed.created_tx,
   }
 }
+
+const hashRowSchema = z.object({ hash: lowerHexSchema })
+
+const checkpointRowSchema = z.object({ last_block: blockTextSchema })
 
 type Executor = Pick<PoolClient, "query">
 
@@ -204,7 +259,7 @@ export class PgIngestStore implements IngestStore {
   constructor(private readonly pool: Pool) {}
 
   async loadContracts(network: Network): Promise<RegisteredContract[]> {
-    const result = await this.pool.query<ContractRow>(
+    const result = await this.pool.query(
       `SELECT network, address, kind, template, parent, pool, gauge,
               created_block::text, created_tx
        FROM matchbox.contracts WHERE network = $1`,
@@ -225,25 +280,25 @@ export class PgIngestStore implements IngestStore {
 
   async knownTransactions(network: Network, hashes: Hex[]): Promise<Set<Hex>> {
     if (hashes.length === 0) return new Set()
-    const result = await this.pool.query<{ hash: Hex }>(
+    const result = await this.pool.query(
       `SELECT hash FROM matchbox_raw.transactions
        WHERE network = $1 AND hash = ANY($2::text[])`,
       [network, hashes],
     )
-    return new Set(result.rows.map((row) => row.hash))
+    return new Set(result.rows.map((row) => hashRowSchema.parse(row).hash))
   }
 
   async getCheckpoint(
     network: Network,
     stream: string,
   ): Promise<bigint | null> {
-    const result = await this.pool.query<{ last_block: string }>(
+    const result = await this.pool.query(
       `SELECT last_block::text FROM matchbox.indexer_checkpoints
        WHERE network = $1 AND stream = $2`,
       [network, stream],
     )
     const row = result.rows[0]
-    return row ? BigInt(row.last_block) : null
+    return row ? checkpointRowSchema.parse(row).last_block : null
   }
 
   async commitWindow(commit: WindowCommit): Promise<void> {
@@ -252,14 +307,15 @@ export class PgIngestStore implements IngestStore {
       await applyPoolLinks(client, commit.poolLinks)
       await insertLogs(client, commit.logs)
       await insertTransactions(client, commit.transactions)
-      const current = await client.query<{ last_block: string }>(
+      const current = await client.query(
         `SELECT last_block::text FROM matchbox.indexer_checkpoints
          WHERE network = $1 AND stream = $2
          FOR UPDATE`,
         [commit.network, commit.stream],
       )
-      const currentBlock = current.rows[0]
-        ? BigInt(current.rows[0].last_block)
+      const currentRow = current.rows[0]
+      const currentBlock = currentRow
+        ? checkpointRowSchema.parse(currentRow).last_block
         : null
       const next = nextCheckpoint(currentBlock, commit)
       if (next === null || next === currentBlock) return

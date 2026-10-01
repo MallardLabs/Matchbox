@@ -1,5 +1,6 @@
 import { CONTRACTS } from "@repo/shared/contracts"
 import { zeroAddress } from "viem"
+import { z } from "zod"
 
 import {
   WAREHOUSE_NETWORK,
@@ -18,12 +19,15 @@ import type {
 // Gauges-tab reads from the warehouse's explorer-compatible tables. Same
 // shapes as the subgraph readers in ./subgraph.ts.
 
-type RewardRow = {
-  gauge: string
-  amount: string
-  timestamp: string
-  actionType: ThirdPartyRewardEvent["actionType"]
-}
+// numeric and bigint columns are selected as ::text.
+const integerText = z.string().regex(/^\d+$/)
+
+const rewardRowSchema = z.object({
+  gauge: z.string(),
+  amount: integerText,
+  timestamp: integerText,
+  actionType: z.enum(["REWARD_DISTRIBUTED", "REWARD_NOTIFIED"]),
+})
 
 export function buildThirdPartyRewardQuery(options: {
   fromTs: number
@@ -47,25 +51,29 @@ export async function fetchWarehouseThirdPartyRewardEvents(options: {
   fromTs: number
   toTs: number
 }): Promise<ThirdPartyRewardEvent[]> {
-  const rows = await queryWarehouse<RewardRow>(
-    buildThirdPartyRewardQuery(options),
-  )
-  return rows.map((row) => ({
-    gauge: row.gauge,
-    amount: BigInt(row.amount),
-    timestamp: Number(row.timestamp),
-    actionType: row.actionType,
-  }))
+  const rows = await queryWarehouse(buildThirdPartyRewardQuery(options))
+  return rows.map((raw) => {
+    const row = rewardRowSchema.parse(raw)
+    return {
+      gauge: row.gauge,
+      amount: BigInt(row.amount),
+      timestamp: Number(row.timestamp),
+      actionType: row.actionType,
+    }
+  })
 }
 
-type LockCreationRow = { tokenId: string; timestamp: string }
+const lockCreationRowSchema = z.object({
+  tokenId: integerText,
+  timestamp: integerText,
+})
 
 export async function fetchWarehouseVeMezoLockCreations(options: {
   fromTs: number
   toTs: number
 }): Promise<VeMezoLockCreation[]> {
   const { params, add } = sqlParams()
-  const rows = await queryWarehouse<LockCreationRow>({
+  const rows = await queryWarehouse({
     text: `SELECT "token_id"::text AS "tokenId", "timestamp"::text AS "timestamp"
       FROM matchbox.activity_events
       WHERE "network" = ${add(WAREHOUSE_NETWORK)}
@@ -77,20 +85,23 @@ export async function fetchWarehouseVeMezoLockCreations(options: {
       ORDER BY "timestamp", "block_number", "log_index"`,
     params,
   })
-  return rows.map((row) => ({
-    timestamp: Number(row.timestamp),
-    tokenId: BigInt(row.tokenId),
-  }))
+  return rows.map((raw) => {
+    const row = lockCreationRowSchema.parse(raw)
+    return {
+      timestamp: Number(row.timestamp),
+      tokenId: BigInt(row.tokenId),
+    }
+  })
 }
 
-type VoteEventRow = {
-  actionType: "BOOST_VOTE" | "BOOST_ABSTAIN"
-  tokenId: string
-  gauge: string
-  weight: string
-  actor: string | null
-  timestamp: string
-}
+const voteEventRowSchema = z.object({
+  actionType: z.enum(["BOOST_VOTE", "BOOST_ABSTAIN"]),
+  tokenId: integerText,
+  gauge: z.string(),
+  weight: integerText,
+  actor: z.string().nullable(),
+  timestamp: integerText,
+})
 
 /**
  * Active third-party votes at a block, replayed from the warehouse's
@@ -101,7 +112,7 @@ export async function fetchWarehouseThirdPartyVotes(options: {
   blockNumber: bigint
 }): Promise<SubgraphVote[]> {
   const { params, add } = sqlParams()
-  const rows = await queryWarehouse<VoteEventRow>({
+  const raw = await queryWarehouse({
     text: `SELECT "action_type" AS "actionType", "token_id"::text AS "tokenId",
         "gauge", "weight"::text AS "weight", "actor",
         "timestamp"::text AS "timestamp"
@@ -115,6 +126,7 @@ export async function fetchWarehouseThirdPartyVotes(options: {
       ORDER BY "block_number", "log_index"`,
     params,
   })
+  const rows = raw.map((row) => voteEventRowSchema.parse(row))
   const positions = replayVoteEvents(
     rows.map((row) => ({
       tokenId: BigInt(row.tokenId),
@@ -143,6 +155,8 @@ export async function fetchWarehouseThirdPartyVotes(options: {
   })
 }
 
+const ownerRowSchema = z.object({ tokenId: integerText, owner: z.string() })
+
 /**
  * Current veMEZO owners from the warehouse's LockPosition rows, keyed by
  * tokenId string. Only NFTs minted inside the indexed range have an owner
@@ -160,7 +174,7 @@ export async function fetchWarehouseVeMezoOwners(
   const escrow = CONTRACTS.mainnet.veMEZO.toLowerCase()
   const ids = [...new Set(tokenIds.map((id) => `${escrow}-${id.toString()}`))]
   const { params, add } = sqlParams()
-  const rows = await queryWarehouse<{ tokenId: string; owner: string }>({
+  const rows = await queryWarehouse({
     text: `SELECT "token_id"::text AS "tokenId", "owner"
       FROM matchbox.lock_positions
       WHERE "network" = ${add(WAREHOUSE_NETWORK)}
@@ -171,6 +185,9 @@ export async function fetchWarehouseVeMezoOwners(
         AND NOT "is_merged" AND NOT "is_withdrawn"`,
     params,
   })
-  for (const row of rows) owners.set(row.tokenId, row.owner.toLowerCase())
+  for (const raw of rows) {
+    const row = ownerRowSchema.parse(raw)
+    owners.set(row.tokenId, row.owner.toLowerCase())
+  }
   return owners
 }

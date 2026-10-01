@@ -5,7 +5,8 @@ import {
   parseAbiItem,
   toEventSelector,
 } from "viem"
-import type { RawLog, RegisteredContract } from "../types"
+import { type RawLog, lowerAddressSchema } from "./rpc"
+import type { RegisteredContract } from "./store"
 
 // The only events that spawn child data sources in the explorer subgraph:
 // PoolsVoter.GaugeCreated (gauge + bribe/fee reward templates) and
@@ -27,8 +28,9 @@ export const FACTORY_TOPICS: Hex[] = [
   POOL_CREATED_TOPIC,
 ]
 
+// Decoded event args are checksummed; the registry stores lowercase.
 function lower(address: Address): Address {
-  return address.toLowerCase() as Address
+  return lowerAddressSchema.parse(address)
 }
 
 export type PoolLink = {

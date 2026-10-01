@@ -1,5 +1,5 @@
 import { type Abi, type AbiEvent, type Hex, slice, toEventSelector } from "viem"
-import type { ContractKind } from "../types"
+import type { ContractKind } from "../ingest/store"
 import boostVoterAbi from "./abis/boost-voter"
 import nonPoolsVoterAbi from "./abis/non-pools-voter"
 import poolsVoterAbi from "./abis/pools-voter"

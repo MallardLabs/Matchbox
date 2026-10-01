@@ -6,7 +6,9 @@ import {
   decodeEventLog,
   toEventSelector,
 } from "viem"
-import type { ContractKind, Network, RawLog } from "../types"
+import type { Network } from "../ingest/networks"
+import type { RawLog } from "../ingest/rpc"
+import type { ContractKind } from "../ingest/store"
 import boostVoterAbi from "./abis/boost-voter"
 import bribeVotingRewardAbi from "./abis/bribe-voting-reward"
 import feeVotingRewardAbi from "./abis/fee-voting-reward"

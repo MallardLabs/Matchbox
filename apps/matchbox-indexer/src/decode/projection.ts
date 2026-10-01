@@ -9,7 +9,8 @@ import {
   isHex,
 } from "viem"
 import { z } from "zod"
-import type { Network, RawLog, RawTx } from "../types"
+import type { Network } from "../ingest/networks"
+import type { RawLog, RawTx } from "../ingest/rpc"
 import { lockKeysForLog, resolveHandler } from "./dispatch"
 import { lower } from "./helpers"
 import { PgStore } from "./pg-store"

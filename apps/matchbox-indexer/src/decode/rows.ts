@@ -1,5 +1,5 @@
 import type { Address, Hex } from "viem"
-import type { Network } from "../types"
+import type { Network } from "../ingest/networks"
 
 // Projection rows. Field names and meaning match the explorer subgraph
 // entities in apps/activity-subgraph/schema.graphql on main. Addresses and

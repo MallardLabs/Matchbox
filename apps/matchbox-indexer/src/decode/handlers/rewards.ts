@@ -1,5 +1,5 @@
 import { type Address, decodeEventLog } from "viem"
-import type { RawLog, RawTx } from "../../types"
+import type { RawLog, RawTx } from "../../ingest/rpc"
 import bribeVotingRewardAbi from "../abis/bribe-voting-reward"
 import feeVotingRewardAbi from "../abis/fee-voting-reward"
 import { ACTION, BOOST_CONTEXT, SOURCE } from "../constants"

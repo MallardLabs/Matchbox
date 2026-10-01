@@ -1,5 +1,5 @@
 import { decodeEventLog } from "viem"
-import type { RawLog, RawTx } from "../../types"
+import type { RawLog, RawTx } from "../../ingest/rpc"
 import gaugeAbi from "../abis/gauge"
 import poolAbi from "../abis/pool"
 import poolFactoryAbi from "../abis/pool-factory"

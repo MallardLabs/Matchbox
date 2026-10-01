@@ -2,10 +2,9 @@ import { parseArgs } from "node:util"
 import { createLogger } from "@repo/shared/logger"
 import { Pool } from "pg"
 import { type IngestDeps, ingestRange } from "../src/ingest/ingest"
-import { networkConfig } from "../src/ingest/networks"
+import { networkConfig, networkSchema } from "../src/ingest/networks"
 import { RpcClient } from "../src/ingest/rpc"
 import { PgIngestStore } from "../src/ingest/store"
-import type { Network } from "../src/types"
 import { loadDirectDatabaseUrl } from "./database"
 
 // pnpm --filter @repo/matchbox-indexer backfill -- --network mezo \
@@ -40,7 +39,7 @@ async function databaseMegabytes(pool: Pool): Promise<number> {
 }
 
 async function main(): Promise<void> {
-  const network = values.network as Network
+  const network = networkSchema.parse(values.network)
   const config = networkConfig(network)
   const concurrency = Number.parseInt(values.concurrency ?? "4", 10)
   const maxDbMb = Number.parseInt(values["max-db-mb"] ?? "900", 10)

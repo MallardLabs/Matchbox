@@ -1,6 +1,56 @@
 import type { Address, Hex } from "viem"
-import type { Network, RawLog, RawTx } from "../types"
-import type { RpcEndpoint } from "./networks"
+import { z } from "zod"
+import type { Network, RpcEndpoint } from "./networks"
+
+// What ingest fetches and stores, and what decode reads back. Addresses and
+// hashes are lowercase hex.
+export type RawLog = {
+  network: Network
+  blockNumber: bigint
+  blockHash: Hex
+  blockTimestamp: bigint
+  txHash: Hex
+  txIndex: number
+  logIndex: number
+  address: Address
+  topics: Hex[]
+  data: Hex
+}
+
+export type RawTx = {
+  network: Network
+  hash: Hex
+  blockNumber: bigint
+  txIndex: number
+  from: Address
+  to: Address | null
+  input: Hex
+}
+
+function isLowerHex(value: unknown): value is Hex {
+  return typeof value === "string" && /^0x[0-9a-f]*$/.test(value)
+}
+
+function isLowerAddress(value: unknown): value is Address {
+  return typeof value === "string" && /^0x[0-9a-f]{40}$/.test(value)
+}
+
+// Lowercases on the way in, so every stored hash and address compares equal.
+export const lowerHexSchema = z
+  .string()
+  .transform((value) => value.toLowerCase())
+  .pipe(z.custom<Hex>(isLowerHex, "Expected hex"))
+
+export const lowerAddressSchema = z
+  .string()
+  .transform((value) => value.toLowerCase())
+  .pipe(z.custom<Address>(isLowerAddress, "Expected an address"))
+
+// JSON-RPC QUANTITY: 0x-prefixed hex.
+const quantitySchema = z
+  .string()
+  .regex(/^0x[0-9a-fA-F]+$/)
+  .transform((value) => BigInt(value))
 
 type JsonRpcRequest = {
   jsonrpc: "2.0"
@@ -9,34 +59,51 @@ type JsonRpcRequest = {
   params: unknown[]
 }
 
-type JsonRpcResponse = {
-  id: number
-  result?: unknown
-  error?: { code: number; message: string }
-}
+// Error responses can carry `id: null`. Those never match a request id, so a
+// batch treats them as missing (retryable) rather than as a bad body.
+const jsonRpcResponseSchema = z.object({
+  id: z.union([z.number(), z.string()]).nullish(),
+  result: z.unknown().optional(),
+  error: z.object({ code: z.number(), message: z.string() }).optional(),
+})
 
-type RpcLog = {
-  address: string
-  topics: string[]
-  data: string
-  blockNumber: string
-  blockHash: string
-  // Always "0x0" on Mezo. Unused: timestamps come from block headers.
-  blockTimestamp?: string
-  transactionHash: string
-  transactionIndex: string
-  logIndex: string
-  removed?: boolean
-}
+type JsonRpcResponse = z.output<typeof jsonRpcResponseSchema>
 
-type RpcTx = {
-  hash: string
-  blockNumber: string | null
-  transactionIndex: string | null
-  from: string
-  to: string | null
-  input: string
-}
+const jsonRpcBodySchema = z.union([
+  jsonRpcResponseSchema,
+  z.array(jsonRpcResponseSchema),
+])
+
+// `blockTimestamp` is left out: Mezo reports "0x0" on every log, so
+// timestamps come from block headers.
+const rpcLogSchema = z.object({
+  address: lowerAddressSchema,
+  topics: z.array(lowerHexSchema),
+  data: lowerHexSchema,
+  blockNumber: quantitySchema,
+  blockHash: lowerHexSchema,
+  transactionHash: lowerHexSchema,
+  transactionIndex: quantitySchema,
+  logIndex: quantitySchema,
+  removed: z.boolean().optional(),
+})
+
+type RpcLog = z.output<typeof rpcLogSchema>
+
+const rpcTxSchema = z
+  .object({
+    hash: lowerHexSchema,
+    blockNumber: quantitySchema.nullable(),
+    transactionIndex: quantitySchema.nullable(),
+    from: lowerAddressSchema,
+    to: lowerAddressSchema.nullish(),
+    input: lowerHexSchema,
+  })
+  .nullable()
+
+const rpcBlockSchema = z
+  .object({ hash: lowerHexSchema, timestamp: quantitySchema })
+  .nullable()
 
 export class RpcError extends Error {
   constructor(
@@ -68,16 +135,10 @@ export type LogFilter = { addresses: Address[]; topic0s?: Hex[] | undefined }
 const TX_BATCH_SIZE = 50
 const HEADER_BATCH_SIZE = 50
 
-type RpcBlock = { hash: string; timestamp: string }
-
 export type BlockHeader = { hash: Hex; timestamp: bigint }
 
 const defaultSleep = (ms: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, ms))
-
-function hexToBigInt(value: string): bigint {
-  return BigInt(value)
-}
 
 function toHex(value: bigint): Hex {
   return `0x${value.toString(16)}`
@@ -139,10 +200,9 @@ export class RpcClient {
   }
 
   async blockNumber(): Promise<bigint> {
-    const result = await this.withFailover((endpoint) =>
-      this.call<string>(endpoint, "eth_blockNumber", []),
+    return this.withFailover((endpoint) =>
+      this.call(endpoint, "eth_blockNumber", [], quantitySchema),
     )
-    return hexToBigInt(result)
   }
 
   // Logs emitted by `addresses` in [fromBlock, toBlock] whose topic0 is one of
@@ -182,34 +242,35 @@ export class RpcClient {
   }
 
   async getTransactions(hashes: Hex[]): Promise<RawTx[]> {
-    const unique = [...new Set(hashes.map((hash) => hash.toLowerCase() as Hex))]
+    const unique = [...new Set(z.array(lowerHexSchema).parse(hashes))]
     const transactions: RawTx[] = []
     const batches = chunk(unique, TX_BATCH_SIZE)
     const fetched = await mapLimit(batches, this.batchConcurrency, (batch) =>
       this.withFailover((endpoint) =>
-        this.batchCall<RpcTx | null>(
+        this.batchCall(
           endpoint,
           batch.map((hash) => ({
             method: "eth_getTransactionByHash",
             params: [hash],
           })),
+          rpcTxSchema,
         ),
       ),
     )
     fetched.forEach((results, batchIndex) => {
-      const batch = batches[batchIndex] as Hex[]
+      const batch = batches[batchIndex] ?? []
       results.forEach((tx, index) => {
         if (!tx || tx.blockNumber === null || tx.transactionIndex === null) {
           throw new RpcError(`Transaction ${batch[index]} not found`, false)
         }
         transactions.push({
           network: this.network,
-          hash: tx.hash.toLowerCase() as Hex,
-          blockNumber: hexToBigInt(tx.blockNumber),
-          txIndex: Number(hexToBigInt(tx.transactionIndex)),
-          from: tx.from.toLowerCase() as Address,
-          to: tx.to ? (tx.to.toLowerCase() as Address) : null,
-          input: tx.input.toLowerCase() as Hex,
+          hash: tx.hash,
+          blockNumber: tx.blockNumber,
+          txIndex: Number(tx.transactionIndex),
+          from: tx.from,
+          to: tx.to ?? null,
+          input: tx.input,
         })
       })
     })
@@ -276,7 +337,12 @@ export class RpcClient {
         ...(topic0s ? { topics: [topic0s] } : {}),
       }
       logs.push(
-        ...(await this.call<RpcLog[]>(endpoint, "eth_getLogs", [filter])),
+        ...(await this.call(
+          endpoint,
+          "eth_getLogs",
+          [filter],
+          z.array(rpcLogSchema),
+        )),
       )
     }
     return logs
@@ -289,18 +355,18 @@ export class RpcClient {
   private async normalizeLogs(logs: RpcLog[]): Promise<RawLog[]> {
     const live = logs.filter((log) => log.removed !== true)
     const headers = await this.blockHeaders([
-      ...new Set(live.map((log) => hexToBigInt(log.blockNumber))),
+      ...new Set(live.map((log) => log.blockNumber)),
     ])
     const seen = new Set<string>()
     const normalized: RawLog[] = []
     for (const log of live) {
-      const txHash = log.transactionHash.toLowerCase() as Hex
-      const logIndex = Number(hexToBigInt(log.logIndex))
+      const txHash = log.transactionHash
+      const logIndex = Number(log.logIndex)
       const key = `${txHash}-${logIndex}`
       if (seen.has(key)) continue
       seen.add(key)
-      const blockNumber = hexToBigInt(log.blockNumber)
-      const blockHash = log.blockHash.toLowerCase() as Hex
+      const blockNumber = log.blockNumber
+      const blockHash = log.blockHash
       const header = headers.get(blockNumber)
       if (!header) {
         throw new RpcError(`Block ${blockNumber} header missing`, false)
@@ -317,11 +383,11 @@ export class RpcClient {
         blockHash,
         blockTimestamp: header.timestamp,
         txHash,
-        txIndex: Number(hexToBigInt(log.transactionIndex)),
+        txIndex: Number(log.transactionIndex),
         logIndex,
-        address: log.address.toLowerCase() as Address,
-        topics: log.topics.map((topic) => topic.toLowerCase() as Hex),
-        data: log.data.toLowerCase() as Hex,
+        address: log.address,
+        topics: log.topics,
+        data: log.data,
       })
     }
     return normalized
@@ -334,31 +400,32 @@ export class RpcClient {
     const batches = chunk(blocks, HEADER_BATCH_SIZE)
     const fetched = await mapLimit(batches, this.batchConcurrency, (batch) =>
       this.withFailover((endpoint) =>
-        this.batchCall<RpcBlock | null>(
+        this.batchCall(
           endpoint,
           batch.map((block) => ({
             method: "eth_getBlockByNumber",
             params: [toHex(block), false],
           })),
+          rpcBlockSchema,
         ),
       ),
     )
     fetched.forEach((results, batchIndex) => {
-      const batch = batches[batchIndex] as bigint[]
+      const batch = batches[batchIndex] ?? []
       results.forEach((block, index) => {
-        const number = batch[index] as bigint
+        const number = batch[index]
+        if (number === undefined) {
+          throw new RpcError("Block batch response out of range", false)
+        }
         if (!block) throw new RpcError(`Block ${number} not found`, true)
-        const timestamp = hexToBigInt(block.timestamp)
+        const timestamp = block.timestamp
         if (timestamp <= 0n) {
           throw new RpcError(
             `Block ${number} has timestamp ${timestamp}`,
             false,
           )
         }
-        headers.set(number, {
-          hash: block.hash.toLowerCase() as Hex,
-          timestamp,
-        })
+        headers.set(number, { hash: block.hash, timestamp })
       })
     })
     return headers
@@ -391,21 +458,23 @@ export class RpcClient {
     )
   }
 
-  private async call<T>(
+  private async call<Schema extends z.ZodType>(
     endpoint: RpcEndpoint,
     method: string,
     params: unknown[],
-  ): Promise<T> {
+    schema: Schema,
+  ): Promise<z.output<Schema>> {
     const [response] = await this.send(endpoint, [
       { jsonrpc: "2.0", id: this.nextId++, method, params },
     ])
-    return unwrap<T>(response)
+    return unwrap(response, method, schema)
   }
 
-  private async batchCall<T>(
+  private async batchCall<Schema extends z.ZodType>(
     endpoint: RpcEndpoint,
     calls: { method: string; params: unknown[] }[],
-  ): Promise<T[]> {
+    schema: Schema,
+  ): Promise<z.output<Schema>[]> {
     const requests = calls.map(
       (call): JsonRpcRequest => ({
         jsonrpc: "2.0",
@@ -416,7 +485,9 @@ export class RpcClient {
     )
     const responses = await this.send(endpoint, requests)
     const byId = new Map(responses.map((response) => [response.id, response]))
-    return requests.map((request) => unwrap<T>(byId.get(request.id)))
+    return requests.map((request) =>
+      unwrap(byId.get(request.id), request.method, schema),
+    )
   }
 
   private async send(
@@ -441,16 +512,19 @@ export class RpcClient {
     if (!response.ok) {
       throw new RpcError(`HTTP ${response.status}`, false)
     }
-    const body = (await response.json().catch(() => null)) as
-      | JsonRpcResponse
-      | JsonRpcResponse[]
-      | null
-    if (body === null) throw new RpcError("Invalid JSON response", true)
-    return Array.isArray(body) ? body : [body]
+    const body = jsonRpcBodySchema.safeParse(
+      await response.json().catch(() => null),
+    )
+    if (!body.success) throw new RpcError("Invalid JSON response", true)
+    return Array.isArray(body.data) ? body.data : [body.data]
   }
 }
 
-function unwrap<T>(response: JsonRpcResponse | undefined): T {
+function unwrap<Schema extends z.ZodType>(
+  response: JsonRpcResponse | undefined,
+  method: string,
+  schema: Schema,
+): z.output<Schema> {
   if (!response) throw new RpcError("Missing JSON-RPC response", true)
   if (response.error) {
     // -32005 is the common "limit exceeded / rate limited" code.
@@ -461,7 +535,12 @@ function unwrap<T>(response: JsonRpcResponse | undefined): T {
       retryable,
     )
   }
-  return response.result as T
+  const result = schema.safeParse(response.result)
+  if (!result.success) {
+    // A malformed result is the endpoint's fault: move on to the next one.
+    throw new RpcError(`Invalid ${method} result`, false)
+  }
+  return result.data
 }
 
 export function compareLogs(left: RawLog, right: RawLog): number {

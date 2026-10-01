@@ -14,7 +14,7 @@ import {
 import { POKE_SELECTOR } from "../../src/decode/constants"
 import { type HandlerBinding, handlerBindings } from "../../src/decode/dispatch"
 import { InMemoryStore } from "../../src/decode/store"
-import type { RawLog, RawTx } from "../../src/types"
+import type { RawLog, RawTx } from "../../src/ingest/rpc"
 
 // Runs every handler binding with different calldata and compares what it
 // writes. A handler outside CALLDATA_SELECTOR_READERS must ignore input

@@ -7,59 +7,65 @@ import type {
   MezoPokeMethod,
 } from "@/types/mezoActivity"
 import type { Hash } from "viem"
+import { z } from "zod"
+
+const optionalText = z.string().nullish()
+const optionalFlag = z.boolean().nullish()
 
 // The explorer subgraph's ActivityEvent, as both the explorer GraphQL API and
 // the warehouse (matchbox.activity_events) return it: big integers as decimal
 // strings, addresses and hashes as hex strings, absent fields as null.
-export type ActivityEventRow = {
-  id: string
-  actionType: string
-  boostContext: string
-  source: string
-  txHash: string
-  txFrom?: string | null
-  logIndex: string
-  blockNumber: string
-  timestamp: string
-  actor?: string | null
-  recipient?: string | null
-  tokenId?: string | null
-  amount?: string | null
-  duration?: string | null
-  prevAmount?: string | null
-  prevDuration?: string | null
-  prevIsPermanent?: boolean | null
-  postAmount?: string | null
-  postDuration?: string | null
-  postIsPermanent?: boolean | null
-  mergeSourceTokenId?: string | null
-  mergeDestTokenId?: string | null
-  mergeDestPrevAmount?: string | null
-  mergeDestPrevDuration?: string | null
-  mergeDestPrevIsPermanent?: boolean | null
-  token?: string | null
-  gauge?: string | null
-  pool?: string | null
-  rewardContract?: string | null
-  rewardType?: string | null
-  boostableTokenId?: string | null
-  boost?: string | null
-  weight?: string | null
-  totalWeight?: string | null
-  pokeMethod?: string | null
-  metadata?: string | null
-  period?: string | null
-  newPeriod?: string | null
-  firstRecipientAmount?: string | null
-  secondRecipientAmount?: string | null
-  emission?: string | null
-  rebase?: string | null
-  rewards?: string | null
-  epochIndex?: string | null
-  epochStart?: string | null
-  epochEnd?: string | null
-  distributionId?: string | null
-}
+export const activityEventRowSchema = z.object({
+  id: z.string(),
+  actionType: z.string(),
+  boostContext: z.string(),
+  source: z.string(),
+  txHash: z.string(),
+  txFrom: optionalText,
+  logIndex: z.string(),
+  blockNumber: z.string(),
+  timestamp: z.string(),
+  actor: optionalText,
+  recipient: optionalText,
+  tokenId: optionalText,
+  amount: optionalText,
+  duration: optionalText,
+  prevAmount: optionalText,
+  prevDuration: optionalText,
+  prevIsPermanent: optionalFlag,
+  postAmount: optionalText,
+  postDuration: optionalText,
+  postIsPermanent: optionalFlag,
+  mergeSourceTokenId: optionalText,
+  mergeDestTokenId: optionalText,
+  mergeDestPrevAmount: optionalText,
+  mergeDestPrevDuration: optionalText,
+  mergeDestPrevIsPermanent: optionalFlag,
+  token: optionalText,
+  gauge: optionalText,
+  pool: optionalText,
+  rewardContract: optionalText,
+  rewardType: optionalText,
+  boostableTokenId: optionalText,
+  boost: optionalText,
+  weight: optionalText,
+  totalWeight: optionalText,
+  pokeMethod: optionalText,
+  metadata: optionalText,
+  period: optionalText,
+  newPeriod: optionalText,
+  firstRecipientAmount: optionalText,
+  secondRecipientAmount: optionalText,
+  emission: optionalText,
+  rebase: optionalText,
+  rewards: optionalText,
+  epochIndex: optionalText,
+  epochStart: optionalText,
+  epochEnd: optionalText,
+  distributionId: optionalText,
+})
+
+export type ActivityEventRow = z.infer<typeof activityEventRowSchema>
 
 // Every field the activity readers select, in GraphQL (camelCase) names. The
 // warehouse columns are the snake_case form of the same names.

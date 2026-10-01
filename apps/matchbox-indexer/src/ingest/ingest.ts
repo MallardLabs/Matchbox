@@ -1,6 +1,5 @@
 import { createLogger } from "@repo/shared/logger"
 import type { Address } from "viem"
-import type { RawLog, RawTx, RegisteredContract } from "../types"
 import {
   type Discovery,
   FACTORY_TOPICS,
@@ -10,8 +9,10 @@ import {
   mergeContract,
 } from "./discovery"
 import type { NetworkConfig } from "./networks"
+import type { RawLog, RawTx } from "./rpc"
 import { type RpcClient, compareLogs } from "./rpc"
 import { STATIC_CONTRACTS } from "./static-contracts"
+import type { RegisteredContract } from "./store"
 import { type IngestStore, LOGS_STREAM } from "./store"
 import { FILTER_GROUPS, filterGroupOf, topic0sFor } from "./topics"
 

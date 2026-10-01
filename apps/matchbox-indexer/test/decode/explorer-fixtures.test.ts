@@ -9,7 +9,7 @@ import { canonicalRow } from "../../src/decode/parity"
 import { projectBlock } from "../../src/decode/projection"
 import { ACTIVITY_FIELDS, type ActivityField } from "../../src/decode/rows"
 import { InMemoryStore } from "../../src/decode/store"
-import type { RawLog, RawTx } from "../../src/types"
+import type { RawLog, RawTx } from "../../src/ingest/rpc"
 
 // Real explorer rows (matchbox-explorer 3.4.0) with the log and transaction
 // behind each, built by fixtures/build-fixtures.ts. Each log runs through the

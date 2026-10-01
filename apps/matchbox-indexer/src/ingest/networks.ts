@@ -1,4 +1,8 @@
-import type { Network } from "../types"
+import { z } from "zod"
+
+export const networkSchema = z.enum(["mezo", "mezo-testnet"])
+
+export type Network = z.output<typeof networkSchema>
 
 export type RpcEndpoint = {
   url: string

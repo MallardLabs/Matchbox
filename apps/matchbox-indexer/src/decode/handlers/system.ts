@@ -1,5 +1,5 @@
 import { decodeEventLog } from "viem"
-import type { RawLog, RawTx } from "../../types"
+import type { RawLog, RawTx } from "../../ingest/rpc"
 import merkleDistributorAbi from "../abis/merkle-distributor"
 import mezoMinterAbi from "../abis/mezo-minter"
 import musdSavingsRateAbi from "../abis/musd-savings-rate"

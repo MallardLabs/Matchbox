@@ -1,7 +1,7 @@
 import type { ClientBase } from "pg"
 import { type Address, isAddress } from "viem"
 import { z } from "zod"
-import type { Network } from "../types"
+import type { Network } from "../ingest/networks"
 import { lower } from "./helpers"
 import {
   ACTIVITY_FIELDS,

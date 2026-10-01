@@ -1,5 +1,5 @@
 import { type Hex, toEventSelector } from "viem"
-import type { ContractKind } from "../types"
+import type { ContractKind } from "./store"
 
 // Events the explorer subgraph handles, per contract kind (canonical
 // signatures from apps/activity-subgraph/subgraph.yaml on main;

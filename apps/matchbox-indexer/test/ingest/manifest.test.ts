@@ -4,8 +4,8 @@ import { fileURLToPath } from "node:url"
 import { describe, expect, it } from "vitest"
 import { parse } from "yaml"
 import { STATIC_CONTRACTS } from "../../src/ingest/static-contracts"
+import type { ContractKind } from "../../src/ingest/store"
 import { FILTER_GROUPS, HANDLED_EVENTS } from "../../src/ingest/topics"
-import type { ContractKind } from "../../src/types"
 
 // The explorer subgraph is the reference for what ingest must cover. These
 // tests fail when its manifest and the ingest config drift apart.

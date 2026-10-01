@@ -1,5 +1,5 @@
 import type { Address, Hex } from "viem"
-import type { RawLog, RawTx } from "../types"
+import type { RawLog, RawTx } from "../ingest/rpc"
 import {
   MAXTIME,
   OWNER_LOOKUP_ESCROWS,

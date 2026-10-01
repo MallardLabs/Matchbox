@@ -1,5 +1,5 @@
 import { decodeEventLog } from "viem"
-import type { RawLog, RawTx } from "../../types"
+import type { RawLog, RawTx } from "../../ingest/rpc"
 import votingEscrowAbi from "../abis/voting-escrow"
 import {
   ACTION,

@@ -1,6 +1,7 @@
 import type { Address } from "viem"
-import type { ContractKind, Network, RegisteredContract } from "../types"
+import type { Network } from "./networks"
 import { NETWORKS } from "./networks"
+import type { ContractKind, RegisteredContract } from "./store"
 
 // The explorer subgraph's static data sources (apps/activity-subgraph/
 // subgraph.yaml on main). Kept in code so the Worker bundle needs no manifest;

@@ -9,7 +9,7 @@ import {
 import type { NetworkConfig } from "../../src/ingest/networks"
 import { RpcClient } from "../../src/ingest/rpc"
 import { MemoryIngestStore, nextCheckpoint } from "../../src/ingest/store"
-import type { RegisteredContract } from "../../src/types"
+import type { RegisteredContract } from "../../src/ingest/store"
 import {
   type ChainLog,
   FakeChain,

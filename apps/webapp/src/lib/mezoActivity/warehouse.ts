@@ -1,6 +1,6 @@
 import {
   ACTIVITY_EVENT_FIELDS,
-  type ActivityEventRow,
+  activityEventRowSchema,
   mapActivityEventRow,
 } from "@/lib/mezoActivity/activityEvent"
 import type { SourceOptions } from "@/lib/mezoActivity/dataSources"
@@ -79,7 +79,10 @@ export function mapWarehouseRows(
 ): MezoActivityItem[] {
   const items: MezoActivityItem[] = []
   for (const row of rows) {
-    const item = mapActivityEventRow(row as ActivityEventRow, "rpcLogs")
+    const item = mapActivityEventRow(
+      activityEventRowSchema.parse(row),
+      "rpcLogs",
+    )
     if (item) items.push(item)
   }
   return items

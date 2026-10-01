@@ -1,5 +1,5 @@
 import { decodeEventLog } from "viem"
-import type { RawLog, RawTx } from "../../types"
+import type { RawLog, RawTx } from "../../ingest/rpc"
 import poolsVoterAbi from "../abis/pools-voter"
 import { ACTION, BOOST_CONTEXT, SOURCE, ZERO } from "../constants"
 import {
