@@ -49,3 +49,4 @@ supabase/.temp/
 
 # Wrangler local secrets
 .dev.vars*
+.wrangler/
