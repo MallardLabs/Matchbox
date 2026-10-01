@@ -1,7 +1,20 @@
 import { CONTRACTS } from "@repo/shared/contracts"
 import { z } from "zod"
 
+import {
+  EARN_LOCKS_MEZO_URL,
+  EARN_PAGE_SIZE,
+  EARN_VOTES_MEZO_URL,
+  earnRows,
+  fetchStakeOwners,
+  queryEarnSubgraph,
+  secondsToTimeseries,
+  timeseriesToSeconds,
+  tokenIdFromStakeId,
+} from "@/lib/mezoEarn"
+
 import { THIRD_PARTY_VOTER_SUBGRAPH_ADDRESS } from "./constants"
+import { replayVoteEvents } from "./participation"
 
 const SUBGRAPH_FIRST_MAX = 1000
 
@@ -33,100 +46,106 @@ async function querySubgraph(query: string): Promise<Record<string, unknown>> {
   return json.data ?? {}
 }
 
-const voteSchema = z.object({
+const voteEventSchema = z.object({
+  id: z.string(),
+  voter: z.string(),
+  timestamp: z.string(),
+  type: z.enum(["Voted", "Abstained"]),
   tokenId: z.string(),
-  owner: z.string(),
-  gauge: z.string(),
-  currentWeight: z.string(),
-  lastUpdatedAt: z.string(),
+  weight: z.string(),
+  gauge: z.object({ address: z.string() }),
 })
 
 export type SubgraphVote = {
   tokenId: bigint
+  // Last address to vote this NFT; only a fallback; snapshots resolve owners.
   owner: string
   gauge: string
   currentWeight: bigint
   lastUpdatedAt: number
 }
 
-export async function fetchActiveThirdPartyVotes(
-  options: {
-    blockNumber?: bigint
-  } = {},
-): Promise<SubgraphVote[]> {
-  const blockClause =
-    options.blockNumber !== undefined
-      ? `, block: { number: ${options.blockNumber.toString()} }`
-      : ""
-  const votes: SubgraphVote[] = []
-  for (let skip = 0; ; skip += SUBGRAPH_FIRST_MAX) {
-    const data = await querySubgraph(`
-      query {
-        votes(
-          first: ${SUBGRAPH_FIRST_MAX},
-          skip: ${skip},
-          where: { voterContract: "${THIRD_PARTY_VOTER_SUBGRAPH_ADDRESS}", isActive: true }${blockClause}
-        ) {
-          tokenId
-          owner
-          gauge
-          currentWeight
-          lastUpdatedAt
-        }
-      }
-    `)
-    const rows = z.array(voteSchema).parse(data.votes ?? [])
-    for (const row of rows) {
-      votes.push({
-        tokenId: BigInt(row.tokenId),
-        owner: row.owner,
-        gauge: row.gauge,
-        currentWeight: BigInt(row.currentWeight),
-        lastUpdatedAt: Number(row.lastUpdatedAt),
-      })
-    }
-    if (rows.length < SUBGRAPH_FIRST_MAX) break
-  }
-  return votes
-}
-
-const lockOwnerSchema = z.object({
-  id: z.string(),
-  owner: z.string().nullable(),
-})
-
-/** Resolve NFT owners at the snapshot block, independently of vote actors. */
-export async function fetchVeMezoOwners(options: {
-  tokenIds: bigint[]
-  blockNumber: bigint
-}): Promise<Map<string, string>> {
-  const owners = new Map<string, string>()
-  const escrow = CONTRACTS.mainnet.veMEZO.toLowerCase()
-  const ids = [...new Set(options.tokenIds.map((id) => id.toString()))]
-  const batchSize = 200
-  for (let start = 0; start < ids.length; start += batchSize) {
-    const batch = ids.slice(start, start + batchSize)
-    const requestedIds = batch.map((id) => `${escrow}-${id}`)
-    const data = await querySubgraph(`
-      query {
-        lockPositions(
-          first: ${batch.length},
-          where: { id_in: ${JSON.stringify(requestedIds)} },
-          block: { number: ${options.blockNumber.toString()} }
+/**
+ * Active third-party votes at a block, rebuilt by replaying every Voted /
+ * Abstained event up to the block's timestamp from Mezo's earn-votes
+ * subgraph. Its `votePositions` time-travel is pruned to ~1,000 blocks, and
+ * the replay matches live positions exactly.
+ */
+export async function fetchActiveThirdPartyVotes(options: {
+  blockTimestamp: number
+}): Promise<SubgraphVote[]> {
+  const events: z.infer<typeof voteEventSchema>[] = []
+  const upTo = secondsToTimeseries(options.blockTimestamp)
+  let lastId = ""
+  for (;;) {
+    const cursor = lastId ? `, id_gt: "${lastId}"` : ""
+    const data = await queryEarnSubgraph(
+      EARN_VOTES_MEZO_URL,
+      `query {
+        voteEvents(
+          first: ${EARN_PAGE_SIZE},
+          orderBy: id,
+          orderDirection: asc,
+          where: {
+            votingContract: "${THIRD_PARTY_VOTER_SUBGRAPH_ADDRESS}",
+            timestamp_lte: "${upTo}"${cursor}
+          }
         ) {
           id
-          owner
+          voter
+          timestamp
+          type
+          tokenId
+          weight
+          gauge { address }
         }
-      }
-    `)
-    const rows = z.array(lockOwnerSchema).parse(data.lockPositions ?? [])
-    for (const row of rows) {
-      if (row.owner !== null) {
-        owners.set(row.id.slice(escrow.length + 1), row.owner)
-      }
-    }
+      }`,
+    )
+    const rows = earnRows(data, "voteEvents", voteEventSchema)
+    events.push(...rows)
+    const last = rows.at(-1)
+    if (rows.length < EARN_PAGE_SIZE || !last) break
+    lastId = last.id
   }
-  return owners
+
+  const positions = replayVoteEvents(
+    events.map((event) => ({
+      tokenId: BigInt(event.tokenId),
+      gauge: event.gauge.address,
+      type: event.type,
+      weight: BigInt(event.weight),
+    })),
+  )
+  const latest = new Map<string, { voter: string; timestamp: number }>()
+  for (const event of events) {
+    const key = `${event.tokenId}:${event.gauge.address.toLowerCase()}`
+    latest.set(key, {
+      voter: event.voter,
+      timestamp: timeseriesToSeconds(event.timestamp) ?? 0,
+    })
+  }
+  return positions.map((position) => {
+    const last = latest.get(`${position.tokenId}:${position.gauge}`)
+    return {
+      tokenId: position.tokenId,
+      owner: last?.voter ?? "",
+      gauge: position.gauge,
+      currentWeight: position.currentWeight,
+      lastUpdatedAt: last?.timestamp ?? 0,
+    }
+  })
+}
+
+/**
+ * veMEZO owners from earn-locks `Stake`. Stake is current state only, so
+ * historical snapshots attribute an NFT to its latest owner; veMEZO NFTs
+ * rarely change hands. NFTs it doesn't know are resolved on-chain by the
+ * caller at the snapshot block.
+ */
+export async function fetchVeMezoOwners(options: {
+  tokenIds: bigint[]
+}): Promise<Map<string, string>> {
+  return fetchStakeOwners(options.tokenIds, CONTRACTS.mainnet.veMEZO)
 }
 
 const gaugeSchema = z.object({
@@ -210,21 +229,20 @@ export async function fetchThirdPartyRewardEvents(options: {
   return events
 }
 
-const lockCreatedSchema = z.object({
-  timestamp: z.string(),
-  tokenId: z.string().nullable(),
-  actor: z.string().nullable(),
+const stakeCreatedSchema = z.object({
+  id: z.string(),
+  initializedAt: z.string().nullable(),
 })
 
 export type VeMezoLockCreation = {
   timestamp: number
-  tokenId?: bigint
-  actor?: string
+  tokenId: bigint
 }
 
 /**
- * New veMEZO locks. LOCK_CREATED events from the VOTING_ESCROW source are
- * scoped to the veMEZO contract address so veBTC locks don't leak in.
+ * New veMEZO locks from earn-locks `Stake.initializedAt`. Matches the
+ * explorer's LOCK_CREATED for every lock it indexed (same token ids and
+ * timestamps) and also covers locks from before the explorer's start block.
  */
 export async function fetchVeMezoLockCreations(options: {
   fromTs: number
@@ -232,37 +250,36 @@ export async function fetchVeMezoLockCreations(options: {
 }): Promise<VeMezoLockCreation[]> {
   const veMezo = CONTRACTS.mainnet.veMEZO.toLowerCase()
   const locks: VeMezoLockCreation[] = []
-  for (let skip = 0; ; skip += SUBGRAPH_FIRST_MAX) {
-    const data = await querySubgraph(`
-      query {
-        activityEvents(
-          first: ${SUBGRAPH_FIRST_MAX},
-          skip: ${skip},
-          orderBy: timestamp,
+  let lastId = ""
+  for (;;) {
+    const cursor = lastId ? `, id_gt: "${lastId}"` : ""
+    const data = await queryEarnSubgraph(
+      EARN_LOCKS_MEZO_URL,
+      `query {
+        stakes(
+          first: ${EARN_PAGE_SIZE},
+          orderBy: id,
           orderDirection: asc,
           where: {
-            source: VOTING_ESCROW,
-            actionType: LOCK_CREATED,
-            contractAddress: "${veMezo}",
-            timestamp_gte: "${options.fromTs}",
-            timestamp_lte: "${options.toTs}"
+            token: "${veMezo}",
+            initializedAt_gte: "${options.fromTs}",
+            initializedAt_lte: "${options.toTs}"${cursor}
           }
         ) {
-          timestamp
-          tokenId
-          actor
+          id
+          initializedAt
         }
-      }
-    `)
-    const rows = z.array(lockCreatedSchema).parse(data.activityEvents ?? [])
+      }`,
+    )
+    const rows = earnRows(data, "stakes", stakeCreatedSchema)
     for (const row of rows) {
-      locks.push({
-        timestamp: Number(row.timestamp),
-        ...(row.tokenId ? { tokenId: BigInt(row.tokenId) } : {}),
-        ...(row.actor ? { actor: row.actor } : {}),
-      })
+      const tokenId = tokenIdFromStakeId(row.id)
+      if (tokenId === undefined || row.initializedAt === null) continue
+      locks.push({ timestamp: Number(row.initializedAt), tokenId })
     }
-    if (rows.length < SUBGRAPH_FIRST_MAX) break
+    const last = rows.at(-1)
+    if (rows.length < EARN_PAGE_SIZE || !last) break
+    lastId = last.id
   }
-  return locks
+  return locks.sort((a, b) => a.timestamp - b.timestamp)
 }

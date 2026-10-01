@@ -81,7 +81,7 @@ export async function buildParticipationSnapshot(options: {
         }),
       ),
       fetchActiveThirdPartyVotes({
-        blockNumber: block.number,
+        blockTimestamp: Number(block.timestamp),
       }),
     ])
 
@@ -104,11 +104,9 @@ export async function buildParticipationSnapshot(options: {
   ]
   const owners = await fetchVeMezoOwners({
     tokenIds: votingTokenIds.map(BigInt),
-    blockNumber: block.number,
   })
-  // LockPosition is not complete for older NFTs in the deployed subgraph.
-  // Resolve missing owners from the escrow at the same block instead of
-  // falling back to Vote.owner, which records the vote actor.
+  // Resolve NFTs earn-locks doesn't know from the escrow at the same block
+  // instead of falling back to the last voter, which may be a keeper.
   await Promise.all(
     votingTokenIds
       .filter((id) => !owners.has(id))
