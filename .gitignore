@@ -45,3 +45,4 @@ supabase/.temp/
 
 # Local Netlify folder
 .netlify
+.neon

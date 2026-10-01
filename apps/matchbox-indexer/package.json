@@ -1,0 +1,39 @@
+{
+  "name": "@repo/matchbox-indexer",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "wrangler deploy --dry-run --outdir dist",
+    "dev": "wrangler dev",
+    "backfill": "tsx scripts/backfill.ts",
+    "lint": "biome check src/ scripts/ test/",
+    "lint:fix": "biome check --write src/ scripts/ test/",
+    "migrate": "tsx scripts/migrate.ts",
+    "roles": "tsx scripts/create-roles.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "vacuum:raw": "tsx scripts/vacuum-raw.ts",
+    "types": "wrangler types worker-configuration.d.ts",
+    "verify:warehouse": "tsx scripts/verify-warehouse.ts"
+  },
+  "dependencies": {
+    "@repo/shared": "workspace:*",
+    "dotenv": "^16.4.7",
+    "pg": "^8.23.0",
+    "viem": "^2.40.3",
+    "yaml": "^2.9.0",
+    "zod": "^4.5.4"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "@repo/biome-config": "workspace:*",
+    "@repo/typescript-config": "workspace:*",
+    "@types/node": "^24.0.0",
+    "@types/pg": "^8.23.1",
+    "tsx": "^4.23.13",
+    "typescript": "^5.9.3",
+    "vitest": "^2.1.9",
+    "wrangler": "^4.127.1"
+  }
+}
