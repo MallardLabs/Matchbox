@@ -1,21 +1,32 @@
 import { LockCarouselSelector } from "@/components/LockCarouselSelector"
 import PaginationControls from "@/components/PaginationControls"
+import { TokenPairIcon } from "@/components/PoolCard"
+import PoolGaugeVotingCard, {
+  poolPairName,
+  poolTypeLabel,
+} from "@/components/PoolGaugeVotingCard"
 import RewardOptimizerPanel, {
   type RewardOptimizerFeedback,
 } from "@/components/RewardOptimizerPanel"
-import ValidatorGaugeVotingCard from "@/components/ValidatorGaugeVotingCard"
 import { getContractConfig } from "@/config/contracts"
 import { useNetwork } from "@/contexts/NetworkContext"
 import { useVeBTCLocks } from "@/hooks/useLocks"
 import useMultiVeBTCBallotVoting from "@/hooks/useMultiVeBTCBallotVoting"
 import { usePagination } from "@/hooks/usePagination"
-import { useValidatorMetrics } from "@/hooks/useValidatorMetrics"
 import {
-  useAllValidatorProfiles,
-  useValidatorProfile,
-} from "@/hooks/useValidatorProfiles"
-import useValidators from "@/hooks/useValidators"
-import type { Validator } from "@/lib/validators"
+  type GaugedPool,
+  isGaugedPool,
+  usePoolVotingMetrics,
+} from "@/hooks/usePoolVotingMetrics"
+import { usePools } from "@/hooks/usePools"
+import {
+  type PoolVoteSortEntry,
+  type PoolVoteSortMode,
+  comparePoolVoteSortEntries,
+  pricedRewardMicroUsd,
+  sumUsdStringsMicroUsd,
+  usdStringToMicroUsd,
+} from "@/utils/poolVoting"
 import {
   type RewardOptimizerResult,
   calculateAnnualizedReturnBasisPoints,
@@ -26,13 +37,10 @@ import {
   decimalToScaledBigInt,
 } from "@/utils/validatorApy"
 import {
-  type ValidatorSortEntry,
-  type ValidatorSortMode,
   aggregateSelectedVoteBasisPoints,
   allocationTotalBasisPoints,
   basisPointsToPercentage,
   calculateProjectedValidatorWeight,
-  compareValidatorSortEntries,
   equalVoteBasisPoints,
   percentageToBasisPoints,
 } from "@/utils/validatorVoting"
@@ -50,8 +58,26 @@ import { useDeferredValue, useEffect, useMemo, useState } from "react"
 import { useAccount, useReadContract, useReadContracts } from "wagmi"
 
 type SortDirection = "asc" | "desc"
+type PoolTypeFilter = "all" | "volatile" | "stable" | "concentrated"
 
-const VALIDATORS_PER_PAGE = 9
+const POOLS_PER_PAGE = 9
+
+const SORT_OPTIONS: readonly { id: PoolVoteSortMode; label: string }[] = [
+  { id: "rewards", label: "Rewards" },
+  { id: "apy", label: "vAPY" },
+  { id: "share", label: "Share" },
+  { id: "weight", label: "BTC Weight" },
+  { id: "tvl", label: "TVL" },
+  { id: "volume", label: "Volume" },
+  { id: "name", label: "Name" },
+]
+
+const TYPE_FILTERS: readonly { id: PoolTypeFilter; label: string }[] = [
+  { id: "all", label: "All" },
+  { id: "volatile", label: "Volatile" },
+  { id: "stable", label: "Stable" },
+  { id: "concentrated", label: "Concentrated" },
+]
 
 function formatBasisPoints(value: bigint): string {
   const whole = value / 100n
@@ -59,61 +85,65 @@ function formatBasisPoints(value: bigint): string {
   return `${whole}.${fraction}`
 }
 
-type ValidatorCartRowProps = {
-  validator: Validator
+function matchesPoolType(pool: GaugedPool, filter: PoolTypeFilter): boolean {
+  if (filter === "all") return true
+  if (filter === "concentrated") return pool.type === "concentrated"
+  if (pool.type === "concentrated") return false
+  return filter === "stable"
+    ? pool.volatility === "stable"
+    : pool.volatility !== "stable"
+}
+
+function poolKey(pool: GaugedPool): string {
+  return pool.address.toLowerCase()
+}
+
+type PoolCartRowProps = {
+  pool: GaugedPool
   allocation: string
   onAllocationChange: (value: string) => void
   onRemove: () => void
 }
 
-function ValidatorCartRow({
-  validator,
+function PoolCartRow({
+  pool,
   allocation,
   onAllocationChange,
   onRemove,
-}: ValidatorCartRowProps): JSX.Element {
-  const { profile } = useValidatorProfile(validator.gauge)
-  const displayName =
-    profile?.display_name || validator.moniker || validator.operator
+}: PoolCartRowProps): JSX.Element {
+  const displayName = poolPairName(pool)
 
   return (
     <li className="rounded-lg border border-[var(--border)] p-3">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div className="flex min-w-0 items-center gap-3">
-          <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center overflow-hidden rounded-full border border-[var(--border)] bg-[var(--surface-secondary)]">
-            {profile?.profile_picture_url ? (
-              <img
-                src={profile.profile_picture_url}
-                alt={`${displayName} profile`}
-                className="h-full w-full object-cover"
-              />
-            ) : (
-              <span className="font-mono text-xs font-semibold text-[var(--content-secondary)]">
-                {displayName.slice(0, 2).toUpperCase()}
-              </span>
-            )}
-          </div>
+          <TokenPairIcon
+            symbol0={pool.token0.symbol}
+            symbol1={pool.token1.symbol}
+            size={28}
+          />
           <div className="min-w-0">
             <Link
-              href={`/validator-gauges/${validator.gauge}`}
+              href={`/pools/${pool.address}`}
               className="block truncate text-sm font-semibold text-[var(--content-primary)] no-underline"
             >
               {displayName}
             </Link>
             <p className="truncate font-mono text-2xs text-[var(--content-tertiary)]">
-              {validator.gauge.slice(0, 8)}…{validator.gauge.slice(-6)}
+              {poolTypeLabel(pool)} · {pool.address.slice(0, 8)}…
+              {pool.address.slice(-6)}
             </p>
           </div>
         </div>
         <div className="flex items-center gap-2">
           <label
-            htmlFor={`cart-validator-${validator.gauge}`}
+            htmlFor={`cart-pool-${pool.address}`}
             className="whitespace-nowrap text-xs text-[var(--content-secondary)]"
           >
             Vote %
           </label>
           <Input
-            id={`cart-validator-${validator.gauge}`}
+            id={`cart-pool-${pool.address}`}
             type="number"
             min={0}
             max={100}
@@ -151,39 +181,51 @@ function ValidatorCartRow({
   )
 }
 
-export default function ValidatorVotingPage(): JSX.Element {
+export default function PoolVotingPage(): JSX.Element {
   const { chainId } = useNetwork()
   const { isConnected } = useAccount()
   const contracts = getContractConfig(chainId)
   const { locks, isLoading: isLoadingLocks } = useVeBTCLocks()
   const {
-    votableValidators,
-    totalWeight,
-    isLoading: isLoadingValidators,
-    error: validatorsError,
-    refetch: refetchValidators,
-  } = useValidators()
+    pools,
+    isLoading: isLoadingPools,
+    error: poolsError,
+    refetch: refetchPools,
+  } = usePools()
+  const gaugedPools = useMemo(() => pools.filter(isGaugedPool), [pools])
   const {
-    map: validatorMetrics,
+    map: poolMetrics,
+    totalWeight,
     btcPriceUsd,
-    isLoading: isLoadingValidatorMetrics,
-  } = useValidatorMetrics(votableValidators)
-  const { profiles: validatorProfiles } = useAllValidatorProfiles()
+    isLoading: isLoadingPoolMetrics,
+    error: poolMetricsError,
+    refetch: refetchPoolMetrics,
+  } = usePoolVotingMetrics(gaugedPools)
+  // Killed gauges reject votes, so they never enter the ballot.
+  const votablePools = useMemo(
+    () =>
+      gaugedPools.filter(
+        (pool) => poolMetrics.get(poolKey(pool))?.isAlive !== false,
+      ),
+    [gaugedPools, poolMetrics],
+  )
   const [selectedLockIndexes, setSelectedLockIndexes] = useState<Set<number>>(
     new Set(),
   )
-  const [selectedGaugeAddresses, setSelectedGaugeAddresses] = useState<
-    Set<string>
-  >(new Set())
+  const [selectedPoolKeys, setSelectedPoolKeys] = useState<Set<string>>(
+    new Set(),
+  )
   const [allocations, setAllocations] = useState<Record<string, string>>({})
   const [search, setSearch] = useState("")
   const deferredSearch = useDeferredValue(search)
-  const [sortMode, setSortMode] = useState<ValidatorSortMode>("incentives")
+  const [typeFilter, setTypeFilter] = useState<PoolTypeFilter>("all")
+  const [rewardedOnly, setRewardedOnly] = useState(false)
+  const [sortMode, setSortMode] = useState<PoolVoteSortMode>("rewards")
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc")
   const [cartOpen, setCartOpen] = useState(false)
   const [optimizerFeedback, setOptimizerFeedback] =
     useState<RewardOptimizerFeedback | null>(null)
-  const multiVote = useMultiVeBTCBallotVoting("validators")
+  const multiVote = useMultiVeBTCBallotVoting("pools")
 
   const selectedLocks = useMemo(
     () =>
@@ -197,14 +239,14 @@ export default function ValidatorVotingPage(): JSX.Element {
     [],
   )
   const { data: epochStart, isLoading: isLoadingEpochStart } = useReadContract({
-    ...contracts.validatorsVoter,
+    ...contracts.poolsVoter,
     functionName: "epochStart",
     args: [currentEpochTimestamp],
   })
   const { data: lastVotedResults, isLoading: isLoadingLastVoted } =
     useReadContracts({
       contracts: selectedLocks.map((lock) => ({
-        ...contracts.validatorsVoter,
+        ...contracts.poolsVoter,
         functionName: "lastVoted" as const,
         args: [lock.tokenId] as const,
       })),
@@ -228,33 +270,34 @@ export default function ValidatorVotingPage(): JSX.Element {
     isLoading: isLoadingSelectedUsedWeights,
   } = useReadContracts({
     contracts: selectedLocks.map((lock) => ({
-      ...contracts.validatorsVoter,
+      ...contracts.poolsVoter,
       functionName: "usedWeights" as const,
       args: [lock.tokenId] as const,
     })),
     query: { enabled: selectedLocks.length > 0 },
   })
+  // PoolsVoter tallies votes by pool address, not by gauge.
   const { data: selectedVoteResults, isLoading: isLoadingSelectedVotes } =
     useReadContracts({
       contracts: selectedLocks.flatMap((lock) =>
-        votableValidators.map((validator) => ({
-          ...contracts.validatorsVoter,
+        gaugedPools.map((pool) => ({
+          ...contracts.poolsVoter,
           functionName: "votes" as const,
-          args: [lock.tokenId, validator.gauge] as const,
+          args: [lock.tokenId, pool.address] as const,
         })),
       ),
       query: {
-        enabled: selectedLocks.length > 0 && votableValidators.length > 0,
+        enabled: selectedLocks.length > 0 && gaugedPools.length > 0,
       },
     })
-  const isLoadingSelectedValidatorState =
+  const isLoadingSelectedPoolState =
     selectedLocks.length > 0 &&
     (isLoadingEpochStart ||
       isLoadingLastVoted ||
       isLoadingSelectedUsedWeights ||
       isLoadingSelectedVotes)
 
-  const selectedVotesByGauge = useMemo(() => {
+  const selectedVotesByPool = useMemo(() => {
     const result = new Map<
       string,
       {
@@ -264,14 +307,13 @@ export default function ValidatorVotingPage(): JSX.Element {
         eligible: boolean
       }[]
     >()
-    votableValidators.forEach((validator, validatorIndex) => {
+    gaugedPools.forEach((pool, poolIndex) => {
       result.set(
-        validator.gauge.toLowerCase(),
+        poolKey(pool),
         selectedLockStates.map((state, lockIndex) => ({
           vote:
-            (selectedVoteResults?.[
-              lockIndex * votableValidators.length + validatorIndex
-            ]?.result as bigint | undefined) ?? 0n,
+            (selectedVoteResults?.[lockIndex * gaugedPools.length + poolIndex]
+              ?.result as bigint | undefined) ?? 0n,
           usedWeight:
             (selectedUsedWeightResults?.[lockIndex]?.result as
               | bigint
@@ -283,106 +325,106 @@ export default function ValidatorVotingPage(): JSX.Element {
     })
     return result
   }, [
+    gaugedPools,
     selectedLockStates,
     selectedUsedWeightResults,
     selectedVoteResults,
-    votableValidators,
   ])
 
-  const validatorOptimizerData = useMemo(() => {
+  const poolOptimizerData = useMemo(() => {
     let unpricedIncentiveCount = 0
-    const optimizerGauges = votableValidators.map((validator) => {
-      const metric = validatorMetrics.get(validator.gauge.toLowerCase())
-      let incentiveValueMicroUsd = 0n
-      for (const incentive of metric?.incentives ?? []) {
-        if (incentive.amount <= 0n) continue
-        if (incentive.valueMicroUsd === null) {
-          unpricedIncentiveCount++
-        } else {
-          incentiveValueMicroUsd += incentive.valueMicroUsd
-        }
-      }
+    const optimizerGauges = votablePools.map((pool) => {
+      const metric = poolMetrics.get(poolKey(pool))
+      const priced = pricedRewardMicroUsd([
+        ...(metric?.bribes ?? []),
+        ...(metric?.voterFees ?? []),
+      ])
+      unpricedIncentiveCount += priced.unpricedCount
 
       return {
-        id: validator.gauge.toLowerCase(),
+        id: poolKey(pool),
         existingWeight: calculateProjectedValidatorWeight(
-          BigInt(validator.weight),
-          selectedVotesByGauge.get(validator.gauge.toLowerCase()) ?? [],
+          metric?.weight ?? 0n,
+          selectedVotesByPool.get(poolKey(pool)) ?? [],
           0n,
         ),
-        incentiveValueMicroUsd,
+        incentiveValueMicroUsd: priced.valueMicroUsd,
       }
     })
 
     return { optimizerGauges, unpricedIncentiveCount }
-  }, [selectedVotesByGauge, validatorMetrics, votableValidators])
-  const validatorOptimizerInputFingerprint = useMemo(
+  }, [poolMetrics, selectedVotesByPool, votablePools])
+  const poolOptimizerInputFingerprint = useMemo(
     () =>
       [
         ...eligibleLocks.map(
           (lock) => `${lock.tokenId.toString()}:${lock.votingPower.toString()}`,
         ),
-        ...validatorOptimizerData.optimizerGauges.map(
+        ...poolOptimizerData.optimizerGauges.map(
           (gauge) =>
             `${gauge.id}:${gauge.existingWeight.toString()}:${gauge.incentiveValueMicroUsd.toString()}`,
         ),
         btcPriceUsd ?? "unpriced",
       ].join("|"),
-    [btcPriceUsd, eligibleLocks, validatorOptimizerData],
+    [btcPriceUsd, eligibleLocks, poolOptimizerData],
   )
 
   useEffect(() => {
-    void validatorOptimizerInputFingerprint
+    void poolOptimizerInputFingerprint
     setOptimizerFeedback(null)
-  }, [validatorOptimizerInputFingerprint])
+  }, [poolOptimizerInputFingerprint])
 
   const currentAllocations = useMemo(
     () =>
       new Map(
-        votableValidators.map((validator) => {
-          const votes =
-            selectedVotesByGauge.get(validator.gauge.toLowerCase()) ?? []
-          return [
-            validator.gauge.toLowerCase(),
-            aggregateSelectedVoteBasisPoints(votes),
-          ] as const
-        }),
+        gaugedPools.map((pool) => [
+          poolKey(pool),
+          aggregateSelectedVoteBasisPoints(
+            selectedVotesByPool.get(poolKey(pool)) ?? [],
+          ),
+        ]),
       ),
-    [selectedVotesByGauge, votableValidators],
+    [gaugedPools, selectedVotesByPool],
   )
 
-  const filteredValidators = useMemo(() => {
+  const filteredPools = useMemo(() => {
     const query = deferredSearch.trim().toLowerCase()
-    const resolveName = (validator: Validator) =>
-      validatorProfiles.get(validator.gauge.toLowerCase())?.display_name ||
-      validator.moniker ||
-      validator.operator
-    const result = votableValidators.filter((validator) => {
+    const result = votablePools.filter((pool) => {
+      if (!matchesPoolType(pool, typeFilter)) return false
+      if (rewardedOnly) {
+        const rewards = poolMetrics.get(poolKey(pool))?.totalRewardsMicroUsd
+        if (rewards === 0n) return false
+      }
       return (
         !query ||
-        resolveName(validator).toLowerCase().includes(query) ||
-        validator.moniker.toLowerCase().includes(query) ||
-        validator.details.toLowerCase().includes(query) ||
-        validator.operator.toLowerCase().includes(query) ||
-        validator.gauge.toLowerCase().includes(query)
+        pool.name.toLowerCase().includes(query) ||
+        pool.symbol.toLowerCase().includes(query) ||
+        pool.token0.symbol.toLowerCase().includes(query) ||
+        pool.token1.symbol.toLowerCase().includes(query) ||
+        pool.address.toLowerCase().includes(query) ||
+        pool.gauge.toLowerCase().includes(query)
       )
     })
 
-    const toSortEntry = (validator: Validator): ValidatorSortEntry => {
-      const weight = BigInt(validator.weight)
-      const metric = validatorMetrics.get(validator.gauge.toLowerCase())
+    const toSortEntry = (pool: GaugedPool): PoolVoteSortEntry => {
+      const metric = poolMetrics.get(poolKey(pool))
+      const weight = metric?.weight ?? 0n
       return {
-        gauge: validator.gauge,
-        name: resolveName(validator),
+        pool: pool.address,
+        name: poolPairName(pool),
         weight,
         shareBasisPoints:
           totalWeight > 0n ? (weight * 10_000n) / totalWeight : 0n,
-        incentivesMicroUsd: metric?.totalIncentivesMicroUsd ?? null,
+        rewardsMicroUsd: metric?.totalRewardsMicroUsd ?? null,
         apyBasisPoints: metric?.apyBasisPoints ?? null,
+        tvlMicroUsd: usdStringToMicroUsd(pool.tvl),
+        volumeMicroUsd: sumUsdStringsMicroUsd(
+          pool.stats.volume.map((stat) => stat.amountUSD),
+        ),
       }
     }
     return [...result].sort((a, b) =>
-      compareValidatorSortEntries(
+      comparePoolVoteSortEntries(
         toSortEntry(a),
         toSortEntry(b),
         sortMode,
@@ -391,12 +433,13 @@ export default function ValidatorVotingPage(): JSX.Element {
     )
   }, [
     deferredSearch,
+    poolMetrics,
+    rewardedOnly,
     sortDirection,
     sortMode,
     totalWeight,
-    validatorMetrics,
-    validatorProfiles,
-    votableValidators,
+    typeFilter,
+    votablePools,
   ])
 
   const {
@@ -407,41 +450,44 @@ export default function ValidatorVotingPage(): JSX.Element {
     paginatedItems,
     goToPreviousPage,
     goToNextPage,
-  } = usePagination(filteredValidators, {
-    pageSize: VALIDATORS_PER_PAGE,
-    resetDeps: [deferredSearch, sortMode, sortDirection],
+  } = usePagination(filteredPools, {
+    pageSize: POOLS_PER_PAGE,
+    resetDeps: [
+      deferredSearch,
+      sortMode,
+      sortDirection,
+      typeFilter,
+      rewardedOnly,
+    ],
   })
 
-  const selectedValidators = useMemo(
-    () =>
-      votableValidators.filter((validator) =>
-        selectedGaugeAddresses.has(validator.gauge),
-      ),
-    [selectedGaugeAddresses, votableValidators],
+  const selectedPools = useMemo(
+    () => votablePools.filter((pool) => selectedPoolKeys.has(poolKey(pool))),
+    [selectedPoolKeys, votablePools],
   )
-  const allocationValues = selectedValidators.map(
-    (validator) => allocations[validator.gauge] ?? "",
+  const allocationValues = selectedPools.map(
+    (pool) => allocations[poolKey(pool)] ?? "",
   )
   const allocationTotal = allocationTotalBasisPoints(allocationValues)
-  const allocationEntries = selectedValidators.flatMap((validator) => {
-    const raw = allocations[validator.gauge] ?? ""
+  const allocationEntries = selectedPools.flatMap((pool) => {
+    const raw = allocations[poolKey(pool)] ?? ""
     const basisPoints = percentageToBasisPoints(raw)
-    return basisPoints && basisPoints > 0n
-      ? [{ validator, raw, basisPoints }]
-      : []
+    return basisPoints && basisPoints > 0n ? [{ pool, raw, basisPoints }] : []
   })
+  const ballotPools = allocationEntries.map((entry) => entry.pool.address)
+  const ballotWeights = allocationEntries.map((entry) => entry.basisPoints)
   const isAllocationValid = allocationTotal === 10_000n
   const canVote =
     isConnected &&
     eligibleLocks.length > 0 &&
-    allocationEntries.length === selectedValidators.length &&
+    allocationEntries.length === selectedPools.length &&
     allocationEntries.length > 0 &&
     isAllocationValid &&
     !multiVote.isInProgress
 
   useEffect(() => {
-    if (selectedGaugeAddresses.size === 0) setCartOpen(false)
-  }, [selectedGaugeAddresses.size])
+    if (selectedPoolKeys.size === 0) setCartOpen(false)
+  }, [selectedPoolKeys.size])
 
   function toggleLock(index: number) {
     setOptimizerFeedback(null)
@@ -453,27 +499,26 @@ export default function ValidatorVotingPage(): JSX.Element {
     })
   }
 
-  function updateAllocation(gaugeAddress: string, value: string) {
+  function updateAllocation(key: string, value: string) {
     setOptimizerFeedback(null)
-    setAllocations((current) => ({ ...current, [gaugeAddress]: value }))
+    setAllocations((current) => ({ ...current, [key]: value }))
   }
 
-  function toggleGauge(validator: Validator) {
+  function togglePool(pool: GaugedPool) {
     setOptimizerFeedback(null)
-    setSelectedGaugeAddresses((current) => {
+    const key = poolKey(pool)
+    setSelectedPoolKeys((current) => {
       const next = new Set(current)
-      if (next.has(validator.gauge)) {
-        next.delete(validator.gauge)
+      if (next.has(key)) {
+        next.delete(key)
         setAllocations((currentAllocations) => {
           const nextAllocations = { ...currentAllocations }
-          delete nextAllocations[validator.gauge]
+          delete nextAllocations[key]
           return nextAllocations
         })
       } else {
-        const parsed = percentageToBasisPoints(
-          allocations[validator.gauge] ?? "",
-        )
-        if (parsed && parsed > 0n) next.add(validator.gauge)
+        const parsed = percentageToBasisPoints(allocations[key] ?? "")
+        if (parsed && parsed > 0n) next.add(key)
       }
       return next
     })
@@ -481,30 +526,30 @@ export default function ValidatorVotingPage(): JSX.Element {
 
   function clearCart() {
     setOptimizerFeedback(null)
-    setSelectedGaugeAddresses(new Set())
+    setSelectedPoolKeys(new Set())
     setAllocations({})
     multiVote.clear()
   }
 
-  function voteEquallyAcrossAll() {
+  function voteEquallyAcrossPools(targetPools: readonly GaugedPool[]) {
     setOptimizerFeedback(null)
-    const weights = equalVoteBasisPoints(votableValidators.length)
+    const weights = equalVoteBasisPoints(targetPools.length)
     const nextAllocations: Record<string, string> = {}
     const nextSelected = new Set<string>()
-    votableValidators.forEach((validator, index) => {
+    targetPools.forEach((pool, index) => {
       const weight = weights[index]
       if (weight === undefined || weight === 0n) return
-      nextSelected.add(validator.gauge)
-      nextAllocations[validator.gauge] = basisPointsToPercentage(weight)
+      nextSelected.add(poolKey(pool))
+      nextAllocations[poolKey(pool)] = basisPointsToPercentage(weight)
     })
     setAllocations(nextAllocations)
-    setSelectedGaugeAddresses(nextSelected)
+    setSelectedPoolKeys(nextSelected)
   }
 
-  function optimizeValidatorAllocation() {
+  function optimizePoolAllocation() {
     const votingPowers = eligibleLocks.map((lock) => lock.votingPower)
     const result = optimizeRewardAllocations({
-      gauges: validatorOptimizerData.optimizerGauges,
+      gauges: poolOptimizerData.optimizerGauges,
       votingPowers,
     })
     if (!result) {
@@ -512,12 +557,12 @@ export default function ValidatorVotingPage(): JSX.Element {
         result: null,
         annualizedReturnBasisPoints: null,
         message:
-          "No active validator gauge currently has both priced incentives and eligible selected voting power.",
+          "No active pool gauge currently has both priced voter rewards and eligible selected voting power.",
       })
       return
     }
 
-    applyOptimizedValidatorAllocation(result)
+    applyOptimizedPoolAllocation(result)
     const assetPriceMicroUsd =
       btcPriceUsd === null ? 0n : decimalToScaledBigInt(btcPriceUsd, 6)
     setOptimizerFeedback({
@@ -531,29 +576,23 @@ export default function ValidatorVotingPage(): JSX.Element {
     })
   }
 
-  function applyOptimizedValidatorAllocation(result: RewardOptimizerResult) {
-    const validatorByGauge = new Map(
-      votableValidators.map((validator) => [
-        validator.gauge.toLowerCase(),
-        validator,
-      ]),
-    )
+  function applyOptimizedPoolAllocation(result: RewardOptimizerResult) {
+    const knownKeys = new Set(votablePools.map(poolKey))
     const nextAllocations: Record<string, string> = {}
     const nextSelected = new Set<string>()
     for (const allocation of result.allocations) {
-      const validator = validatorByGauge.get(allocation.id)
-      if (!validator) continue
-      nextSelected.add(validator.gauge)
-      nextAllocations[validator.gauge] = basisPointsToPercentage(
+      if (!knownKeys.has(allocation.id)) continue
+      nextSelected.add(allocation.id)
+      nextAllocations[allocation.id] = basisPointsToPercentage(
         allocation.basisPoints,
       )
     }
 
     setAllocations(nextAllocations)
-    setSelectedGaugeAddresses(nextSelected)
+    setSelectedPoolKeys(nextSelected)
   }
 
-  function handleSort(nextSort: ValidatorSortMode) {
+  function handleSort(nextSort: PoolVoteSortMode) {
     if (sortMode === nextSort) {
       setSortDirection((current) => (current === "asc" ? "desc" : "asc"))
       return
@@ -562,23 +601,52 @@ export default function ValidatorVotingPage(): JSX.Element {
     setSortDirection(nextSort === "name" ? "asc" : "desc")
   }
 
+  function projectedApyFor(pool: GaugedPool): bigint | null {
+    const metric = poolMetrics.get(poolKey(pool))
+    const allocationBasisPoints = percentageToBasisPoints(
+      allocations[poolKey(pool)] ?? "",
+    )
+    if (
+      metric?.totalRewardsMicroUsd === null ||
+      metric?.totalRewardsMicroUsd === undefined ||
+      btcPriceUsd === null ||
+      allocationBasisPoints === null
+    ) {
+      return metric?.apyBasisPoints ?? null
+    }
+    return calculateValidatorApyBasisPoints(
+      metric.totalRewardsMicroUsd,
+      calculateProjectedValidatorWeight(
+        metric.weight,
+        selectedVotesByPool.get(poolKey(pool)) ?? [],
+        allocationBasisPoints,
+      ),
+      btcPriceUsd,
+    )
+  }
+
   async function submitVote() {
     if (!canVote) return
     const result = await multiVote.voteAll(
       eligibleLocks.map((lock) => lock.tokenId),
-      allocationEntries.map((entry) => entry.validator.gauge),
-      allocationEntries.map((entry) => entry.basisPoints),
+      ballotPools,
+      ballotWeights,
     )
-    if (result.successCount > 0) await refetchValidators()
+    if (result.successCount > 0) {
+      refetchPoolMetrics()
+      await refetchPools()
+    }
     if (result.errorCount === 0) {
       setCartOpen(false)
-      setSelectedGaugeAddresses(new Set())
+      setSelectedPoolKeys(new Set())
       setAllocations({})
       setOptimizerFeedback(null)
     }
   }
 
-  if (isLoadingValidators || (isConnected && isLoadingLocks)) {
+  const loadError = poolsError ?? poolMetricsError
+
+  if (isLoadingPools || (isConnected && isLoadingLocks)) {
     return (
       <div className="flex flex-col gap-4">
         <Skeleton width="100%" height="180px" animation />
@@ -591,10 +659,11 @@ export default function ValidatorVotingPage(): JSX.Element {
     <div className="flex flex-col gap-5 pb-24">
       <header>
         <h1 className="text-balance text-2xl font-semibold text-[var(--content-primary)]">
-          <span className="text-[#F7931A]">$</span> validators --vote
+          <span className="text-[#F7931A]">$</span> pools --vote
         </h1>
         <p className="mt-1 text-pretty text-sm text-[var(--content-secondary)]">
-          Direct veBTC voting power to Mezo validator gauges. Build one ballot
+          Direct veBTC voting power to Mezo pool gauges to steer MEZO emissions
+          and earn each pool&apos;s bribes and trading fees. Build one ballot
           and apply it to every eligible selected NFT.
         </p>
       </header>
@@ -606,8 +675,8 @@ export default function ValidatorVotingPage(): JSX.Element {
               Connect your wallet to vote
             </h2>
             <p className="mt-2 text-pretty text-sm text-[var(--content-secondary)]">
-              The validator directory is public. Connect to select veBTC NFTs
-              and submit a ballot.
+              The pool directory is public. Connect to select veBTC NFTs and
+              submit a ballot.
             </p>
           </div>
         </Card>
@@ -643,20 +712,21 @@ export default function ValidatorVotingPage(): JSX.Element {
         </Card>
       )}
 
-      {selectedLocks.length > eligibleLocks.length && (
-        <p className="rounded-lg border border-[var(--warning)] p-3 text-pretty text-xs text-[var(--warning)]">
-          {selectedLocks.length - eligibleLocks.length} selected NFT
-          {selectedLocks.length - eligibleLocks.length === 1
-            ? " has"
-            : "s have"}
-          already voted this epoch and will be skipped until reset or the next
-          epoch.
-        </p>
-      )}
+      {selectedLocks.length > eligibleLocks.length &&
+        !isLoadingSelectedPoolState && (
+          <p className="rounded-lg border border-[var(--warning)] p-3 text-pretty text-xs text-[var(--warning)]">
+            {selectedLocks.length - eligibleLocks.length} selected NFT
+            {selectedLocks.length - eligibleLocks.length === 1
+              ? " has"
+              : "s have"}{" "}
+            already voted on pools this epoch and will be skipped until reset or
+            the next epoch.
+          </p>
+        )}
 
-      {validatorsError ? (
+      {loadError ? (
         <p className="rounded-lg border border-[var(--negative)] p-3 text-sm text-[var(--negative)]">
-          {validatorsError.message}
+          Pool voting data is unavailable right now. Please try again shortly.
         </p>
       ) : (
         <Card title="Allocate Voting Power" withBorder overrides={{}}>
@@ -664,13 +734,13 @@ export default function ValidatorVotingPage(): JSX.Element {
             <div className="flex flex-col gap-4">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-xs text-[var(--content-secondary)]">
-                  {filteredValidators.length} validator gauge
-                  {filteredValidators.length === 1 ? "" : "s"}
+                  {filteredPools.length} pool gauge
+                  {filteredPools.length === 1 ? "" : "s"}
                 </p>
                 <div className="flex flex-wrap items-center gap-2">
                   <p
                     className={`font-mono text-xs tabular-nums ${
-                      selectedValidators.length > 0 && !isAllocationValid
+                      selectedPools.length > 0 && !isAllocationValid
                         ? "text-[var(--negative)]"
                         : "text-[var(--content-secondary)]"
                     }`}
@@ -683,10 +753,10 @@ export default function ValidatorVotingPage(): JSX.Element {
                   <Button
                     kind="secondary"
                     size="small"
-                    disabled={votableValidators.length === 0}
-                    onClick={voteEquallyAcrossAll}
+                    disabled={filteredPools.length === 0}
+                    onClick={() => voteEquallyAcrossPools(filteredPools)}
                   >
-                    Vote equally across all
+                    Vote equally across shown
                   </Button>
                 </div>
               </div>
@@ -697,125 +767,116 @@ export default function ValidatorVotingPage(): JSX.Element {
                 disabledMessage={
                   selectedLocks.length === 0
                     ? "Select at least one veBTC NFT to calculate an optimized ballot."
-                    : isLoadingSelectedValidatorState
+                    : isLoadingSelectedPoolState
                       ? "Loading the selected NFTs and their prior allocations."
-                      : "None of the selected veBTC NFTs are eligible to vote in this epoch."
+                      : "None of the selected veBTC NFTs are eligible to vote on pools in this epoch."
                 }
-                isLoading={
-                  isLoadingValidatorMetrics || isLoadingSelectedValidatorState
-                }
+                isLoading={isLoadingPoolMetrics || isLoadingSelectedPoolState}
                 unpricedIncentiveCount={
-                  validatorOptimizerData.unpricedIncentiveCount
+                  poolOptimizerData.unpricedIncentiveCount
                 }
                 feedback={optimizerFeedback}
-                onOptimize={optimizeValidatorAllocation}
+                onOptimize={optimizePoolAllocation}
               />
 
               <Input
-                id="validator-search"
+                id="pool-vote-search"
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
-                placeholder="Search validator gauges..."
+                placeholder="Search pools by token, name, or address..."
                 size="small"
               />
 
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs text-[var(--content-secondary)]">
-                  Sort:
-                </span>
-                {(
-                  [
-                    { id: "incentives", label: "Incentives" },
-                    { id: "apy", label: "APY" },
-                    { id: "share", label: "Share" },
-                    { id: "weight", label: "BTC Weight" },
-                    { id: "name", label: "Name" },
-                  ] as const
-                ).map((option) => (
-                  <button
-                    key={option.id}
-                    type="button"
-                    onClick={() => handleSort(option.id)}
-                    className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs ${
-                      sortMode === option.id
-                        ? "border-[var(--content-primary)] text-[var(--content-primary)]"
-                        : "border-[var(--border)] text-[var(--content-secondary)]"
-                    }`}
-                  >
-                    {option.label}
-                    {sortMode === option.id &&
-                      (sortDirection === "asc" ? " ↑" : " ↓")}
-                  </button>
-                ))}
-              </div>
+              <fieldset className="flex flex-col gap-3">
+                <legend className="sr-only">Pool filters and sorting</legend>
+                <ol className="flex flex-col gap-3">
+                  <li className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs text-[var(--content-secondary)]">
+                      Type:
+                    </span>
+                    {TYPE_FILTERS.map((option) => (
+                      <button
+                        key={option.id}
+                        type="button"
+                        aria-pressed={typeFilter === option.id}
+                        onClick={() => setTypeFilter(option.id)}
+                        className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs ${
+                          typeFilter === option.id
+                            ? "border-[var(--content-primary)] text-[var(--content-primary)]"
+                            : "border-[var(--border)] text-[var(--content-secondary)]"
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                    <label className="ml-1 inline-flex items-center gap-2 text-xs text-[var(--content-secondary)]">
+                      <input
+                        type="checkbox"
+                        checked={rewardedOnly}
+                        onChange={(event) =>
+                          setRewardedOnly(event.target.checked)
+                        }
+                        className="accent-[#F7931A]"
+                      />
+                      With voter rewards only
+                    </label>
+                  </li>
+                  <li className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs text-[var(--content-secondary)]">
+                      Sort:
+                    </span>
+                    {SORT_OPTIONS.map((option) => (
+                      <button
+                        key={option.id}
+                        type="button"
+                        onClick={() => handleSort(option.id)}
+                        className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs ${
+                          sortMode === option.id
+                            ? "border-[var(--content-primary)] text-[var(--content-primary)]"
+                            : "border-[var(--border)] text-[var(--content-secondary)]"
+                        }`}
+                      >
+                        {option.label}
+                        {sortMode === option.id &&
+                          (sortDirection === "asc" ? " ↑" : " ↓")}
+                      </button>
+                    ))}
+                  </li>
+                </ol>
+              </fieldset>
 
-              {votableValidators.length === 0 ? (
+              {votablePools.length === 0 ? (
                 <p className="text-sm text-[var(--content-secondary)]">
-                  No validator gauges are currently available to vote on.
+                  No pool gauges are currently available to vote on.
                 </p>
-              ) : filteredValidators.length === 0 ? (
+              ) : filteredPools.length === 0 ? (
                 <div className="rounded-lg border border-dashed border-[var(--border)] p-8 text-center">
                   <p className="text-sm text-[var(--content-secondary)]">
-                    No validator gauges match your filters.
+                    No pool gauges match your filters.
                   </p>
                 </div>
               ) : (
                 <div className="flex flex-col gap-4">
                   <fieldset>
-                    <legend className="sr-only">
-                      Validator vote allocation
-                    </legend>
+                    <legend className="sr-only">Pool vote allocation</legend>
                     <ol className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                      {paginatedItems.map((validator) => (
-                        <li key={validator.gauge} className="min-w-0">
-                          <ValidatorGaugeVotingCard
-                            validator={validator}
+                      {paginatedItems.map((pool) => (
+                        <li key={pool.address} className="min-w-0">
+                          <PoolGaugeVotingCard
+                            pool={pool}
                             totalWeight={totalWeight}
-                            metric={validatorMetrics.get(
-                              validator.gauge.toLowerCase(),
-                            )}
-                            isLoadingMetrics={isLoadingValidatorMetrics}
-                            allocation={allocations[validator.gauge] ?? ""}
+                            metric={poolMetrics.get(poolKey(pool))}
+                            isLoadingMetrics={isLoadingPoolMetrics}
+                            allocation={allocations[poolKey(pool)] ?? ""}
                             currentAllocation={
-                              currentAllocations.get(
-                                validator.gauge.toLowerCase(),
-                              ) ?? 0n
+                              currentAllocations.get(poolKey(pool)) ?? 0n
                             }
-                            projectedApyBasisPoints={(() => {
-                              const metric = validatorMetrics.get(
-                                validator.gauge.toLowerCase(),
-                              )
-                              const allocationBasisPoints =
-                                percentageToBasisPoints(
-                                  allocations[validator.gauge] ?? "",
-                                )
-                              if (
-                                metric?.totalIncentivesMicroUsd === null ||
-                                metric?.totalIncentivesMicroUsd === undefined ||
-                                btcPriceUsd === null ||
-                                allocationBasisPoints === null
-                              ) {
-                                return metric?.apyBasisPoints ?? null
-                              }
-                              return calculateValidatorApyBasisPoints(
-                                metric.totalIncentivesMicroUsd,
-                                calculateProjectedValidatorWeight(
-                                  BigInt(validator.weight),
-                                  selectedVotesByGauge.get(
-                                    validator.gauge.toLowerCase(),
-                                  ) ?? [],
-                                  allocationBasisPoints,
-                                ),
-                                btcPriceUsd,
-                              )
-                            })()}
-                            isSelected={selectedGaugeAddresses.has(
-                              validator.gauge,
-                            )}
+                            projectedApyBasisPoints={projectedApyFor(pool)}
+                            isSelected={selectedPoolKeys.has(poolKey(pool))}
                             onAllocationChange={(value) =>
-                              updateAllocation(validator.gauge, value)
+                              updateAllocation(poolKey(pool), value)
                             }
-                            onToggleSelection={() => toggleGauge(validator)}
+                            onToggleSelection={() => togglePool(pool)}
                           />
                         </li>
                       ))}
@@ -826,8 +887,8 @@ export default function ValidatorVotingPage(): JSX.Element {
                     totalPages={totalPages}
                     pageStart={pageStart}
                     pageEnd={pageEnd}
-                    totalItems={filteredValidators.length}
-                    itemLabel="validator gauge"
+                    totalItems={filteredPools.length}
+                    itemLabel="pool gauge"
                     onPrevious={goToPreviousPage}
                     onNext={goToNextPage}
                   />
@@ -867,12 +928,12 @@ export default function ValidatorVotingPage(): JSX.Element {
                   Shopping cart
                 </p>
                 <h2 className="text-balance text-lg font-semibold text-[var(--content-primary)]">
-                  Validator vote allocations
+                  Pool vote allocations
                 </h2>
               </div>
               <div className="flex items-center gap-2">
                 <Tag closeable={false} color="blue">
-                  {selectedValidators.length} selected
+                  {selectedPools.length} selected
                 </Tag>
                 <Tag
                   closeable={false}
@@ -894,7 +955,7 @@ export default function ValidatorVotingPage(): JSX.Element {
               <Button
                 kind="secondary"
                 size="small"
-                onClick={voteEquallyAcrossAll}
+                onClick={() => voteEquallyAcrossPools(selectedPools)}
               >
                 Equal vote
               </Button>
@@ -905,21 +966,21 @@ export default function ValidatorVotingPage(): JSX.Element {
                 Vote weights
               </legend>
               <ol className="mt-4 flex max-h-[42vh] flex-col gap-3 overflow-y-auto pr-1">
-                {selectedValidators.map((validator) => (
-                  <ValidatorCartRow
-                    key={validator.gauge}
-                    validator={validator}
-                    allocation={allocations[validator.gauge] ?? ""}
+                {selectedPools.map((pool) => (
+                  <PoolCartRow
+                    key={pool.address}
+                    pool={pool}
+                    allocation={allocations[poolKey(pool)] ?? ""}
                     onAllocationChange={(value) =>
-                      updateAllocation(validator.gauge, value)
+                      updateAllocation(poolKey(pool), value)
                     }
-                    onRemove={() => toggleGauge(validator)}
+                    onRemove={() => togglePool(pool)}
                   />
                 ))}
               </ol>
             </fieldset>
 
-            {!isAllocationValid && selectedValidators.length > 0 && (
+            {!isAllocationValid && selectedPools.length > 0 && (
               <p className="text-pretty text-xs text-[var(--negative)]">
                 Allocation must equal exactly 100% before voting.
               </p>
@@ -1004,8 +1065,8 @@ export default function ValidatorVotingPage(): JSX.Element {
                     onClick={() =>
                       void multiVote.exportVoteBatch(
                         eligibleLocks.map((lock) => lock.tokenId),
-                        allocationEntries.map((entry) => entry.validator.gauge),
-                        allocationEntries.map((entry) => entry.basisPoints),
+                        ballotPools,
+                        ballotWeights,
                       )
                     }
                   >
@@ -1018,8 +1079,8 @@ export default function ValidatorVotingPage(): JSX.Element {
                     onClick={() =>
                       void multiVote.copyVoteBatchJson(
                         eligibleLocks.map((lock) => lock.tokenId),
-                        allocationEntries.map((entry) => entry.validator.gauge),
-                        allocationEntries.map((entry) => entry.basisPoints),
+                        ballotPools,
+                        ballotWeights,
                       )
                     }
                   >
@@ -1048,8 +1109,8 @@ export default function ValidatorVotingPage(): JSX.Element {
                         multiVote.lockStates
                           .filter((state) => state.status === "error")
                           .map((state) => state.tokenId),
-                        allocationEntries.map((entry) => entry.validator.gauge),
-                        allocationEntries.map((entry) => entry.basisPoints),
+                        ballotPools,
+                        ballotWeights,
                       )
                     }
                   >
@@ -1062,7 +1123,7 @@ export default function ValidatorVotingPage(): JSX.Element {
         </ModalBody>
       </Modal>
 
-      {selectedGaugeAddresses.size > 0 && (
+      {selectedPoolKeys.size > 0 && (
         <div className="fixed bottom-3 left-0 right-0 z-40 px-3 sm:bottom-4 sm:px-4">
           <div className="mx-auto flex w-full max-w-3xl flex-col items-stretch gap-2 rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 shadow-lg">
             {selectedLocks.length === 0 && (
@@ -1076,7 +1137,7 @@ export default function ValidatorVotingPage(): JSX.Element {
                   Selections
                 </span>
                 <span className="font-mono text-sm font-semibold tabular-nums text-[var(--content-primary)]">
-                  {selectedGaugeAddresses.size}
+                  {selectedPoolKeys.size}
                 </span>
                 <span className="text-xs text-[var(--content-secondary)]">
                   Total
