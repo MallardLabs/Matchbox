@@ -23,8 +23,12 @@ export const Root = DialogPrimitive.Root
 export const Trigger = DialogPrimitive.Trigger
 export const Close = DialogPrimitive.Close
 
-/** center: Pro connect modal. sheet: Pro bottom sheet (checkout, claim, lock). */
-export type DialogPlacement = "center" | "sheet"
+/**
+ * center: Pro connect modal. sheet: Pro bottom sheet (checkout, claim, lock).
+ * drawer: right-hand review drawer (Query transaction review); a bottom
+ * sheet below sm.
+ */
+export type DialogPlacement = "center" | "sheet" | "drawer"
 export type DialogSize = "sm" | "md" | "lg"
 
 const PlacementContext = createContext<DialogPlacement>("center")
@@ -32,7 +36,7 @@ const PlacementContext = createContext<DialogPlacement>("center")
 const contentStyles = tv({
   slots: {
     overlay:
-      "fixed inset-0 z-40 flex overflow-y-auto bg-black/60 data-[state=open]:animate-fade-in",
+      "fixed inset-0 z-overlay flex overflow-y-auto bg-scrim data-[state=open]:animate-fade-in",
     content: "relative flex flex-col bg-surface text-ink outline-none",
     column: "flex w-full flex-col gap-4",
   },
@@ -49,6 +53,11 @@ const contentStyles = tv({
           "max-h-[85dvh] w-full overflow-y-auto rounded-t-2xl px-5 pb-[max(2rem,env(safe-area-inset-bottom))] pt-3 shadow-sheet data-[state=open]:animate-sheet-in sm:px-10",
         column: "mx-auto",
       },
+      drawer: {
+        overlay: "items-end sm:items-stretch sm:justify-end",
+        content:
+          "max-h-[85dvh] w-full overflow-y-auto rounded-t-2xl px-5 pb-[max(2rem,env(safe-area-inset-bottom))] pt-3 shadow-sheet data-[state=open]:animate-sheet-in sm:max-h-none sm:w-[400px] sm:rounded-none sm:px-5 sm:pt-7 sm:shadow-dialog sm:data-[state=open]:animate-fade-in",
+      },
     },
     size: { sm: {}, md: {}, lg: {} },
   },
@@ -58,6 +67,7 @@ const contentStyles = tv({
     { placement: "center", size: "lg", class: { content: "max-w-[640px]" } },
     { placement: "sheet", size: "sm", class: { column: "max-w-[520px]" } },
     { placement: "sheet", size: "md", class: { column: "max-w-[640px]" } },
+    { placement: "sheet", size: "lg", class: { column: "max-w-[1280px]" } },
   ],
   defaultVariants: { placement: "center", size: "sm" },
 })
@@ -104,10 +114,13 @@ export const Content = forwardRef<
           {...props}
         >
           <PlacementContext.Provider value={placement}>
-            {placement === "sheet" ? (
+            {placement !== "center" ? (
               <span
                 aria-hidden="true"
-                className="mx-auto mb-3 block h-1 w-10 shrink-0 rounded-full bg-line-2"
+                className={cn(
+                  "mx-auto mb-3 block h-1 w-10 shrink-0 rounded-full bg-line-2",
+                  placement === "drawer" && "sm:hidden",
+                )}
               />
             ) : null}
             <div className={styles.column()}>{children}</div>
@@ -116,9 +129,9 @@ export const Content = forwardRef<
                 aria-label="Close"
                 className={cn(
                   "absolute flex size-8 items-center justify-center rounded-md text-muted transition-colors hover:bg-inset hover:text-ink",
-                  placement === "sheet"
-                    ? "right-4 top-6 sm:right-8"
-                    : "right-3 top-3",
+                  placement === "center"
+                    ? "right-3 top-3"
+                    : "right-4 top-6 sm:right-8",
                 )}
               >
                 <X aria-hidden="true" size={16} strokeWidth={1.75} />

@@ -25,7 +25,40 @@ export const tokenNames = [
   "pos",
   "warn",
   "neg",
+  "info",
+  "pos-soft",
+  "warn-soft",
+  "neg-soft",
+  "vebtc",
+  "vemezo",
+  "on-card",
+  "scrim",
+  "glow",
 ] as const
+
+// One type scale for every Matchbox surface, read off the Pencil screens.
+const fontSize = {
+  micro: ["10px", { lineHeight: "14px" }],
+  caption: ["11px", { lineHeight: "15px" }],
+  label: ["12px", { lineHeight: "16px" }],
+  "body-sm": ["13px", { lineHeight: "18px" }],
+  body: ["14px", { lineHeight: "20px" }],
+  nav: ["15px", { lineHeight: "20px" }],
+  lead: ["16px", { lineHeight: "22px" }],
+  "title-sm": ["18px", { lineHeight: "24px" }],
+  metric: ["22px", { lineHeight: "28px" }],
+  title: ["28px", { lineHeight: "34px" }],
+  hero: ["40px", { lineHeight: "48px" }],
+} satisfies Record<string, [string, { lineHeight: string }]>
+
+// Fixed stacking order from the Pro foundations board.
+const zIndex = {
+  sticky: "10",
+  rail: "20",
+  sheet: "30",
+  overlay: "40",
+  toast: "50",
+}
 
 const colors = Object.fromEntries(
   tokenNames.map((token) => [
@@ -40,6 +73,9 @@ const preset = {
   theme: {
     extend: {
       colors,
+      fontSize,
+      zIndex,
+      maxWidth: { content: "1152px" },
       borderColor: { DEFAULT: "var(--line)" },
       fontFamily: {
         sans: [

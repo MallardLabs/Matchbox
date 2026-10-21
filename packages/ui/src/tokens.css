@@ -38,6 +38,16 @@
   /* AA: Pro #b86524 */
   --warn: #a8591c;
   --neg: #c23b3b;
+  --info: #3c6e9f;
+  --pos-soft: #eef7f1;
+  --warn-soft: #fff6ec;
+  --neg-soft: #fbefed;
+  --vebtc: #f7931a;
+  --vemezo: #e84d71;
+  /* Ink on veBTC/veMEZO lock cards; white fails AA on both fills. */
+  --on-card: #1a140c;
+  --scrim: #1a1a1866;
+  --glow: #f7931a0f;
 }
 
 .dark {
@@ -66,6 +76,15 @@
   --pos: #5fbe8e;
   --warn: #e3ae4a;
   --neg: #e2604e;
+  --info: #8fb4d9;
+  --pos-soft: #5fbe8e1a;
+  --warn-soft: #e3ae4a1a;
+  --neg-soft: #e2604e1a;
+  --vebtc: #f7931a;
+  --vemezo: #e84d71;
+  --on-card: #1a140c;
+  --scrim: #000000a6;
+  --glow: #f7931a14;
 }
 
 html,

@@ -39,7 +39,7 @@ export const Content = forwardRef<
   const focus = useFocusRestore(onOpenAutoFocus, onCloseAutoFocus)
   return (
     <AlertDialogPrimitive.Portal>
-      <AlertDialogPrimitive.Overlay className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/60 p-4 data-[state=open]:animate-fade-in sm:items-center">
+      <AlertDialogPrimitive.Overlay className="fixed inset-0 z-overlay flex items-start justify-center overflow-y-auto bg-scrim p-4 data-[state=open]:animate-fade-in sm:items-center">
         <AlertDialogPrimitive.Content
           ref={ref}
           className={cn(
