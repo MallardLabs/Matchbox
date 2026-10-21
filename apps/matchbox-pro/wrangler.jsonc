@@ -44,5 +44,12 @@
       "namespace_id": "4104",
       "simple": { "limit": 30, "period": 60 }
     }
+  ],
+  // Settled epoch prices never change, so the preview shares this namespace.
+  "kv_namespaces": [
+    {
+      "binding": "HISTORY_KV",
+      "id": "e906dbf2806749f087d3b878ae99f2e4"
+    }
   ]
 }
