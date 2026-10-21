@@ -71,7 +71,7 @@ export default function WalletButton({
             watching ? `Watching ${short}` : `Wallet ${short}, open menu`
           }
           className={cn(
-            "flex h-10 items-center gap-[9px] rounded-md border border-line bg-surface px-[11px] transition-colors hover:border-line-2",
+            "flex h-10 shrink-0 items-center gap-[9px] whitespace-nowrap rounded-md border border-line bg-surface px-[11px] transition-colors hover:border-line-2",
             compact ? "h-9 rounded-full px-3" : "md:min-w-[193px]",
           )}
         >
@@ -99,7 +99,9 @@ export default function WalletButton({
             </span>
           )}
           <span className="font-mono text-label font-500 text-ink-2">
-            {watching && !compact ? "Watching " : ""}
+            {watching && !compact ? (
+              <span className="hidden xl:inline">Watching </span>
+            ) : null}
             {short}
             {wrongNetwork && !compact ? (
               <span className="text-neg"> · {chainName(walletChainId)}</span>
