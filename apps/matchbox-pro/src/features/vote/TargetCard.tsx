@@ -282,6 +282,12 @@ export function RewardPill({ reward }: { reward: RewardToken }): ReactElement {
 }
 
 function Footer({ footer }: { footer: TargetFooter }): ReactElement {
+  if (footer.kind === "line")
+    return (
+      <p className="mt-auto truncate px-3.5 text-caption font-500 text-secondary tabular-nums">
+        {footer.text}
+      </p>
+    )
   return (
     <div className="mt-auto flex flex-col gap-1 px-3.5">
       <p className="flex items-center justify-between gap-2 text-caption">

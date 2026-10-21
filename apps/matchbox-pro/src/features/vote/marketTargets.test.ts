@@ -78,8 +78,13 @@ describe("poolTargets", () => {
     expect(pool?.name).toBe("MUSD / SATS")
     expect(pool?.incentiveMicroUsd).toBe(600_000_000n)
     expect(pool?.hasUnpriced).toBe(false)
-    expect(pool?.footer?.value).toBe("$500.00")
-    expect(pool?.footer?.side?.text).toBe("Incentives $100.00")
+    // One headline total; the footer is just the split, not a second total.
+    expect(pool?.rewardsLabel).toBe("Fees + incentives")
+    expect(pool?.footer).toEqual({
+      kind: "line",
+      text: "Fees $500.00 · Incentives $100.00",
+      meter: { fill: 0.25, tone: "accent" },
+    })
     expect(pool?.stats[1]).toEqual({ label: "Share", value: "25.0%" })
   })
 
@@ -102,7 +107,10 @@ describe("poolTargets", () => {
       hasUnpriced: true,
       incentiveMicroUsd: 0n,
     })
-    expect(vault?.footer?.value).toBe("Unpriced")
+    expect(vault?.footer).toMatchObject({
+      kind: "line",
+      text: "Fees Unpriced · Incentives $0.00",
+    })
   })
 })
 
@@ -136,7 +144,10 @@ describe("validatorTargets", () => {
     )[0]
     expect(named?.name).toBe("Chorus One")
     expect(named?.description).toBe("Registry details")
-    expect(named?.footer?.label).toBe("Operator")
+    expect(named?.footer).toMatchObject({
+      kind: "line",
+      text: "Operator 0x0000…000F",
+    })
     expect(named?.apyBps).toBeNull()
   })
 })

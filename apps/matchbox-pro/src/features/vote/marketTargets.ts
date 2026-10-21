@@ -8,10 +8,10 @@ import {
   type UnpricedReward,
   formatShare,
   formatVeBtc,
+  lineFooter,
   priceRewards,
   rewardPerUnit,
   shareBps,
-  shareFooter,
   sumPriced,
 } from "./targets"
 
@@ -51,7 +51,6 @@ export function validatorTargets(
       shortenAddress(operator ?? row.gauge)
     const rewards = priceRewards(unpriced(row.rewardTokens), prices)
     const { microUsd, hasUnpriced } = sumPriced(rewards)
-    const footer = shareFooter(row.weight, market.totalWeight)
     return {
       id: row.gauge,
       name,
@@ -74,9 +73,13 @@ export function validatorTargets(
         { label: "Votes", value: formatVeBtc(row.weight) },
         { label: "Share", value: formatShare(row.weight, market.totalWeight) },
       ],
-      footer: operator
-        ? { ...footer, label: "Operator", value: shortenAddress(operator) }
-        : footer,
+      footer: lineFooter(
+        operator
+          ? `Operator ${shortenAddress(operator)}`
+          : "Not in the validator set",
+        row.weight,
+        market.totalWeight,
+      ),
       sortValues: {
         incentives: microUsd,
         votes: row.weight,
@@ -113,7 +116,6 @@ export function poolTargets(market: PoolMarket, prices: Prices): VoteTarget[] {
     const bribes = priceRewards(unpriced(row.bribes), prices)
     const rewards = [...fees, ...bribes]
     const { microUsd, hasUnpriced } = sumPriced(rewards)
-    const share = shareFooter(row.weight, market.totalWeight)
     return {
       id: row.target,
       name,
@@ -136,12 +138,12 @@ export function poolTargets(market: PoolMarket, prices: Prices): VoteTarget[] {
         { label: "Votes", value: formatVeBtc(row.weight) },
         { label: "Share", value: formatShare(row.weight, market.totalWeight) },
       ],
-      footer: {
-        ...share,
-        label: "Fees",
-        value: rewardTotal(fees),
-        side: { text: `Incentives ${rewardTotal(bribes)}`, tone: "muted" },
-      },
+      // The headline is fees + incentives; this line is the split.
+      footer: lineFooter(
+        `Fees ${rewardTotal(fees)} · Incentives ${rewardTotal(bribes)}`,
+        row.weight,
+        market.totalWeight,
+      ),
       sortValues: {
         incentives: microUsd,
         votes: row.weight,

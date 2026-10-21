@@ -35,14 +35,24 @@ export type VoteLock = {
 
 export type TargetStat = { label: string; value: string }
 
-export type TargetFooter = {
-  label: string
-  value: string
-  side: { text: string; tone: "muted" | "neg" } | null
-  multiplier: { text: string; atMax: boolean } | null
-  /** Bottom meter, fractions 0–1 of the card width. */
-  meter: { fill: number; tone: "accent" | "pos" }
-}
+/** Bottom meter, fractions 0–1 of the card width. */
+export type TargetMeter = { fill: number; tone: "accent" | "pos" }
+
+/**
+ * Card footer above the meter. Boost gauges get the J04 metric block
+ * (Optimal veMEZO, its number and the boost); validators and pools, whose
+ * headline total already says it all, get one small line.
+ */
+export type TargetFooter =
+  | {
+      kind: "metric"
+      label: string
+      value: string
+      side: { text: string; tone: "muted" | "neg" } | null
+      multiplier: { text: string; atMax: boolean } | null
+      meter: TargetMeter
+    }
+  | { kind: "line"; text: string; meter: TargetMeter }
 
 export type TargetMark =
   | { kind: "image"; url: string }

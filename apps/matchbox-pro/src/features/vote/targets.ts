@@ -148,6 +148,7 @@ export function boostFooter(input: {
         1_000
       : 0
   return {
+    kind: "metric",
     label: "Optimal veMEZO",
     value: optimal !== undefined ? formatWhole(optimal) : "—",
     side:
@@ -167,13 +168,15 @@ export function boostFooter(input: {
   }
 }
 
-export function shareFooter(weight: bigint, total: bigint): TargetFooter {
-  const share = Number(shareBps(weight, total)) / 10_000
+/** A one-line footer over a vote-share meter (validators, pools). */
+export function lineFooter(
+  text: string,
+  weight: bigint,
+  total: bigint,
+): TargetFooter {
   return {
-    label: "Vote share",
-    value: formatShare(weight, total),
-    side: null,
-    multiplier: null,
-    meter: { fill: share, tone: "accent" },
+    kind: "line",
+    text,
+    meter: { fill: Number(shareBps(weight, total)) / 10_000, tone: "accent" },
   }
 }

@@ -67,8 +67,11 @@ describe("boostFooter", () => {
       weight: 150n * E18,
       boost: 5,
     })
-    expect(footer.meter).toEqual({ fill: 1, tone: "pos" })
-    expect(footer.side).toEqual({ text: "+50 over", tone: "neg" })
+    expect(footer).toMatchObject({
+      kind: "metric",
+      meter: { fill: 1, tone: "pos" },
+      side: { text: "+50 over", tone: "neg" },
+    })
   })
 
   it("fills toward the optimum below it", () => {
@@ -77,8 +80,11 @@ describe("boostFooter", () => {
       weight: 25n * E18,
       boost: 2,
     })
-    expect(footer.meter).toEqual({ fill: 0.25, tone: "accent" })
-    expect(footer.side?.text).toBe("75 to 5x")
+    expect(footer).toMatchObject({
+      kind: "metric",
+      meter: { fill: 0.25, tone: "accent" },
+      side: { text: "75 to 5x", tone: "muted" },
+    })
   })
 })
 
