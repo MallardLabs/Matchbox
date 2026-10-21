@@ -1230,6 +1230,10 @@ export const adminReviewSchema = reviewSchema.extend({
     name: z.string(),
     websiteUrl: z.string().nullable(),
     status: appStatusSchema,
+    /** Always populate; optional only for older servers. */
+    privacyUrl: z.string().nullable().optional(),
+    termsUrl: z.string().nullable().optional(),
+    supportEmail: z.string().nullable().optional(),
   }),
   environment: z.object({
     id: uuidSchema,
@@ -1257,6 +1261,35 @@ export const adminReviewListResponseSchema = z.object({
 })
 
 // GET /api/admin/reviews/{reviewId} -> adminReviewSchema
+
+/**
+ * GET /api/admin/reviews/{reviewId}/context (C09b strip): what staff need
+ * to judge a review without reading the org's own usage or OAuth views.
+ */
+export const adminReviewContextResponseSchema = z.object({
+  /** The app's test environment over the last 7 days; null when analytics
+   * are unavailable or the app has no test environment. */
+  testUsage7d: z
+    .object({
+      requests: z.number().int().nonnegative(),
+      errors: z.number().int().nonnegative(),
+      /** errors / requests in [0, 1]; null when there were no requests. */
+      errorRate: z.number().min(0).max(1).nullable(),
+    })
+    .nullable(),
+  /** Active grants on the test environment; null when unavailable. */
+  testActiveGrants: z.number().int().nonnegative().nullable(),
+  /** Decided reviews of this environment created before this one. */
+  priorReviews: z.number().int().nonnegative(),
+  /** The environment's current scope version ("scope v2 → v3"). */
+  scopeVersion: z.number().int().positive(),
+  /** Version an approval would set; null when it adds no scope. */
+  nextScopeVersion: z.number().int().positive().nullable(),
+})
+
+export type AdminReviewContextResponse = z.infer<
+  typeof adminReviewContextResponseSchema
+>
 
 /**
  * GET /api/admin/reviews/stats (C09 header). Decisions count staff

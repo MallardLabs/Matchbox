@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import {
+  adminReviewContextResponseSchema,
   adminReviewStats,
   compareReviewsNewestFirst,
   environmentReviewListResponseSchema,
@@ -232,5 +233,26 @@ describe("quota buckets", () => {
       overrides[1],
     )
     expect(activeQuotaOverride(overrides, "userinfo", now)).toBeNull()
+  })
+})
+
+describe("admin review context", () => {
+  it("accepts unavailable analytics and no scope bump", () => {
+    const context = {
+      testUsage7d: null,
+      testActiveGrants: null,
+      priorReviews: 1,
+      scopeVersion: 2,
+      nextScopeVersion: null,
+    }
+    expect(adminReviewContextResponseSchema.parse(context)).toEqual(context)
+    expect(
+      adminReviewContextResponseSchema.safeParse({
+        ...context,
+        testUsage7d: { requests: 4610, errors: 11, errorRate: 11 / 4610 },
+        testActiveGrants: 38,
+        nextScopeVersion: 3,
+      }).success,
+    ).toBe(true)
   })
 })

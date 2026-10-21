@@ -600,7 +600,9 @@ memory mode answers `localPlatformHealth`, `source: "local"`),
 Test / Both), `GET /api/environments/{id}/reviews` and
 `GET /api/orgs/{orgId}/reviews` (decided reviews with reviewer notes, newest
 first), `awaitingReconsent` on OAuth stats, and
-`GET /api/admin/reviews/stats`.
+`GET /api/admin/reviews/stats` and `GET /api/admin/reviews/{id}/context`
+(`adminReviewContextResponseSchema`: test usage 7 d, test grants, prior
+reviews, scope version → next).
 
 Auto-approval: a live environment requesting only `gauge-profiles:read`
 moves to `approved` on submit when the org's owner email is verified, the app
