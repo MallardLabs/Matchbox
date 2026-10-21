@@ -145,6 +145,9 @@ export CLOUDFLARE_ACCOUNT_ID=df8279c833d38dca96f9a091ca3a9219
 Rollback: `npx neonctl@2.47.0 projects delete $NEON_PROJECT`. Nothing reads
 it yet.
 
+Created 2026-10-21: `NEON_ORG=org-quiet-sea-43624997` (Mallard Labs),
+`NEON_PROJECT=mute-cell-09147715`.
+
 ## 2. Migrations and roles [OUTWARD]
 
 ```bash
@@ -202,6 +205,13 @@ POOLER_HOST="$(echo "$HOST" | sed -E 's/^(ep-[a-z0-9-]+)\./\1-pooler./')"
 export INDEXER_URL="postgresql://matchbox_indexer_worker:${INDEXER_PASSWORD}@${HOST}/neondb?sslmode=require"
 export READER_URL="postgresql://matchbox_reader:${READER_PASSWORD}@${POOLER_HOST}/neondb?sslmode=require"
 ```
+
+The roles can also be created without a password (drop `PASSWORD '…'`), as
+on 2026-10-21, when steps 6 to 8 come in a later session. Then generate the
+password in the command that stores it: `ALTER ROLE … PASSWORD` as
+`neondb_owner`, build the URL, and pipe it to `wrangler secret put`. Setting
+a new password cuts off any consumer still using the old one, so give both
+consumers of `matchbox_reader` (steps 7 and 8) the same URL.
 
 Rollback: `DROP ROLE matchbox_indexer_worker; DROP ROLE matchbox_reader;`
 (after removing any secret that uses them).
