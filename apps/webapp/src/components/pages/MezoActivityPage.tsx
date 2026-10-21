@@ -131,6 +131,24 @@ function formatRelativeTime(timestamp: number): string {
   return `${Math.floor(diff / 86_400)}d ago`
 }
 
+// The indexer projects every minute; flag the feed once it falls this far
+// behind.
+const STALE_INDEX_SECONDS = 10 * 60
+
+function staleIndexLabel(updatedAt: string | undefined): string | undefined {
+  if (!updatedAt) return undefined
+  const updated = Math.floor(Date.parse(updatedAt) / 1000)
+  if (!Number.isFinite(updated)) return undefined
+  if (nowSeconds() - updated <= STALE_INDEX_SECONDS) return undefined
+  const time = new Date(updated * 1000).toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  })
+  return `as of ${time}`
+}
+
 function formatUsdCompact(value: number): string {
   if (!Number.isFinite(value) || value <= 0) return "$0"
   if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(2)}M`
@@ -1220,7 +1238,7 @@ export default function MezoActivityPage() {
       ? (USER_ACTION_TYPES_GRAPHQL as readonly string[])
       : (SYSTEM_ACTION_TYPES_GRAPHQL as readonly string[])
 
-  const { rawData, isLoading, isError, error, isFetching, hasMore } =
+  const { rawData, isLoading, isError, error, isFetching, hasMore, meta } =
     useMezoActivity({
       filters: allFilters,
       fromTimestamp,
@@ -1229,6 +1247,7 @@ export default function MezoActivityPage() {
       limit: PAGE_SIZE,
       actionTypes: apiActionTypes,
     })
+  const staleLabel = staleIndexLabel(meta?.indexedThrough?.updatedAt)
 
   useEffect(() => {
     setMaxKnownPage((prev) => {
@@ -1507,10 +1526,15 @@ export default function MezoActivityPage() {
             >
               {isExporting ? "Exporting..." : "Export CSV"}
             </button>
+            {staleLabel ? (
+              <span className="rounded-full border border-[#F7931A]/40 px-2 py-0.5 font-mono text-[10px] text-[#F7931A]">
+                {staleLabel}
+              </span>
+            ) : null}
           </div>
           <p className="text-xs leading-relaxed text-[var(--content-tertiary)]">
-            Sourced from the Matchbox Explorer subgraph. Automated 4-hour boost
-            refreshes from the protocol cron are collapsed on the System tab.
+            Automated 4-hour boost refreshes from the protocol cron are
+            collapsed on the System tab.
           </p>
         </div>
       </SpringIn>

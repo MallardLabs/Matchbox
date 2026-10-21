@@ -46,6 +46,8 @@ const sourceFiles = [
   "src/lib/mezoGauges/participation.test.ts",
   "src/lib/mezoGauges/schema.ts",
   "src/lib/mezoGauges/snapshot.test.ts",
+  "src/lib/mezoId.ts",
+  "src/lib/mezoId.test.ts",
 ]
 
 const testEntries = [
@@ -63,6 +65,7 @@ const testEntries = [
   "lib/mezoGauges/epochs.test.js",
   "lib/mezoGauges/participation.test.js",
   "lib/mezoGauges/snapshot.test.js",
+  "lib/mezoId.test.js",
 ]
 
 rmSync(outDir, { recursive: true, force: true })

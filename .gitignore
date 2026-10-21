@@ -45,9 +45,10 @@ supabase/.temp/
 
 # Local Netlify folder
 .netlify
+.neon
 
 # Cloudflare Workers local state and secrets
-.wrangler
+.wrangler/
 .dev.vars
 .dev.vars.*
 !.dev.vars.example

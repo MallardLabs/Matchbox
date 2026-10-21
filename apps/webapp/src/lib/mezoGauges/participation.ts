@@ -44,6 +44,41 @@ export function formatBps(bps: bigint): string {
   return `${whole}.${frac}%`
 }
 
+export type VoteEventDelta = {
+  tokenId: bigint
+  gauge: string
+  type: "Voted" | "Abstained"
+  weight: bigint
+}
+
+export type VotePosition = {
+  tokenId: bigint
+  gauge: string
+  currentWeight: bigint
+}
+
+/**
+ * Rebuild per-(tokenId, gauge) vote weights from Voted/Abstained events.
+ * Every reset or poke emits Abstained with the prior weight before re-voting,
+ * so the net sum is the live weight and event order doesn't matter.
+ */
+export function replayVoteEvents(events: VoteEventDelta[]): VotePosition[] {
+  const net = new Map<string, VotePosition>()
+  for (const event of events) {
+    const gauge = event.gauge.toLowerCase()
+    const key = `${event.tokenId}:${gauge}`
+    const position = net.get(key) ?? {
+      tokenId: event.tokenId,
+      gauge,
+      currentWeight: 0n,
+    }
+    position.currentWeight +=
+      event.type === "Voted" ? event.weight : -event.weight
+    net.set(key, position)
+  }
+  return [...net.values()].filter((position) => position.currentWeight > 0n)
+}
+
 export function aggregateVotes(votes: ThirdPartyVote[]): AggregatedVotes {
   let totalWeight = 0n
   const tokenIds = new Set<string>()
