@@ -8,12 +8,17 @@ import {
 import { type RawLog, lowerAddressSchema } from "./rpc"
 import type { RegisteredContract } from "./store"
 
-// The only events that spawn child data sources in the explorer subgraph:
+// The events that spawn child data sources in the explorer subgraph:
 // PoolsVoter.GaugeCreated (gauge + bribe/fee reward templates) and
-// PoolFactory.PoolCreated (pool template). BoostVoter, ThirdPartyVoter and
-// ValidatorsVoter gauges emit nothing the explorer indexes.
+// PoolFactory.PoolCreated (pool template). The warehouse adds the bribe
+// rewards of BoostVoter, ThirdPartyVoter and ValidatorsVoter gauges, from
+// their 3-argument GaugeCreated; those gauges themselves emit nothing the
+// decoder reads.
 const POOL_GAUGE_CREATED = parseAbiItem(
   "event GaugeCreated(address indexed poolFactory, address indexed votingRewardsFactory, address indexed gaugeFactory, address pool, address bribeVotingReward, address feeVotingReward, address gauge, address creator)",
+)
+const VOTER_GAUGE_CREATED = parseAbiItem(
+  "event GaugeCreated(address indexed gauge, address indexed bribeVotingReward, address indexed creator)",
 )
 // The ABI leaves the uint256 unnamed; naming it keeps the selector and makes
 // viem decode named args.
@@ -22,11 +27,20 @@ const POOL_CREATED = parseAbiItem(
 )
 
 export const POOL_GAUGE_CREATED_TOPIC = toEventSelector(POOL_GAUGE_CREATED)
+export const VOTER_GAUGE_CREATED_TOPIC = toEventSelector(VOTER_GAUGE_CREATED)
 export const POOL_CREATED_TOPIC = toEventSelector(POOL_CREATED)
 export const FACTORY_TOPICS: Hex[] = [
   POOL_GAUGE_CREATED_TOPIC,
+  VOTER_GAUGE_CREATED_TOPIC,
   POOL_CREATED_TOPIC,
 ]
+
+// Voters whose 3-argument GaugeCreated registers a voterBribeReward child.
+const BRIBE_FACTORY_KINDS: ReadonlySet<RegisteredContract["kind"]> = new Set([
+  "boostVoter",
+  "thirdPartyVoter",
+  "validatorsVoter",
+])
 
 // Decoded event args are checksummed; the registry stores lowercase.
 function lower(address: Address): Address {
@@ -101,6 +115,30 @@ export function discoverFromLog(
     return { children, poolLinks: [{ network: log.network, pool, gauge }] }
   }
 
+  if (
+    BRIBE_FACTORY_KINDS.has(factory.kind) &&
+    topic0 === VOTER_GAUGE_CREATED_TOPIC
+  ) {
+    const { args } = decodeEventLog({
+      abi: [VOTER_GAUGE_CREATED],
+      data: log.data,
+      topics: log.topics as [Hex, ...Hex[]],
+    })
+    return {
+      children: [
+        {
+          ...base,
+          address: lower(args.bribeVotingReward),
+          kind: "voterBribeReward",
+          template: "VoterBribeReward",
+          pool: null,
+          gauge: lower(args.gauge),
+        },
+      ],
+      poolLinks: [],
+    }
+  }
+
   if (factory.kind === "poolFactory" && topic0 === POOL_CREATED_TOPIC) {
     const { args } = decodeEventLog({
       abi: [POOL_CREATED],
@@ -131,7 +169,11 @@ export function factoryContracts(
 ): Map<Address, RegisteredContract> {
   const factories = new Map<Address, RegisteredContract>()
   for (const contract of contracts) {
-    if (contract.kind === "poolsVoter" || contract.kind === "poolFactory") {
+    if (
+      contract.kind === "poolsVoter" ||
+      contract.kind === "poolFactory" ||
+      BRIBE_FACTORY_KINDS.has(contract.kind)
+    ) {
       factories.set(contract.address, contract)
     }
   }

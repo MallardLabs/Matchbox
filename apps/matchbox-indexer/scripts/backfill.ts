@@ -1,14 +1,22 @@
 import { parseArgs } from "node:util"
 import { createLogger } from "@repo/shared/logger"
 import { Pool } from "pg"
-import { type IngestDeps, ingestRange } from "../src/ingest/ingest"
+import {
+  type IngestDeps,
+  historyStartBlock,
+  ingestRange,
+} from "../src/ingest/ingest"
 import { networkConfig, networkSchema } from "../src/ingest/networks"
 import { RpcClient } from "../src/ingest/rpc"
 import { PgIngestStore } from "../src/ingest/store"
 import { loadDirectDatabaseUrl } from "./database"
 
 // pnpm --filter @repo/matchbox-indexer backfill -- --network mezo \
-//   --from 5000000 [--to N] [--concurrency 4] [--max-db-mb 900]
+//   [--from N] [--to N] [--concurrency 4] [--max-db-mb 900]
+//
+// --from defaults to the first block any static contract needs: 178,630 on
+// mezo (mUSD BorrowerOperations), before the 5,000,000 network start. Only
+// the mUSD contracts are fetched below the network start.
 //
 // Resumable: windows commit in order with the checkpoint, and re-ingesting a
 // range is a no-op. Stops cleanly (checkpoint intact) if the database grows
@@ -18,7 +26,9 @@ const logger = createLogger("matchbox-indexer-backfill")
 
 const SIZE_CHECK_EVERY = 25
 
+// pnpm 9 forwards the "--" separator to the script; drop it.
 const { values } = parseArgs({
+  args: process.argv.slice(2).filter((arg) => arg !== "--"),
   options: {
     network: { type: "string", default: "mezo" },
     from: { type: "string" },
@@ -52,7 +62,7 @@ async function main(): Promise<void> {
   const deps: IngestDeps = { config, rpc, store: new PgIngestStore(pool) }
 
   try {
-    const from = values.from ? BigInt(values.from) : config.startBlock
+    const from = values.from ? BigInt(values.from) : historyStartBlock(deps)
     const head = (await rpc.blockNumber()) - config.confirmations
     const to = values.to ? BigInt(values.to) : head
     const totalBlocks = Number(to - from + 1n)

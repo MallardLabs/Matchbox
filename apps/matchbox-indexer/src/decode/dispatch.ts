@@ -6,8 +6,12 @@ import {
   decodeEventLog,
   toEventSelector,
 } from "viem"
-import type { Network } from "../ingest/networks"
+import { type Network, networkConfig } from "../ingest/networks"
 import type { RawLog } from "../ingest/rpc"
+import {
+  MUSD_BORROWER_OPERATIONS_DEPLOY_BLOCK,
+  MUSD_TROVE_MANAGER_DEPLOY_BLOCK,
+} from "../ingest/static-contracts"
 import type { ContractKind } from "../ingest/store"
 import boostVoterAbi from "./abis/boost-voter"
 import bribeVotingRewardAbi from "./abis/bribe-voting-reward"
@@ -16,6 +20,7 @@ import gaugeAbi from "./abis/gauge"
 import merkleDistributorAbi from "./abis/merkle-distributor"
 import mezoMinterAbi from "./abis/mezo-minter"
 import musdSavingsRateAbi from "./abis/musd-savings-rate"
+import musdTrovesAbi from "./abis/musd-troves"
 import nonPoolsVoterAbi from "./abis/non-pools-voter"
 import pcvAbi from "./abis/pcv"
 import poolAbi from "./abis/pool"
@@ -26,6 +31,10 @@ import splitterAbi from "./abis/splitter"
 import votingEscrowAbi from "./abis/voting-escrow"
 import { OWNER_LOOKUP_ESCROWS } from "./constants"
 import { boostVoterHandlers } from "./handlers/boost-voter"
+import {
+  musdBorrowerOperationsHandlers,
+  musdTroveManagerHandlers,
+} from "./handlers/musd"
 import {
   thirdPartyVoterHandlers,
   validatorsVoterHandlers,
@@ -40,6 +49,7 @@ import {
   LEGACY_POOL_REWARDS,
   bribeVotingRewardHandlers,
   feeVotingRewardHandlers,
+  voterBribeRewardHandlers,
 } from "./handlers/rewards"
 import {
   chainFeeSplitterHandlers,
@@ -53,15 +63,21 @@ import {
 } from "./handlers/system"
 import { votingEscrowHandlers } from "./handlers/voting-escrow"
 import { type Handler, eventTopics, lockId, lower } from "./helpers"
-import type { TemplateName } from "./rows"
+import type { ExplorerTemplateName, TemplateName } from "./rows"
 import type { Store } from "./store"
 
-// Which handler, if any, the explorer subgraph would run for a log. This is
-// graph-node's data source model: a static source handles its address from
-// its startBlock; a template handles an address from the block a handler
-// created it in. Logs the ingest fetched for anything else (core contracts
-// before 7,739,500, gauges and pools created before then) are skipped, which
-// is what keeps the projection identical to matchbox-explorer 3.4.0.
+// Which handler, if any, runs for a log, and whether the explorer subgraph
+// would have run it too. This is graph-node's data source model: a static
+// source handles its address from its startBlock; a template handles an
+// address from the block a handler created it in. Logs the ingest fetched for
+// anything else (escrows and pools before 7,739,500, gauges and pools created
+// before then) are skipped, which keeps the explorer-parity rows identical to
+// matchbox-explorer 3.4.0.
+//
+// The warehouse handles more than the explorer did: the voters from the
+// network start, the voters' bribe rewards (template VoterBribeReward) and
+// the mUSD trove contracts. Rows from those logs are warehouse-only
+// (activity_events.explorer_parity = false).
 
 type EventTable = {
   selectors: ReadonlyMap<Hex, string>
@@ -72,7 +88,13 @@ type EventTable = {
 type StaticSource = EventTable & {
   name: string
   address: Address
+  // First block the decoder handles this source from.
   startBlock: bigint
+  // First block matchbox-explorer 3.4.0 handled it from. Rows from earlier
+  // logs are warehouse-only; null for a source the explorer never had.
+  explorerStartBlock: bigint | null
+  // Events that start later than the source, by event name.
+  eventStartBlocks: ReadonlyMap<string, bigint>
 }
 
 function eventTable(abi: Abi, handlers: Record<string, Handler>): EventTable {
@@ -89,6 +111,7 @@ function eventTable(abi: Abi, handlers: Record<string, Handler>): EventTable {
 }
 
 const CORE_START_BLOCK = 7_739_500n
+const NETWORK_START_BLOCK = networkConfig("mezo").startBlock
 
 function staticSource(
   name: string,
@@ -101,7 +124,44 @@ function staticSource(
     name,
     address: lower(address),
     startBlock,
+    explorerStartBlock: startBlock,
+    eventStartBlocks: new Map(),
     ...eventTable(abi, handlers),
+  }
+}
+
+// Voters project from the network start rather than the explorer's start
+// block, so a vote replay sees every ballot (BoostVoter's began at 6.25M).
+// Their rows before 7,739,500 are warehouse-only. Events listed in
+// `explorerStartOnly` keep the explorer start: PoolsVoter.GaugeCreated spawns
+// explorer templates, and gauges created before then must stay untracked.
+function voterSource(
+  name: string,
+  address: Address,
+  abi: Abi,
+  handlers: Record<string, Handler>,
+  explorerStartOnly: string[] = [],
+): StaticSource {
+  return {
+    ...staticSource(name, address, abi, handlers),
+    startBlock: NETWORK_START_BLOCK,
+    eventStartBlocks: new Map(
+      explorerStartOnly.map((eventName) => [eventName, CORE_START_BLOCK]),
+    ),
+  }
+}
+
+// A source the explorer never had: every row it produces is warehouse-only.
+function warehouseSource(
+  name: string,
+  address: Address,
+  abi: Abi,
+  handlers: Record<string, Handler>,
+  startBlock: bigint,
+): StaticSource {
+  return {
+    ...staticSource(name, address, abi, handlers, startBlock),
+    explorerStartBlock: null,
   }
 }
 
@@ -159,25 +219,26 @@ const MAINNET_SOURCES: StaticSource[] = [
     votingEscrowAbi,
     votingEscrowHandlers,
   ),
-  staticSource(
+  voterSource(
     "BoostVoter",
     "0x2Ba614a598Cffa5a19d683cDCA97bac3a49313d1",
     boostVoterAbi,
     boostVoterHandlers,
   ),
-  staticSource(
+  voterSource(
     "PoolsVoter",
     "0x48233cCC97B87Ba93bCA212cbEe48e3210211f03",
     poolsVoterAbi,
     poolsVoterHandlers,
+    ["GaugeCreated"],
   ),
-  staticSource(
+  voterSource(
     "ThirdPartyVoter",
     "0x2e6D2F2CaCC1d24F9f9358030674eB307397A6EB",
     nonPoolsVoterAbi,
     thirdPartyVoterHandlers,
   ),
-  staticSource(
+  voterSource(
     "ValidatorsVoter",
     "0xe99a9ad5Ed26BD30e4DB25397f378817e9b9515a",
     nonPoolsVoterAbi,
@@ -256,6 +317,20 @@ const MAINNET_SOURCES: StaticSource[] = [
     poolHandlers,
   ),
   ...legacyRewardSources(),
+  warehouseSource(
+    "MusdBorrowerOperations",
+    "0x44b1bac67dDA612a41a58AAf779143B181dEe031",
+    musdTrovesAbi,
+    musdBorrowerOperationsHandlers,
+    MUSD_BORROWER_OPERATIONS_DEPLOY_BLOCK,
+  ),
+  warehouseSource(
+    "MusdTroveManager",
+    "0x94AfB503dBca74aC3E4929BACEeDfCe19B93c193",
+    musdTrovesAbi,
+    musdTroveManagerHandlers,
+    MUSD_TROVE_MANAGER_DEPLOY_BLOCK,
+  ),
 ]
 
 const TEMPLATES: Record<TemplateName, EventTable> = {
@@ -266,7 +341,16 @@ const TEMPLATES: Record<TemplateName, EventTable> = {
   FeeVotingReward: eventTable(feeVotingRewardAbi, feeVotingRewardHandlers),
   Gauge: eventTable(gaugeAbi, gaugeHandlers),
   Pool: eventTable(poolAbi, poolHandlers),
+  VoterBribeReward: eventTable(bribeVotingRewardAbi, voterBribeRewardHandlers),
 }
+
+const EXPLORER_TEMPLATES: ReadonlySet<TemplateName> =
+  new Set<ExplorerTemplateName>([
+    "BribeVotingReward",
+    "FeeVotingReward",
+    "Gauge",
+    "Pool",
+  ])
 
 function sourcesByAddress(sources: StaticSource[]): Map<Address, StaticSource> {
   const byAddress = new Map<Address, StaticSource>()
@@ -290,29 +374,48 @@ export function staticSourcesFor(network: Network): StaticSource[] {
   return [...STATIC_SOURCES[network].values()]
 }
 
-// Returns the handler graph-node would run for this log, or undefined when
-// no active data source covers it.
-export function resolveHandler(log: RawLog, store: Store): Handler | undefined {
+export type ResolvedHandler = {
+  handler: Handler
+  // Whether matchbox-explorer 3.4.0 would have run this handler on this log.
+  explorerParity: boolean
+}
+
+// Returns the handler to run for this log, or undefined when no active data
+// source covers it.
+export function resolveHandler(
+  log: RawLog,
+  store: Store,
+): ResolvedHandler | undefined {
   const address = lower(log.address)
   const topic0 = log.topics[0]
   if (topic0 === undefined) return undefined
+  const selector = lower(topic0)
 
-  const staticSourceForLog = STATIC_SOURCES[log.network].get(address)
-  let table: EventTable | undefined
-  if (staticSourceForLog !== undefined) {
-    if (log.blockNumber >= staticSourceForLog.startBlock) {
-      table = staticSourceForLog
-    }
-  } else {
-    const dynamic = store.getDataSource(address)
-    if (dynamic !== undefined && log.blockNumber >= dynamic.createdBlock) {
-      table = TEMPLATES[dynamic.template]
+  const source = STATIC_SOURCES[log.network].get(address)
+  if (source !== undefined) {
+    const eventName = source.selectors.get(selector)
+    if (eventName === undefined) return undefined
+    const start = source.eventStartBlocks.get(eventName) ?? source.startBlock
+    const handler = source.handlers[eventName]
+    if (handler === undefined || log.blockNumber < start) return undefined
+    return {
+      handler,
+      explorerParity:
+        source.explorerStartBlock !== null &&
+        log.blockNumber >= source.explorerStartBlock,
     }
   }
-  if (table === undefined) return undefined
 
-  const eventName = table.selectors.get(lower(topic0))
-  return eventName === undefined ? undefined : table.handlers[eventName]
+  const dynamic = store.getDataSource(address)
+  if (dynamic === undefined || log.blockNumber < dynamic.createdBlock) {
+    return undefined
+  }
+  const table = TEMPLATES[dynamic.template]
+  const eventName = table.selectors.get(selector)
+  const handler =
+    eventName === undefined ? undefined : table.handlers[eventName]
+  if (handler === undefined) return undefined
+  return { handler, explorerParity: EXPLORER_TEMPLATES.has(dynamic.template) }
 }
 
 const ESCROW_SOURCES = new Set(["VeMEZO", "VeBTC"])
@@ -369,6 +472,23 @@ export function lockKeysForLog(log: RawLog): string[] {
   }
 }
 
+const TROVE_SOURCES = new Set(["MusdBorrowerOperations", "MusdTroveManager"])
+const TROVE_UPDATED_SELECTORS = new Set<Hex>(
+  musdTrovesAbi.map((item) => toEventSelector(item)),
+)
+
+// Borrowers whose latest trove state a handler reads for this log, so a
+// Postgres-backed store can load them first.
+export function troveKeysForLog(log: RawLog): Address[] {
+  const source = STATIC_SOURCES[log.network].get(lower(log.address))
+  const [topic0, borrowerTopic] = log.topics
+  if (source === undefined || !TROVE_SOURCES.has(source.name)) return []
+  if (topic0 === undefined || borrowerTopic === undefined) return []
+  if (log.blockNumber < source.startBlock) return []
+  if (!TROVE_UPDATED_SELECTORS.has(lower(topic0))) return []
+  return [lower(`0x${borrowerTopic.slice(-40)}`)]
+}
+
 // Contract kind (matchbox.contracts.kind) for each data source or template
 // name, so ingest and decode agree on what a binding is.
 const KIND_BY_NAME: Record<string, ContractKind> = {
@@ -396,6 +516,9 @@ const KIND_BY_NAME: Record<string, ContractKind> = {
   FeeVotingReward: "feeVotingReward",
   Gauge: "gauge",
   Pool: "pool",
+  VoterBribeReward: "voterBribeReward",
+  MusdBorrowerOperations: "musdBorrowerOperations",
+  MusdTroveManager: "musdTroveManager",
 }
 
 export type HandlerBinding = {

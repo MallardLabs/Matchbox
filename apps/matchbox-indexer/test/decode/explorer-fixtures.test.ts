@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest"
 import { z } from "zod"
 import { OWNER_LOOKUP_ESCROWS } from "../../src/decode/constants"
 import { detectPokeMethod } from "../../src/decode/helpers"
-import { canonicalRow } from "../../src/decode/parity"
+import { canonicalRow, isEnrichment } from "../../src/decode/parity"
 import { projectBlock } from "../../src/decode/projection"
 import { ACTIVITY_FIELDS, type ActivityField } from "../../src/decode/rows"
 import { InMemoryStore } from "../../src/decode/store"
@@ -170,10 +170,18 @@ describe("explorer fixtures", () => {
     expect(activity, `no activity ${id}`).toBeDefined()
     if (activity === undefined) return
 
+    // Explorer data sources only: every row is an explorer-parity row.
+    expect(activity.explorerParity).toBe(true)
     const ours = canonicalRow(activity)
+    const actionType = expected.actionType ?? ""
     const ignored = ignoredFields(expected.actionType ?? null)
     for (const [field] of ACTIVITY_FIELDS) {
       if (ignored.has(field)) continue
+      const theirs = expected[field] ?? null
+      // A warehouse enrichment may fill what the explorer left null.
+      if (isEnrichment(actionType, field, theirs) && ours[field] != null) {
+        continue
+      }
       expect({ field, value: ours[field] ?? null }).toEqual({
         field,
         value: expected[field] ?? null,

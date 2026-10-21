@@ -18,7 +18,7 @@ import { FILTER_GROUPS, filterGroupOf, topic0sFor } from "./topics"
 
 const logger = createLogger("matchbox-indexer-ingest")
 
-const GROUP_TOPIC0S = FILTER_GROUPS.map(topic0sFor)
+const GROUP_TOPIC0S = FILTER_GROUPS.map((group) => topic0sFor(group.kinds))
 
 export type IngestDeps = {
   config: NetworkConfig
@@ -119,6 +119,7 @@ export async function fetchLogs(
     groups.map((addresses, index) => ({
       addresses: [...new Set(addresses)].sort(),
       topic0s: GROUP_TOPIC0S[index],
+      scanByTopic: FILTER_GROUPS[index]?.scanByTopic ?? false,
     })),
   )
 }
@@ -199,6 +200,18 @@ export async function seedStaticContracts(deps: IngestDeps): Promise<void> {
   )
 }
 
+// First block a full backfill must cover: the network start, or earlier for
+// a static contract deployed before it (the mUSD trove contracts). The cron
+// only ever follows head, so this matters to scripts/backfill.ts alone.
+export function historyStartBlock(deps: IngestDeps): bigint {
+  const statics = deps.staticContracts ?? STATIC_CONTRACTS[deps.config.network]
+  return statics.reduce(
+    (first, contract) =>
+      contract.createdBlock < first ? contract.createdBlock : first,
+    deps.config.startBlock,
+  )
+}
+
 // Registers every factory child created in [from, to] before any window is
 // fetched, so windows can then be fetched in parallel with a complete
 // address set. Factory logs are scanned by topic only; they are stored as raw
@@ -212,7 +225,17 @@ export async function discoverRange(
     await deps.store.loadContracts(deps.config.network),
   )
   const factories = known.factories()
-  const windows = blockWindows(range.from, range.to, deps.config.windowSize)
+  // No factory exists before the earliest one was registered from.
+  const firstFactoryBlock = [...factories.values()].reduce(
+    (first, factory) =>
+      factory.createdBlock < first ? factory.createdBlock : first,
+    range.to + 1n,
+  )
+  const windows = blockWindows(
+    range.from > firstFactoryBlock ? range.from : firstFactoryBlock,
+    range.to,
+    deps.config.windowSize,
+  )
   const batches = await mapConcurrent(windows, concurrency, (window) =>
     deps.rpc.getLogs(
       window.from,

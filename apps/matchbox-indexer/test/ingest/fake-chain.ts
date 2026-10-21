@@ -21,6 +21,10 @@ export type ChainLog = {
   topics: Hex[]
   data?: Hex
   tx?: Hex
+  // The emitting transaction's `to` and input; default to the log's
+  // address and TX_INPUT.
+  txTo?: Address
+  txInput?: Hex
 }
 
 type Request = { id: number; method: string; params: unknown[] }
@@ -122,8 +126,8 @@ export class FakeChain {
           blockNumber: toHex(log.block),
           transactionIndex: toHex(log.txIndex ?? 0),
           from: pad("0xaa", { size: 20 }),
-          to: log.address,
-          input: TX_INPUT,
+          to: log.txTo ?? log.address,
+          input: log.txInput ?? TX_INPUT,
         }
       }
       default:
@@ -132,11 +136,14 @@ export class FakeChain {
   }
 
   private getLogs(filter: LogFilter): unknown[] {
-    const addresses = new Set(
-      filter.address.map((address) => address.toLowerCase()),
-    )
+    // No address: every contract's logs matching the topics.
+    const addresses =
+      filter.address === undefined
+        ? null
+        : new Set(filter.address.map((address) => address.toLowerCase()))
     if (
       this.options.maxAddresses &&
+      addresses !== null &&
       addresses.size > this.options.maxAddresses
     ) {
       throw new Error("too many addresses")
@@ -149,7 +156,7 @@ export class FakeChain {
         (log) =>
           log.block >= from &&
           log.block <= to &&
-          addresses.has(log.address.toLowerCase()) &&
+          (addresses === null || addresses.has(log.address.toLowerCase())) &&
           (!topic0s || topic0s.includes(log.topics[0] as Hex)),
       )
       .map((log) => ({
@@ -170,7 +177,7 @@ export class FakeChain {
 type LogFilter = {
   fromBlock: Hex
   toBlock: Hex
-  address: Address[]
+  address?: Address[]
   topics?: [Hex[]]
 }
 
@@ -248,6 +255,29 @@ export function eventLog(input: {
     logIndex: input.logIndex,
     address: input.address,
     topics: [toEventSelector(input.signature)],
+    data: "0x",
+  }
+}
+
+// BoostVoter / ValidatorsVoter / ThirdPartyVoter GaugeCreated: every argument
+// indexed.
+export function voterGaugeCreatedLog(input: {
+  block: number
+  logIndex: number
+  voter: Address
+  gauge: Address
+  bribe: Address
+}): ChainLog {
+  return {
+    block: input.block,
+    logIndex: input.logIndex,
+    address: input.voter,
+    topics: [
+      toEventSelector("GaugeCreated(address,address,address)"),
+      addressTopic(input.gauge),
+      addressTopic(input.bribe),
+      addressTopic(pad("0x03", { size: 20 })),
+    ],
     data: "0x",
   }
 }

@@ -113,6 +113,38 @@ export type ActionParity = {
   missingIds: string[]
   extraIds: string[]
   fieldDiffs: FieldDiff[]
+  // Fields the warehouse filled where the explorer left null (ENRICHMENTS).
+  enriched: number
+}
+
+// Intended differences: fields the warehouse fills where the explorer left
+// null (docs/goldsky-exit.md). Any other value, or a non-null explorer value
+// that differs, is still a field difference.
+const ENRICHMENTS: ReadonlyArray<{
+  field: ActivityField
+  actionTypes: ReadonlySet<string>
+}> = [
+  // The claimed lock, from a claim call sent straight to a voter.
+  {
+    field: "tokenId",
+    actionTypes: new Set(["VOTE_BRIBE_CLAIMED", "VOTE_FEE_CLAIMED"]),
+  },
+  // The epoch the incentive was deposited for.
+  { field: "epochStart", actionTypes: new Set(["INCENTIVE_ADDED"]) },
+]
+
+export function isEnrichment(
+  actionType: string,
+  field: ActivityField,
+  explorer: string | null,
+): boolean {
+  return (
+    explorer === null &&
+    ENRICHMENTS.some(
+      (enrichment) =>
+        enrichment.field === field && enrichment.actionTypes.has(actionType),
+    )
+  )
 }
 
 export function compareRows(
@@ -130,6 +162,7 @@ export function compareRows(
         missingIds: [],
         extraIds: [],
         fieldDiffs: [],
+        enriched: 0,
       }
       byType.set(actionType, parity)
     }
@@ -156,7 +189,10 @@ export function compareRows(
     for (const [field] of ACTIVITY_FIELDS) {
       const theirs = row[field] ?? null
       const mine = ours[field] ?? null
-      if (theirs !== mine) {
+      if (theirs === mine) continue
+      if (isEnrichment(parity.actionType, field, theirs)) {
+        parity.enriched += 1
+      } else {
         parity.fieldDiffs.push({
           id: row.id,
           field,

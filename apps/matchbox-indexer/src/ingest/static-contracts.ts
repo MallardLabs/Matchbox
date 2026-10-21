@@ -4,12 +4,19 @@ import { NETWORKS } from "./networks"
 import type { ContractKind, RegisteredContract } from "./store"
 
 // The explorer subgraph's static data sources (apps/activity-subgraph/
-// subgraph.yaml on main). Kept in code so the Worker bundle needs no manifest;
-// test/ingest/static-contracts.test.ts fails if the two drift.
+// subgraph.yaml on main), then the warehouse-only ones. Kept in code so the
+// Worker bundle needs no manifest; test/ingest/manifest.test.ts fails if the
+// explorer list and the manifest drift.
 //
 // `createdBlock` is the first block ingest fetches the contract's logs from:
 // the network start block for core contracts, the creation block for the
-// Legacy* reward contracts. It is not the subgraph's startBlock (7,739,500).
+// Legacy* reward contracts and the mUSD contracts. It is not the subgraph's
+// startBlock (7,739,500).
+
+// First blocks with code (eth_getCode bisection on rpc-internal, 2026-10-21).
+// BorrowerOperations' first log is in that same block.
+export const MUSD_BORROWER_OPERATIONS_DEPLOY_BLOCK = 178_630n
+export const MUSD_TROVE_MANAGER_DEPLOY_BLOCK = 178_660n
 
 type LegacyLink = { pool: Address; gauge: Address; fromBlock: bigint }
 
@@ -32,7 +39,7 @@ function staticContract(
   }
 }
 
-const MEZO_STATIC_CONTRACTS: RegisteredContract[] = [
+export const EXPLORER_STATIC_CONTRACTS: RegisteredContract[] = [
   staticContract(
     "VeMEZO",
     "votingEscrow",
@@ -301,7 +308,34 @@ const MEZO_STATIC_CONTRACTS: RegisteredContract[] = [
   ),
 ]
 
+function warehouseContract(
+  template: string,
+  kind: ContractKind,
+  address: Address,
+  fromBlock: bigint,
+): RegisteredContract {
+  return { ...staticContract(template, kind, address), createdBlock: fromBlock }
+}
+
+// Not explorer data sources. The mUSD contracts start at their deployment
+// block (first block with code), before the network start: trove history
+// begins there, and each TroveUpdated delta needs the trove's previous state.
+export const WAREHOUSE_STATIC_CONTRACTS: RegisteredContract[] = [
+  warehouseContract(
+    "MusdBorrowerOperations",
+    "musdBorrowerOperations",
+    "0x44b1bac67dda612a41a58aaf779143b181dee031",
+    MUSD_BORROWER_OPERATIONS_DEPLOY_BLOCK,
+  ),
+  warehouseContract(
+    "MusdTroveManager",
+    "musdTroveManager",
+    "0x94afb503dbca74ac3e4929baceedfce19b93c193",
+    MUSD_TROVE_MANAGER_DEPLOY_BLOCK,
+  ),
+]
+
 export const STATIC_CONTRACTS: Record<Network, RegisteredContract[]> = {
-  mezo: MEZO_STATIC_CONTRACTS,
+  mezo: [...EXPLORER_STATIC_CONTRACTS, ...WAREHOUSE_STATIC_CONTRACTS],
   "mezo-testnet": [],
 }

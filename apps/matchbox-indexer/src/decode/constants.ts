@@ -102,4 +102,13 @@ export const OWNER_LOOKUP_ESCROWS = [
   "0x38e35d92e6bfc6787272a62345856b13ea12130a", // veBTC testnet
 ] as const
 
+// The four mainnet voters. A reward claim sent straight to one of them names
+// the claimed lock in its calldata (src/decode/calldata.ts).
+export const VOTER_ADDRESSES = [
+  "0x2ba614a598cffa5a19d683cdca97bac3a49313d1", // BoostVoter
+  "0x48233ccc97b87ba93bca212cbee48e3210211f03", // PoolsVoter
+  "0x2e6d2f2cacc1d24f9f9358030674eb307397a6eb", // ThirdPartyVoter
+  "0xe99a9ad5ed26bd30e4db25397f378817e9b9515a", // ValidatorsVoter
+] as const
+
 export const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"

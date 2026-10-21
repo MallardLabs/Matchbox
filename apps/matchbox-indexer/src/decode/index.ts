@@ -10,6 +10,16 @@ export {
   resetProjection,
   runProjection,
 } from "./projection"
-export { lockKeysForLog, resolveHandler, staticSourcesFor } from "./dispatch"
-export { InMemoryStore, type Store } from "./store"
-export { ACTIVITY_FIELDS, type ActivityEventRow } from "./rows"
+export {
+  lockKeysForLog,
+  resolveHandler,
+  staticSourcesFor,
+  troveKeysForLog,
+} from "./dispatch"
+export { InMemoryStore, type Store, WarehouseOnlyStore } from "./store"
+export {
+  ACTIVITY_FIELDS,
+  type ActivityEventRow,
+  type RewardDepositRow,
+  type TroveUpdateRow,
+} from "./rows"
