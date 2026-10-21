@@ -201,6 +201,13 @@ export type MezoActivityMeta = {
     fromTimestamp: number
     toTimestamp: number
   }
+  // Sources that failed for this response; the data is partial.
+  degraded?: string[]
+  // Warehouse reads only: the last block the projection has processed.
+  indexedThrough?: {
+    block: string
+    updatedAt: string
+  }
 }
 
 export type MezoActivityApiItem = Omit<

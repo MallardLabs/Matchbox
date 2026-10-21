@@ -1,0 +1,22 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "matchbox-indexer",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-30",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  // Each tick ingests from the logs checkpoint to head minus confirmations.
+  // DATABASE_URL is a secret (`wrangler secret put DATABASE_URL`): the direct
+  // Neon URL for the matchbox_indexer login, never committed here.
+  "triggers": {
+    "crons": ["* * * * *"]
+  },
+  "observability": {
+    "enabled": true,
+    "logs": { "head_sampling_rate": 1 },
+    "traces": { "enabled": true, "head_sampling_rate": 0.01 }
+  },
+  "vars": {
+    "ENVIRONMENT": "development"
+  }
+}

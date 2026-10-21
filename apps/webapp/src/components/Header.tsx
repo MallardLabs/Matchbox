@@ -158,10 +158,10 @@ const navItems: NavItem[] = [
   {
     label: "more",
     children: [
-      { href: "/academy", label: "academy" },
       { href: "/how-to", label: "how2" },
       { href: "/activity", label: "activity" },
       { href: "/transactions", label: "transactions" },
+      { href: "/id-lookup", label: "id lookup" },
     ],
   },
 ]

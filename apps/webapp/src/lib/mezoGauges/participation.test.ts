@@ -5,6 +5,7 @@ import {
   aggregateVotes,
   formatBps,
   participationBps,
+  replayVoteEvents,
   shareBps,
 } from "./participation"
 
@@ -95,4 +96,36 @@ test("aggregateVotes on empty input", () => {
   assert.equal(agg.wallets, 0)
   assert.equal(agg.topWalletBps, 0n)
   assert.equal(agg.byWallet.length, 0)
+})
+
+test("replayVoteEvents nets Voted against Abstained per NFT and gauge", () => {
+  const positions = replayVoteEvents([
+    // NFT 1 votes G1, then re-votes (poke) with a decayed weight
+    { tokenId: 1n, gauge: "0xG1", type: "Voted", weight: 100n * E18 },
+    { tokenId: 1n, gauge: "0xg1", type: "Abstained", weight: 100n * E18 },
+    { tokenId: 1n, gauge: "0xG1", type: "Voted", weight: 90n * E18 },
+    // NFT 2 votes G2 then fully resets
+    { tokenId: 2n, gauge: "0xG2", type: "Voted", weight: 50n * E18 },
+    { tokenId: 2n, gauge: "0xG2", type: "Abstained", weight: 50n * E18 },
+    // NFT 3 splits across two gauges, listed out of order
+    { tokenId: 3n, gauge: "0xG2", type: "Voted", weight: 30n * E18 },
+    { tokenId: 3n, gauge: "0xG1", type: "Voted", weight: 70n * E18 },
+  ])
+
+  assert.deepEqual(
+    positions.sort((a, b) =>
+      a.tokenId === b.tokenId
+        ? a.gauge.localeCompare(b.gauge)
+        : Number(a.tokenId - b.tokenId),
+    ),
+    [
+      { tokenId: 1n, gauge: "0xg1", currentWeight: 90n * E18 },
+      { tokenId: 3n, gauge: "0xg1", currentWeight: 70n * E18 },
+      { tokenId: 3n, gauge: "0xg2", currentWeight: 30n * E18 },
+    ],
+  )
+})
+
+test("replayVoteEvents on empty input", () => {
+  assert.deepEqual(replayVoteEvents([]), [])
 })

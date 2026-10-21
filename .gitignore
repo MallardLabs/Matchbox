@@ -45,3 +45,8 @@ supabase/.temp/
 
 # Local Netlify folder
 .netlify
+.neon
+
+# Wrangler local secrets
+.dev.vars*
+.wrangler/
