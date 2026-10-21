@@ -1,12 +1,9 @@
 import "./polyfills"
-import WalletProviders from "@/components/wallet/Providers"
+import Providers from "@/app/Providers"
 import { RouterProvider, createRouter } from "@tanstack/react-router"
 import { Component, type ReactNode, StrictMode } from "react"
 import { createRoot } from "react-dom/client"
 import { routeTree } from "./routeTree.gen"
-import "@fontsource-variable/figtree"
-import "@fontsource/dm-mono/400.css"
-import "@fontsource/dm-mono/500.css"
 import "./styles/globals.css"
 
 const router = createRouter({
@@ -50,9 +47,9 @@ if (!root) throw new Error("Missing #root")
 createRoot(root).render(
   <StrictMode>
     <BootErrorBoundary>
-      <WalletProviders>
+      <Providers>
         <RouterProvider router={router} />
-      </WalletProviders>
+      </Providers>
     </BootErrorBoundary>
   </StrictMode>,
 )

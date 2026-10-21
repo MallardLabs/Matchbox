@@ -1,8 +1,9 @@
 import { getContractConfig } from "@/lib/contracts"
 import { useNetwork } from "@/lib/network"
 import { QUERY_PROFILES } from "@/lib/queryProfiles"
+import { useViewer } from "@/lib/viewer"
 import { useMemo } from "react"
-import { useAccount, useReadContract, useReadContracts } from "wagmi"
+import { useReadContract, useReadContracts } from "wagmi"
 
 export type VeMEZOLock = {
   tokenId: bigint
@@ -19,8 +20,9 @@ export type VeBTCLock = VeMEZOLock & {
 type LockedResult = { amount: bigint; end: bigint; isPermanent: boolean }
 
 // Both escrows share one ABI; veBTC additionally reads unboosted power.
+// Reads the viewer (connected or watched wallet), never just the signer.
 function useEscrowLocks(kind: "veMEZO" | "veBTC") {
-  const { address } = useAccount()
+  const { address } = useViewer().viewer
   const { chainId } = useNetwork()
   const escrow = getContractConfig(chainId)[kind]
   const readsPerLock = kind === "veBTC" ? 3 : 2

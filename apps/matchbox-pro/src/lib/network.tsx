@@ -13,8 +13,14 @@ type NetworkContextValue = {
   chainId: SupportedChainId
   isMainnet: boolean
   isNetworkReady: boolean
+  /** Developer mode: flips the app between Mezo mainnet and testnet. */
   switchNetwork: () => void
   networkName: string
+  walletChainId: number | undefined
+  /** Connected wallet sits on a different chain than the app. */
+  isWrongNetwork: boolean
+  isSwitching: boolean
+  switchWalletToApp: () => Promise<void>
 }
 
 const NetworkContext = createContext<NetworkContextValue | undefined>(undefined)
@@ -45,10 +51,27 @@ function writeSavedNetwork(chainId: SupportedChainId) {
   }
 }
 
+// Names for chains a wallet is commonly left on, for the wrong-network banner.
+const KNOWN_CHAIN_NAMES: Record<number, string> = {
+  1: "Ethereum",
+  10: "Optimism",
+  56: "BNB Chain",
+  137: "Polygon",
+  8453: "Base",
+  42161: "Arbitrum",
+  [CHAIN_ID.mainnet]: "Mezo",
+  [CHAIN_ID.testnet]: "Mezo testnet",
+}
+
+export function chainName(chainId: number | undefined): string {
+  if (chainId === undefined) return "another network"
+  return KNOWN_CHAIN_NAMES[chainId] ?? `chain ${chainId}`
+}
+
 export function NetworkProvider({ children }: { children: ReactNode }) {
   const wagmiChainId = useChainId()
-  const { isConnected } = useAccount()
-  const { switchChainAsync } = useSwitchChain()
+  const { isConnected, chainId: walletChainId } = useAccount()
+  const { switchChainAsync, isPending: isSwitching } = useSwitchChain()
   // Client-only app: read the saved network during the first render so
   // queries start immediately instead of waiting a render for an effect.
   const [chainId, setChainId] = useState(readSavedNetwork)
@@ -63,6 +86,17 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
     }
   }, [chainId, isConnected, switchChainAsync, wagmiChainId])
 
+  const isWrongNetwork =
+    isConnected && walletChainId !== undefined && walletChainId !== chainId
+
+  const switchWalletToApp = useCallback(async () => {
+    try {
+      await switchChainAsync({ chainId })
+    } catch {
+      // The wallet declined or can't add the chain; the banner stays up.
+    }
+  }, [chainId, switchChainAsync])
+
   const value = useMemo(
     () => ({
       chainId,
@@ -70,8 +104,19 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
       isNetworkReady: true,
       switchNetwork,
       networkName: chainId === CHAIN_ID.mainnet ? "Mainnet" : "Testnet",
+      walletChainId,
+      isWrongNetwork,
+      isSwitching,
+      switchWalletToApp,
     }),
-    [chainId, switchNetwork],
+    [
+      chainId,
+      switchNetwork,
+      walletChainId,
+      isWrongNetwork,
+      isSwitching,
+      switchWalletToApp,
+    ],
   )
 
   return (

@@ -1,8 +1,12 @@
 import { Link, createFileRoute } from "@tanstack/react-router"
 import { ArrowUp, Search } from "lucide-react"
 import { type FormEvent, type ReactElement, useState } from "react"
+import { z } from "zod"
+
+const querySearchSchema = z.object({ q: z.string().optional() })
 
 export const Route = createFileRoute("/query")({
+  validateSearch: querySearchSchema,
   component: QueryPage,
 })
 
