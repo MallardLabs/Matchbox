@@ -294,20 +294,18 @@ describe("ledger model", () => {
     expect(formatUsdTick(500)).toBe("$500")
   })
 
-  it("charts the last eight sealed epochs, newest current, then Next", () => {
+  it("charts the last six sealed epochs (as Overview), newest current, then Next", () => {
     const epochs = Array.from({ length: 10 }, (_, index) =>
       sealed(
         current - (10 - index) * EPOCH_SECONDS,
-        index === 3 ? null : 100_000_000n,
+        index === 5 ? null : 100_000_000n,
       ),
     )
     const bars = realizedBars(epochs, 24_000_000n)
-    expect(bars).toHaveLength(9)
+    expect(bars).toHaveLength(7)
     expect(bars.map((bar) => bar.tone)).toEqual([
       "past",
       "unavailable",
-      "past",
-      "past",
       "past",
       "past",
       "past",
@@ -315,7 +313,7 @@ describe("ledger model", () => {
       "projected",
     ])
     expect(bars[1]?.display).toBe("—")
-    expect(bars[8]?.label).toBe("Next")
+    expect(bars[6]?.label).toBe("Next")
     expect(realizedBars([], null)[0]?.tone).toBe("unavailable")
   })
 
@@ -423,6 +421,7 @@ describe("epoch names", () => {
     expect(epochShort(launch)).toBe("0")
     expect(epochShort(launch + 6 * EPOCH_SECONDS)).toBe("6")
     expect(epochShort(launch - EPOCH_SECONDS)).toBe("Aug 27")
+    expect(epochShort(launch - 4 * EPOCH_SECONDS)).toBe("Aug 6")
     expect(epochTitle(launch + 6 * EPOCH_SECONDS)).toBe("Epoch 6")
     expect(epochTitle(launch - 2 * EPOCH_SECONDS)).toBe("Epoch Aug 20")
   })

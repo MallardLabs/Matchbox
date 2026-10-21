@@ -35,14 +35,35 @@ import {
   periodFrom,
   realizedBars,
 } from "./ledgerModel"
+import {
+  DEFAULT_PERIOD,
+  type RewardsSearch,
+  compactRewardsSearch,
+} from "./rewardsSearch"
 import { useClaimFlow } from "./useClaimFlow"
 import { useClaimEstimate } from "./useClaimRun"
 import { useClaimSources } from "./useClaimSources"
 
-export default function RewardsPage(): ReactElement {
+type RewardsPageProps = {
+  /** Ledger period from the URL; without it the page keeps its own state. */
+  search?: RewardsSearch | undefined
+  onSearchChange?: ((next: RewardsSearch) => void) | undefined
+}
+
+export default function RewardsPage({
+  search,
+  onSearchChange,
+}: RewardsPageProps): ReactElement {
   const { viewer } = useViewer()
   if (viewer.mode === "disconnected") return <Disconnected />
-  return <RewardsWallet key={viewer.address} viewer={viewer} />
+  return (
+    <RewardsWallet
+      key={viewer.address}
+      viewer={viewer}
+      search={search}
+      onSearchChange={onSearchChange}
+    />
+  )
 }
 
 function PageTitle({ children }: { children?: ReactNode }): ReactElement {
@@ -99,14 +120,21 @@ function summaryUsd(micro: bigint): string {
 
 function RewardsWallet({
   viewer,
+  search,
+  onSearchChange,
 }: {
   viewer: Exclude<Viewer, { mode: "disconnected" }>
-}): ReactElement {
+} & RewardsPageProps): ReactElement {
   const address = viewer.address
   const { switchWalletToApp, isSwitching } = useNetwork()
   const network = useHistoryNetwork()
   const [now] = useState(() => Math.floor(Date.now() / 1000))
-  const [period, setPeriod] = useState<PeriodId>("last-8")
+  const [localPeriod, setLocalPeriod] = useState<PeriodId>(DEFAULT_PERIOD)
+  const period = search ? (search.period ?? DEFAULT_PERIOD) : localPeriod
+  function setPeriod(next: PeriodId): void {
+    if (onSearchChange) onSearchChange(compactRewardsSearch({ period: next }))
+    else setLocalPeriod(next)
+  }
   const [excluded, setExcluded] = useState<ReadonlySet<string>>(new Set())
 
   const claim = useClaimSources()

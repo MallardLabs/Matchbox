@@ -8,6 +8,7 @@ import {
   STATUS_LABEL,
   STATUS_TONE,
   formatEpochDate,
+  isPrelaunch,
   ledgerNative,
   ledgerSource,
   shortAddress,
@@ -194,7 +195,14 @@ function LedgerLine({
     (row.status === "pending" || row.usdAtEarnMicro === null)
   return (
     <tr className="border-b border-line text-label">
-      <td className="whitespace-nowrap py-2 pr-3 font-mono text-secondary tabular-nums xl:py-2.5 xl:text-ink">
+      <td
+        className={cn(
+          "whitespace-nowrap py-2 pr-3 font-mono tabular-nums xl:py-2.5",
+          isPrelaunch(row.epochStart)
+            ? "text-muted"
+            : "text-secondary xl:text-ink",
+        )}
+      >
         {epochLabel}
       </td>
       <td className="hidden py-2.5 pr-3 text-secondary tabular-nums xl:table-cell">

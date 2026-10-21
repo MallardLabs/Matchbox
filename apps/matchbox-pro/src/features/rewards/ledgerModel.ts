@@ -34,12 +34,15 @@ export function periodFrom(
 ): number | undefined {
   const current = epochStartOf(nowSeconds)
   if (period === "epoch") return current
-  if (period === "last-8") return current - CHART_EPOCHS * EPOCH_SECONDS
+  if (period === "last-8") return current - PERIOD_EPOCHS * EPOCH_SECONDS
   return undefined
 }
 
 /** Sealed epochs the chart draws before the projected "Next" bar. */
-export const CHART_EPOCHS = 8
+export const CHART_EPOCHS = 6
+
+/** Sealed epochs in the "Last 8" period. */
+export const PERIOD_EPOCHS = 8
 
 const EPOCH_DATE = new Intl.DateTimeFormat("en-US", {
   timeZone: "UTC",
@@ -52,13 +55,27 @@ export function formatEpochDate(seconds: number): string {
   return EPOCH_DATE.format(new Date(seconds * 1000))
 }
 
+const PRELAUNCH_DATE = new Intl.DateTimeFormat("en-US", {
+  timeZone: "UTC",
+  month: "short",
+  day: "numeric",
+})
+
 /**
  * The app-wide epoch name: the Classic number ("6", Epoch 0 = 3 Sep 2026),
- * or the start date for epochs before launch.
+ * or for epochs before launch their start date ("Aug 6"), as Overview's
+ * chart labels them.
  */
 export function epochShort(epochStart: number): string {
   const number = epochNumberFor(BigInt(epochStart))
-  return number === null ? formatEpochDate(epochStart) : String(number)
+  return number === null
+    ? PRELAUNCH_DATE.format(new Date(epochStart * 1000))
+    : String(number)
+}
+
+/** Before Epoch 0 (3 Sep 2026): labelled by date and shown muted. */
+export function isPrelaunch(epochStart: number): boolean {
+  return epochNumberFor(BigInt(epochStart)) === null
 }
 
 /** "Epoch 6", or "Epoch Aug 20" before launch. */
