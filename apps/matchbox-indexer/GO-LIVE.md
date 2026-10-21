@@ -49,9 +49,12 @@ up for the tick plus the 5-minute suspend timeout.
   meta; the gauge pages use earn-votes and earn-locks), and a breaker skips
   the warehouse for 2 minutes per isolate so the dead endpoint is not
   hammered. Once `matchbox-explorer/3.4.0` is deleted (step 10), only the
-  vote rows survive that fallback. Pro returns 503 `warehouse_unavailable`
-  for activity and transaction pages (earnings and ledgers are RPC and keep
-  working, without claim links).
+  vote rows survive that fallback. Pro does the same with its own 6 s
+  timeout and 2-minute breaker (`apps/matchbox-pro/src/worker/history/neon.ts`):
+  activity, transaction pages and `/api/history/status` are served from
+  Classic's `/api/activity`, marked `frozen-explorer` (stale); it returns 503
+  `warehouse_unavailable` only when both are down. Earnings and ledgers are
+  RPC and keep working, without claim links.
 - `/health` on the indexer queries the database: check it by hand, at most
   hourly, never from an uptime monitor.
 - Watch: Neon Console → `matchbox-warehouse` → Monitoring (or Billing,
