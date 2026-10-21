@@ -5,8 +5,9 @@ import type {
 } from "../../features/history/schema"
 import type { VoteBranch, WalletMode } from "../../features/query/contract"
 import { gaugeEpochs } from "../history/gauges"
+import type { PricingEnv } from "../history/pricing"
 import { walletEarnings } from "../history/wallet"
-import type { WaitUntil } from "../router"
+import type { KvNamespace, WaitUntil } from "../router"
 import { type BoostState, loadBoostState } from "./providers/boost"
 import { type BridgeSearch, searchBridgeOperations } from "./providers/bridge"
 import { type ClaimableLock, loadClaimable } from "./providers/claims"
@@ -132,6 +133,7 @@ class RequestMemo<T> {
 /** Live providers with per-request memoization of the expensive reads. */
 export function createLiveProviders(input: {
   baseRpcUrl?: string
+  historyKv?: KvNamespace
   supabaseUrl: string | null
   supabaseAnonKey: string | null
   nowSeconds: () => bigint
@@ -139,6 +141,10 @@ export function createLiveProviders(input: {
   waitUntil: WaitUntil
 }): StuartProviders {
   const client = mezoMainnet()
+  const historyEnv: PricingEnv = {
+    BASE_RPC_URL: input.baseRpcUrl,
+    HISTORY_KV: input.historyKv,
+  }
   const domains = new RequestMemo<VotingDomain>()
   const priceMemo = new RequestMemo<PriceSnapshot>()
   const profileMemo = new RequestMemo<Map<string, GaugeProfileName>>()
@@ -191,18 +197,11 @@ export function createLiveProviders(input: {
         count,
         boostTokenId: boostTokenId ?? undefined,
         now: input.nowSeconds(),
-        env: { BASE_RPC_URL: input.baseRpcUrl },
+        env: historyEnv,
       }),
     walletEarnings: (owner) =>
       settledEarnings(
-        (waitUntil) =>
-          walletEarnings(
-            owner,
-            [],
-            8,
-            { BASE_RPC_URL: input.baseRpcUrl },
-            waitUntil,
-          ),
+        (waitUntil) => walletEarnings(owner, [], 8, historyEnv, waitUntil),
         input.waitUntil,
       ),
   }

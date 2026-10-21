@@ -55,6 +55,7 @@ function runtimeFor(
   return {
     providers: createLiveProviders({
       ...(env.BASE_RPC_URL ? { baseRpcUrl: env.BASE_RPC_URL } : {}),
+      ...(env.HISTORY_KV ? { historyKv: env.HISTORY_KV } : {}),
       supabaseUrl: config.supabaseUrl,
       supabaseAnonKey: config.supabaseAnonKey,
       nowSeconds: () => BigInt(Math.floor(Date.now() / 1000)),
