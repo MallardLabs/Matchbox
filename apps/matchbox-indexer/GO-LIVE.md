@@ -251,6 +251,13 @@ The live webapp Worker is `matchbox` (OpenNext, deployed by Workers Builds
 from `main`). Set both values as secrets: secrets survive the CI deploys, and
 `process.env` reads secrets and vars alike.
 
+Precondition: the deployed `main` has the webapp change that reads only
+`explorer_parity` rows and returns the two enrichments as null
+(`apps/webapp/src/lib/mezoActivity/warehouse.ts`). Without it, Classic would
+show the warehouse-only bribe claims and pre-March voter rows, and its claim
+drawers would label veBTC lock ids as veMEZO. With it, a dev-branch window of
+2,636 rows matched the explorer exactly (ids, `tokenId`, `epochStart`).
+
 ```bash
 printf '%s' "$READER_URL" | pnpm --filter @repo/matchbox-indexer exec wrangler secret put MATCHBOX_WAREHOUSE_URL --name matchbox
 printf 'warehouse' | pnpm --filter @repo/matchbox-indexer exec wrangler secret put MEZO_ACTIVITY_SOURCE --name matchbox
@@ -276,19 +283,27 @@ explorer plus earn-votes. Keep `matchbox-explorer/3.4.0` until step 10.
 ## 8. Give Matchbox Pro read access [OUTWARD]
 
 The Pro Worker is `matchbox-pro`. Its history routes read
-`MATCHBOX_WAREHOUSE_URL` first, then `DATABASE_URL`
-(`apps/matchbox-pro/src/worker/history/sources.ts`); without either they fall
-back to the frozen explorer. Set `DATABASE_URL` to the same read-only pooled
-URL:
+`MATCHBOX_WAREHOUSE_URL`, the secret its `wrangler.jsonc` lists
+(`apps/matchbox-pro/src/worker/history/sources.ts`); without it they fall
+back to the frozen explorer. Pro reads every row, warehouse-only ones
+included.
+
+Run this only after Pro's first deploy, once `matchbox-pro` exists on the
+account: `secret put` on a missing Worker would create an empty one. It can
+come any time after step 6 and does not depend on step 7.
 
 ```bash
-printf '%s' "$READER_URL" | pnpm --filter @repo/matchbox-indexer exec wrangler secret put DATABASE_URL --name matchbox-pro
+pnpm --filter @repo/matchbox-indexer exec wrangler deployments list --name matchbox-pro   # [READ] must list a deployment
+printf '%s' "$READER_URL" | pnpm --filter @repo/matchbox-indexer exec wrangler secret put MATCHBOX_WAREHOUSE_URL --name matchbox-pro
 ```
 
-**[READ]** Check the Pro history status route once it is deployed (for
-example `GET /api/history/status`): `freshness.state` is `fresh`.
+The `secret put` deploys a new version of `matchbox-pro` immediately.
 
-Rollback: `pnpm --filter @repo/matchbox-indexer exec wrangler secret delete DATABASE_URL --name matchbox-pro`.
+**[READ]** Check: `curl -s https://pro.matchbox.markets/api/history/status`
+reports the warehouse as the source and `freshness.state` as `fresh`.
+
+Rollback: `pnpm --filter @repo/matchbox-indexer exec wrangler secret delete MATCHBOX_WAREHOUSE_URL --name matchbox-pro`.
+Pro falls back to the frozen explorer.
 
 ## 9. Watch for a day [READ]
 
@@ -350,7 +365,7 @@ subgraph storage left.
 ## Full rollback
 
 1. Webapp: `MEZO_ACTIVITY_SOURCE=explorer` (step 7). Pro: delete its
-   `DATABASE_URL` (step 8).
+   `MATCHBOX_WAREHOUSE_URL` (step 8).
 2. Indexer: remove the cron or delete the Worker (step 6).
 3. Database: keep `warehouse-production` for diagnosis, or delete it (step 1).
 

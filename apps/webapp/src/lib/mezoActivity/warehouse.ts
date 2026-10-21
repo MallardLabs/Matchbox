@@ -26,23 +26,43 @@ function columnFor(field: string): string {
   return `"${field.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`)}"`
 }
 
+// Fields the warehouse fills where the explorer left null, by action type
+// (docs/goldsky-exit.md, "Enrichments"). Classic reads them as null, as it did
+// from the explorer: claim drawers label a tokenId as a veMEZO lock, but pool
+// and validator claims are veBTC locks.
+const ENRICHED_FIELDS: Readonly<Record<string, readonly string[]>> = {
+  tokenId: ["VOTE_BRIBE_CLAIMED", "VOTE_FEE_CLAIMED"],
+  epochStart: ["INCENTIVE_ADDED"],
+}
+
+function selectFor(field: string): string {
+  const column = columnFor(field)
+  if (BOOLEAN_FIELDS.has(field)) return `${column} AS "${field}"`
+  const enrichedFor = ENRICHED_FIELDS[field]
+  if (enrichedFor) {
+    const types = enrichedFor.map((type) => `'${type}'`).join(", ")
+    return `CASE WHEN "action_type" IN (${types}) THEN NULL ELSE ${column}::text END AS "${field}"`
+  }
+  return `${column}::text AS "${field}"`
+}
+
 // matchbox.activity_events columns are the snake_case explorer fields. Cast
 // everything but booleans to text so rows match the explorer's strings.
-const ACTIVITY_SELECT = ACTIVITY_EVENT_FIELDS.map((field) =>
-  BOOLEAN_FIELDS.has(field)
-    ? `${columnFor(field)} AS "${field}"`
-    : `${columnFor(field)}::text AS "${field}"`,
-).join(", ")
+const ACTIVITY_SELECT = ACTIVITY_EVENT_FIELDS.map(selectFor).join(", ")
 
 /**
  * The explorer activity query in SQL. Actor scope matches the actor or the
  * recipient, like the explorer's two merged queries. Order is total
- * (timestamp, block, log index, id) so offset paging is stable.
+ * (timestamp, block, log index, id) so offset paging is stable. Only rows
+ * the explorer would have produced (explorer_parity) are read: the
+ * warehouse-only ones (voter bribe claims, voter rows before block
+ * 7,739,500) serve Matchbox Pro.
  */
 export function buildActivityQuery(options: SourceOptions): WarehouseQuery {
   const { params, add } = sqlParams()
   const where = [
     `"network" = ${add(WAREHOUSE_NETWORK)}`,
+    `"explorer_parity"`,
     `"timestamp" >= ${add(String(Math.trunc(options.fromTimestamp)))}`,
     `"timestamp" <= ${add(String(Math.trunc(options.toTimestamp)))}`,
   ]
