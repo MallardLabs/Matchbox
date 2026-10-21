@@ -238,7 +238,7 @@ Additions to the column lists above, all additive:
 - The view is `security_invoker = true`; `anon`/`authenticated` have no
   privileges on any v2 relation; no policies exist on `mbx_*` tables.
 
-### 4.5 Optional scopes and re-consent (migration `20261021000001`)
+### 4.5 Optional scopes and re-consent (migration `20261021000002`)
 
 - `mbx_dev_environments.optional_scopes text[] not null default '{}'` —
   requested OIDC scopes users may decline at consent. CHECKs: values in
