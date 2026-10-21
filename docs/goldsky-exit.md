@@ -250,10 +250,12 @@ the compute suspends after 5 idle minutes (not configurable). So:
   database. The initial load uses the same path.
 - **Size guard.** Ticks stop writing at 90% of `neon.max_cluster_size`, and
   `/health` reports the usage.
-- **Read cache.** The webapp caches every warehouse read for 5 minutes per
-  query (Workers Cache API plus a per-isolate memo), and the activity route
-  rounds its default window to that. Shorter TTLs would keep the compute
-  awake under steady traffic. The "as of" chip waits 45 minutes.
+- **Read cache.** The webapp and Pro cache every warehouse read for 5
+  minutes per query (Workers Cache API plus a per-isolate memo; Pro's is
+  `queryBatchCached`), and both round open-ended windows to that bucket.
+  Shorter TTLs would keep the compute awake under steady traffic. Both treat
+  up to 45 minutes of lag as fresh (the webapp's "as of" chip, Pro's
+  `STALE_SECONDS`).
 
 `apps/matchbox-indexer/GO-LIVE.md`, "Free-tier budget", has the numbers and
 what to watch.
