@@ -14,8 +14,14 @@ export const handleApiRequest = createApiHandler([
 ])
 
 export default {
-  async fetch(request: Request, env: WorkerEnv): Promise<Response> {
-    const api = await handleApiRequest(request, env)
+  async fetch(
+    request: Request,
+    env: WorkerEnv,
+    ctx: { waitUntil: (promise: Promise<unknown>) => void },
+  ): Promise<Response> {
+    const api = await handleApiRequest(request, env, (promise) =>
+      ctx.waitUntil(promise),
+    )
     if (api) return api
     if (!env.ASSETS) {
       return new Response("Not found", { status: 404 })

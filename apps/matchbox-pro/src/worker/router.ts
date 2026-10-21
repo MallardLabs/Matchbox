@@ -19,7 +19,12 @@ export type ApiContext = {
   url: URL
   env: WorkerEnv
   params: Record<string, string>
+  /** Keeps background work (cache refreshes) alive after the response. */
+  waitUntil: (promise: Promise<unknown>) => void
 }
+
+/** The part of the Workers ExecutionContext the router needs. */
+export type WaitUntil = (promise: Promise<unknown>) => void
 
 export type ApiRoute = {
   method: ApiMethod
@@ -54,6 +59,43 @@ export async function cached<T>(
   if (hit && hit.expires > Date.now()) return hit.value as T
   const value = await load()
   memo.set(key, { expires: Date.now() + ttlMs, value })
+  return value
+}
+
+const refreshing = new Set<string>()
+
+/**
+ * Like `cached`, but after `freshMs` it keeps serving the last value for up
+ * to `staleMs` more while one background refresh runs, so a request never
+ * waits on an expired cache that still has a recent value.
+ */
+export async function cachedStale<T>(
+  key: string,
+  ttl: { freshMs: number; staleMs: number },
+  load: () => Promise<T>,
+  waitUntil: WaitUntil,
+): Promise<T> {
+  const hit = memo.get(key)
+  const now = Date.now()
+  if (hit && hit.expires > now) return hit.value as T
+  if (hit && hit.expires + ttl.staleMs > now) {
+    if (!refreshing.has(key)) {
+      refreshing.add(key)
+      waitUntil(
+        load()
+          .then((value) => {
+            memo.set(key, { expires: Date.now() + ttl.freshMs, value })
+          })
+          .catch(() => {
+            // Keep serving the stale value; the next request retries.
+          })
+          .finally(() => refreshing.delete(key)),
+      )
+    }
+    return hit.value as T
+  }
+  const value = await load()
+  memo.set(key, { expires: Date.now() + ttl.freshMs, value })
   return value
 }
 
@@ -104,6 +146,9 @@ export function createApiHandler(routes: ApiRoute[]) {
   return async function handleApiRequest(
     request: Request,
     env: WorkerEnv = {},
+    waitUntil: WaitUntil = (promise) => {
+      void promise.catch(() => {})
+    },
   ): Promise<Response | null> {
     const url = new URL(request.url)
     if (!url.pathname.startsWith("/api/")) return null
@@ -134,7 +179,7 @@ export function createApiHandler(routes: ApiRoute[]) {
       const params = matchPath(route.path, url.pathname)
       if (!params) continue
       try {
-        return await route.handler({ request, url, env, params })
+        return await route.handler({ request, url, env, params, waitUntil })
       } catch (error) {
         if (error instanceof ApiError) {
           return errorResponse(error.status, error.publicMessage)
