@@ -8,8 +8,8 @@ import { SearchPaletteProvider } from "@/features/query/SearchPalette"
 import StuartWorkspace from "@/features/query/StuartWorkspace"
 import { DESKTOP_QUERY, useMediaQuery } from "@/hooks/useMediaQuery"
 import * as AppShell from "@repo/ui/app-shell"
-import { Outlet, createRootRoute } from "@tanstack/react-router"
-import { type ReactElement, type ReactNode, useState } from "react"
+import { Outlet, createRootRoute, useRouterState } from "@tanstack/react-router"
+import { type ReactElement, type ReactNode, useEffect, useState } from "react"
 
 export const Route = createRootRoute({
   component: RootLayout,
@@ -38,16 +38,53 @@ function LegacyWalletDialog({ children }: { children: ReactNode }) {
 
 function Shell(): ReactElement {
   const desktop = useMediaQuery(DESKTOP_QUERY)
+  const pathname = useRouterState({ select: (s) => s.location.pathname })
   const [userCollapsed, setUserCollapsed] = useState(false)
-  const collapsed = !desktop || userCollapsed
+  // Tablet keeps the rail; expanding opens the full sidebar over the page.
+  const [tabletOpen, setTabletOpen] = useState(false)
+  const overlay = !desktop && tabletOpen
+  const collapsed = desktop ? userCollapsed : !tabletOpen
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: close the overlay whenever the route changes
+  useEffect(() => {
+    setTabletOpen(false)
+  }, [pathname])
+
+  useEffect(() => {
+    if (!overlay) return
+    function onKey(event: KeyboardEvent): void {
+      if (event.key === "Escape") setTabletOpen(false)
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [overlay])
 
   return (
     <AppShell.Root className="overflow-x-clip">
       <AppShell.SkipLink />
+      {overlay ? (
+        <>
+          <div
+            aria-hidden="true"
+            className="hidden w-[72px] shrink-0 md:block"
+          />
+          <button
+            type="button"
+            aria-label="Close sidebar"
+            onClick={() => setTabletOpen(false)}
+            className="fixed inset-0 z-overlay cursor-default bg-scrim"
+          />
+        </>
+      ) : null}
       <Sidebar
         collapsed={collapsed}
-        canToggle={desktop}
-        onToggleCollapse={() => setUserCollapsed((value) => !value)}
+        canToggle
+        overlay={overlay}
+        onToggleCollapse={() =>
+          desktop
+            ? setUserCollapsed((value) => !value)
+            : setTabletOpen((value) => !value)
+        }
       />
       <AppShell.Body>
         <TopBar showTicker={collapsed} />

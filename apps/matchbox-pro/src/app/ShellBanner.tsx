@@ -104,7 +104,7 @@ function Strip({
       <span className="flex h-[22px] shrink-0 items-center rounded bg-accent-soft-2 px-2 text-caption font-700 text-accent-ink">
         {pill}
       </span>
-      <p className="m-0 hidden min-w-0 flex-1 truncate text-body-sm font-500 text-ink-2 sm:block">
+      <p className="sr-only m-0 min-w-0 flex-1 truncate text-body-sm font-500 text-ink-2 sm:not-sr-only sm:block">
         {message}
       </p>
       <span className="flex-1 sm:hidden" />
@@ -114,7 +114,7 @@ function Strip({
           type="button"
           onClick={onDismiss}
           aria-label={dismissLabel ?? "Dismiss"}
-          className="flex size-7 shrink-0 items-center justify-center rounded-md text-secondary transition-colors hover:bg-accent-soft-2 hover:text-ink"
+          className="flex size-9 shrink-0 items-center justify-center rounded-md text-secondary transition-colors hover:bg-accent-soft-2 hover:text-ink sm:size-7"
         >
           <X aria-hidden="true" size={14} strokeWidth={1.75} />
         </button>

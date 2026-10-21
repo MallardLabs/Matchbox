@@ -143,7 +143,9 @@ function ConnectDialog({
                           className="size-5 rounded"
                         />
                       ) : null}
-                      {connector.name}
+                      {connector.name === "Injected"
+                        ? "Browser wallet"
+                        : connector.name}
                     </span>
                     <ArrowRight
                       aria-hidden="true"

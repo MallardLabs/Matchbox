@@ -35,6 +35,8 @@ export default function MobileNav(): ReactElement {
             type="button"
             onClick={() => setMoreOpen(true)}
             aria-haspopup="dialog"
+            aria-expanded={moreOpen}
+            aria-current={moreActive ? "page" : undefined}
             className={
               moreActive
                 ? "flex h-full w-full flex-col items-center justify-center gap-1 text-caption font-600 text-ink [&_svg]:text-accent"
@@ -79,6 +81,7 @@ export default function MobileNav(): ReactElement {
                       href={item.href}
                       target="_blank"
                       rel="noreferrer"
+                      aria-label={`${item.label} (opens in a new tab)`}
                       className="flex h-12 items-center gap-3 rounded-lg px-3 text-nav font-500 text-ink hover:bg-inset"
                     >
                       <item.icon

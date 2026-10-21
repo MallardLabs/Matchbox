@@ -12,21 +12,28 @@ import { X_URL, isNavActive, moreNav, primaryNav } from "./nav"
 
 type SidebarProps = {
   collapsed: boolean
-  /** False when the viewport forces the icon rail (tablet). */
   canToggle: boolean
+  /** Tablet: the full sidebar opens over the page instead of beside it. */
+  overlay?: boolean
   onToggleCollapse: () => void
 }
 
 export default function Sidebar({
   collapsed,
   canToggle,
+  overlay = false,
   onToggleCollapse,
 }: SidebarProps): ReactElement {
   const pathname = useRouterState({ select: (s) => s.location.pathname })
   const { resolved } = useTheme()
 
   return (
-    <AppShell.Sidebar collapsed={collapsed}>
+    <AppShell.Sidebar
+      collapsed={collapsed}
+      className={
+        overlay ? "fixed inset-y-0 left-0 z-overlay shadow-dialog" : undefined
+      }
+    >
       <AppShell.SidebarHeader>
         {collapsed ? (
           <>
@@ -40,6 +47,7 @@ export default function Sidebar({
             {canToggle ? (
               <CollapseButton
                 label="Expand sidebar"
+                expanded={false}
                 onClick={onToggleCollapse}
               />
             ) : null}
@@ -55,6 +63,7 @@ export default function Sidebar({
             </Link>
             <CollapseButton
               label="Collapse sidebar"
+              expanded
               onClick={onToggleCollapse}
             />
           </>
@@ -127,9 +136,11 @@ export default function Sidebar({
 
 function CollapseButton({
   label,
+  expanded,
   onClick,
 }: {
   label: string
+  expanded: boolean
   onClick: () => void
 }): ReactElement {
   return (
@@ -137,6 +148,7 @@ function CollapseButton({
       type="button"
       onClick={onClick}
       aria-label={label}
+      aria-expanded={expanded}
       className="flex size-8 items-center justify-center rounded-md text-muted transition-colors hover:bg-inset hover:text-ink"
     >
       <PanelLeft aria-hidden="true" size={16} strokeWidth={1.75} />
