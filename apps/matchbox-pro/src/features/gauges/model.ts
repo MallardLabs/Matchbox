@@ -214,8 +214,12 @@ export type EpochTableRow = {
 }
 
 function historyRow(row: GaugeEpochRow): EpochTableRow {
+  // Sealed epochs are priced at earn; the current one at today's price.
   const unpriced = row.incentives.filter(
-    (token) => token.amount > 0n && token.usdAtEarnMicro === null,
+    (token) =>
+      token.amount > 0n &&
+      (row.status === "current" ? token.usdNowMicro : token.usdAtEarnMicro) ===
+        null,
   ).length
   return {
     key: String(row.epochStart),

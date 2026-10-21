@@ -62,7 +62,6 @@ function GaugeDetail({ address }: { address: Address }): ReactElement {
   const topology = useTopology()
   const { data: btcPrice = null } = useBtcPrice()
   const { data: mezoPrice = null, isLoading: mezoPriceLoading } = useMezoPrice()
-  const history = useGaugeEpochHistory(address, 8)
   const { viewer } = useViewer()
   const { open: openConnect } = useConnectDialog()
   const { isWatching, toggleWatching } = useGaugeWatchlist()
@@ -79,6 +78,13 @@ function GaugeDetail({ address }: { address: Address }): ReactElement {
 
   const gauge = gauges.find(
     (item) => item.address.toLowerCase() === address.toLowerCase(),
+  )
+  // Waits for the gauge so the first request already carries the veBTC token
+  // id that history needs to read each sealed epoch's boost.
+  const history = useGaugeEpochHistory(
+    gauge ? address : undefined,
+    8,
+    gauge?.veBTCTokenId,
   )
   const profile = profileForGauge(profiles.data, address)
   const rewardTokens = topology.data?.gauges.find(
