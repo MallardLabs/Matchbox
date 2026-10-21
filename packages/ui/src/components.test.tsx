@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event"
 import { type ReactElement, useState } from "react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import * as AlertDialog from "./alert-dialog"
+import { niceCeiling } from "./bar-chart"
 import * as Button from "./button"
 import { cn } from "./cn"
 import * as CopyField from "./copy-field"
@@ -213,5 +214,21 @@ describe("shortenAddress", () => {
       "0x8f3c…a063",
     )
     expect(shortenAddress("0x1234")).toBe("0x1234")
+  })
+})
+
+describe("niceCeiling", () => {
+  it("rounds up to a fine step so bars fill most of the plot", () => {
+    expect(niceCeiling(53_900)).toBe(60_000)
+    expect(niceCeiling(3.96)).toBe(4)
+    expect(niceCeiling(0.44)).toBe(0.5)
+    expect(niceCeiling(0.28)).toBe(0.3)
+    expect(niceCeiling(7_100)).toBe(8_000)
+    expect(niceCeiling(1_000)).toBe(1_000)
+  })
+
+  it("falls back to 1 for empty or invalid maxima", () => {
+    expect(niceCeiling(0)).toBe(1)
+    expect(niceCeiling(Number.NaN)).toBe(1)
   })
 })
