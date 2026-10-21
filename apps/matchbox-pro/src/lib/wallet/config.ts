@@ -32,7 +32,9 @@ const MAINNET_RPC = "https://rpc-internal.mezo.org"
 const TESTNET_RPC =
   import.meta.env.VITE_RPC_TESTNET_URL ?? "https://rpc.test.mezo.org"
 
-const MULTICALL_BATCH_SIZE_BYTES = 16_384
+// rpc-internal answers HTTP 413 past ~20 calls per JSON-RPC batch or ~4 KB
+// of calldata per multicall (see worker/history/chain.ts).
+const MULTICALL_BATCH_SIZE_BYTES = 4_096
 const JSON_RPC_BATCH_SIZE = 20
 
 function withHttpRpc(

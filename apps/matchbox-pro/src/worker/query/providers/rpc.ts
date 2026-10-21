@@ -8,11 +8,9 @@ export type MezoClient = ReturnType<typeof createMezoClient>
 
 const CHUNK = 200
 
-let mainnetClient: MezoClient | null = null
-
+/** A fresh client: viem clients must not be shared across requests. */
 export function mezoMainnet(): MezoClient {
-  mainnetClient ??= createMezoClient(CHAIN_ID.mainnet)
-  return mainnetClient
+  return createMezoClient(CHAIN_ID.mainnet)
 }
 
 export const bigintSchema = z.bigint()

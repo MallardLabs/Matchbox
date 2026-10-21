@@ -8,6 +8,7 @@ import {
   parseAbi,
 } from "viem"
 import { chunkArray } from "../../lib/chunk"
+import { isolatedRpcUrl } from "../mezoClient"
 
 // Mezo RPC access for history reads. rpc-internal is an archive node and
 // answers JSON-RPC batches of up to ~20 calls; larger batches or multicalls
@@ -52,10 +53,13 @@ export const ORACLE_ABI = parseAbi([
   "function decimals() view returns (uint8)",
 ])
 
-let client: PublicClient | undefined
-
+/**
+ * A fresh client per call: viem's batch queues and in-flight dedupe are
+ * per client (and per URL), and Workers cancels a request that waits on I/O
+ * started by another request.
+ */
 export function mezoHistoryClient(): PublicClient {
-  client ??= createPublicClient({
+  return createPublicClient({
     chain: {
       id: CHAIN_ID.mainnet,
       name: "Mezo",
@@ -67,7 +71,7 @@ export function mezoHistoryClient(): PublicClient {
     },
     transport: fallback(
       MEZO_RPCS.map((url) =>
-        http(url, {
+        http(isolatedRpcUrl(url), {
           batch: { batchSize: RPC_BATCH_SIZE },
           fetchOptions: { cache: "no-store" },
           retryCount: 1,
@@ -76,7 +80,6 @@ export function mezoHistoryClient(): PublicClient {
       ),
     ),
   })
-  return client
 }
 
 export type ReadCall = {
