@@ -291,18 +291,20 @@ describe("ledger model", () => {
     expect(formatUsdTick(500)).toBe("$500")
   })
 
-  it("charts the last six sealed epochs, newest current, then Next", () => {
-    const epochs = Array.from({ length: 8 }, (_, index) =>
+  it("charts the last eight sealed epochs, newest current, then Next", () => {
+    const epochs = Array.from({ length: 10 }, (_, index) =>
       sealed(
-        current - (8 - index) * EPOCH_SECONDS,
+        current - (10 - index) * EPOCH_SECONDS,
         index === 3 ? null : 100_000_000n,
       ),
     )
     const bars = realizedBars(epochs, 24_000_000n)
-    expect(bars).toHaveLength(7)
+    expect(bars).toHaveLength(9)
     expect(bars.map((bar) => bar.tone)).toEqual([
       "past",
       "unavailable",
+      "past",
+      "past",
       "past",
       "past",
       "past",
@@ -310,7 +312,7 @@ describe("ledger model", () => {
       "projected",
     ])
     expect(bars[1]?.display).toBe("—")
-    expect(bars[6]?.label).toBe("Next")
+    expect(bars[8]?.label).toBe("Next")
     expect(realizedBars([], null)[0]?.tone).toBe("unavailable")
   })
 

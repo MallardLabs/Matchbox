@@ -9,17 +9,14 @@ import {
 import { useVeMEZOLocks } from "@/hooks/useLocks"
 import { usePersonalProjected } from "@/hooks/usePersonalProjected"
 import { profileForGauge, useGaugeProfiles } from "@/hooks/useProfiles"
-import { useRewardClaims } from "@/hooks/useRewardClaims"
 import { formatMicroUsd } from "@/lib/money"
 import { useNetwork } from "@/lib/network"
 import { type Viewer, useViewer } from "@/lib/viewer"
 import * as Button from "@repo/ui/button"
 import * as EmptyState from "@repo/ui/empty-state"
-import { useQueryClient } from "@tanstack/react-query"
 import { LoaderCircle } from "lucide-react"
 import { type ReactElement, type ReactNode, useMemo, useState } from "react"
 import ClaimPanel from "./ClaimPanel"
-import ClaimSheet from "./ClaimSheet"
 import EpochLedger from "./EpochLedger"
 import RealizedChart from "./RealizedChart"
 import ToggleChip from "./ToggleChip"
@@ -38,7 +35,8 @@ import {
   periodFrom,
   realizedBars,
 } from "./ledgerModel"
-import { useClaimEstimate, useClaimRun } from "./useClaimRun"
+import { useClaimFlow } from "./useClaimFlow"
+import { useClaimEstimate } from "./useClaimRun"
 import { useClaimSources } from "./useClaimSources"
 
 export default function RewardsPage(): ReactElement {
@@ -110,7 +108,6 @@ function RewardsWallet({
   const [now] = useState(() => Math.floor(Date.now() / 1000))
   const [period, setPeriod] = useState<PeriodId>("last-8")
   const [excluded, setExcluded] = useState<ReadonlySet<string>>(new Set())
-  const [sheetOpen, setSheetOpen] = useState(false)
 
   const claim = useClaimSources()
   const locks = useVeMEZOLocks()
@@ -119,10 +116,8 @@ function RewardsWallet({
     [locks.locks],
   )
   const projection = usePersonalProjected(tokenIds)
-  const receipts = useRewardClaims()
-  const run = useClaimRun()
+  const flow = useClaimFlow(() => setExcluded(new Set()))
   const { data: profiles } = useGaugeProfiles()
-  const queryClient = useQueryClient()
 
   const earnings = useWalletEarnings(address, CHART_EPOCHS)
   const from = periodFrom(period, now)
@@ -202,7 +197,6 @@ function RewardsWallet({
   ].join(" · ")
 
   // Claim action and the line under the amount.
-  const running = run.phase === "running"
   let action: ReactNode
   let note: ReactNode = null
   let noteTone: "accent" | "muted" | "warn" = "accent"
@@ -221,9 +215,9 @@ function RewardsWallet({
     )
     note = "Wrong network"
     noteTone = "warn"
-  } else if (running) {
+  } else if (flow.running) {
     action = (
-      <ClaimButton aria-busy onClick={() => setSheetOpen(true)}>
+      <ClaimButton aria-busy onClick={flow.reopen}>
         <LoaderCircle
           aria-hidden="true"
           size={13}
@@ -233,7 +227,7 @@ function RewardsWallet({
         Claiming
       </ClaimButton>
     )
-  } else if (receipts.pending) {
+  } else if (flow.confirming) {
     action = <ClaimButton loading>Confirming</ClaimButton>
   } else if (claim.status === "error") {
     action = (
@@ -250,8 +244,7 @@ function RewardsWallet({
           claim.status !== "ready" || claim.isFetching || selected.length === 0
         }
         onClick={() => {
-          run.start(selected)
-          setSheetOpen(true)
+          flow.start(selected)
         }}
       >
         {selected.length < claim.sources.length
@@ -366,27 +359,12 @@ function RewardsWallet({
         loadingMore={ledger.isFetchingNextPage}
         onLoadMore={ledger.fetchNextPage}
         onRetry={() => {
-          void queryClient.invalidateQueries({ queryKey: ["history"] })
+          ledger.refetch()
+          earnings.refetch?.()
         }}
       />
 
-      {run.run && run.phase ? (
-        <ClaimSheet
-          open={sheetOpen}
-          sources={run.run.sources}
-          steps={run.run.steps}
-          phase={run.phase}
-          explorer={receipts.explorer}
-          onRetry={run.retry}
-          onOpenChange={(open) => {
-            setSheetOpen(open)
-            if (!open && run.phase !== "running") {
-              run.close()
-              setExcluded(new Set())
-            }
-          }}
-        />
-      ) : null}
+      {flow.sheet}
     </div>
   )
 }

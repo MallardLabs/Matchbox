@@ -38,7 +38,7 @@ export function periodFrom(
 }
 
 /** Sealed epochs the chart draws before the projected "Next" bar. */
-export const CHART_EPOCHS = 6
+export const CHART_EPOCHS = 8
 
 const MONTHS = [
   "Jan",

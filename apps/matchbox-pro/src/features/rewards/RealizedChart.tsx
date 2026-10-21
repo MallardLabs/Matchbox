@@ -28,6 +28,7 @@ export default function RealizedChart({
         bars={bars}
         title="Realized by epoch, USD at earn"
         formatTick={formatUsdTick}
+        spacing="compact"
         className="pt-2"
       />
     </section>

@@ -182,6 +182,17 @@ export function sourceTokens(sources: ClaimSource[]): TokenTotal[] {
   return sumTokens(sources.map((source) => source.tokens))
 }
 
+const KIND_GROUP: Record<ClaimSourceKind, string> = {
+  "boost-bribes": "veBTC gauges",
+  "pool-rewards": "Pools",
+  "validator-bribes": "Validators",
+}
+
+/** Family heading for grouped breakdowns (J03: veBTC gauges · Pools · Validators). */
+export function sourceGroupLabel(kind: ClaimSourceKind): string {
+  return KIND_GROUP[kind]
+}
+
 export function sourceLabel(source: ClaimSource): string {
   return `${KIND_LABEL[source.kind].full} · ${source.escrow} #${source.tokenId}`
 }
