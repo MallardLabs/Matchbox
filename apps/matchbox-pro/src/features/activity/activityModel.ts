@@ -113,29 +113,8 @@ export function groupEvents(items: ActivityItem[]): ActivityEvent[] {
 
 export type Escrow = "veMEZO" | "veBTC"
 
-/**
- * Escrow behind a row: BoostVoter ballots are veMEZO, pool/validator veBTC.
- * Lock rows (source VOTING_ESCROW) fall back to the wallet's own lock ids.
- */
-export function escrowOf(item: ActivityItem, names?: Names): Escrow | null {
-  if (item.source === "BOOST_VOTER" || item.source === "THIRD_PARTY_VOTER") {
-    return "veMEZO"
-  }
-  if (item.source === "POOLS_VOTER" || item.source === "VALIDATORS_VOTER") {
-    return "veBTC"
-  }
-  if (item.kind === "boost_refreshed") return "veBTC"
-  if (item.tokenId !== null && names?.lock) return names.lock(item.tokenId)
-  return null
-}
-
-export type TokenMeta = { symbol: string; decimals: number }
-
 export type Names = {
   gauge: (address: string) => string | null
-  token: (address: string) => TokenMeta | null
-  /** Escrow of one of the viewed wallet's own locks; null when unknown. */
-  lock?: ((tokenId: bigint) => Escrow | null) | undefined
 }
 
 function short(address: string): string {
@@ -199,7 +178,7 @@ function first(event: ActivityEvent): ActivityItem {
 /** "Voted · veMEZO #4821" — the short title used on phones and in the panel. */
 export function eventTitle(event: ActivityEvent, names: Names): string {
   const item = first(event)
-  const lock = lockRef(escrowOf(item, names), item.tokenId)
+  const lock = lockRef(item.escrow, item.tokenId)
   switch (event.kind) {
     case "voted":
       return ["Voted", lock].filter(Boolean).join(" · ")
@@ -276,42 +255,49 @@ export function eventLine(event: ActivityEvent, names: Names): string {
 }
 
 /** Native amounts by token ("241.20 MEZO"), or null when the event has none. */
-export function eventAmount(event: ActivityEvent, names: Names): string | null {
+export function eventAmount(event: ActivityEvent): string | null {
   const item = first(event)
-  if (event.kind === "lock_increased" && item.lock) {
-    const { prevAmount, postAmount } = item.lock
-    if (prevAmount !== null && postAmount !== null && postAmount > prevAmount) {
-      const meta = lockToken(escrowOf(item, names))
-      return meta
-        ? `+${formatNative(postAmount - prevAmount, meta.decimals)} ${meta.symbol}`
-        : null
-    }
-  }
   if (event.kind.startsWith("lock_")) {
-    const amount = item.lock?.postAmount ?? item.amount
-    const meta = lockToken(escrowOf(item, names))
-    if (amount === null || amount === 0n || !meta) return null
-    return `${formatNative(amount, meta.decimals)} ${meta.symbol}`
+    if (item.symbol === null || item.decimals === null) return null
+    const prev = item.lock?.prevAmount ?? null
+    const post = item.lock?.postAmount ?? null
+    if (
+      event.kind === "lock_increased" &&
+      prev !== null &&
+      post !== null &&
+      post > prev
+    ) {
+      return `+${formatNative(post - prev, item.decimals)} ${item.symbol}`
+    }
+    const amount = post ?? item.amount
+    if (amount === null || amount === 0n) return null
+    return `${formatNative(amount, item.decimals)} ${item.symbol}`
   }
-  const totals = new Map<string, bigint>()
+  const totals = new Map<
+    string,
+    { amount: bigint; symbol: string; decimals: number }
+  >()
   for (const row of event.items) {
-    if (!row.token || row.amount === null) continue
+    if (
+      !row.token ||
+      row.amount === null ||
+      row.symbol === null ||
+      row.decimals === null
+    ) {
+      continue
+    }
     const key = row.token.toLowerCase()
-    totals.set(key, (totals.get(key) ?? 0n) + row.amount)
+    const current = totals.get(key)
+    totals.set(key, {
+      amount: (current?.amount ?? 0n) + row.amount,
+      symbol: row.symbol,
+      decimals: row.decimals,
+    })
   }
-  const parts: string[] = []
-  for (const [token, amount] of totals) {
-    const meta = names.token(token)
-    if (!meta) continue
-    parts.push(`${formatNative(amount, meta.decimals)} ${meta.symbol}`)
-  }
+  const parts = Array.from(totals.values()).map(
+    (total) => `${formatNative(total.amount, total.decimals)} ${total.symbol}`,
+  )
   return parts.length > 0 ? parts.join(" · ") : null
-}
-
-function lockToken(escrow: Escrow | null): TokenMeta | null {
-  if (escrow === "veMEZO") return { symbol: "MEZO", decimals: 18 }
-  if (escrow === "veBTC") return { symbol: "BTC", decimals: 18 }
-  return null
 }
 
 /** Voting power a ballot used (Σ vote weights), 18-decimal ve units. */
@@ -382,7 +368,7 @@ export function activityCsvRows(
       event.txHash,
       event.kind,
       eventLine(event, names),
-      eventAmount(event, names),
+      eventAmount(event),
       event.status,
       item.tokenId === null ? null : item.tokenId.toString(),
       Array.from(

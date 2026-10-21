@@ -103,7 +103,7 @@ export default function EventTable({
             ))
           : events.map((event) => {
               const selected = event.id === selectedId
-              const amount = eventAmount(event, names)
+              const amount = eventAmount(event)
               return (
                 <tr
                   key={event.id}

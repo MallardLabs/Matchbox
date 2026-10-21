@@ -8,7 +8,6 @@ import {
   type Names,
   allocation,
   allocationText,
-  escrowOf,
   eventAmount,
   eventTitle,
   formatWhen,
@@ -69,9 +68,8 @@ export default function EventDetail({
 }: EventDetailProps): ReactElement {
   const title = eventTitle(event, names)
   const power = powerUsed(event)
-  const head = event.items[0]
-  const escrow = head ? escrowOf(head, names) : null
-  const amount = eventAmount(event, names)
+  const escrow = event.items[0]?.escrow ?? null
+  const amount = eventAmount(event)
   const lines = allocation(event, names)
   const permalink =
     address && event.txHash ? permalinkPath(address, event.txHash) : null

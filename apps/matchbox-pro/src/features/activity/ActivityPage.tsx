@@ -20,7 +20,6 @@ import * as Button from "@repo/ui/button"
 import { cn } from "@repo/ui/cn"
 import * as Dialog from "@repo/ui/dialog"
 import { shortenAddress } from "@repo/ui/wallet-address"
-import { useQueryClient } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
 import { History } from "lucide-react"
 import { type ReactElement, useMemo, useState } from "react"
@@ -86,15 +85,11 @@ export default function ActivityPage({
   const client = usePublicClient({ chainId })
   const explorer = client?.chain?.blockExplorers?.default.url
   const desktop = useMediaQuery(DESKTOP_QUERY)
-  const queryClient = useQueryClient()
+  const names = useActivityNames()
 
   const wallet = pinned ?? viewer.address
-  const own =
-    !!viewer.address &&
-    (!pinned || pinned.toLowerCase() === viewer.address.toLowerCase())
   const [now] = useState(() => Math.floor(Date.now() / 1000))
   const [scope, setScope] = useState<Scope>(wallet ? "wallet" : "protocol")
-  const names = useActivityNames(own && scope === "wallet")
   const [kind, setKind] = useState<KindFilter>("all")
   const [range, setRange] = useState<Range>("last-8")
   const [pageSize, setPageSize] = useState<number>(50)
@@ -110,9 +105,9 @@ export default function ActivityPage({
     scope === "wallet" ? wallet : undefined,
     filters,
   )
-  const protocolFeed = useProtocolActivity(
-    scope === "protocol" ? filters : { limit: 1 },
-  )
+  const protocolFeed = useProtocolActivity(filters, {
+    enabled: scope === "protocol",
+  })
   const feed: HistoryPagesResult<ActivityItem> =
     scope === "wallet" ? walletFeed : protocolFeed
   const tx = useActivityTx(txHash, wallet)
@@ -129,6 +124,13 @@ export default function ActivityPage({
     events[0] ??
     null
 
+  // Permalink to a tx the index hasn't got (yet): say so instead of
+  // silently showing another event.
+  const txMissing =
+    txHash && tx.status === "ready" && tx.data && tx.data.index !== "indexed"
+      ? tx.data.index
+      : null
+
   const freshness = feed.freshness
   const stale = freshness?.state === "stale"
   const lagSeconds = freshness?.lagSeconds ?? null
@@ -138,7 +140,8 @@ export default function ActivityPage({
       : (selected?.items[0]?.txFrom ?? selected?.items[0]?.actor ?? null)
 
   function retry(): void {
-    void queryClient.invalidateQueries({ queryKey: ["history"] })
+    feed.refetch()
+    if (txHash) tx.refetch?.()
   }
 
   function exportCsv(): void {
@@ -280,6 +283,17 @@ export default function ActivityPage({
         </span>
       </div>
 
+      {txMissing && txHash ? (
+        <p aria-live="polite" className="text-body-sm text-warn">
+          Tx{" "}
+          <span className="font-mono">{`${txHash.slice(0, 6)}…${txHash.slice(-4)}`}</span>{" "}
+          ·{" "}
+          {txMissing === "pending_index"
+            ? "not indexed yet"
+            : "not found in the index"}
+        </p>
+      ) : null}
+
       {scope === "wallet" && !wallet ? (
         <EmptyBox title="No wallet connected">
           <Button.Root size="md" onClick={openConnect}>
@@ -322,7 +336,7 @@ export default function ActivityPage({
               names={names}
               stale={stale}
               selectedId={
-                desktop || picked !== null || txHash
+                desktop || picked !== null || pinnedEvent
                   ? (selected?.id ?? null)
                   : null
               }
@@ -392,7 +406,10 @@ export default function ActivityPage({
       )}
 
       {selected && !desktop ? (
-        <Dialog.Root open={sheetOpen} onOpenChange={setSheetOpen}>
+        <Dialog.Root
+          open={sheetOpen && (picked !== null || !!pinnedEvent)}
+          onOpenChange={setSheetOpen}
+        >
           <Dialog.Content
             placement="sheet"
             size="sm"

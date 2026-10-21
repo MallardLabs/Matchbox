@@ -48,15 +48,15 @@ function item(overrides: Partial<ActivityItem>): ActivityItem {
     boost: null,
     boostableTokenId: null,
     lock: undefined,
+    escrow: "veMEZO",
+    symbol: null,
+    decimals: null,
     ...overrides,
   }
 }
 
 const names: Names = {
   gauge: (address) => (address === G1 ? "Stackbridge" : null),
-  token: (address) =>
-    address.toLowerCase() === MEZO ? { symbol: "MEZO", decimals: 18 } : null,
-  lock: (tokenId) => (tokenId === 4821n ? "veMEZO" : null),
 }
 
 describe("groupEvents", () => {
@@ -99,6 +99,8 @@ describe("groupEvents", () => {
         gauge: G1,
         token: MEZO,
         amount: 200n * E18,
+        symbol: "MEZO",
+        decimals: 18,
       }),
       item({
         id: "c2",
@@ -108,10 +110,12 @@ describe("groupEvents", () => {
         gauge: G1,
         token: MEZO,
         amount: 41_200_000_000_000_000_000n,
+        symbol: "MEZO",
+        decimals: 18,
       }),
     ])
     if (!event) throw new Error("missing event")
-    expect(eventAmount(event, names)).toBe("241.20 MEZO")
+    expect(eventAmount(event)).toBe("241.20 MEZO")
     expect(eventLine(event, names)).toBe("Claimed · bribes · Stackbridge")
   })
 })
@@ -124,6 +128,8 @@ describe("event labels", () => {
         actionType: "LOCK_AMOUNT_INCREASED",
         source: "VOTING_ESCROW",
         tokenId: 4821n,
+        symbol: "MEZO",
+        decimals: 18,
         lock: {
           prevAmount: 10_000n * E18,
           postAmount: 12_000n * E18,
@@ -137,7 +143,7 @@ describe("event labels", () => {
       }),
     ])
     if (!increased) throw new Error("missing event")
-    expect(eventAmount(increased, names)).toBe("+2,000.00 MEZO")
+    expect(eventAmount(increased)).toBe("+2,000.00 MEZO")
   })
 
   it("describes merges and boost refreshes", () => {
