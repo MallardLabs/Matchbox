@@ -24,6 +24,7 @@ import {
 } from "@rainbow-me/rainbowkit/wallets"
 import { mainnet } from "viem/chains"
 import { http, type Config } from "wagmi"
+import { mezoTransport } from "./rpcWrite"
 
 const WALLET_CONNECT_PROJECT_ID =
   import.meta.env.VITE_WALLET_CONNECT_PROJECT_ID ?? ""
@@ -105,14 +106,8 @@ export const wagmiConfig: Config = getDefaultConfig({
     },
   },
   transports: {
-    [mezoMainnet.id]: http(MAINNET_RPC, {
-      batch: { batchSize: JSON_RPC_BATCH_SIZE },
-      fetchOptions: { cache: "no-store" },
-    }),
-    [mezoTestnet.id]: http(TESTNET_RPC, {
-      batch: { batchSize: JSON_RPC_BATCH_SIZE },
-      fetchOptions: { cache: "no-store" },
-    }),
+    [mezoMainnet.id]: mezoTransport(MAINNET_RPC, JSON_RPC_BATCH_SIZE),
+    [mezoTestnet.id]: mezoTransport(TESTNET_RPC, JSON_RPC_BATCH_SIZE),
     [mainnet.id]: http("https://cloudflare-eth.com", {
       batch: { batchSize: JSON_RPC_BATCH_SIZE },
       fetchOptions: { cache: "no-store" },

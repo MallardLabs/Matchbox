@@ -1,4 +1,8 @@
 import { BaseError } from "viem"
+import {
+  EMPTY_RAW_TX_MESSAGE,
+  isEmptyRawTransactionError,
+} from "./wallet/rpcWrite"
 
 export type WriteErrorKind =
   | "rejected"
@@ -56,6 +60,10 @@ export function describeWriteError(error: unknown): WriteFailure {
       kind: "unsupported",
       message: "This wallet can't bundle these calls.",
     }
+  }
+  const raw = error instanceof Error ? error.message : ""
+  if (isEmptyRawTransactionError(raw)) {
+    return { kind: "unknown", message: EMPTY_RAW_TX_MESSAGE }
   }
   const name = error instanceof Error ? error.name : ""
   if (name === "WaitForCallsStatusTimeoutError" || name === "TimeoutError") {
