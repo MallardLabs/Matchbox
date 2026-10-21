@@ -77,12 +77,29 @@ test("buildActivityQuery binds every filter as a parameter", () => {
 
 test("buildActivityQuery selects every explorer field in explorer names", () => {
   const query = buildActivityQuery(BASE)
-  assert.match(query.text, /"token_id"::text AS "tokenId"/)
+  assert.match(query.text, /"amount"::text AS "amount"/)
   assert.match(
     query.text,
     /"merge_dest_prev_is_permanent" AS "mergeDestPrevIsPermanent"/,
   )
   assert.match(query.text, /"timestamp"::text AS "timestamp"/)
+})
+
+test("buildActivityQuery reads only explorer-parity rows", () => {
+  const query = buildActivityQuery(BASE)
+  assert.match(query.text, /WHERE "network" = \$1 AND "explorer_parity" AND/)
+})
+
+test("buildActivityQuery reads the warehouse enrichments as null", () => {
+  const query = buildActivityQuery(BASE)
+  assert.match(
+    query.text,
+    /CASE WHEN "action_type" IN \('VOTE_BRIBE_CLAIMED', 'VOTE_FEE_CLAIMED'\) THEN NULL ELSE "token_id"::text END AS "tokenId"/,
+  )
+  assert.match(
+    query.text,
+    /CASE WHEN "action_type" IN \('INCENTIVE_ADDED'\) THEN NULL ELSE "epoch_start"::text END AS "epochStart"/,
+  )
 })
 
 test("warehouse rows map to the same items as explorer rows", () => {

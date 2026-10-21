@@ -161,9 +161,12 @@ Intended differences, in addition to the two listed under the parity result:
 - **Votes table.** `matchbox.votes` gains the (voter, tokenId, gauge) rows
   last touched before block 7,739,500, so it no longer matches the explorer's
   7,870 `Vote` entities.
-- **Webapp feed.** `/api/activity` in warehouse mode returns the
-  warehouse-only rows too (boost and validator bribe claims, pre-March voter
-  rows). Readers that need explorer semantics filter on `explorer_parity`.
+- **Classic stays on explorer semantics.** The webapp's warehouse activity
+  query (`apps/webapp/src/lib/mezoActivity/warehouse.ts`) reads only
+  `explorer_parity` rows and returns the two enrichments as null. Its claim
+  drawers would otherwise call veBTC lock ids "veMEZO token". The gauges
+  routes need no filter: no warehouse-only row matches their action types
+  and sources. Matchbox Pro reads every row.
 - **Trove amounts.** `debt_change` is exact to the wei except across an
   interest checkpoint that emitted no event (`updateSystemAndTroveInterest`
   is public): each one can shift it by 1 wei. A closed, liquidated or fully
@@ -225,8 +228,9 @@ outward-facing step marked. In short:
    the two logins, backfill from block 178,630, project, and pass `parity`.
 2. Cloudflare (mallard account): deploy `matchbox-indexer` with its 1-minute
    cron and `DATABASE_URL` secret. On the `matchbox` Worker, set
-   `MATCHBOX_WAREHOUSE_URL` and `MEZO_ACTIVITY_SOURCE=warehouse`; on
-   `matchbox-pro`, set `DATABASE_URL` to the read-only URL.
+   `MATCHBOX_WAREHOUSE_URL` and `MEZO_ACTIVITY_SOURCE=warehouse`. After
+   Pro's first deploy, set `MATCHBOX_WAREHOUSE_URL` on `matchbox-pro` to the
+   same read-only URL.
 3. Watch lag and per-type counts for a day.
 4. Delete `matchbox-explorer/3.4.0`. Matchbox then has no Goldsky subgraph
    storage.
