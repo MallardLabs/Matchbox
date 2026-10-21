@@ -17,6 +17,7 @@ import { type AskOptions, useStuart } from "./StuartProvider"
 import { type AnswerAction, answerActions, visibleFollowups } from "./actions"
 import { AllocationDiff } from "./blocks/AllocationDiff"
 import { BridgeRecords } from "./blocks/BridgeRecords"
+import { ClaimReview } from "./blocks/ClaimReview"
 import { Clarification } from "./blocks/Clarification"
 import { GaugeExplain } from "./blocks/GaugeExplain"
 import { LoanPosition, ScenarioModel } from "./blocks/LoanBlocks"
@@ -53,7 +54,7 @@ const RICH_BLOCKS = new Set<UiBlock["type"]>([
   "gauge_ranking",
   "loan_position",
   "liquidation_scenario",
-  "gauge_explain",
+  "claim_review",
   "zap_route",
   "support_report_preview",
   "clarification_card",
@@ -610,9 +611,16 @@ function BlockView({
       return <GaugeExplain block={block} />
     case "allocation_diff":
       return <AllocationDiff diff={block} actions={null} />
+    case "claim_review":
+      // A surplus claim under its loan is already stated by the loan block.
+      return block.rows.every((row) => row.source === "collateral_surplus") &&
+        response.uiBlocks.some(
+          (item) => item.type === "loan_position",
+        ) ? null : (
+        <ClaimReview block={block} />
+      )
     case "source_cluster":
     case "repay_review":
-    case "claim_review":
     case "activity_trace":
       return null
     default: {

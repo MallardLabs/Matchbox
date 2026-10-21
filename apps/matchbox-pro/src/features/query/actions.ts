@@ -215,7 +215,14 @@ export function answerActions(input: Input): AnswerAction[] {
       }
       case "claim_review": {
         const proposal = input.proposalFor(block.proposalId)
-        if (proposal) {
+        const surplusOfLoan =
+          proposal?.kind === "claim_surplus" &&
+          input.blocks.some(
+            (item) =>
+              item.type === "loan_position" &&
+              item.actions.includes("claim_collateral_surplus"),
+          )
+        if (proposal && !surplusOfLoan) {
           out.push({
             key: `${block.id}-review`,
             label: "Review claim",

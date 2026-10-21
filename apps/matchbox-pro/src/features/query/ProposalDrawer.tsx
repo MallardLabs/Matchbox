@@ -9,6 +9,7 @@ import type { ReactElement, ReactNode } from "react"
 import { useStuart } from "./StuartProvider"
 import VoteReview from "./VoteReview"
 import { diffReasons } from "./blocks/AllocationDiff"
+import { CLAIM_SOURCE_COPY } from "./blocks/ClaimReview"
 import { approvalsCopy, simulationCopy } from "./blocks/ZapRoute"
 import type {
   ClaimReviewBlock,
@@ -82,14 +83,6 @@ const BLOCKED_COPY: Record<NonNullable<Proposal["blockedReason"]>, string> = {
   already_voted_this_epoch: "Already voted this epoch.",
   nothing_to_claim: "Nothing to claim.",
 }
-
-const SOURCE_COPY: Record<ClaimReviewBlock["rows"][number]["source"], string> =
-  {
-    boost_bribes: "Boost incentives",
-    pool_fees_bribes: "Pool fees",
-    validator_bribes: "Validator incentives",
-    collateral_surplus: "BTC surplus",
-  }
 
 function isBlock<T extends UiBlock["type"]>(
   block: UiBlock,
@@ -634,7 +627,7 @@ function Summary({
               className="flex items-baseline justify-between gap-3 border-b border-line py-2"
             >
               <span className="text-muted">
-                {SOURCE_COPY[row.source]}
+                {CLAIM_SOURCE_COPY[row.source]}
                 {row.tokenId ? ` · #${row.tokenId}` : ""}
               </span>
               <span className="tabular-nums text-ink">
@@ -658,6 +651,7 @@ function Summary({
           <>
             <DetailRow label="Min received">
               {formatToken(proposal.quote?.minOut ?? zap.minReceived)}
+              <span className="text-secondary"> · extra stays in wallet</span>
             </DetailRow>
             <DetailRow label="Vault shares" className="hidden sm:flex">
               {zap.shares ? formatToken(zap.shares) : "—"}

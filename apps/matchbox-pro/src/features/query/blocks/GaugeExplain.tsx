@@ -43,7 +43,7 @@ function Metric({
     <div className="flex min-w-0 flex-col gap-1 px-3 py-3 xl:py-0">
       <dt className="text-caption text-muted">{label}</dt>
       <dd className="m-0 flex flex-col gap-1">
-        <span className="truncate text-title-sm font-600 tabular-nums text-ink">
+        <span className="break-words text-lead font-600 tabular-nums text-ink sm:text-title-sm">
           {value}
         </span>
         {detail ? (

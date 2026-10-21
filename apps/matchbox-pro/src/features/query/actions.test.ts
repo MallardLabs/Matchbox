@@ -115,6 +115,43 @@ describe("answer actions", () => {
   })
 })
 
+describe("surplus claims", () => {
+  it("shows one Claim BTC surplus button for a loan with a surplus claim", () => {
+    const surplus = proposalFixture({
+      proposalId: "claim_surplus_1",
+      kind: "claim_surplus",
+      atomicity: "single",
+      content: {
+        kind: "claim_surplus",
+        amount: { raw: "663000000000000000", decimals: 18, symbol: "BTC" },
+      },
+    })
+    const loan = {
+      type: "loan_position",
+      version: 1,
+      id: "loan",
+      evidenceRefs: [],
+      actions: ["claim_collateral_surplus"],
+    } as unknown as UiBlock
+    const claim: UiBlock = {
+      type: "claim_review",
+      version: 1,
+      id: "claim",
+      evidenceRefs: [],
+      proposalId: "claim_surplus_1",
+      rows: [],
+      totalUsd: null,
+      unpricedCount: 0,
+      signatures: { count: 1, atomic: true },
+      irreversibilityNote: "claim_final",
+    }
+    const actions = actionsFor([loan, claim], [surplus])
+    expect(actions.map((action) => [action.label, action.kind])).toEqual([
+      ["Claim BTC surplus", "review"],
+    ])
+  })
+})
+
 describe("visible follow-ups", () => {
   it("drops follow-ups that repeat an action label or page", () => {
     const response = responseFixture()

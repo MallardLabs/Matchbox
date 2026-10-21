@@ -151,7 +151,10 @@ export function ZapRoute({
             <span className="text-secondary"> · {formatUsd(youPayUsd)}</span>
           ) : null}
         </DetailRow>
-        <DetailRow label="Min received">{formatToken(minReceived)}</DetailRow>
+        <DetailRow label="Min received">
+          {formatToken(minReceived)}
+          <span className="text-secondary"> · extra stays in wallet</span>
+        </DetailRow>
         <DetailRow
           label="Price impact"
           tone={
