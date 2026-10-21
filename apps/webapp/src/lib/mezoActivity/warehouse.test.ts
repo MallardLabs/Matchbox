@@ -4,6 +4,7 @@ import { mapActivityEventRow } from "@/lib/mezoActivity/activityEvent"
 import { buildThirdPartyRewardQuery } from "@/lib/mezoGauges/warehouse"
 import {
   WAREHOUSE_CACHE_SECONDS,
+  WAREHOUSE_TIMEOUT_MS,
   WarehouseUnavailableError,
   cacheableNow,
   cachedWarehouseRead,
@@ -11,18 +12,26 @@ import {
   isWarehouseSource,
   parseIndexedThrough,
   queryWarehouse,
+  resetWarehouseBreaker,
+  warehouseReadable,
   warehouseSql,
+  withWarehouseFallback,
 } from "@/lib/warehouse"
 import { CHAIN_ID } from "@repo/shared/contracts"
 import { z } from "zod"
+import { fetchMezoActivity } from "./dataSources"
 import { buildActivityQuery, mapWarehouseRows } from "./warehouse"
 import { PARITY_FIXTURES } from "./warehouse.fixtures"
 
 const ENV_KEYS = ["MEZO_ACTIVITY_SOURCE", "MATCHBOX_WAREHOUSE_URL"] as const
 const savedEnv = Object.fromEntries(ENV_KEYS.map((k) => [k, process.env[k]]))
 
+const realFetch = globalThis.fetch
+
 afterEach(() => {
   clearWarehouseCache()
+  resetWarehouseBreaker()
+  globalThis.fetch = realFetch
   for (const key of ENV_KEYS) {
     const value = savedEnv[key]
     if (value === undefined) Reflect.deleteProperty(process.env, key)
@@ -206,4 +215,77 @@ test("cacheableNow rounds a default window end up to the cache window", () => {
   assert.equal(WAREHOUSE_CACHE_SECONDS, 300)
   assert.equal(cacheableNow(1_790_000_001), 1_790_000_100)
   assert.equal(cacheableNow(1_790_000_100), 1_790_000_100)
+})
+
+test("withWarehouseFallback reads the old sources unless the warehouse is on", async () => {
+  Reflect.deleteProperty(process.env, "MEZO_ACTIVITY_SOURCE")
+  let warehouseCalls = 0
+  const value = await withWarehouseFallback(
+    CHAIN_ID.mainnet,
+    "test",
+    async () => {
+      warehouseCalls += 1
+      return "warehouse"
+    },
+    async () => "fallback",
+  )
+  assert.equal(value, "fallback")
+  assert.equal(warehouseCalls, 0)
+})
+
+test("a failed warehouse read falls back and trips the breaker", async () => {
+  process.env.MEZO_ACTIVITY_SOURCE = "warehouse"
+  let warehouseCalls = 0
+  async function warehouse(): Promise<string> {
+    warehouseCalls += 1
+    throw new WarehouseUnavailableError("quota exceeded")
+  }
+  async function fallback(): Promise<string> {
+    return "fallback"
+  }
+  assert.equal(
+    await withWarehouseFallback(CHAIN_ID.mainnet, "test", warehouse, fallback),
+    "fallback",
+  )
+  assert.equal(warehouseReadable(CHAIN_ID.mainnet), false)
+  // While tripped, the warehouse is not asked at all.
+  assert.equal(
+    await withWarehouseFallback(CHAIN_ID.mainnet, "test", warehouse, fallback),
+    "fallback",
+  )
+  assert.equal(warehouseCalls, 1)
+  resetWarehouseBreaker()
+  assert.equal(warehouseReadable(CHAIN_ID.mainnet), true)
+})
+
+test("a hung warehouse read times out", async () => {
+  process.env.MATCHBOX_WAREHOUSE_URL =
+    "postgresql://reader:secret@ep-test-000000.us-east-2.aws.neon.tech/neondb"
+  globalThis.fetch = () => new Promise<Response>(() => {})
+  const started = Date.now()
+  await assert.rejects(
+    queryWarehouse({ text: "SELECT 3", params: [] }),
+    /timed out/,
+  )
+  assert.ok(Date.now() - started >= WAREHOUSE_TIMEOUT_MS - 50)
+})
+
+test("fetchMezoActivity serves the explorer and earn-votes when the warehouse fails", async () => {
+  process.env.MEZO_ACTIVITY_SOURCE = "warehouse"
+  Reflect.deleteProperty(process.env, "MATCHBOX_WAREHOUSE_URL")
+  const requested: string[] = []
+  globalThis.fetch = async (input) => {
+    const url = String(input)
+    requested.push(url)
+    const body = url.includes("matchbox-explorer")
+      ? { data: { activityEvents: [] } }
+      : { data: { voteEvents: [] } }
+    return Response.json(body)
+  }
+  const result = await fetchMezoActivity({ ...BASE })
+  assert.deepEqual(result.data, [])
+  assert.deepEqual(result.degraded, ["warehouse"])
+  assert.equal(result.indexedThrough, undefined)
+  assert.ok(requested.some((url) => url.includes("matchbox-explorer")))
+  assert.equal(warehouseReadable(CHAIN_ID.mainnet), false)
 })

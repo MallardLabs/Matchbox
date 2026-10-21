@@ -37,6 +37,72 @@ export function isWarehouseSource(chainId: SupportedChainId): boolean {
   )
 }
 
+// When a warehouse read fails or times out, Classic serves the pre-warehouse
+// sources (the frozen explorer, Mezo's earn-votes and earn-locks) and stops
+// asking the warehouse for WAREHOUSE_BREAKER_SECONDS. Neon suspends a Free
+// project for the rest of the month once its compute quota is spent; the
+// breaker keeps Classic up without hammering the dead endpoint (each isolate
+// probes once per window).
+export const WAREHOUSE_TIMEOUT_MS = 6_000
+export const WAREHOUSE_BREAKER_SECONDS = 120
+
+let breakerOpenUntil = 0
+
+/** Whether to try the warehouse now: it is the source and not tripped. */
+export function warehouseReadable(chainId: SupportedChainId): boolean {
+  return isWarehouseSource(chainId) && Date.now() >= breakerOpenUntil
+}
+
+/** Trips the breaker after a failed warehouse read. */
+export function recordWarehouseFailure(context: string, error: unknown): void {
+  breakerOpenUntil = Date.now() + WAREHOUSE_BREAKER_SECONDS * 1000
+  console.error(
+    `Warehouse read failed (${context}); falling back for ${WAREHOUSE_BREAKER_SECONDS}s`,
+    error,
+  )
+}
+
+/** Test hook. */
+export function resetWarehouseBreaker(): void {
+  breakerOpenUntil = 0
+}
+
+/**
+ * The warehouse read while it is readable, else (or when it throws) the
+ * pre-warehouse read.
+ */
+export async function withWarehouseFallback<T>(
+  chainId: SupportedChainId,
+  context: string,
+  warehouse: () => Promise<T>,
+  fallback: () => Promise<T>,
+): Promise<T> {
+  if (warehouseReadable(chainId)) {
+    try {
+      return await warehouse()
+    } catch (error) {
+      recordWarehouseFailure(context, error)
+    }
+  }
+  return fallback()
+}
+
+function withTimeout<T>(read: PromiseLike<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timeout = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(
+      () =>
+        reject(
+          new WarehouseUnavailableError(
+            `Warehouse read timed out after ${ms} ms`,
+          ),
+        ),
+      ms,
+    )
+  })
+  return Promise.race([read, timeout]).finally(() => clearTimeout(timer))
+}
+
 let client: { url: string; sql: NeonQueryFunction<false, false> } | undefined
 
 export function warehouseSql(): NeonQueryFunction<false, false> {
@@ -170,10 +236,17 @@ export function clearWarehouseCache(): void {
   memo.clear()
 }
 
-/** Rows are unvalidated; callers parse them with a zod schema. */
+/**
+ * Rows are unvalidated; callers parse them with a zod schema. Times out
+ * after WAREHOUSE_TIMEOUT_MS (a cold start plus the reader's 2 s statement
+ * timeout fit well inside it).
+ */
 export async function queryWarehouse(query: WarehouseQuery): Promise<Rows> {
   return cachedWarehouseRead([query], rowsSchema, () =>
-    warehouseSql().query(query.text, query.params),
+    withTimeout(
+      warehouseSql().query(query.text, query.params),
+      WAREHOUSE_TIMEOUT_MS,
+    ),
   )
 }
 
@@ -183,9 +256,12 @@ export async function queryWarehouseBatch(
 ): Promise<Rows[]> {
   return cachedWarehouseRead(queries, batchSchema, () => {
     const sql = warehouseSql()
-    return sql.transaction(
-      queries.map((query) => sql.query(query.text, query.params)),
-      { readOnly: true },
+    return withTimeout(
+      sql.transaction(
+        queries.map((query) => sql.query(query.text, query.params)),
+        { readOnly: true },
+      ),
+      WAREHOUSE_TIMEOUT_MS,
     )
   })
 }
