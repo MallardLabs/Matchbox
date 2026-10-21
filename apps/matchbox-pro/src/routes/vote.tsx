@@ -6,10 +6,12 @@ import {
   DEFAULT_VIEW,
   type VoteSearch,
   type VoteView,
+  parseStoredSearch,
   parseVoteSearch,
   searchFromView,
   viewFromSearch,
 } from "@/features/vote/search"
+import { usePrefetchVoteMarkets } from "@/features/vote/useMarkets"
 import { createFileRoute } from "@tanstack/react-router"
 import { type ReactElement, useCallback, useEffect, useRef } from "react"
 
@@ -25,13 +27,9 @@ const LAST_SEARCH_KEY = "matchbox-pro:vote:last-search"
 
 function readLastSearch(): VoteSearch {
   try {
-    const raw = window.sessionStorage.getItem(LAST_SEARCH_KEY)
-    if (!raw) return {}
-    const value: unknown = JSON.parse(raw)
-    return typeof value === "object" && value !== null
-      ? parseVoteSearch({ ...value })
-      : {}
+    return parseStoredSearch(window.sessionStorage.getItem(LAST_SEARCH_KEY))
   } catch {
+    // Storage blocked: start from defaults.
     return {}
   }
 }
@@ -50,6 +48,7 @@ function VotePage(): ReactElement {
   const navigate = Route.useNavigate()
   const view = viewFromSearch(search)
   const restored = useRef(false)
+  usePrefetchVoteMarkets()
 
   useEffect(() => {
     if (restored.current) return

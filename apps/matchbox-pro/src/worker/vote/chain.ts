@@ -45,6 +45,10 @@ import {
 const STRUCTURE_TTL = { freshMs: 120_000, staleMs: 30 * 60_000 }
 const PRICES_TTL = { freshMs: 60_000, staleMs: 10 * 60_000 }
 export const MARKET_TTL = { freshMs: 30_000, staleMs: 5 * 60_000 }
+// The pools API answers in ~1s warm but can take 4s+ cold. The market never
+// waits on it: cached prices are folded in, otherwise the market ships with
+// reference pricing and the client fills the rest from /api/vote/prices.
+const PRICE_GRACE_MS = 0
 const MULTICALL_CHUNK = 200
 const POOLS_API: Record<SupportedChainId, string> = {
   [CHAIN_ID.mainnet]: "https://api.mezo.org",
@@ -91,7 +95,7 @@ export async function fetchPoolsApiPrices(
           {
             // The API only answers its own site's origin, like the webapp proxy.
             headers: { origin: "https://mezo.org", accept: "application/json" },
-            signal: AbortSignal.timeout(5_000),
+            signal: AbortSignal.timeout(8_000),
           },
         )
         if (!response.ok) throw new Error(`pools API ${response.status}`)
@@ -102,6 +106,20 @@ export async function fetchPoolsApiPrices(
   } catch {
     return new Map()
   }
+}
+
+const NO_PRICES = new Map<string, string>()
+
+function pricesWithin(
+  pricing: Promise<Map<string, string>>,
+  graceMs: number,
+): Promise<Map<string, string>> {
+  return Promise.race([
+    pricing,
+    new Promise<Map<string, string>>((resolve) =>
+      setTimeout(() => resolve(NO_PRICES), graceMs),
+    ),
+  ])
 }
 
 /** Which tokens each reward contract pays, and their metadata. */
@@ -279,10 +297,13 @@ export async function computeValidatorMarket(
 ): Promise<WireValidatorMarket> {
   const client = createMezoClient(chainId)
   const voter = voterConfig(chainId, "validators").address
-  const [structure, head, prices] = await Promise.all([
+  const pricing = fetchPoolsApiPrices(chainId, waitUntil)
+  // If the market ships before prices arrive, keep the fetch alive so the
+  // next refresh has them.
+  waitUntil(pricing)
+  const [structure, head] = await Promise.all([
     validatorStructure(chainId, waitUntil),
     readHead(client, voter),
-    fetchPoolsApiPrices(chainId, waitUntil),
   ])
   const [live, amounts] = await Promise.all([
     multicall(
@@ -304,6 +325,7 @@ export async function computeValidatorMarket(
     ),
     readEpochAmounts(client, structure.rewards.pairs, head.epochStart),
   ])
+  const prices = await pricesWithin(pricing, PRICE_GRACE_MS)
   return mapValidatorMarket({
     chainId,
     generatedAt: new Date().toISOString(),
@@ -433,10 +455,13 @@ export async function computePoolMarket(
 ): Promise<WirePoolMarket> {
   const client = createMezoClient(chainId)
   const voter = voterConfig(chainId, "pools").address
-  const [structure, head, prices] = await Promise.all([
+  const pricing = fetchPoolsApiPrices(chainId, waitUntil)
+  // If the market ships before prices arrive, keep the fetch alive so the
+  // next refresh has them.
+  waitUntil(pricing)
+  const [structure, head] = await Promise.all([
     poolStructure(chainId, waitUntil),
     readHead(client, voter),
-    fetchPoolsApiPrices(chainId, waitUntil),
   ])
   const [live, amounts] = await Promise.all([
     multicall(
@@ -458,6 +483,7 @@ export async function computePoolMarket(
     ),
     readEpochAmounts(client, structure.rewards.pairs, head.epochStart),
   ])
+  const prices = await pricesWithin(pricing, PRICE_GRACE_MS)
   return mapPoolMarket({
     chainId,
     generatedAt: new Date().toISOString(),

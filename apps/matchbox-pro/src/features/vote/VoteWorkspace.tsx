@@ -68,8 +68,9 @@ import {
 } from "./presign"
 import { projectTarget, sumNative, voteWeightForBps } from "./projection"
 import type { VoteView } from "./search"
-import type { Prices } from "./targets"
+import { type Prices, apySortValue, displayApy } from "./targets"
 import { useBallotStore } from "./useBallotStore"
+import { useTokenPrices } from "./useMarkets"
 import { usePoolTargets } from "./usePoolTargets"
 import { useValidatorTargets } from "./useValidatorTargets"
 import { useVeMezoTargets } from "./useVeMezoTargets"
@@ -94,11 +95,12 @@ function usePriceSnapshot(): {
 } {
   const btc = useBtcPrice()
   const mezo = useMezoPrice()
+  const tokens = useTokenPrices()
   const btcPrice = btc.data ?? null
   const mezoPrice = mezo.data ?? null
   const prices = useMemo(
-    () => ({ btc: btcPrice, mezo: mezoPrice }),
-    [btcPrice, mezoPrice],
+    () => ({ btc: btcPrice, mezo: mezoPrice, tokens }),
+    [btcPrice, mezoPrice, tokens],
   )
   return {
     prices,
@@ -230,17 +232,45 @@ function Workspace({
       ),
     [data.targets, ownVotes.ownWeights],
   )
-  const targetById = useMemo(
-    () =>
-      new Map(data.targets.map((target) => [target.id.toLowerCase(), target])),
-    [data.targets],
-  )
   const optimizerById = useMemo(
     () =>
       new Map(
         optimizerTargets.map((target) => [target.id.toLowerCase(), target]),
       ),
     [optimizerTargets],
+  )
+  // APY depends on the lock selection: marginal against the selected power
+  // when there is one, else only for targets with a reference unit of votes.
+  const targets = useMemo(
+    () =>
+      data.targets.map((target) => {
+        const apyBps = displayApy({
+          incentiveMicroUsd: target.incentiveMicroUsd,
+          totalWeight: target.totalWeight,
+          competingWeight:
+            optimizerById.get(target.id.toLowerCase())?.competingWeight ??
+            target.totalWeight,
+          selectedPower,
+          referenceUnit: meta.referenceUnit,
+          assetPrice,
+        })
+        return {
+          ...target,
+          apyBps,
+          sortValues: { ...target.sortValues, apy: apySortValue(apyBps) },
+        }
+      }),
+    [
+      assetPrice,
+      data.targets,
+      meta.referenceUnit,
+      optimizerById,
+      selectedPower,
+    ],
+  )
+  const targetById = useMemo(
+    () => new Map(targets.map((target) => [target.id.toLowerCase(), target])),
+    [targets],
   )
 
   // Ballot projection: each slice against competing votes that remain after
@@ -290,14 +320,13 @@ function Workspace({
         votingPowers: powers,
         assetPriceMicroUsd,
       }),
-      weightedCount: weightedEntries(store.ballot).length,
     }
   }, [assetPriceMicroUsd, optimizerById, powers, store.ballot, targetById])
 
   // Filter, sort, page.
   const filtered = useMemo(() => {
     const needle = view.query.trim().toLowerCase()
-    return data.targets
+    return targets
       .filter((target) => {
         if (view.status === "active" && !target.isAlive) return false
         if (view.status === "watching" && !watched.has(target.id.toLowerCase()))
@@ -318,7 +347,7 @@ function Workspace({
         if (weight !== 0) return weight
         return a.name.localeCompare(b.name)
       })
-  }, [data.targets, type, view, watched])
+  }, [targets, type, view, watched])
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const page = Math.min(view.page, pageCount - 1)
   const visible = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
@@ -449,7 +478,9 @@ function Workspace({
     })
     if (viewer.mode === "disconnected")
       return { label: "Connect to vote", disabled: false, onPress: openConnect }
-    if (viewer.mode === "watching") return disabled("Watching · read-only")
+    // Watching is read-only, but not a dead end: offer to connect a wallet.
+    if (viewer.mode === "watching")
+      return { label: "Connect to vote", disabled: false, onPress: openConnect }
     if (viewer.wrongNetwork)
       return {
         label: "Switch network",

@@ -2,6 +2,7 @@ import { getAddress } from "viem"
 import { describe, expect, it } from "vitest"
 import {
   DEFAULT_VIEW,
+  parseStoredSearch,
   parseVoteSearch,
   searchFromView,
   viewFromSearch,
@@ -52,5 +53,18 @@ describe("vote search params", () => {
     const search = searchFromView(view)
     expect(search).toEqual({ type: "validators", q: "chorus", page: 3 })
     expect(viewFromSearch(search)).toEqual(view)
+  })
+})
+
+describe("stored search", () => {
+  it("reads saved filters and ignores anything unreadable", () => {
+    expect(parseStoredSearch('{"type":"pools","q":"btc"}')).toEqual({
+      type: "pools",
+      q: "btc",
+    })
+    expect(parseStoredSearch("{not json")).toEqual({})
+    expect(parseStoredSearch("[1,2]")).toEqual({})
+    expect(parseStoredSearch("null")).toEqual({})
+    expect(parseStoredSearch(null)).toEqual({})
   })
 })

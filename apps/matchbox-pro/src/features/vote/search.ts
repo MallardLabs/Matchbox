@@ -75,9 +75,28 @@ export const DEFAULT_VIEW: VoteView = {
   page: 0,
 }
 
-export function parseVoteSearch(raw: Record<string, unknown>): VoteSearch {
-  const parsed = voteSearchSchema.parse(raw)
-  return compactSearch(parsed)
+export function parseVoteSearch(raw: unknown): VoteSearch {
+  // Every field already falls back on its own; this guards a non-object.
+  const parsed = voteSearchSchema.safeParse(raw)
+  return parsed.success ? compactSearch(parsed.data) : {}
+}
+
+/** A search saved as JSON (sessionStorage); anything unreadable is `{}`. */
+export function parseStoredSearch(raw: string | null): VoteSearch {
+  if (!raw) return {}
+  const json = z
+    .string()
+    .transform((text, context) => {
+      try {
+        const value: unknown = JSON.parse(text)
+        return value
+      } catch {
+        context.addIssue({ code: "custom", message: "not JSON" })
+        return z.NEVER
+      }
+    })
+    .safeParse(raw)
+  return json.success ? parseVoteSearch(json.data) : {}
 }
 
 export function viewFromSearch(search: VoteSearch): VoteView {

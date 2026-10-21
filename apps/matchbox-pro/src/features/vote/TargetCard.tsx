@@ -182,7 +182,8 @@ function WatchToggle({
       }
       className={cn(
         "relative z-[1] -mx-0.5 flex size-7 shrink-0 items-center justify-center rounded-md transition-colors",
-        watching ? "text-accent" : "text-faint hover:text-muted",
+        // muted, not faint: an icon-only control needs 3:1 at rest.
+        watching ? "text-accent" : "text-muted hover:text-secondary",
       )}
     >
       <Star
@@ -243,7 +244,7 @@ function Incentives({ target }: { target: VoteTarget }): ReactElement {
   if (target.incentiveMicroUsd === 0n && target.hasUnpriced) total = "Unpriced"
   return (
     <div className="flex flex-col gap-1 px-3.5">
-      <p className="text-micro font-500 text-muted">Incentives</p>
+      <p className="text-micro font-500 text-muted">{target.rewardsLabel}</p>
       <p
         className={cn(
           "text-lead font-400 tabular-nums",
@@ -323,18 +324,10 @@ function Meter({ footer }: { footer: TargetFooter | null }): ReactElement {
   return (
     <div aria-hidden="true" className="flex h-2 shrink-0 bg-inset-2">
       {meter ? (
-        <>
-          <span
-            className={meter.tone === "pos" ? "bg-pos" : "bg-accent"}
-            style={{ width: `${Math.max(0, Math.min(1, meter.fill)) * 100}%` }}
-          />
-          {meter.over > 0 ? (
-            <span
-              className="bg-neg"
-              style={{ width: `${Math.min(1, meter.over) * 100}%` }}
-            />
-          ) : null}
-        </>
+        <span
+          className={meter.tone === "pos" ? "bg-pos" : "bg-accent"}
+          style={{ width: `${Math.max(0, Math.min(1, meter.fill)) * 100}%` }}
+        />
       ) : null}
     </div>
   )

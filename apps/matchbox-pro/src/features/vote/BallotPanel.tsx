@@ -1,10 +1,9 @@
-import { formatMicroUsd } from "@/lib/money"
 import * as Button from "@repo/ui/button"
 import { cn } from "@repo/ui/cn"
 import { Minus, Plus, Sparkles, X } from "lucide-react"
 import type { ReactElement } from "react"
 import { FULL_BALLOT_BPS, formatBps } from "./ballot"
-import { formatApy, formatNativeList } from "./format"
+import { formatApy, formatNativeList, formatUsd } from "./format"
 import type { NativeAmount } from "./projection"
 
 export type BallotRowModel = {
@@ -24,7 +23,6 @@ export type BallotModel = {
   native: NativeAmount[]
   hasUnpriced: boolean
   apyBps: bigint | null
-  weightedCount: number
 }
 
 export type PanelAction = {
@@ -165,7 +163,7 @@ export function BallotSlots({
               type="button"
               onClick={() => onRemove(row.id)}
               aria-label={`Remove ${row.name}`}
-              className="-mr-1.5 -mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md text-faint opacity-60 transition-opacity hover:text-ink focus-visible:opacity-100 group-hover:opacity-100"
+              className="-mr-1.5 -mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md text-muted transition-colors hover:bg-inset hover:text-ink"
             >
               <X aria-hidden="true" size={13} strokeWidth={1.75} />
             </button>
@@ -204,7 +202,7 @@ export function BallotSlots({
                   {formatApy(row.apyBps)}
                 </span>
                 <span className="text-body-sm font-500 text-secondary">
-                  {row.bps > 0 ? formatMicroUsd(row.projectedMicroUsd) : "—"}
+                  {row.bps > 0 ? formatUsd(row.projectedMicroUsd) : "—"}
                 </span>
               </p>
             ) : null}
@@ -250,7 +248,7 @@ export function Projection({
     <div className="flex flex-col gap-[18px]">
       <p className="text-label font-500 text-secondary">Projected this epoch</p>
       <p className="flex items-baseline gap-2 text-metric font-600 text-ink tabular-nums">
-        {showFigures ? formatMicroUsd(model.projectedMicroUsd) : "—"}
+        {showFigures ? formatUsd(model.projectedMicroUsd) : "—"}
         {showFigures && model.hasUnpriced ? (
           <span className="rounded-[4px] bg-inset px-1.5 py-0.5 text-caption font-600 text-secondary">
             + Unpriced

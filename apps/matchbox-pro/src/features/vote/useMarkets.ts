@@ -11,14 +11,15 @@ import {
   pairTokenAddresses,
 } from "@/worker/vote/mappers"
 import { VALIDATOR_POOL_ABI } from "@repo/shared/contracts"
-import { useQuery } from "@tanstack/react-query"
-import { useMemo } from "react"
+import { queryOptions, useQuery, useQueryClient } from "@tanstack/react-query"
+import { useEffect, useMemo, useState } from "react"
 import { useReadContract, useReadContracts } from "wagmi"
 import type { z } from "zod"
 import {
   type PoolMarket,
   type ValidatorMarket,
   poolMarketSchema,
+  tokenPricesSchema,
   validatorMarketSchema,
 } from "./contract"
 import { TOKEN_META_ABI, validatorPoolAddress, voterConfig } from "./contracts"
@@ -34,6 +35,11 @@ export type MarketState<T> = {
   retry: () => void
 }
 
+// A slow Worker never strands the page: after this long the browser starts
+// its own chain reads alongside, and whichever lands first is shown.
+const HEDGE_AFTER_MS = 6_000
+const REQUEST_TIMEOUT_MS = 15_000
+
 async function fetchMarket<S extends z.ZodType>(
   path: string,
   chainId: number,
@@ -41,57 +47,133 @@ async function fetchMarket<S extends z.ZodType>(
   signal: AbortSignal,
 ): Promise<z.output<S>> {
   const response = await fetch(`/api/vote/${path}?chainId=${chainId}`, {
-    signal,
+    signal: AbortSignal.any([signal, AbortSignal.timeout(REQUEST_TIMEOUT_MS)]),
   })
   if (!response.ok) throw new Error(`${path} failed (${response.status})`)
   return schema.parse(await response.json())
 }
 
-/**
- * Validator gauges from the Worker (one cached request), falling back to
- * browser chain reads with the same mappers if the endpoint fails.
- */
-export function useValidatorMarket(): MarketState<ValidatorMarket> {
-  const { chainId } = useNetwork()
-  const server = useQuery({
+export function validatorMarketQuery(chainId: number) {
+  return queryOptions({
     queryKey: ["vote-market", "validators", chainId],
     queryFn: ({ signal }) =>
       fetchMarket("validators", chainId, validatorMarketSchema, signal),
     ...QUERY_PROFILES.SHORT_CACHE,
     retry: 1,
   })
-  const chain = useValidatorChainMarket(server.isError)
-  return {
-    market: server.data ?? chain.market,
-    isLoading: server.isPending || (server.isError && chain.isLoading),
-    source: server.data ? "server" : "chain",
-    unavailable: server.isError && !chain.isLoading && !chain.market,
-    retry: () => void server.refetch(),
-  }
 }
 
-export function usePoolMarket(): MarketState<PoolMarket> {
-  const { chainId } = useNetwork()
-  const server = useQuery({
+export function poolMarketQuery(chainId: number) {
+  return queryOptions({
     queryKey: ["vote-market", "pools", chainId],
     queryFn: ({ signal }) =>
       fetchMarket("pools", chainId, poolMarketSchema, signal),
     ...QUERY_PROFILES.SHORT_CACHE,
     retry: 1,
   })
-  const chain = usePoolChainMarket(server.isError)
+}
+
+export function tokenPricesQuery(chainId: number) {
+  return queryOptions({
+    queryKey: ["vote-token-prices", chainId],
+    queryFn: async ({ signal }) => {
+      const response = await fetch(`/api/vote/prices?chainId=${chainId}`, {
+        signal: AbortSignal.any([
+          signal,
+          AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+        ]),
+      })
+      if (!response.ok) throw new Error(`prices failed (${response.status})`)
+      const body = tokenPricesSchema.parse(await response.json())
+      return new Map(Object.entries(body.prices))
+    },
+    ...QUERY_PROFILES.LONG_CACHE,
+    retry: 1,
+  })
+}
+
+const NO_TOKEN_PRICES: ReadonlyMap<string, string> = new Map()
+
+/**
+ * Mezo pools API prices for tokens without a reference price. Loaded on its
+ * own so cards never wait for it; rewards re-price when it lands.
+ */
+export function useTokenPrices(): ReadonlyMap<string, string> {
+  const { chainId } = useNetwork()
+  return useQuery(tokenPricesQuery(chainId)).data ?? NO_TOKEN_PRICES
+}
+
+/**
+ * Warms both veBTC markets (and token prices) as soon as Vote opens,
+ * whichever tab is showing, so switching to Validators or Pools is instant.
+ */
+export function usePrefetchVoteMarkets(): void {
+  const { chainId } = useNetwork()
+  const queryClient = useQueryClient()
+  useEffect(() => {
+    void queryClient.prefetchQuery(validatorMarketQuery(chainId))
+    void queryClient.prefetchQuery(poolMarketQuery(chainId))
+    void queryClient.prefetchQuery(tokenPricesQuery(chainId))
+  }, [chainId, queryClient])
+}
+
+/** True once a request has been pending longer than `ms`. */
+function usePendingFor(pending: boolean, ms: number): boolean {
+  const [slow, setSlow] = useState(false)
+  useEffect(() => {
+    if (!pending) {
+      setSlow(false)
+      return
+    }
+    const id = window.setTimeout(() => setSlow(true), ms)
+    return () => window.clearTimeout(id)
+  }, [ms, pending])
+  return slow
+}
+
+function combine<T>(
+  server: { data: T | undefined; isError: boolean },
+  chain: { market: T | undefined; failed: boolean },
+  retry: () => void,
+): MarketState<T> {
+  const market = server.data ?? chain.market
+  // Loading until something lands or both sources have failed outright, so
+  // the hand-off to the fallback never flashes an empty list.
+  const unavailable = market === undefined && server.isError && chain.failed
   return {
-    market: server.data ?? chain.market,
-    isLoading: server.isPending || (server.isError && chain.isLoading),
+    market,
+    isLoading: market === undefined && !unavailable,
     source: server.data ? "server" : "chain",
-    unavailable: server.isError && !chain.isLoading && !chain.market,
-    retry: () => void server.refetch(),
+    unavailable,
+    retry,
   }
+}
+
+/**
+ * Validator gauges from the Worker (one cached request), falling back to
+ * browser chain reads with the same mappers if it fails or is slow.
+ */
+export function useValidatorMarket(): MarketState<ValidatorMarket> {
+  const { chainId } = useNetwork()
+  const server = useQuery(validatorMarketQuery(chainId))
+  const slow = usePendingFor(server.isPending, HEDGE_AFTER_MS)
+  const fallback = server.isError || slow
+  const chain = useValidatorChainMarket(fallback && !server.data)
+  return combine(server, chain, () => void server.refetch())
+}
+
+export function usePoolMarket(): MarketState<PoolMarket> {
+  const { chainId } = useNetwork()
+  const server = useQuery(poolMarketQuery(chainId))
+  const slow = usePendingFor(server.isPending, HEDGE_AFTER_MS)
+  const fallback = server.isError || slow
+  const chain = usePoolChainMarket(fallback && !server.data)
+  return combine(server, chain, () => void server.refetch())
 }
 
 function useValidatorChainMarket(enabled: boolean): {
   market: ValidatorMarket | undefined
-  isLoading: boolean
+  failed: boolean
 } {
   const { chainId } = useNetwork()
   const voter = voterConfig(chainId, "validators")
@@ -182,8 +264,16 @@ function useValidatorChainMarket(enabled: boolean): {
   )
   const rewards = useEpochRewards(bribes, epochStart, enabled)
 
+  // Only hand over a market once every stage has landed; a half-read one
+  // would show every gauge as inactive and unfunded.
+  const complete =
+    head.data !== undefined &&
+    (length === 0n || gaugeRead.data !== undefined) &&
+    (gauges.length === 0 || states.data !== undefined) &&
+    !rewards.isLoading
   const market = useMemo(() => {
-    if (!enabled || !head.data || epochStart === undefined) return undefined
+    if (!enabled || !complete || !head.data || epochStart === undefined)
+      return undefined
     const parsed = validatorMarketSchema.safeParse(
       mapValidatorMarket({
         chainId,
@@ -200,6 +290,7 @@ function useValidatorChainMarket(enabled: boolean): {
     return parsed.success ? parsed.data : undefined
   }, [
     chainId,
+    complete,
     enabled,
     epochStart,
     gauges,
@@ -212,18 +303,14 @@ function useValidatorChainMarket(enabled: boolean): {
 
   return {
     market,
-    isLoading:
-      enabled &&
-      (head.isLoading ||
-        gaugeRead.isLoading ||
-        states.isLoading ||
-        rewards.isLoading),
+    // The first read failing means nothing below it can work.
+    failed: enabled && head.isError,
   }
 }
 
 function usePoolChainMarket(enabled: boolean): {
   market: PoolMarket | undefined
-  isLoading: boolean
+  failed: boolean
 } {
   const { chainId } = useNetwork()
   const voter = voterConfig(chainId, "pools")
@@ -346,8 +433,17 @@ function usePoolChainMarket(enabled: boolean): {
   )
   const rewards = useEpochRewards(rewardContracts, epochStart, enabled)
 
+  const complete =
+    head.data !== undefined &&
+    (length === 0n || poolRead.data !== undefined) &&
+    (pools.length === 0 || gaugeRead.data !== undefined) &&
+    (rows.length === 0 ||
+      (states.data !== undefined && meta.data !== undefined)) &&
+    (pairTokens.length === 0 || symbols.data !== undefined) &&
+    !rewards.isLoading
   const market = useMemo(() => {
-    if (!enabled || !head.data || epochStart === undefined) return undefined
+    if (!enabled || !complete || !head.data || epochStart === undefined)
+      return undefined
     const pairSymbols = new Map<string, string>()
     pairTokens.forEach((address, index) => {
       const symbol = okText(symbols.data?.[index], 32)
@@ -369,6 +465,7 @@ function usePoolChainMarket(enabled: boolean): {
     return parsed.success ? parsed.data : undefined
   }, [
     chainId,
+    complete,
     enabled,
     epochStart,
     head.data,
@@ -382,12 +479,7 @@ function usePoolChainMarket(enabled: boolean): {
 
   return {
     market,
-    isLoading:
-      enabled &&
-      (head.isLoading ||
-        poolRead.isLoading ||
-        gaugeRead.isLoading ||
-        states.isLoading ||
-        rewards.isLoading),
+    // The first read failing means nothing below it can work.
+    failed: enabled && head.isError,
   }
 }

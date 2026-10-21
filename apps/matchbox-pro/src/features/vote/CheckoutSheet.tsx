@@ -1,5 +1,4 @@
 import type { CarouselItem } from "@/lib/carousel"
-import { formatMicroUsd } from "@/lib/money"
 import * as Button from "@repo/ui/button"
 import * as Dialog from "@repo/ui/dialog"
 import * as SigningSteps from "@repo/ui/signing-steps"
@@ -7,7 +6,7 @@ import { useCopy } from "@repo/ui/use-copy"
 import { Copy } from "lucide-react"
 import type { ReactElement, ReactNode } from "react"
 import { formatBps } from "./ballot"
-import { formatApy, formatNativeList } from "./format"
+import { formatApy, formatNativeList, formatUsd } from "./format"
 import type { NativeAmount } from "./projection"
 import type { RefreshState } from "./useVoteCheckout"
 
@@ -97,7 +96,7 @@ export default function CheckoutSheet(props: CheckoutSheetProps): ReactElement {
             <p className="flex justify-between gap-4 text-body text-ink">
               <span className="font-500">Projected this epoch</span>
               <span className="tabular-nums">
-                {formatMicroUsd(summary.projectedMicroUsd)}
+                {formatUsd(summary.projectedMicroUsd)}
               </span>
             </p>
             <p className="text-body-sm font-500 text-secondary tabular-nums">

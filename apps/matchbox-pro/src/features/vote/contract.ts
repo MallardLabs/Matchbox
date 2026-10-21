@@ -73,6 +73,14 @@ export const poolMarketSchema = z.object({
   ),
 })
 
+/** Mezo pools API prices by lower-case token address (`/api/vote/prices`). */
+export const tokenPricesSchema = z.object({
+  chainId: z.number().int(),
+  prices: z.record(z.string(), z.string().regex(/^\d+(\.\d+)?$/)),
+})
+
+export type WireTokenPrices = z.input<typeof tokenPricesSchema>
+
 /** What the Worker serialises. */
 export type WireValidatorMarket = z.input<typeof validatorMarketSchema>
 export type WirePoolMarket = z.input<typeof poolMarketSchema>

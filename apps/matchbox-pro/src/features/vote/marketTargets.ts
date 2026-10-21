@@ -1,9 +1,8 @@
-import { formatMicroUsd } from "@/lib/money"
 import { shortenAddress } from "@repo/ui/wallet-address"
 import type { MarketRewardToken, PoolMarket, ValidatorMarket } from "./contract"
+import { formatUsdHeadline } from "./format"
 import type { VoteTarget } from "./model"
 import {
-  INFINITE_APY,
   PER_VEBTC,
   type Prices,
   type UnpricedReward,
@@ -14,7 +13,6 @@ import {
   shareBps,
   shareFooter,
   sumPriced,
-  targetApy,
 } from "./targets"
 
 export type ValidatorProfile = {
@@ -35,10 +33,6 @@ function unpriced(tokens: readonly MarketRewardToken[]): UnpricedReward[] {
   }))
 }
 
-function sortApy(apyBps: bigint | null): bigint {
-  return apyBps === -1n ? INFINITE_APY : (apyBps ?? 0n)
-}
-
 /** Validator gauges → cards. Supabase profile beats the registry moniker. */
 export function validatorTargets(
   market: ValidatorMarket,
@@ -57,7 +51,6 @@ export function validatorTargets(
       shortenAddress(operator ?? row.gauge)
     const rewards = priceRewards(unpriced(row.rewardTokens), prices)
     const { microUsd, hasUnpriced } = sumPriced(rewards)
-    const apyBps = targetApy(microUsd, row.weight, prices.btc)
     const footer = shareFooter(row.weight, market.totalWeight)
     return {
       id: row.gauge,
@@ -73,7 +66,8 @@ export function validatorTargets(
       rewards,
       incentiveMicroUsd: microUsd,
       hasUnpriced,
-      apyBps,
+      rewardsLabel: "Incentives",
+      apyBps: null,
       perUnitMicroUsd:
         microUsd > 0n ? rewardPerUnit(microUsd, row.weight, PER_VEBTC) : null,
       stats: [
@@ -84,7 +78,6 @@ export function validatorTargets(
         ? { ...footer, label: "Operator", value: shortenAddress(operator) }
         : footer,
       sortValues: {
-        apy: sortApy(apyBps),
         incentives: microUsd,
         votes: row.weight,
         share: shareBps(row.weight, market.totalWeight),
@@ -97,16 +90,17 @@ export function validatorTargets(
   })
 }
 
+/** Footer money in the same format as the card's headline total. */
 function rewardTotal(rewards: ReturnType<typeof priceRewards>): string {
   const { microUsd, hasUnpriced } = sumPriced(rewards)
-  if (rewards.length === 0) return "$0.00"
   if (hasUnpriced && microUsd === 0n) return "Unpriced"
-  return formatMicroUsd(microUsd)
+  return formatUsdHeadline(microUsd)
 }
 
 /**
  * PoolsVoter targets → cards. Voters earn the gauge's fee reward (last
- * epoch's trading fees) plus bribes; both count toward incentives and APY.
+ * epoch's trading fees) plus bribes; both count toward the headline total,
+ * which is labelled as such, and toward APY.
  */
 export function poolTargets(market: PoolMarket, prices: Prices): VoteTarget[] {
   return market.targets.map((row): VoteTarget => {
@@ -119,7 +113,6 @@ export function poolTargets(market: PoolMarket, prices: Prices): VoteTarget[] {
     const bribes = priceRewards(unpriced(row.bribes), prices)
     const rewards = [...fees, ...bribes]
     const { microUsd, hasUnpriced } = sumPriced(rewards)
-    const apyBps = targetApy(microUsd, row.weight, prices.btc)
     const share = shareFooter(row.weight, market.totalWeight)
     return {
       id: row.target,
@@ -135,7 +128,8 @@ export function poolTargets(market: PoolMarket, prices: Prices): VoteTarget[] {
       rewards,
       incentiveMicroUsd: microUsd,
       hasUnpriced,
-      apyBps,
+      rewardsLabel: "Fees + incentives",
+      apyBps: null,
       perUnitMicroUsd:
         microUsd > 0n ? rewardPerUnit(microUsd, row.weight, PER_VEBTC) : null,
       stats: [
@@ -146,13 +140,9 @@ export function poolTargets(market: PoolMarket, prices: Prices): VoteTarget[] {
         ...share,
         label: "Fees",
         value: rewardTotal(fees),
-        side: {
-          text: `Incentives ${rewardTotal(bribes).replace("Unpriced", "unpriced")}`,
-          tone: "muted",
-        },
+        side: { text: `Incentives ${rewardTotal(bribes)}`, tone: "muted" },
       },
       sortValues: {
-        apy: sortApy(apyBps),
         incentives: microUsd,
         votes: row.weight,
         share: shareBps(row.weight, market.totalWeight),

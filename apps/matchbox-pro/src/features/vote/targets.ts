@@ -9,10 +9,13 @@ import type { TargetFooter } from "./model"
 import type { RewardToken } from "./projection"
 
 const E18 = 10n ** 18n
-/** Sort key for "∞" APY so an empty-but-funded target ranks first. */
-export const INFINITE_APY = 10n ** 30n
 
-export type Prices = { btc: string | null; mezo: string | null }
+export type Prices = {
+  btc: string | null
+  mezo: string | null
+  /** Mezo pools API prices by lower-case token address, when loaded. */
+  tokens: ReadonlyMap<string, string>
+}
 
 export type UnpricedReward = Omit<RewardToken, "microUsd"> & {
   /** Market price from the Mezo pools API, used only without a reference price. */
@@ -34,6 +37,7 @@ export function priceRewards(
           mezoPriceUsd: prices.mezo,
         }) ??
         priceUsd ??
+        prices.tokens.get(reward.tokenAddress.toLowerCase()) ??
         null
       return {
         ...reward,
@@ -59,20 +63,40 @@ export function sumPriced(rewards: readonly RewardToken[]): {
 
 /**
  * Annualised return on the asset backing the votes (MEZO for veMEZO, BTC for
- * veBTC). A funded target with no votes yet is unbounded: -1 renders as "∞".
+ * veBTC), per unit of (boosted) voting power.
+ *
+ * With locks selected it is marginal: the selection's power joins the votes
+ * already competing for the pot (its own standing votes excluded), so a
+ * near-empty target can't advertise a return the vote itself would dilute.
+ * Without a selection, targets holding less than one reference unit of votes
+ * (10k veMEZO, 1 veBTC) get no figure rather than a meaningless one.
  */
-export function targetApy(
-  incentiveMicroUsd: bigint,
-  totalWeight: bigint,
-  assetPrice: string | null,
-): bigint | null {
-  if (!assetPrice || incentiveMicroUsd <= 0n) return null
-  if (totalWeight <= 0n) return -1n
+export function displayApy(input: {
+  incentiveMicroUsd: bigint
+  totalWeight: bigint
+  /** Votes that stay on the target if the selection votes (total − own). */
+  competingWeight: bigint
+  selectedPower: bigint
+  referenceUnit: bigint
+  assetPrice: string | null
+}): bigint | null {
+  if (!input.assetPrice || input.incentiveMicroUsd <= 0n) return null
+  if (input.selectedPower <= 0n && input.totalWeight < input.referenceUnit)
+    return null
   return calculateAnnualizedReturnBasisPoints({
-    epochRewardMicroUsd: incentiveMicroUsd,
-    votingPowers: [totalWeight],
-    assetPriceMicroUsd: priceToMicroUsd(assetPrice),
+    epochRewardMicroUsd: input.incentiveMicroUsd,
+    votingPowers: [
+      input.selectedPower > 0n
+        ? input.competingWeight + input.selectedPower
+        : input.totalWeight,
+    ],
+    assetPriceMicroUsd: priceToMicroUsd(input.assetPrice),
   })
+}
+
+/** APY sort key: targets without a figure always sort last. */
+export function apySortValue(apyBps: bigint | null): bigint {
+  return apyBps ?? -1n
 }
 
 /** Reward one more `unit` of votes would earn this epoch. */
@@ -123,9 +147,6 @@ export function boostFooter(input: {
       ? Number(((weight >= optimal ? optimal : weight) * 1_000n) / optimal) /
         1_000
       : 0
-  // Past the optimum the bar splits by weight: green for the optimal part,
-  // red for the oversubscribed remainder.
-  const overFraction = over > 0n ? Number((over * 1_000n) / weight) / 1_000 : 0
   return {
     label: "Optimal veMEZO",
     value: optimal !== undefined ? formatWhole(optimal) : "—",
@@ -139,9 +160,10 @@ export function boostFooter(input: {
       text: atMax ? "5×" : `${Math.floor(tenths / 10)}.${tenths % 10}×`,
       atMax,
     },
-    meter: atMax
-      ? { fill: 1 - overFraction, tone: "pos", over: overFraction }
-      : { fill, tone: "accent", over: 0 },
+    // At or past the optimum the bar is simply full and green; oversubscription
+    // shows only in the red "+N over" text (J04, frame 18).
+    meter:
+      atMax || over > 0n ? { fill: 1, tone: "pos" } : { fill, tone: "accent" },
   }
 }
 
@@ -152,6 +174,6 @@ export function shareFooter(weight: bigint, total: bigint): TargetFooter {
     value: formatShare(weight, total),
     side: null,
     multiplier: null,
-    meter: { fill: share, tone: "accent", over: 0 },
+    meter: { fill: share, tone: "accent" },
   }
 }

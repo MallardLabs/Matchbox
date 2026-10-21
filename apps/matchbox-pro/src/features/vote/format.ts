@@ -5,9 +5,15 @@ function groupThousands(value: bigint): string {
   return value.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",")
 }
 
+/** "$86.40"; a projection under half a cent reads "<$0.01", not "$0.00". */
+export function formatUsd(microUsd: bigint): string {
+  if (microUsd > 0n && microUsd < 5_000n) return "<$0.01"
+  return formatMicroUsd(microUsd)
+}
+
 /** "$18,204" for card totals; cents only below $1,000. */
 export function formatUsdHeadline(microUsd: bigint): string {
-  if (microUsd < 1_000_000_000n) return formatMicroUsd(microUsd)
+  if (microUsd < 1_000_000_000n) return formatUsd(microUsd)
   return `$${groupThousands((microUsd + 500_000n) / 1_000_000n)}`
 }
 
@@ -19,7 +25,7 @@ export function formatUsdApprox(microUsd: bigint): string {
   return `~$${groupThousands((microUsd + 500_000n) / 1_000_000n)}`
 }
 
-/** "$18.2K" for tight mobile rows; truncates so it never overstates. */
+/** "$18.2K" / "$228" for tight mobile rows; truncates so it never overstates. */
 export function formatUsdCompact(microUsd: bigint): string {
   const dollars = microUsd / 1_000_000n
   const scaled = (unit: bigint, suffix: string): string => {
@@ -29,7 +35,8 @@ export function formatUsdCompact(microUsd: bigint): string {
   }
   if (dollars >= 1_000_000n) return scaled(1_000_000n, "M")
   if (dollars >= 1_000n) return scaled(1_000n, "K")
-  return formatMicroUsd(microUsd)
+  if (dollars >= 1n) return `$${dollars}`
+  return microUsd > 0n ? "<$1" : "$0"
 }
 
 /** Six significant digits at most, two decimals for amounts above 1. */

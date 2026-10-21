@@ -7,7 +7,7 @@ function addr(n: number): Address {
   return getAddress(`0x${n.toString(16).padStart(40, "0")}`)
 }
 const E18 = 10n ** 18n
-const prices = { btc: "100000", mezo: "0.01" }
+const prices = { btc: "100000", mezo: "0.01", tokens: new Map() }
 const MUSD = getAddress("0xdD468A1DDc392dcdbEf6db6e34E89AA338F9F186")
 const SATS = addr(0x5a75)
 
@@ -81,6 +81,16 @@ describe("poolTargets", () => {
     expect(pool?.footer?.value).toBe("$500.00")
     expect(pool?.footer?.side?.text).toBe("Incentives $100.00")
     expect(pool?.stats[1]).toEqual({ label: "Share", value: "25.0%" })
+  })
+
+  it("prices a token from the separately loaded API prices", () => {
+    const vault = poolTargets(market, {
+      ...prices,
+      tokens: new Map([[addr(0xdead).toLowerCase(), "2"]]),
+    })[1]
+    // 5 wei at $2 is priced (no longer "Unpriced"), just worth nothing.
+    expect(vault?.hasUnpriced).toBe(false)
+    expect(vault?.incentiveMicroUsd).toBe(0n)
   })
 
   it("labels vaults and never shows an unpriced reward as $0", () => {

@@ -1,10 +1,10 @@
-import { formatMicroUsd } from "@/lib/money"
 import * as Button from "@repo/ui/button"
 import { cn } from "@repo/ui/cn"
 import { ArrowRight, Sparkles } from "lucide-react"
 import type { ReactElement } from "react"
 import type { BallotModel, PanelAction } from "./BallotPanel"
 import { FULL_BALLOT_BPS, formatBps } from "./ballot"
+import { formatUsd } from "./format"
 
 type BallotBarProps = {
   model: BallotModel
@@ -21,7 +21,8 @@ type BallotBarProps = {
  */
 export default function BallotBar(props: BallotBarProps): ReactElement {
   const { model } = props
-  const count = model.weightedCount
+  // Every ballot entry, as the sheet lists them (0% rows included).
+  const count = model.rows.length
   const fill = Math.min(1, model.totalBps / FULL_BALLOT_BPS)
   return (
     <aside
@@ -36,7 +37,7 @@ export default function BallotBar(props: BallotBarProps): ReactElement {
       >
         <span className="flex items-baseline gap-1.5">
           <span className="text-[17px] font-700 text-ink tabular-nums">
-            {props.showFigures ? formatMicroUsd(model.projectedMicroUsd) : "—"}
+            {props.showFigures ? formatUsd(model.projectedMicroUsd) : "—"}
           </span>
           <span className="text-caption font-500 text-muted">projected</span>
         </span>

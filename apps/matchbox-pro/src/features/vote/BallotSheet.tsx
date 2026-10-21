@@ -1,4 +1,3 @@
-import { formatMicroUsd } from "@/lib/money"
 import * as Button from "@repo/ui/button"
 import * as Dialog from "@repo/ui/dialog"
 import { Sparkles } from "lucide-react"
@@ -10,7 +9,7 @@ import {
   totalTone,
 } from "./BallotPanel"
 import { formatBps } from "./ballot"
-import { formatNativeList } from "./format"
+import { formatNativeList, formatUsd } from "./format"
 
 type BallotSheetProps = {
   open: boolean
@@ -56,9 +55,7 @@ export default function BallotSheet(props: BallotSheetProps): ReactElement {
           <p className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-body-sm font-600 text-ink tabular-nums">
             Projected this epoch
             <span>
-              {props.showFigures
-                ? formatMicroUsd(model.projectedMicroUsd)
-                : "—"}
+              {props.showFigures ? formatUsd(model.projectedMicroUsd) : "—"}
             </span>
             {props.showFigures && model.native.length > 0 ? (
               <span className="font-500 text-secondary">

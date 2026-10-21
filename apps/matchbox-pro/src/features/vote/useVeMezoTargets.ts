@@ -1,10 +1,10 @@
 import { useBoostGauges } from "@/hooks/useBoostGauges"
 import { profileForGauge, useGaugeProfiles } from "@/hooks/useProfiles"
 import { useTopology } from "@/hooks/useTopology"
+import { shortenAddress } from "@repo/ui/wallet-address"
 import { useMemo } from "react"
 import type { TargetData, VoteTarget } from "./model"
 import {
-  INFINITE_APY,
   PER_10K_VEMEZO,
   type Prices,
   boostFooter,
@@ -13,7 +13,6 @@ import {
   priceRewards,
   rewardPerUnit,
   sumPriced,
-  targetApy,
 } from "./targets"
 
 function parseAmount(value: string): bigint {
@@ -49,9 +48,10 @@ export function useVeMezoTargets(prices: Prices): TargetData {
         prices,
       )
       const { microUsd, hasUnpriced } = sumPriced(rewards)
-      const apyBps = targetApy(microUsd, gauge.totalWeight, prices.mezo)
+      // A blank display name falls back to the address, as on Overview.
+      const displayName = profile?.display_name?.trim() ?? ""
       const name =
-        profile?.display_name?.trim() || `Gauge ${gauge.address.slice(0, 6)}`
+        displayName !== "" ? displayName : shortenAddress(gauge.address)
       const chip = profile?.vebtc_token_id ?? gauge.veBTCTokenId?.toString()
       return {
         id: gauge.address,
@@ -67,7 +67,8 @@ export function useVeMezoTargets(prices: Prices): TargetData {
         rewards,
         incentiveMicroUsd: microUsd,
         hasUnpriced,
-        apyBps,
+        rewardsLabel: "Incentives",
+        apyBps: null,
         perUnitMicroUsd:
           microUsd > 0n
             ? rewardPerUnit(microUsd, gauge.totalWeight, PER_10K_VEMEZO)
@@ -88,7 +89,6 @@ export function useVeMezoTargets(prices: Prices): TargetData {
           boost: gauge.boostMultiplier,
         }),
         sortValues: {
-          apy: apyBps === -1n ? INFINITE_APY : (apyBps ?? 0n),
           incentives: microUsd,
           vebtc: gauge.veBTCWeight ?? 0n,
           vemezo: gauge.totalWeight,

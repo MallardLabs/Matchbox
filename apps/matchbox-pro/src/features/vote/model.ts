@@ -41,7 +41,7 @@ export type TargetFooter = {
   side: { text: string; tone: "muted" | "neg" } | null
   multiplier: { text: string; atMax: boolean } | null
   /** Bottom meter, fractions 0–1 of the card width. */
-  meter: { fill: number; tone: "accent" | "pos"; over: number }
+  meter: { fill: number; tone: "accent" | "pos" }
 }
 
 export type TargetMark =
@@ -64,6 +64,9 @@ export type VoteTarget = {
   /** Priced rewards only. */
   incentiveMicroUsd: bigint
   hasUnpriced: boolean
+  /** Label over the headline total: "Incentives", or "Fees + incentives" for pools. */
+  rewardsLabel: string
+  /** Filled by the workspace for the current lock selection (see `displayApy`). */
   apyBps: bigint | null
   /** Reward for one more `unitLabel` of votes, e.g. "$21.40 / 10k veMEZO". */
   perUnitMicroUsd: bigint | null
@@ -105,8 +108,12 @@ export type VoteTypeMeta = {
   stepLabel: (tokenId: bigint) => string
   targetNoun: string
   perUnitLabel: string
+  /** Votes a target needs before an APY is shown with no lock selected. */
+  referenceUnit: bigint
   sorts: SortOption[]
 }
+
+const E18 = 10n ** 18n
 
 export const VOTE_TYPE_META: Record<VoteType, VoteTypeMeta> = {
   vemezo: {
@@ -121,6 +128,7 @@ export const VOTE_TYPE_META: Record<VoteType, VoteTypeMeta> = {
     stepLabel: (tokenId) => `Vote with veMEZO #${tokenId}`,
     targetNoun: "gauges",
     perUnitLabel: "10k veMEZO",
+    referenceUnit: 10_000n * E18,
     sorts: [
       { key: "apy", label: "APY" },
       { key: "incentives", label: "Incentives" },
@@ -141,6 +149,7 @@ export const VOTE_TYPE_META: Record<VoteType, VoteTypeMeta> = {
     stepLabel: (tokenId) => `Vote with veBTC #${tokenId} · Validators`,
     targetNoun: "validators",
     perUnitLabel: "1 veBTC",
+    referenceUnit: E18,
     sorts: [
       { key: "apy", label: "APY" },
       { key: "incentives", label: "Incentives" },
@@ -160,6 +169,7 @@ export const VOTE_TYPE_META: Record<VoteType, VoteTypeMeta> = {
     stepLabel: (tokenId) => `Vote with veBTC #${tokenId} · Pools`,
     targetNoun: "pools",
     perUnitLabel: "1 veBTC",
+    referenceUnit: E18,
     sorts: [
       { key: "apy", label: "APY" },
       { key: "incentives", label: "Incentives" },

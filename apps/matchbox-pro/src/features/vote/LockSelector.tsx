@@ -131,13 +131,13 @@ function LockBody(props: LockSelectorProps): ReactElement {
         return (
           <li
             key={id}
-            className="shrink-0 md:w-[calc((100%-5rem)/6)] md:min-w-[150px]"
+            // Six to a row like J04, but a tile grows rather than wrap its amount.
+            className="shrink-0 md:min-w-[max(150px,calc((100%-5rem)/6))]"
           >
             <LockTile
               asset={props.asset}
               lock={lock}
               selected={props.selected.has(id)}
-              readOnly={props.mode === "watching"}
               onToggle={() => props.onToggle(id)}
             />
           </li>
@@ -151,13 +151,11 @@ function LockTile({
   asset,
   lock,
   selected,
-  readOnly,
   onToggle,
 }: {
   asset: PowerAsset
   lock: VoteLock
   selected: boolean
-  readOnly: boolean
   onToggle: () => void
 }): ReactElement {
   const votable = lock.state === "votable"
@@ -172,7 +170,6 @@ function LockTile({
       onClick={onToggle}
       aria-pressed={votable ? on : undefined}
       aria-label={label}
-      title={readOnly && votable ? "Watching · read-only" : undefined}
       className={cn(
         "group flex text-left transition-[filter,background-color] disabled:cursor-not-allowed",
         // Phone chip
@@ -199,7 +196,7 @@ function LockTile({
         <Tick on={on} votable={votable} asset={asset} />
       </span>
       <span className="flex flex-col gap-px md:contents">
-        <span className="text-label font-600 tabular-nums md:mt-1 md:text-nav md:font-500">
+        <span className="whitespace-nowrap text-label font-600 tabular-nums md:mt-1 md:text-nav md:font-500">
           {amount}
           <span className="hidden md:inline"> {asset}</span>
         </span>

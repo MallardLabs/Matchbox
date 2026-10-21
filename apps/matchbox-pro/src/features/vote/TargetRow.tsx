@@ -52,19 +52,22 @@ export default function TargetRow({
           ) : null}
         </h3>
         <p className="flex items-center gap-2.5 text-caption tabular-nums">
-          <span
-            className={cn(
-              "font-600",
-              target.apyBps === null ? "text-muted" : "text-pos",
-            )}
-          >
-            {formatApy(target.apyBps)} APY
-          </span>
-          <span className="font-500 text-muted">
-            {target.incentiveMicroUsd === 0n && target.hasUnpriced
-              ? "Unpriced"
-              : formatUsdCompact(target.incentiveMicroUsd)}
-          </span>
+          {target.incentiveMicroUsd === 0n && !target.hasUnpriced ? (
+            <span className="font-500 text-muted">No incentives</span>
+          ) : (
+            <>
+              {target.apyBps === null ? null : (
+                <span className="font-600 text-pos">
+                  {formatApy(target.apyBps)} APY
+                </span>
+              )}
+              <span className="font-500 text-muted">
+                {target.incentiveMicroUsd === 0n
+                  ? "Unpriced"
+                  : formatUsdCompact(target.incentiveMicroUsd)}
+              </span>
+            </>
+          )}
         </p>
       </div>
       {bps === undefined ? (
