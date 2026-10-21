@@ -262,53 +262,6 @@ export function useWalletEarnings(
   return toResult(query, !!wallet)
 }
 
-export type EpochEarning = {
-  /** Stable epoch id: epochStart / 604800 (Unix week). Label by date. */
-  epoch: number
-  /** Unix seconds the epoch started. */
-  startsAt: number
-  /**
-   * Voting incentives earned that epoch, micro-USD: USD at earn for sealed
-   * epochs, current USD for the projected one. Null when a token in the epoch
-   * has no price (render "Unpriced", never $0).
-   */
-  usdMicro: bigint | null
-  /** The current epoch: still accruing, not realized. */
-  projected?: boolean
-}
-
-/**
- * Connected or watched wallet's voting-incentive earnings, newest last. The
- * final entry is the current epoch with `projected: true`.
- */
-export function useEpochEarnings(
-  address: string | undefined,
-  epochs = 6,
-): HistoryResult<EpochEarning[]> {
-  const result = useWalletEarnings(address, epochs)
-  const earnings = result.data
-  const data = useMemo(
-    () =>
-      earnings
-        ? [
-            ...earnings.epochs.map((epoch) => ({
-              epoch: epoch.epochStart / EPOCH_SECONDS,
-              startsAt: epoch.epochStart,
-              usdMicro: epoch.unpriced > 0 ? null : epoch.usdAtEarnMicro,
-            })),
-            {
-              epoch: earnings.current.epochStart / EPOCH_SECONDS,
-              startsAt: earnings.current.epochStart,
-              usdMicro: earnings.current.usdNowMicro,
-              projected: true,
-            },
-          ]
-        : undefined,
-    [earnings],
-  )
-  return { ...result, data }
-}
-
 // ---------------------------------------------------------------- ledger
 
 export type LedgerFilters = {
