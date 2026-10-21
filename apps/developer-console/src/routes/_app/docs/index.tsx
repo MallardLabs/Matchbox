@@ -10,6 +10,7 @@ import { ArrowRight, Braces } from "lucide-react"
 import type { ReactElement, ReactNode } from "react"
 import DocsHeader from "../../../components/docs/DocsHeader"
 import SectionHead from "../../../components/ui/SectionHead"
+import { shortKeyPrefix } from "../../../lib/api-keys"
 import { useDocsControls, useDocsCredentials } from "../../../lib/docs-context"
 import { docPages } from "../../../lib/docs-pages"
 import { buildDocsIndex } from "../../../lib/docs-search"
@@ -91,7 +92,7 @@ function QuickstartPage(): ReactElement {
   return (
     <div className="flex flex-col gap-6">
       <DocsHeader title="Quickstart">
-        <dl className="m-0 grid grid-cols-2 gap-x-6 gap-y-3 border-y border-line py-3 md:grid-cols-[minmax(0,1fr)_160px_220px_220px]">
+        <dl className="m-0 grid grid-cols-2 gap-x-6 gap-y-3 border-y border-line py-3 md:grid-cols-[minmax(0,1fr)_120px_180px_150px]">
           <div className="col-span-2 flex min-w-0 flex-col gap-1 md:col-span-1">
             <dt className="text-caption text-muted">Base URL</dt>
             <dd className="m-0 truncate font-mono text-body-sm text-ink">
@@ -127,8 +128,11 @@ function QuickstartPage(): ReactElement {
           )}
           <div className="flex min-w-0 flex-col gap-1">
             <dt className="text-caption text-muted">Key</dt>
-            <dd className="m-0 truncate font-mono text-body-sm text-ink">
-              {`${credentials.secretKeyPrefix}_…`}
+            <dd
+              title={credentials.secretKeyPrefix}
+              className="m-0 truncate font-mono text-body-sm text-ink"
+            >
+              {shortKeyPrefix(credentials.secretKeyPrefix)}
             </dd>
           </div>
         </dl>

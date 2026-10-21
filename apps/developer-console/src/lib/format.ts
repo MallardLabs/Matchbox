@@ -103,6 +103,18 @@ export function formatMonthDay(value: string | null): string {
   return monthDay.format(new Date(value))
 }
 
+const clock = new Intl.DateTimeFormat("en-GB", {
+  hour: "2-digit",
+  minute: "2-digit",
+})
+
+/** "Oct 19 · 14:22" (local time). */
+export function formatMonthDayTime(value: string | null): string {
+  if (value === null) return dash
+  const date = new Date(value)
+  return `${monthDay.format(date)} · ${clock.format(date)}`
+}
+
 /** Compact age: "now", "45s ago", "4m ago", "3h ago", "2d ago". */
 export function formatAgo(seconds: number | null): string {
   if (seconds === null) return dash

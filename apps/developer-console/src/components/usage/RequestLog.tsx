@@ -21,6 +21,9 @@ import ChipGroup from "../ui/ChipGroup"
 
 type LogFilter = "all" | RequestStatusFilter
 
+/** Rows shown per "Show more"; the log fetches up to 50. */
+const LOG_PAGE = 10
+
 const filters: Array<{ value: LogFilter; label: string; name: string }> = [
   { value: "all", label: "All", name: "All statuses" },
   { value: "success", label: "2xx", name: "Successful" },
@@ -78,6 +81,7 @@ export default function RequestLog({
   prefixes: ReadonlyMap<string, string>
 }): ReactElement {
   const [filter, setFilter] = useState<LogFilter>("all")
+  const [shown, setShown] = useState(LOG_PAGE)
   const [requestId, setRequestId] = useState("")
   const searchId = useId()
   const params = {
@@ -134,6 +138,7 @@ export default function RequestLog({
           onChange={(value) => {
             if (isLogFilter(value)) {
               setFilter(value)
+              setShown(LOG_PAGE)
               lookup.reset()
             }
           }}
@@ -228,7 +233,7 @@ export default function RequestLog({
                 </Table.Cell>
               </Table.Row>
             ) : (
-              rows.map((entry) => (
+              rows.slice(0, shown).map((entry) => (
                 <Table.Row key={entry.requestId}>
                   <Table.Cell mono className="py-2 text-label text-ink-2">
                     <time dateTime={entry.timestamp}>
@@ -298,6 +303,16 @@ export default function RequestLog({
           Show recent requests
         </Button.Root>
       )}
+      {lookup.data === undefined && rows.length > shown ? (
+        <Button.Root
+          variant="ghost"
+          size="sm"
+          className="mt-2 self-start"
+          onClick={() => setShown((count) => count + LOG_PAGE)}
+        >
+          {`Show more · ${rows.length - shown}`}
+        </Button.Root>
+      ) : null}
     </section>
   )
 }

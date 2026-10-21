@@ -19,10 +19,17 @@ const segments: Segment[] = [
   { key: "serverErrors", label: "5xx", className: "bg-neg" },
 ]
 
+const [rateLimited, clientErrors, serverErrors] = segments as [
+  Segment,
+  Segment,
+  Segment,
+]
+const legendOrder = [clientErrors, serverErrors, rateLimited]
+
 export function ErrorsLegend(): ReactElement {
   return (
     <ul className="m-0 flex list-none items-center gap-3 p-0 text-label text-secondary">
-      {[...segments].reverse().map((segment) => (
+      {legendOrder.map((segment) => (
         <li key={segment.key} className="flex items-center gap-1.5">
           <span
             aria-hidden="true"

@@ -494,10 +494,10 @@ function InviteCard({ org }: { org: OrganizationSummary }): ReactElement {
       setEmail("")
     },
   })
-  const roles =
-    org.role === "owner"
-      ? membershipRoleSchema.options
-      : membershipRoleSchema.options.filter((option) => option !== "owner")
+  // Least access first, as in the frame.
+  const roles = [...membershipRoleSchema.options]
+    .reverse()
+    .filter((option) => org.role === "owner" || option !== "owner")
 
   function submit(event: FormEvent): void {
     event.preventDefault()
@@ -522,10 +522,9 @@ function InviteCard({ org }: { org: OrganizationSummary }): ReactElement {
             <Field.Control>
               <Input.Root
                 type="email"
-                size="lg"
                 autoComplete="off"
                 value={email}
-                className="bg-surface"
+                className="h-9 bg-surface"
                 onChange={(event) => setEmail(event.target.value)}
               />
             </Field.Control>

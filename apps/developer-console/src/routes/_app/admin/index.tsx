@@ -28,6 +28,15 @@ import { developerReviewLabels } from "../../../lib/reviews"
 
 type QueueSearch = { state?: ReviewRecordState; scope?: PlatformScope }
 
+/** Queue filters, most actionable first. */
+const stateOrder = [
+  "open",
+  "changes-requested",
+  "approved",
+  "rejected",
+  "withdrawn",
+] as const satisfies readonly ReviewRecordState[]
+
 export const Route = createFileRoute("/_app/admin/")({
   validateSearch: (search: Record<string, unknown>): QueueSearch => {
     const state = reviewRecordStateSchema.safeParse(search.state)
@@ -139,7 +148,7 @@ function ReviewQueue(): ReactElement {
             const parsed = reviewRecordStateSchema.safeParse(value)
             if (parsed.success) setFilter({ state: parsed.data })
           }}
-          options={reviewRecordStateSchema.options.map((option) => ({
+          options={stateOrder.map((option) => ({
             value: option,
             label:
               option === "open" && data !== undefined

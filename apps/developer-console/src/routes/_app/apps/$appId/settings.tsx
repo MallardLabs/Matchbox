@@ -174,11 +174,10 @@ function Settings({ app }: { app: App }): ReactElement {
         <Input.Root
           type="url"
           inputMode="url"
-          size="lg"
           mono
           placeholder="https://"
           value={draft[key]}
-          className="bg-surface text-label"
+          className="h-9 bg-surface text-label"
           onChange={(event) => set(key, event.target.value)}
         />
       </Field.Control>
@@ -205,10 +204,9 @@ function Settings({ app }: { app: App }): ReactElement {
                   <Field.Label>Name</Field.Label>
                   <Field.Control>
                     <Input.Root
-                      size="lg"
                       value={draft.name}
                       maxLength={80}
-                      className="bg-surface"
+                      className="h-9 bg-surface"
                       onChange={(event) => set("name", event.target.value)}
                     />
                   </Field.Control>
@@ -217,7 +215,12 @@ function Settings({ app }: { app: App }): ReactElement {
                 <Field.Root>
                   <Field.Label>Slug</Field.Label>
                   <Field.Control>
-                    <Input.Root size="lg" mono readOnly value={app.slug} />
+                    <Input.Root
+                      className="h-9 text-label"
+                      mono
+                      readOnly
+                      value={app.slug}
+                    />
                   </Field.Control>
                 </Field.Root>
               </div>
@@ -258,11 +261,10 @@ function Settings({ app }: { app: App }): ReactElement {
                     <Input.Root
                       type="url"
                       inputMode="url"
-                      size="lg"
                       mono
                       placeholder="https://example.com/logo.png"
                       value={draft.logoUrl}
-                      className="bg-surface text-label"
+                      className="h-9 bg-surface text-label"
                       onChange={(event) => set("logoUrl", event.target.value)}
                     />
                   </Field.Control>
@@ -278,11 +280,10 @@ function Settings({ app }: { app: App }): ReactElement {
                   <Field.Control>
                     <Input.Root
                       type="email"
-                      size="lg"
                       mono
                       autoComplete="email"
                       value={draft.supportEmail}
-                      className="bg-surface text-label"
+                      className="h-9 bg-surface text-label"
                       onChange={(event) =>
                         set("supportEmail", event.target.value)
                       }

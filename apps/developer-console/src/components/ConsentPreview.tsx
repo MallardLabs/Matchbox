@@ -7,6 +7,7 @@ import { networkNames } from "@repo/platform-contracts/network"
 import { buttonStyles } from "@repo/ui/button"
 import { cn } from "@repo/ui/cn"
 import * as Switch from "@repo/ui/switch"
+import { shortenAddress } from "@repo/ui/wallet-address"
 import { CircleCheck } from "lucide-react"
 import { type ReactElement, useId, useState } from "react"
 import { formatHost, humanize } from "../lib/format"
@@ -17,18 +18,37 @@ export type ConsentAudience = "new" | "returning"
 
 const sampleWallet = "0x3D41…9DC3"
 
+/** Short form of a sample claim value, as the consent screen shows it. */
+export function claimDisplayValue(claim: ClaimPreview): string {
+  const value = claim.value
+  if (value === null || value === "") return "—"
+  if (/^0x[0-9a-fA-F]{40}$/.test(value)) return shortenAddress(value)
+  if (/^https?:\/\//.test(value)) {
+    try {
+      const file = new URL(value).pathname.split("/").filter(Boolean).pop()
+      return file ?? formatHost(value)
+    } catch {
+      return value
+    }
+  }
+  return value
+}
+
 function ClaimRow({ claim }: { claim: ClaimPreview }): ReactElement {
   const mono = claim.claim === "wallet_address" || claim.claim === "discord_id"
   return (
     <div className="flex items-center justify-between gap-4 text-body-sm">
-      <dt className="text-secondary">{claim.label}</dt>
+      <dt className="shrink-0 whitespace-nowrap text-secondary">
+        {claim.label}
+      </dt>
       <dd
+        title={claim.value ?? undefined}
         className={cn(
           "m-0 min-w-0 truncate text-right text-ink",
           mono ? "font-mono text-label" : "font-500",
         )}
       >
-        {claim.value ?? "—"}
+        {claimDisplayValue(claim)}
       </dd>
     </div>
   )

@@ -747,7 +747,7 @@ function KeyPanel({
               }}
             >
               <Field.Control>
-                <Select.Trigger size="lg" className="bg-surface">
+                <Select.Trigger className="h-9 bg-surface">
                   <Select.Value />
                 </Select.Trigger>
               </Field.Control>
@@ -926,12 +926,11 @@ function CreateKeyDialog({
                 <Field.Label>Name</Field.Label>
                 <Field.Control>
                   <Input.Root
-                    size="lg"
                     value={name}
                     maxLength={80}
                     autoComplete="off"
                     placeholder="Production server"
-                    className="bg-surface"
+                    className="h-9 bg-surface"
                     onChange={(event) => setName(event.target.value)}
                   />
                 </Field.Control>

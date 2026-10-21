@@ -165,7 +165,7 @@ function SearchDialog({ onClose }: { onClose: () => void }): ReactElement {
       hideClose
       aria-describedby={undefined}
       overlayClassName="sm:items-start sm:pt-[12vh]"
-      className="p-3"
+      className="mb-auto mt-0 p-3"
     >
       <Dialog.Title className="sr-only">Search docs</Dialog.Title>
       <Input.Group size="lg">

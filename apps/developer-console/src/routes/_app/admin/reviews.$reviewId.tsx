@@ -49,10 +49,10 @@ import * as api from "../../../lib/api"
 import { errorMessage } from "../../../lib/api-client"
 import {
   dash,
-  formatDateTime,
   formatHost,
   formatInteger,
   formatMonthDay,
+  formatMonthDayTime,
   formatPercent,
   humanize,
 } from "../../../lib/format"
@@ -225,7 +225,9 @@ function ReviewDetail({ review }: { review: AdminReview }): ReactElement {
             </dl>
             <dl className="m-0 flex flex-col">
               <Fact term="Submitter">{review.submitterEmail ?? dash}</Fact>
-              <Fact term="Submitted">{formatDateTime(review.createdAt)}</Fact>
+              <Fact term="Submitted">
+                {formatMonthDayTime(review.createdAt)}
+              </Fact>
               <Fact term="Client ID">
                 <span className="font-mono">
                   {`${review.environment.clientId.slice(0, 12)}…${review.environment.clientId.slice(-4)}`}
@@ -677,7 +679,7 @@ function DecidedPanel({ review }: { review: AdminReview }): ReactElement {
         </StatusLabel>
       </p>
       <dl className="m-0 flex flex-col">
-        <Fact term="Decided">{formatDateTime(review.decidedAt)}</Fact>
+        <Fact term="Decided">{formatMonthDayTime(review.decidedAt)}</Fact>
       </dl>
       {review.reviewerNote === null ? null : (
         <div className="flex flex-col gap-1.5 rounded-r-md border-l-2 border-accent bg-accent-soft px-3.5 py-3">
