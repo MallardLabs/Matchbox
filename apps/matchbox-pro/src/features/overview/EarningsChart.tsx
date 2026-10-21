@@ -45,6 +45,7 @@ export default function EarningsChart({
   bars,
   legend,
   note,
+  empty = null,
   busy,
   detail,
   className,
@@ -54,6 +55,8 @@ export default function EarningsChart({
   legend: LegendItem[]
   /** Short state line, e.g. "History unavailable". */
   note: string | null
+  /** Replaces the bars with this line ("No earnings yet"). */
+  empty?: string | null
   busy: boolean
   /** Pointer-only epoch breakdown; the chart's data table carries the values. */
   detail?: (bar: BarChart.Bar) => BarDetail | null
@@ -71,7 +74,7 @@ export default function EarningsChart({
     >
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
         <h2 className="m-0 text-body font-500 text-ink-2">{title}</h2>
-        {legend.length > 0 ? (
+        {legend.length > 0 && empty === null ? (
           <ul className="m-0 flex list-none items-center gap-3 p-0">
             {legend.map((item) => (
               <li
@@ -88,82 +91,91 @@ export default function EarningsChart({
           </ul>
         ) : null}
       </div>
-      <div className="relative" onMouseLeave={() => setHovered(null)}>
-        <span
-          aria-hidden="true"
-          className="absolute inset-x-0 h-px bg-line"
-          style={{ top: PLOT_HEIGHT }}
-        />
-        <BarChart.Root
-          bars={bars}
-          title={title}
-          formatTick={formatTick}
-          height={PLOT_HEIGHT}
-          style={{ maxWidth: plotWidth(bars.length) }}
-          className="relative w-full"
-        />
-        {detail ? (
-          <div
+      {empty !== null ? (
+        <div
+          className="flex items-center border-b border-line"
+          style={{ height: PLOT_HEIGHT }}
+        >
+          <p className="m-0 text-body-sm text-muted">{empty}</p>
+        </div>
+      ) : (
+        <div className="relative" onMouseLeave={() => setHovered(null)}>
+          <span
             aria-hidden="true"
-            className="absolute left-0 top-0 hidden md:block"
-            style={{ width: plotWidth(bars.length), height: PLOT_HEIGHT }}
-          >
-            {bars.map((bar, index) => (
-              <span
-                key={bar.key}
-                className={cn(
-                  "absolute top-0 h-full rounded-md transition-colors",
-                  hovered === index && "bg-ink/[0.04]",
-                )}
-                style={{
-                  left: AXIS + index * (COLUMN + GAP) - 6,
-                  width: COLUMN + 12,
-                }}
-                onMouseEnter={() => setHovered(index)}
-              />
-            ))}
-          </div>
-        ) : null}
-        {card && hovered !== null ? (
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute z-sticky hidden w-[228px] flex-col gap-1 rounded-lg border border-line bg-surface p-3 shadow-pop md:flex"
-            style={{
-              top: -8,
-              left: Math.min(
-                AXIS + hovered * (COLUMN + GAP) + COLUMN + 8,
-                Math.max(0, plotWidth(bars.length) - 228),
-              ),
-            }}
-          >
-            <p className="m-0 text-caption text-muted">{card.heading}</p>
-            <p className="m-0 text-title-sm font-600 tabular-nums text-ink">
-              {card.value}
-            </p>
-            {card.note ? (
-              <p className="m-0 text-label text-accent-ink">{card.note}</p>
-            ) : null}
-            {card.rows.length > 0 ? (
-              <ul className="m-0 mt-1.5 flex list-none flex-col gap-1 p-0">
-                {card.rows.map((row) => (
-                  <li
-                    key={row.key}
-                    className="flex items-center justify-between gap-3 text-label"
-                  >
-                    <span className="flex min-w-0 items-center gap-1.5 text-ink-2">
-                      <span className="size-1.5 shrink-0 rounded-full bg-accent" />
-                      <span className="truncate">{row.label}</span>
-                    </span>
-                    <span className="shrink-0 tabular-nums text-ink">
-                      {row.value}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-          </div>
-        ) : null}
-      </div>
+            className="absolute inset-x-0 h-px bg-line"
+            style={{ top: PLOT_HEIGHT }}
+          />
+          <BarChart.Root
+            bars={bars}
+            title={title}
+            formatTick={formatTick}
+            height={PLOT_HEIGHT}
+            style={{ maxWidth: plotWidth(bars.length) }}
+            className="relative w-full"
+          />
+          {detail ? (
+            <div
+              aria-hidden="true"
+              className="absolute left-0 top-0 hidden md:block"
+              style={{ width: plotWidth(bars.length), height: PLOT_HEIGHT }}
+            >
+              {bars.map((bar, index) => (
+                <span
+                  key={bar.key}
+                  className={cn(
+                    "absolute top-0 h-full rounded-md transition-colors",
+                    hovered === index && "bg-ink/[0.04]",
+                  )}
+                  style={{
+                    left: AXIS + index * (COLUMN + GAP) - 6,
+                    width: COLUMN + 12,
+                  }}
+                  onMouseEnter={() => setHovered(index)}
+                />
+              ))}
+            </div>
+          ) : null}
+          {card && hovered !== null ? (
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute z-sticky hidden w-[228px] flex-col gap-1 rounded-lg border border-line bg-surface p-3 shadow-pop md:flex"
+              style={{
+                top: -8,
+                left: Math.min(
+                  AXIS + hovered * (COLUMN + GAP) + COLUMN + 8,
+                  Math.max(0, plotWidth(bars.length) - 228),
+                ),
+              }}
+            >
+              <p className="m-0 text-caption text-muted">{card.heading}</p>
+              <p className="m-0 text-title-sm font-600 tabular-nums text-ink">
+                {card.value}
+              </p>
+              {card.note ? (
+                <p className="m-0 text-label text-accent-ink">{card.note}</p>
+              ) : null}
+              {card.rows.length > 0 ? (
+                <ul className="m-0 mt-1.5 flex list-none flex-col gap-1 p-0">
+                  {card.rows.map((row) => (
+                    <li
+                      key={row.key}
+                      className="flex items-center justify-between gap-3 text-label"
+                    >
+                      <span className="flex min-w-0 items-center gap-1.5 text-ink-2">
+                        <span className="size-1.5 shrink-0 rounded-full bg-accent" />
+                        <span className="truncate">{row.label}</span>
+                      </span>
+                      <span className="shrink-0 tabular-nums text-ink">
+                        {row.value}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+      )}
       {note ? <p className="m-0 text-label text-muted">{note}</p> : null}
     </section>
   )

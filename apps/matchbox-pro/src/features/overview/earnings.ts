@@ -1,4 +1,8 @@
-import type { EpochEarning, HistoryResult } from "@/features/history/useHistory"
+import {
+  EPOCH_SECONDS,
+  type HistoryResult,
+  type WalletEarnings,
+} from "@/features/history/useHistory"
 import { epochNumberFor } from "@/lib/epoch"
 import { formatWholeUsd } from "@/lib/overview"
 import type { Bar } from "@repo/ui/bar-chart"
@@ -14,6 +18,51 @@ export type LiveValue =
   | { status: "unavailable" }
   | { status: "none" }
   | { status: "ready"; usdMicro: bigint }
+
+/** One epoch on the chart (realized history, or the accruing `projected`). */
+export type ChartEpoch = {
+  epoch: number
+  /** Unix seconds the epoch started. */
+  startsAt: number
+  /** Null: earned tokens but none priced yet ("Unpriced"). */
+  usdMicro: bigint | null
+  projected?: boolean
+  /** Some lines still unpriced: USD is at least this and will grow. */
+  lowerBound?: boolean
+}
+
+function epochUsd(
+  tokenCount: number,
+  usdMicro: bigint | null,
+  unpriced: number,
+): Pick<ChartEpoch, "usdMicro" | "lowerBound"> {
+  // Nothing earned is a real $0, not a missing price.
+  if (tokenCount === 0) return { usdMicro: 0n, lowerBound: false }
+  if (usdMicro === null) return { usdMicro: null, lowerBound: false }
+  return { usdMicro, lowerBound: unpriced > 0 }
+}
+
+/**
+ * Wallet earnings to chart epochs, oldest first, the accruing epoch last.
+ * Priced lines show as soon as they arrive (a lower bound while other
+ * prices retry) instead of the whole epoch reading "Unpriced".
+ */
+export function walletChartEpochs(earnings: WalletEarnings): ChartEpoch[] {
+  const { current } = earnings
+  return [
+    ...earnings.epochs.map((epoch) => ({
+      epoch: epoch.epochStart / EPOCH_SECONDS,
+      startsAt: epoch.epochStart,
+      ...epochUsd(epoch.tokens.length, epoch.usdAtEarnMicro, epoch.unpriced),
+    })),
+    {
+      epoch: current.epochStart / EPOCH_SECONDS,
+      startsAt: current.epochStart,
+      ...epochUsd(current.tokens.length, current.usdNowMicro, 0),
+      projected: true,
+    },
+  ]
+}
 
 /** Whole dollars; sub-dollar amounts read "<$1" rather than "$0". */
 function barUsd(usdMicro: bigint): string {
@@ -57,7 +106,7 @@ export function earningsBars({
   next,
   historyEpochs = 5,
 }: {
-  history: HistoryResult<EpochEarning[]>
+  history: HistoryResult<ChartEpoch[]>
   epochStart: bigint | undefined
   current?: LiveValue | undefined
   next?: LiveValue | undefined
@@ -81,7 +130,10 @@ export function earningsBars({
         key: `epoch-${item.startsAt}`,
         label: epochAxisLabel(start),
         value: item.usdMicro === null ? null : geometry(item.usdMicro),
-        display: item.usdMicro === null ? "Unpriced" : barUsd(item.usdMicro),
+        display:
+          item.usdMicro === null
+            ? "Unpriced"
+            : `${item.lowerBound ? "≥" : ""}${barUsd(item.usdMicro)}`,
         tone:
           item.usdMicro === null ? "unavailable" : latest ? "current" : "past",
       })
@@ -150,4 +202,20 @@ export function formatTick(value: number): string {
 
 function trim(value: number): string {
   return String(Math.round(value * 100) / 100)
+}
+
+/**
+ * The chart's empty state, or null to draw bars: no earnings in any shown
+ * epoch, or no locks while history is still out (nothing new can accrue).
+ */
+export function earningsEmptyState(
+  bars: Bar[],
+  { hasLocks, historyReady }: { hasLocks: boolean; historyReady: boolean },
+): string | null {
+  const earned = bars.some((bar) => bar.value !== null && bar.value > 0)
+  if (earned) return null
+  if (historyReady && bars.every((bar) => bar.value !== null)) {
+    return "No earnings yet"
+  }
+  return hasLocks ? null : "No locks"
 }

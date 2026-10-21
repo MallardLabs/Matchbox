@@ -1,6 +1,13 @@
+import type { WalletEarnings } from "@/features/history/useHistory"
 import { LAUNCH_EPOCH_START, epochLabel, epochNumberFor } from "@/lib/epoch"
 import { describe, expect, it } from "vitest"
-import { earningsBars, formatTick } from "./earnings"
+import {
+  earningsBars,
+  earningsEmptyState,
+  formatTick,
+  walletChartEpochs,
+} from "./earnings"
+import { claimableValue, liveUsd, projectedValue } from "./heroValues"
 
 const WEEK = 604_800n
 
@@ -196,5 +203,169 @@ describe("formatTick", () => {
     expect(formatTick(2500)).toBe("$2.5k")
     expect(formatTick(0.25)).toBe("$0.25")
     expect(formatTick(2_000_000)).toBe("$2M")
+  })
+})
+
+describe("no-lock wallets", () => {
+  const sources = { status: "ready" as const, usdMicro: 0n }
+
+  it("reads $0.00 claimable and projected once lock reads settle", () => {
+    const claimable = claimableValue({ locksState: "empty", sources })
+    const projected = projectedValue({
+      locksState: "empty",
+      veMezoLocks: 0,
+      isLoading: true,
+      failed: false,
+      usdMicro: 0n,
+    })
+    expect(claimable).toEqual({ status: "none" })
+    expect(projected).toEqual({ status: "none" })
+    expect(liveUsd(claimable, (micro) => `$${micro}`)).toBe("$0")
+  })
+
+  it("stays loading, or unknown, until the lock reads settle", () => {
+    expect(claimableValue({ locksState: "loading", sources })).toEqual({
+      status: "loading",
+    })
+    expect(claimableValue({ locksState: "error", sources })).toEqual({
+      status: "unavailable",
+    })
+    expect(liveUsd({ status: "loading" }, String)).toBeNull()
+    expect(
+      projectedValue({
+        locksState: "ready",
+        veMezoLocks: 1,
+        isLoading: false,
+        failed: true,
+        usdMicro: 5n,
+      }),
+    ).toEqual({ status: "unavailable" })
+  })
+
+  it("shows the chart empty state instead of dashes", () => {
+    const epochStart = LAUNCH_EPOCH_START + 7n * WEEK
+    const pending = earningsBars({
+      history: { status: "loading", data: undefined, lagSeconds: undefined },
+      epochStart,
+      next: { status: "none" },
+    })
+    expect(
+      earningsEmptyState(pending, { hasLocks: false, historyReady: false }),
+    ).toBe("No locks")
+    expect(
+      earningsEmptyState(pending, { hasLocks: true, historyReady: false }),
+    ).toBeNull()
+
+    const zeros = earningsBars({
+      history: {
+        status: "ready",
+        lagSeconds: 0,
+        data: [6n, 7n].map((n) => ({
+          epoch: Number(n),
+          startsAt: Number(LAUNCH_EPOCH_START + n * WEEK),
+          usdMicro: 0n,
+          projected: n === 7n,
+        })),
+      },
+      epochStart,
+      next: { status: "ready", usdMicro: 0n },
+    })
+    expect(
+      earningsEmptyState(zeros, { hasLocks: true, historyReady: true }),
+    ).toBe("No earnings yet")
+  })
+})
+
+describe("walletChartEpochs", () => {
+  const window = (n: bigint) => ({
+    epochStart: Number(LAUNCH_EPOCH_START + n * WEEK),
+    epochEnd: Number(LAUNCH_EPOCH_START + (n + 1n) * WEEK),
+  })
+  const token = {
+    token: "0x7b7c000000000000000000000000000000000001",
+    symbol: "MEZO",
+    decimals: 18,
+    amount: 10n ** 18n,
+    usdAtEarnMicro: null,
+    usdNowMicro: null,
+  }
+  const totals = {
+    tokens: [],
+    usdAtEarnMicro: 0n,
+    usdNowMicro: 0n,
+    unpriced: 0,
+  }
+  function earnings(): WalletEarnings {
+    return {
+      tokenIds: [],
+      current: {
+        ...window(7n),
+        status: "projected",
+        tokens: [],
+        usdNowMicro: 0n,
+      },
+      epochs: [
+        {
+          ...window(4n),
+          status: "sealed",
+          tokens: [],
+          usdAtEarnMicro: null,
+          usdNowMicro: null,
+          unpriced: 0,
+        },
+        {
+          ...window(5n),
+          status: "sealed",
+          tokens: [token, token],
+          usdAtEarnMicro: 1_500_000n,
+          usdNowMicro: 1_500_000n,
+          unpriced: 1,
+        },
+        {
+          ...window(6n),
+          status: "sealed",
+          tokens: [token],
+          usdAtEarnMicro: null,
+          usdNowMicro: null,
+          unpriced: 1,
+        },
+      ],
+      totals: {
+        realized: totals,
+        claimed: totals,
+        claimable: totals,
+        projected: totals,
+      },
+      verified: true,
+      partial: true,
+    }
+  }
+
+  it("treats empty epochs as $0 and shows priced lines as a lower bound", () => {
+    expect(
+      walletChartEpochs(earnings()).map((epoch) => [
+        epoch.usdMicro,
+        epoch.lowerBound ?? false,
+        epoch.projected ?? false,
+      ]),
+    ).toEqual([
+      [0n, false, false],
+      [1_500_000n, true, false],
+      [null, false, false],
+      [0n, false, true],
+    ])
+  })
+
+  it("labels lower-bound bars with ≥", () => {
+    const bars = earningsBars({
+      history: {
+        status: "ready",
+        lagSeconds: 0,
+        data: walletChartEpochs(earnings()),
+      },
+      epochStart: LAUNCH_EPOCH_START + 7n * WEEK,
+      historyEpochs: 3,
+    })
+    expect(bars.map((bar) => bar.display)).toEqual(["$0", "≥$2", "Unpriced"])
   })
 })

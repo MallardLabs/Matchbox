@@ -13,7 +13,8 @@ import { ChevronRight, Gift, LoaderCircle, Vote } from "lucide-react"
 import type { ReactElement, ReactNode } from "react"
 import EarningsChart from "./EarningsChart"
 import TokenChips from "./TokenChips"
-import { earningsBars } from "./earnings"
+import { earningsBars, earningsEmptyState } from "./earnings"
+import { liveUsd } from "./heroValues"
 import type { Overview } from "./useOverview"
 
 /** J01 hero (T01 on tablets, M01 on phones): claim cluster + earnings. */
@@ -33,14 +34,21 @@ export default function OverviewHero({
     next: projected,
     historyEpochs: 6,
   })
-  const historyNote =
-    overview.history.status === "ready"
-      ? overview.history.freshness?.state === "stale"
-        ? "Stale"
+  const historyReady = overview.history.status === "ready"
+  const historyNote = historyReady
+    ? overview.history.freshness?.state === "stale"
+      ? "Stale"
+      : overview.historyPartial
+        ? "Prices updating"
         : null
-      : overview.history.status === "loading"
-        ? null
-        : "History unavailable"
+    : overview.history.status === "loading"
+      ? null
+      : "History unavailable"
+  const emptyChart = earningsEmptyState(bars, {
+    hasLocks: locksState !== "empty",
+    historyReady,
+  })
+  const noValue = <span className="text-muted">—</span>
 
   return (
     <section
@@ -72,6 +80,8 @@ export default function OverviewHero({
           <Metric label="APY" accent>
             {projected.status === "loading" ? (
               <Skeleton.Root className="h-6 w-16" />
+            ) : overview.apyBasisPoints === null ? (
+              noValue
             ) : (
               formatApyBasisPoints(overview.apyBasisPoints)
             )}
@@ -81,14 +91,17 @@ export default function OverviewHero({
               <Skeleton.Root className="h-6 w-16" />
             ) : projected.status === "ready" ? (
               formatMicroUsd(projected.usdMicro)
+            ) : projected.status === "none" ? (
+              // No eligible locks: nothing accrues this epoch.
+              formatMicroUsd(0n)
             ) : (
-              "—"
+              noValue
             )}
           </Metric>
           <Metric label="Voting power" className="md:hidden">
             {overview.votingPower
               ? formatCompactNumber(overview.votingPower.amount / 10n ** 18n)
-              : "—"}
+              : noValue}
           </Metric>
         </dl>
 
@@ -105,7 +118,8 @@ export default function OverviewHero({
         title="Earnings by epoch"
         bars={bars}
         legend={["realized", "latest", "projected"]}
-        note={historyNote}
+        note={emptyChart === null ? historyNote : null}
+        empty={emptyChart}
         busy={overview.history.status === "loading"}
         detail={(bar) => {
           if (bar.value === null) return null
@@ -141,15 +155,13 @@ function ClaimBlock({ overview }: { overview: Overview }): ReactElement {
   const canClaim = claims.sources.length > 0 || claim.running
   // Some claim reads failed: the total is a lower bound.
   const value =
-    claimable.status === "ready"
-      ? claims.usdMicro === 0n && claims.unpriced
-        ? "Unpriced"
-        : `${claims.incomplete ? "≥ " : ""}${formatMicroUsd(claimable.usdMicro)}`
-      : claimable.status === "unavailable"
-        ? "Unavailable"
-        : claimable.status === "none"
-          ? "—"
-          : null
+    claimable.status === "ready" && claims.usdMicro === 0n && claims.unpriced
+      ? "Unpriced"
+      : liveUsd(
+          claimable,
+          (micro) =>
+            `${claims.incomplete && claimable.status === "ready" ? "≥ " : ""}${formatMicroUsd(micro)}`,
+        )
 
   const claimLabel = claim.running
     ? "Claiming"

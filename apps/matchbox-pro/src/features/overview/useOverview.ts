@@ -1,4 +1,7 @@
-import { useEpochEarnings } from "@/features/history/useHistory"
+import {
+  type HistoryResult,
+  useWalletEarnings,
+} from "@/features/history/useHistory"
 import { claimGroups, sourcesForLock } from "@/features/locks/claims"
 import { type LockView, isExpired } from "@/features/locks/lockModel"
 import { useLockDetails } from "@/features/locks/useLockDetails"
@@ -14,9 +17,10 @@ import { gaugeDisplayName } from "@/lib/overview"
 import { calculateAnnualizedReturnBasisPoints } from "@/lib/rewardOptimizer"
 import { useViewer } from "@/lib/viewer"
 import { useCallback, useMemo } from "react"
-import type { LiveValue } from "./earnings"
+import { type ChartEpoch, walletChartEpochs } from "./earnings"
+import { type LocksState, claimableValue, projectedValue } from "./heroValues"
 
-export type LocksState = "loading" | "error" | "empty" | "ready"
+export type { LocksState } from "./heroValues"
 
 /** Everything the signed-in (or watched) Overview shows, from live reads. */
 export function useOverview() {
@@ -42,7 +46,16 @@ export function useOverview() {
   const claimSources = useClaimSources()
   const projected = usePersonalProjected(veMezoIds)
   const { voteStateMap } = useBatchVoteState(veMezoIds)
-  const history = useEpochEarnings(viewer.address, 6)
+  const earnings = useWalletEarnings(viewer.address, 6)
+  const earningsData = earnings.data
+  const chartEpochs = useMemo(
+    () => (earningsData ? walletChartEpochs(earningsData) : undefined),
+    [earningsData],
+  )
+  const history: HistoryResult<ChartEpoch[]> = {
+    ...earnings,
+    data: chartEpochs,
+  }
 
   const gaugeName = useCallback(
     (gauge: string) => gaugeDisplayName(profiles, gauge),
@@ -140,26 +153,17 @@ export function useOverview() {
     assetPriceMicroUsd: projected.assetPriceMicroUsd,
   })
 
-  const claimableValue: LiveValue =
-    locksState === "loading"
-      ? { status: "loading" }
-      : locks.length === 0
-        ? { status: "none" }
-        : claimSources.status === "loading"
-          ? { status: "loading" }
-          : claimSources.status === "error"
-            ? { status: "unavailable" }
-            : { status: "ready", usdMicro: claimSources.usdMicro }
-  const projectedValue: LiveValue =
-    veMezoIds.length === 0
-      ? locksState === "loading"
-        ? { status: "loading" }
-        : { status: "none" }
-      : projected.isLoading
-        ? { status: "loading" }
-        : projected.error || !projected.mezoPrice
-          ? { status: "unavailable" }
-          : { status: "ready", usdMicro: projected.projectedMicro }
+  const claimableLive = claimableValue({
+    locksState,
+    sources: claimSources,
+  })
+  const projectedLive = projectedValue({
+    locksState,
+    veMezoLocks: veMezoIds.length,
+    isLoading: projected.isLoading,
+    failed: Boolean(projected.error) || !projected.mezoPrice,
+    usdMicro: projected.projectedMicro,
+  })
 
   const unvoted = locks.filter(
     (lock) =>
@@ -176,8 +180,8 @@ export function useOverview() {
     locks,
     locksState,
     claims,
-    claimable: claimableValue,
-    projected: projectedValue,
+    claimable: claimableLive,
+    projected: projectedLive,
     apyBasisPoints,
     votingPower:
       veMezoPower > 0n
@@ -187,6 +191,8 @@ export function useOverview() {
           : null,
     unvoted,
     history,
+    /** Some realized USD is a lower bound while prices retry. */
+    historyPartial: earningsData?.partial === true,
     refetch: async () => {
       await Promise.all([
         mezo.refetch(),
