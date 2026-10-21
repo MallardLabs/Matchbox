@@ -38,6 +38,11 @@
       "name": "STUART_SUPPORT_LIMITER",
       "namespace_id": "4103",
       "simple": { "limit": 3, "period": 60 }
+    },
+    {
+      "name": "MCP_LIMITER",
+      "namespace_id": "4104",
+      "simple": { "limit": 30, "period": 60 }
     }
   ]
 }

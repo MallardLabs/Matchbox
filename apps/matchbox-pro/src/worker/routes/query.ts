@@ -21,8 +21,10 @@ import {
   stuartError,
   stuartJson,
 } from "../query/http"
+import { MCP_PROTOCOL_VERSION, handleMcpRequest } from "../query/mcp"
 import { type StuartRuntime, runStuartQuery } from "../query/orchestrator"
 import {
+  MCP_LIMIT,
   QUERY_LIMIT,
   REFRESH_LIMIT,
   type RateLimitPolicy,
@@ -39,6 +41,7 @@ import type { ApiContext, ApiRoute, WorkerEnv } from "../router"
 const QUERY_BODY_LIMIT = 16 * 1024
 const REFRESH_BODY_LIMIT = 128 * 1024
 const SUPPORT_BODY_LIMIT = 32 * 1024
+const MCP_BODY_LIMIT = 16 * 1024
 
 function log(event: Record<string, unknown>): void {
   console.log(JSON.stringify(event))
@@ -190,5 +193,47 @@ export const queryRoutes: ApiRoute[] = [
       log({ message: "stuart.support_report", ref: result.ref })
       return stuartJson(result, 201)
     }),
+  },
+  {
+    // External agents: off unless MCP_ENABLED="true". Not same-origin, so
+    // the strict per-IP limiter is the guard. Deterministic tools only.
+    method: "POST",
+    path: "/api/mcp",
+    handler: async ({ request, env }) => {
+      const config = readStuartConfig(env)
+      if (!config.mcpEnabled) {
+        return stuartError(
+          new StuartHttpError(404, "invalid_request", "Not found"),
+        )
+      }
+      try {
+        await limit(MCP_LIMIT, config.limiters.mcp, [`ip:${clientIp(request)}`])
+        const body = await readJsonBody(request, MCP_BODY_LIMIT)
+        const result = await handleMcpRequest({
+          body,
+          headers: request.headers,
+          runtime: { ...runtimeFor(env, config), claude: null },
+        })
+        return new Response(JSON.stringify(result.body), {
+          status: result.status,
+          headers: {
+            "content-type": "application/json",
+            "cache-control": "no-store",
+            "access-control-allow-origin": "*",
+            "mcp-protocol-version": MCP_PROTOCOL_VERSION,
+          },
+        })
+      } catch (error) {
+        if (error instanceof StuartHttpError) return stuartError(error)
+        log({
+          message: "stuart.mcp_error",
+          error:
+            error instanceof Error ? error.message.slice(0, 200) : "unknown",
+        })
+        return stuartError(
+          new StuartHttpError(500, "internal", "MCP is unavailable right now."),
+        )
+      }
+    },
   },
 ]
