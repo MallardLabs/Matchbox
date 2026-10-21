@@ -22,7 +22,9 @@ import {
 import { csvCell, csvFilename, toCsv } from "./csv"
 import {
   EPOCH_SECONDS,
+  epochShort,
   epochStartOf,
+  epochTitle,
   formatEpochDate,
   formatUsdShort,
   formatUsdTick,
@@ -410,5 +412,62 @@ describe("ledger USD at earn", () => {
         false,
       ),
     ).toBe("$0.48")
+  })
+})
+
+describe("epoch names", () => {
+  // Classic numbering: Epoch 0 starts Thu 3 Sep 2026 00:00 UTC.
+  const launch = 1_788_393_600
+
+  it("numbers epochs from launch and dates the ones before it", () => {
+    expect(epochShort(launch)).toBe("0")
+    expect(epochShort(launch + 6 * EPOCH_SECONDS)).toBe("6")
+    expect(epochShort(launch - EPOCH_SECONDS)).toBe("Aug 27")
+    expect(epochTitle(launch + 6 * EPOCH_SECONDS)).toBe("Epoch 6")
+    expect(epochTitle(launch - 2 * EPOCH_SECONDS)).toBe("Epoch Aug 20")
+  })
+
+  it("labels chart bars by epoch number", () => {
+    const bars = realizedBars(
+      [
+        sealed(launch - EPOCH_SECONDS, 1_000_000n),
+        sealed(launch + 5 * EPOCH_SECONDS, 1_000_000n),
+      ],
+      null,
+    )
+    expect(bars.map((bar) => bar.label)).toEqual(["Aug 27", "5", "Next"])
+  })
+
+  it("adds the epoch number as the last ledger CSV column", () => {
+    const [line] = ledgerCsvRows(
+      [
+        {
+          id: "1",
+          epochStart: launch + 2 * EPOCH_SECONDS,
+          epochEnd: launch + 3 * EPOCH_SECONDS,
+          date: new Date((launch + 3 * EPOCH_SECONDS) * 1000).toISOString(),
+          tokenId: 1n,
+          escrow: "veMEZO",
+          voter: "boost",
+          gauge: "0x0000000000000000000000000000000000000b01",
+          rewardContract: "0x0000000000000000000000000000000000000c01",
+          rewardType: "Bribe",
+          token: MEZO,
+          symbol: "MEZO",
+          decimals: 18,
+          amount: 1n,
+          balance: 1n,
+          supply: 1n,
+          deposited: 1n,
+          usdAtEarnMicro: null,
+          usdNowMicro: null,
+          status: "claimable",
+          claim: null,
+          method: "rpc-checkpoints-v1",
+        },
+      ],
+      () => null,
+    )
+    expect(line?.at(-1)).toBe(2)
   })
 })

@@ -1,4 +1,5 @@
 import type { ActivityItem } from "@/features/history/useHistory"
+import { epochNumberFor } from "@/lib/epoch"
 import { describe, expect, it } from "vitest"
 import {
   type Names,
@@ -191,6 +192,8 @@ describe("event labels", () => {
     )
     expect(rows).toHaveLength(1)
     expect(rows[0]?.[5]).toBe("voted")
+    // Epoch number last (null before the 3 Sep 2026 launch epoch).
+    expect(rows[0]?.at(-1)).toBe(epochNumberFor(BigInt(rows[0]?.[2] ?? 0)))
     expect(rows[0]?.[6]).toBe("Voted · veMEZO #1 → Stackbridge 100%")
   })
 })
