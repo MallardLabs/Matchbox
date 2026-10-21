@@ -3,12 +3,18 @@ import { afterEach, test } from "node:test"
 import { mapActivityEventRow } from "@/lib/mezoActivity/activityEvent"
 import { buildThirdPartyRewardQuery } from "@/lib/mezoGauges/warehouse"
 import {
+  WAREHOUSE_CACHE_SECONDS,
   WarehouseUnavailableError,
+  cacheableNow,
+  cachedWarehouseRead,
+  clearWarehouseCache,
   isWarehouseSource,
   parseIndexedThrough,
+  queryWarehouse,
   warehouseSql,
 } from "@/lib/warehouse"
 import { CHAIN_ID } from "@repo/shared/contracts"
+import { z } from "zod"
 import { buildActivityQuery, mapWarehouseRows } from "./warehouse"
 import { PARITY_FIXTURES } from "./warehouse.fixtures"
 
@@ -16,6 +22,7 @@ const ENV_KEYS = ["MEZO_ACTIVITY_SOURCE", "MATCHBOX_WAREHOUSE_URL"] as const
 const savedEnv = Object.fromEntries(ENV_KEYS.map((k) => [k, process.env[k]]))
 
 afterEach(() => {
+  clearWarehouseCache()
   for (const key of ENV_KEYS) {
     const value = savedEnv[key]
     if (value === undefined) Reflect.deleteProperty(process.env, key)
@@ -161,4 +168,42 @@ test("third-party reward query binds the window", () => {
     "2",
   ])
   assert.match(query.text, /"source" = 'THIRD_PARTY_VOTER'/)
+})
+
+const rowsSchema = z.array(z.record(z.string(), z.unknown()))
+
+test("cachedWarehouseRead serves a repeat query from the cache", async () => {
+  let loads = 0
+  async function load(): Promise<unknown> {
+    loads += 1
+    return [{ block: "1", updatedAt: new Date("2026-10-21T00:00:00.000Z") }]
+  }
+  const query = { text: "SELECT 1", params: ["mezo", "5"] }
+  const first = await cachedWarehouseRead([query], rowsSchema, load)
+  const second = await cachedWarehouseRead([query], rowsSchema, load)
+  assert.equal(loads, 1)
+  // A hit and a miss have the same JSON shape.
+  assert.deepEqual(first, [
+    { block: "1", updatedAt: "2026-10-21T00:00:00.000Z" },
+  ])
+  assert.deepEqual(second, first)
+  await cachedWarehouseRead(
+    [{ ...query, params: ["mezo", "6"] }],
+    rowsSchema,
+    load,
+  )
+  assert.equal(loads, 2)
+})
+
+test("cachedWarehouseRead never caches a failure", async () => {
+  Reflect.deleteProperty(process.env, "MATCHBOX_WAREHOUSE_URL")
+  const query = { text: "SELECT 2", params: [] }
+  await assert.rejects(queryWarehouse(query), WarehouseUnavailableError)
+  await assert.rejects(queryWarehouse(query), WarehouseUnavailableError)
+})
+
+test("cacheableNow rounds a default window end up to the cache window", () => {
+  assert.equal(WAREHOUSE_CACHE_SECONDS, 300)
+  assert.equal(cacheableNow(1_790_000_001), 1_790_000_100)
+  assert.equal(cacheableNow(1_790_000_100), 1_790_000_100)
 })
