@@ -50,3 +50,6 @@ supabase/.temp/
 # Wrangler local secrets
 .dev.vars*
 .wrangler/
+
+# TanStack Router plugin temp files
+.tanstack/
