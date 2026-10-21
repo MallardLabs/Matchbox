@@ -25,6 +25,9 @@ const WALLET_CONNECT_PROJECT_ID =
   import.meta.env.VITE_WALLET_CONNECT_PROJECT_ID ?? ""
 const hasWalletConnect = WALLET_CONNECT_PROJECT_ID.length >= 32
 
+/** Without a project id WalletConnect can't pair, so the dialog hides it. */
+export const walletConnectEnabled = hasWalletConnect
+
 const MAINNET_RPC = "https://rpc-internal.mezo.org"
 const TESTNET_RPC =
   import.meta.env.VITE_RPC_TESTNET_URL ?? "https://rpc.test.mezo.org"
