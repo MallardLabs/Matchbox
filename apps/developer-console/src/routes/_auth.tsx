@@ -10,7 +10,7 @@ export const Route = createFileRoute("/_auth")({
   component: AuthLayout,
 })
 
-const proUrl = "https://matchbox.markets"
+const proUrl = "https://pro.matchbox.markets"
 
 function ApiStatus(): ReactElement {
   const health = useQuery(healthQuery)
