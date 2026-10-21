@@ -36,7 +36,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
-    "@cloudflare/vite-plugin": "^1.62.2",
+    "@cloudflare/vite-plugin": "1.62.2",
     "@cloudflare/workers-types": "^4.20260620.1",
     "@repo/biome-config": "workspace:*",
     "@repo/typescript-config": "workspace:*",
