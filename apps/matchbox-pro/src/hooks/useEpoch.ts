@@ -22,6 +22,13 @@ function minuteTimestamp(): bigint {
   return BigInt(Math.floor(Date.now() / 60_000) * 60)
 }
 
+// Epochs are whole Unix weeks (Thursday 00:00 UTC), as BoostVoter.epochNext
+// computes them, so the boundary is known even when the chain read is
+// missing or failed; the chain value wins when present.
+function localEpochNext(nowSeconds: number): bigint {
+  return (BigInt(nowSeconds) / EPOCH_LENGTH_SECONDS + 1n) * EPOCH_LENGTH_SECONDS
+}
+
 export function useEpoch() {
   const { chainId } = useNetwork()
   const contracts = getContractConfig(chainId)
@@ -36,11 +43,10 @@ export function useEpoch() {
     args: [nowArg],
     query: QUERY_PROFILES.SHORT_CACHE,
   })
-  const epochNext = typeof data === "bigint" ? data : undefined
-  const epochStart =
-    epochNext !== undefined ? epochNext - EPOCH_LENGTH_SECONDS : undefined
+  const epochNext = typeof data === "bigint" ? data : localEpochNext(now)
+  const epochStart = epochNext - EPOCH_LENGTH_SECONDS
 
-  const remaining = epochNext ? Number(epochNext) - now : 0
+  const remaining = Number(epochNext) - now
   const tickMs = remaining > 3600 ? 30_000 : 1_000
 
   useEffect(() => {
@@ -51,7 +57,7 @@ export function useEpoch() {
   }, [tickMs])
 
   useEffect(() => {
-    if (epochNext !== undefined && BigInt(now) >= epochNext) {
+    if (BigInt(now) >= epochNext) {
       setNowArg(minuteTimestamp())
     }
   }, [epochNext, now])
@@ -60,7 +66,7 @@ export function useEpoch() {
     epochNext,
     epochStart,
     remainingSeconds: Math.max(0, remaining),
-    label: epochNext ? compactRemaining(Math.max(0, remaining)) : "—",
+    label: compactRemaining(Math.max(0, remaining)),
     isLoading,
   }
 }
