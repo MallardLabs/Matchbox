@@ -174,6 +174,7 @@ export type ActivityItem = {
 export type ActivityPage = {
   items: ActivityItem[]
   nextCursor: string | null
+  truncated: boolean
 }
 
 export type ActivityTx = {
@@ -389,6 +390,7 @@ export function parseActivityPage(wire: WireActivityPage): ActivityPage {
   return {
     items: wire.items.map(parseActivityItem),
     nextCursor: wire.nextCursor,
+    truncated: wire.truncated ?? false,
   }
 }
 

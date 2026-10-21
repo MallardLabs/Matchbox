@@ -74,6 +74,8 @@ export type ActivityResult = {
   items: WireActivityItem[]
   nextCursor: string | null
   freshness: WireFreshness
+  /** The source stopped short of the range (the explorer's row window). */
+  truncated: boolean
 }
 
 function nowSeconds(): number {
@@ -269,6 +271,7 @@ async function warehouseActivity(
           })
         : null,
     freshness: await warehouseFreshness(checkpoint),
+    truncated: false,
   }
 }
 
@@ -282,7 +285,7 @@ async function explorerFetch(
   origin: string,
   params: Record<string, string>,
   fetcher: typeof fetch,
-): Promise<{ items: WireActivityItem[]; hasMore: boolean }> {
+): Promise<{ items: WireActivityItem[]; hasMore: boolean; rows: number }> {
   const search = new URLSearchParams({
     network: NETWORK,
     order: "desc",
@@ -323,6 +326,7 @@ async function explorerFetch(
       return item ? [item] : []
     }),
     hasMore: body.data.hasMore,
+    rows: body.data.data.length,
   }
 }
 
@@ -399,10 +403,16 @@ async function explorerActivity(
     explorerFreshness(origin, fetcher),
   ])
   const items = [...result.items].sort(compareActivityDesc)
+  // The explorer merges its sources in a window of ~1000 rows and keeps
+  // saying hasMore past it; a short page is the real end, and older rows in
+  // range (mostly votes) aren't served until the warehouse is live.
+  const windowEnd = result.hasMore && result.rows < query.limit
   return {
     items: await enrichActivity(collapseRevotes(items)),
-    nextCursor: result.hasMore ? encodeCursor({ p: page + 1 }) : null,
+    nextCursor:
+      result.hasMore && !windowEnd ? encodeCursor({ p: page + 1 }) : null,
     freshness,
+    truncated: windowEnd,
   }
 }
 

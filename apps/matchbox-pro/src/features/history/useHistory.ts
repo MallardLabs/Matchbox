@@ -82,6 +82,11 @@ export type HistoryPagesResult<T> = HistoryResult<T[]> & {
    * a price read; the hook refetches until it settles.
    */
   partial?: boolean
+  /**
+   * Activity only: the source ended before the range did (the frozen
+   * explorer serves a limited row window), so older rows are missing.
+   */
+  truncated?: boolean
 }
 
 export type {
@@ -442,7 +447,9 @@ function useActivityPages(
     () => query.data?.pages.flatMap((page) => page.data.items),
     [query.data],
   )
-  return toPagesResult(query, rows, active)
+  const pages = query.data?.pages
+  const truncated = pages?.[pages.length - 1]?.data.truncated ?? false
+  return { ...toPagesResult(query, rows, active), truncated }
 }
 
 /** A wallet's on-chain activity, newest first, cursor-paged. */

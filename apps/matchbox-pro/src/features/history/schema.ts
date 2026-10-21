@@ -221,6 +221,8 @@ export type WireActivityItem = z.infer<typeof activityItemSchema>
 export const activityPageSchema = z.object({
   items: z.array(activityItemSchema),
   nextCursor: z.string().nullable(),
+  /** The source ended before the range did (frozen explorer row window). */
+  truncated: z.boolean().optional(),
 })
 export type WireActivityPage = z.infer<typeof activityPageSchema>
 

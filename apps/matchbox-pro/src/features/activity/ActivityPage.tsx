@@ -23,7 +23,7 @@ import * as Dialog from "@repo/ui/dialog"
 import { shortenAddress } from "@repo/ui/wallet-address"
 import { Link } from "@tanstack/react-router"
 import { History } from "lucide-react"
-import { type ReactElement, useMemo, useState } from "react"
+import { type ReactElement, useEffect, useMemo, useState } from "react"
 import { usePublicClient } from "wagmi"
 import EventDetail from "./EventDetail"
 import EventTable from "./EventTable"
@@ -32,28 +32,39 @@ import {
   ACTIVITY_CSV_HEADERS,
   type ActivityEvent,
   KIND_FILTERS,
-  type KindFilter,
   activityCsvRows,
   eventStale,
   filterKinds,
   groupEvents,
   permalinkPath,
 } from "./activityModel"
+import {
+  ACTIVITY_DEFAULTS,
+  type ActivityPageSize,
+  type ActivityRange,
+  type ActivityScope,
+  type ActivitySearch,
+  PAGE_SIZES,
+  useActivitySearch,
+} from "./activitySearch"
 import { useActivityNames } from "./useActivityNames"
 
-type Scope = "wallet" | "protocol"
-type Range = "epoch" | "last-8" | "all"
-
-const RANGES: ReadonlyArray<{ id: Range; label: string }> = [
+const RANGES: ReadonlyArray<{ id: ActivityRange; label: string }> = [
   { id: "epoch", label: "This epoch" },
   { id: "last-8", label: "Last 8" },
   { id: "all", label: "All time" },
 ]
 
-const PAGE_SIZES = [25, 50, 100] as const
+/**
+ * Rows per request. A re-vote is up to ~14 rows that group into one event,
+ * so pages are fetched in large row batches and filled up to the page size
+ * in events (at most MAX_AUTO_PAGES requests per page).
+ */
+const RAW_ROWS = 200
+const MAX_AUTO_PAGES = 10
 
 /** Same windows as Rewards: this epoch, or eight sealed plus current. */
-function rangeFrom(range: Range, now: number): number | undefined {
+function rangeFrom(range: ActivityRange, now: number): number | undefined {
   return periodFrom(range === "all" ? "lifetime" : range, now)
 }
 
@@ -72,12 +83,17 @@ type ActivityPageProps = {
   address?: string | undefined
   /** Permalink: the transaction to select. */
   txHash?: string | undefined
+  /** Filters from the URL; without them the page keeps its own state. */
+  search?: ActivitySearch | undefined
+  onSearchChange?: ((next: ActivitySearch) => void) | undefined
 }
 
 /** Expert explorer: normalized wallet or protocol events with permalinks. */
 export default function ActivityPage({
   address: pinned,
   txHash,
+  search: searchProp,
+  onSearchChange,
 }: ActivityPageProps): ReactElement {
   const { viewer } = useViewer()
   const { open: openConnect } = useConnectDialog()
@@ -89,17 +105,18 @@ export default function ActivityPage({
 
   const wallet = pinned ?? viewer.address
   const [now] = useState(() => Math.floor(Date.now() / 1000))
-  const [scope, setScope] = useState<Scope>(wallet ? "wallet" : "protocol")
-  const [kind, setKind] = useState<KindFilter>("all")
-  const [range, setRange] = useState<Range>("last-8")
-  const [pageSize, setPageSize] = useState<number>(50)
+  const [search, setSearch] = useActivitySearch(searchProp, onSearchChange)
+  const scope: ActivityScope = search.scope ?? (wallet ? "wallet" : "protocol")
+  const kind = search.kind ?? ACTIVITY_DEFAULTS.kind
+  const range = search.range ?? ACTIVITY_DEFAULTS.range
+  const pageSize: ActivityPageSize = search.size ?? ACTIVITY_DEFAULTS.size
   const [picked, setPicked] = useState<string | null>(null)
   const [sheetOpen, setSheetOpen] = useState(!!txHash)
 
   const filters = {
     kinds: filterKinds(kind),
     from: rangeFrom(range, now),
-    limit: pageSize,
+    limit: RAW_ROWS,
   }
   const walletFeed = useWalletActivity(
     scope === "wallet" ? wallet : undefined,
@@ -113,6 +130,41 @@ export default function ActivityPage({
   const tx = useActivityTx(txHash, wallet)
 
   const events = useMemo(() => groupEvents(feed.data ?? []), [feed.data])
+
+  // Pages are counted in events. "Load more" asks for another page's worth;
+  // the effect keeps fetching row batches until that many events exist.
+  const filterKey = `${scope}|${kind}|${range}|${pageSize}|${wallet ?? ""}`
+  const [extra, setExtra] = useState({ key: filterKey, pages: 0 })
+  const wanted = pageSize * (1 + (extra.key === filterKey ? extra.pages : 0))
+  const rowsLoaded = feed.data?.length ?? 0
+  const {
+    status: feedStatus,
+    hasNextPage,
+    isFetchingNextPage,
+    fetchNextPage,
+  } = feed
+  useEffect(() => {
+    if (
+      feedStatus === "ready" &&
+      hasNextPage &&
+      !isFetchingNextPage &&
+      events.length < wanted &&
+      rowsLoaded < RAW_ROWS * MAX_AUTO_PAGES * (wanted / pageSize)
+    ) {
+      fetchNextPage()
+    }
+  }, [
+    feedStatus,
+    hasNextPage,
+    isFetchingNextPage,
+    events.length,
+    wanted,
+    rowsLoaded,
+    pageSize,
+    fetchNextPage,
+  ])
+  const visible = events.slice(0, wanted)
+  const canLoadMore = events.length > wanted || hasNextPage
   const txEvents = useMemo(() => groupEvents(tx.data?.items ?? []), [tx.data])
   const pinnedEvent = txEvents[0] ?? null
   const selected: ActivityEvent | null =
@@ -213,7 +265,7 @@ export default function ActivityPage({
               pressed={scope === "wallet"}
               disabled={!wallet}
               onClick={() => {
-                setScope("wallet")
+                setSearch({ scope: "wallet" })
                 setPicked(null)
               }}
             >
@@ -222,7 +274,7 @@ export default function ActivityPage({
             <ToggleChip
               pressed={scope === "protocol"}
               onClick={() => {
-                setScope("protocol")
+                setSearch({ scope: "protocol" })
                 setPicked(null)
               }}
             >
@@ -251,7 +303,7 @@ export default function ActivityPage({
               className="px-2 md:px-2.5"
               pressed={kind === item.id}
               onClick={() => {
-                setKind(item.id)
+                setSearch({ kind: item.id })
                 setPicked(null)
               }}
             >
@@ -273,7 +325,7 @@ export default function ActivityPage({
             }))}
             onChange={(value) => {
               const next = RANGES.find((item) => item.id === value)
-              if (next) setRange(next.id)
+              if (next) setSearch({ range: next.id })
             }}
           />
           <span aria-hidden="true">·</span>
@@ -318,10 +370,7 @@ export default function ActivityPage({
           {kind !== "all" || range !== "all" ? (
             <Button.Root
               size="md"
-              onClick={() => {
-                setKind("all")
-                setRange("all")
-              }}
+              onClick={() => setSearch({ kind: "all", range: "all" })}
             >
               Clear filters
             </Button.Root>
@@ -331,7 +380,7 @@ export default function ActivityPage({
         <div className="flex min-w-0 gap-6">
           <div className="flex min-w-0 flex-1 flex-col">
             <EventTable
-              events={events}
+              events={visible}
               loading={loading}
               names={names}
               stale={(event) => eventStale(event, freshness)}
@@ -346,7 +395,7 @@ export default function ActivityPage({
               <div className="flex flex-wrap items-center justify-between gap-3 pt-3 text-label text-muted">
                 <div className="flex items-center gap-1.5">
                   <span>
-                    {events.length} {events.length === 1 ? "event" : "events"}
+                    {visible.length} {visible.length === 1 ? "event" : "events"}
                   </span>
                   <span aria-hidden="true">·</span>
                   <TextSelect
@@ -357,14 +406,33 @@ export default function ActivityPage({
                       value: String(size),
                       label: `${size} / page`,
                     }))}
-                    onChange={(value) => setPageSize(Number(value))}
+                    onChange={(value) => {
+                      const size = PAGE_SIZES.find(
+                        (item) => String(item) === value,
+                      )
+                      if (size) setSearch({ size })
+                    }}
                   />
-                  {feed.hasNextPage ? (
+                  {!canLoadMore && feed.truncated ? (
+                    <>
+                      <span aria-hidden="true">·</span>
+                      <span className="text-warn">
+                        Older rows not in frozen index
+                      </span>
+                    </>
+                  ) : null}
+                  {canLoadMore ? (
                     <Button.Root
                       variant="ghost"
                       size="sm"
-                      loading={feed.isFetchingNextPage}
-                      onClick={feed.fetchNextPage}
+                      loading={isFetchingNextPage}
+                      onClick={() =>
+                        setExtra({
+                          key: filterKey,
+                          pages:
+                            (extra.key === filterKey ? extra.pages : 0) + 1,
+                        })
+                      }
                     >
                       Load more
                     </Button.Root>

@@ -92,7 +92,7 @@ async function feed(
   return envelope(
     network,
     result.freshness,
-    { items, nextCursor: result.nextCursor },
+    { items, nextCursor: result.nextCursor, truncated: result.truncated },
     wallet
       ? { kind: "no-store" }
       : { kind: "shared", sMaxAge: 15, staleWhileRevalidate: 45 },

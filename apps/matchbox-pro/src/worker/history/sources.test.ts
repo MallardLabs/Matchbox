@@ -224,7 +224,8 @@ describe("queryActivity", () => {
   it("falls back to the frozen explorer and reports it stale", async () => {
     const fetcher = vi.fn(async (input: string | URL | Request) => {
       const url = new URL(String(input))
-      const probe = url.searchParams.get("limit") === "1"
+      // The freshness probe asks for non-vote action types only.
+      const probe = url.searchParams.has("actionTypes")
       return jsonResponse({
         success: true,
         page: 0,
@@ -248,7 +249,7 @@ describe("queryActivity", () => {
     })
     const result = await queryActivity(
       { warehouseUrl: undefined, explorerOrigin: "https://explorer.test" },
-      { ...BASE_QUERY, wallet: WALLET, limit: 50 },
+      { ...BASE_QUERY, wallet: WALLET, limit: 1 },
       fetcher as unknown as typeof fetch,
     )
     expect(result.items[0]?.kind).toBe("lock_created")
@@ -260,5 +261,20 @@ describe("queryActivity", () => {
     expect(result.nextCursor).not.toBeNull()
     const firstUrl = new URL(String(fetcher.mock.calls[0]?.[0]))
     expect(firstUrl.searchParams.get("actor")).toBe(WALLET)
+  })
+
+  it("ends explorer paging on a short page even when it says hasMore", async () => {
+    const fetcher = vi.fn(async () =>
+      jsonResponse({ success: true, page: 5, hasMore: true, data: [] }),
+    )
+    const result = await queryActivity(
+      { warehouseUrl: undefined, explorerOrigin: "https://short.test" },
+      { ...BASE_QUERY, limit: 200 },
+      fetcher as unknown as typeof fetch,
+    )
+    expect(result.items).toEqual([])
+    expect(result.nextCursor).toBeNull()
+    // The explorer still had rows in range: flagged, not silently dropped.
+    expect(result.truncated).toBe(true)
   })
 })
