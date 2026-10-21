@@ -1,79 +1,96 @@
-import { getContractConfig } from "@/lib/contracts"
+import { VOTE_LIST_SCAN, voterConfig } from "@/features/vote/contracts"
 import { useNetwork } from "@/lib/network"
 import { QUERY_PROFILES } from "@/lib/queryProfiles"
 import { useMemo } from "react"
 import type { Address } from "viem"
 import { useReadContracts } from "wagmi"
+import {
+  type VoteAllocation,
+  aggregateAllocations,
+  allocationsByToken as toAllocationsByToken,
+  votePairs,
+  votedGaugesFromScan,
+} from "./personalProjected"
 
-export type VoteAllocation = {
-  gaugeAddress: Address
-  weight: bigint
-}
+export type { VoteAllocation } from "./personalProjected"
 
-export function useAllVoteAllocations(
-  tokenIds: bigint[],
-  gaugeAddresses: Address[],
-): {
+/**
+ * Each veMEZO lock's boost-gauge votes. Reads only the gauges a lock voted
+ * for (`gaugeVote` list, then `votes` for those) instead of `votes` against
+ * every gauge, which was 700+ reads per lock.
+ */
+export function useAllVoteAllocations(tokenIds: bigint[]): {
   allocationsByToken: Map<string, VoteAllocation[]>
   aggregatedAllocations: VoteAllocation[]
+  /** Unique gauges on any lock's vote list, known before `votes` returns. */
+  votedGauges: Address[]
   isLoading: boolean
   error: Error | null
 } {
   const { chainId, isNetworkReady } = useNetwork()
-  const contracts = getContractConfig(chainId)
-  const { data, isLoading, error } = useReadContracts({
+  const voter = voterConfig(chainId, "vemezo")
+  const enabled = isNetworkReady && tokenIds.length > 0
+
+  const scan = useReadContracts({
     contracts: tokenIds.flatMap((tokenId) =>
-      gaugeAddresses.map((gaugeAddress) => ({
-        ...contracts.boostVoter,
-        functionName: "votes" as const,
-        args: [tokenId, gaugeAddress],
+      Array.from({ length: VOTE_LIST_SCAN }, (_, index) => ({
+        address: voter.address,
+        abi: voter.abi,
+        chainId: voter.chainId,
+        functionName: "gaugeVote" as const,
+        args: [tokenId, BigInt(index)] as const,
       })),
     ),
+    query: { ...QUERY_PROFILES.SHORT_CACHE, enabled },
+  })
+
+  const pairs = useMemo(
+    () =>
+      votePairs(
+        tokenIds,
+        votedGaugesFromScan(tokenIds.length, scan.data, VOTE_LIST_SCAN),
+      ),
+    [scan.data, tokenIds],
+  )
+
+  const votedGauges = useMemo(() => {
+    const unique = new Map<string, Address>()
+    for (const pair of pairs) unique.set(pair.gauge.toLowerCase(), pair.gauge)
+    return [...unique.values()]
+  }, [pairs])
+
+  const votes = useReadContracts({
+    contracts: pairs.map((pair) => ({
+      address: voter.address,
+      abi: voter.abi,
+      chainId: voter.chainId,
+      functionName: "votes" as const,
+      args: [pair.tokenId, pair.gauge] as const,
+    })),
     query: {
       ...QUERY_PROFILES.SHORT_CACHE,
-      enabled:
-        isNetworkReady && tokenIds.length > 0 && gaugeAddresses.length > 0,
+      enabled: enabled && pairs.length > 0,
     },
   })
 
-  const allocationsByToken = useMemo(() => {
-    const map = new Map<string, VoteAllocation[]>()
-    tokenIds.forEach((tokenId, tokenIndex) => {
-      const rows: VoteAllocation[] = []
-      gaugeAddresses.forEach((gaugeAddress, gaugeIndex) => {
-        const result =
-          data?.[tokenIndex * gaugeAddresses.length + gaugeIndex]?.result
-        const weight = typeof result === "bigint" ? result : 0n
-        if (weight > 0n) rows.push({ gaugeAddress, weight })
-      })
-      map.set(tokenId.toString(), rows)
-    })
-    return map
-  }, [data, gaugeAddresses, tokenIds])
-
-  const aggregatedAllocations = useMemo(() => {
-    const weights = new Map<string, bigint>()
-    for (const rows of allocationsByToken.values()) {
-      for (const row of rows) {
-        const key = row.gaugeAddress.toLowerCase()
-        weights.set(key, (weights.get(key) ?? 0n) + row.weight)
-      }
-    }
-    return gaugeAddresses
-      .map((gaugeAddress) => ({
-        gaugeAddress,
-        weight: weights.get(gaugeAddress.toLowerCase()) ?? 0n,
-      }))
-      .filter((row) => row.weight > 0n)
-  }, [allocationsByToken, gaugeAddresses])
+  const allocationsByToken = useMemo(
+    () => toAllocationsByToken(tokenIds, pairs, votes.data),
+    [pairs, tokenIds, votes.data],
+  )
+  const aggregatedAllocations = useMemo(
+    () => aggregateAllocations(allocationsByToken),
+    [allocationsByToken],
+  )
 
   return {
     allocationsByToken,
     aggregatedAllocations,
-    isLoading,
+    votedGauges,
+    isLoading: scan.isLoading || votes.isLoading,
     error:
-      error ??
-      (data?.some((row) => row.status === "failure")
+      scan.error ??
+      votes.error ??
+      (votes.data?.some((row) => row.status === "failure")
         ? new Error("Some vote allocations could not be read")
         : null),
   }
