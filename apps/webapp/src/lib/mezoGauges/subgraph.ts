@@ -12,7 +12,7 @@ import {
   timeseriesToSeconds,
   tokenIdFromStakeId,
 } from "@/lib/mezoEarn"
-import { isWarehouseSource } from "@/lib/warehouse"
+import { withWarehouseFallback } from "@/lib/warehouse"
 
 import { THIRD_PARTY_VOTER_SUBGRAPH_ADDRESS } from "./constants"
 import { replayVoteEvents } from "./participation"
@@ -83,11 +83,21 @@ export async function fetchActiveThirdPartyVotes(options: {
   blockNumber: bigint
   blockTimestamp: number
 }): Promise<SubgraphVote[]> {
-  if (isWarehouseSource(CHAIN_ID.mainnet)) {
-    return fetchWarehouseThirdPartyVotes({ blockNumber: options.blockNumber })
-  }
+  return withWarehouseFallback(
+    CHAIN_ID.mainnet,
+    "third-party votes",
+    () => fetchWarehouseThirdPartyVotes({ blockNumber: options.blockNumber }),
+    () => fetchEarnThirdPartyVotes(options.blockTimestamp),
+  )
+}
+
+// Mezo's earn-votes replay: the source before the warehouse, and its
+// fallback.
+async function fetchEarnThirdPartyVotes(
+  blockTimestamp: number,
+): Promise<SubgraphVote[]> {
   const events: z.infer<typeof voteEventSchema>[] = []
-  const upTo = secondsToTimeseries(options.blockTimestamp)
+  const upTo = secondsToTimeseries(blockTimestamp)
   let lastId = ""
   for (;;) {
     const cursor = lastId ? `, id_gt: "${lastId}"` : ""
@@ -157,10 +167,12 @@ export async function fetchActiveThirdPartyVotes(options: {
 export async function fetchVeMezoOwners(options: {
   tokenIds: bigint[]
 }): Promise<Map<string, string>> {
-  if (isWarehouseSource(CHAIN_ID.mainnet)) {
-    return fetchWarehouseVeMezoOwners(options.tokenIds)
-  }
-  return fetchStakeOwners(options.tokenIds, CONTRACTS.mainnet.veMEZO)
+  return withWarehouseFallback(
+    CHAIN_ID.mainnet,
+    "veMEZO owners",
+    () => fetchWarehouseVeMezoOwners(options.tokenIds),
+    () => fetchStakeOwners(options.tokenIds, CONTRACTS.mainnet.veMEZO),
+  )
 }
 
 const gaugeSchema = z.object({
@@ -205,9 +217,19 @@ export async function fetchThirdPartyRewardEvents(options: {
   fromTs: number
   toTs: number
 }): Promise<ThirdPartyRewardEvent[]> {
-  if (isWarehouseSource(CHAIN_ID.mainnet)) {
-    return fetchWarehouseThirdPartyRewardEvents(options)
-  }
+  return withWarehouseFallback(
+    CHAIN_ID.mainnet,
+    "third-party rewards",
+    () => fetchWarehouseThirdPartyRewardEvents(options),
+    () => fetchExplorerThirdPartyRewardEvents(options),
+  )
+}
+
+// The explorer subgraph: the source before the warehouse, and its fallback.
+async function fetchExplorerThirdPartyRewardEvents(options: {
+  fromTs: number
+  toTs: number
+}): Promise<ThirdPartyRewardEvent[]> {
   const events: ThirdPartyRewardEvent[] = []
   for (const actionType of ["REWARD_DISTRIBUTED", "REWARD_NOTIFIED"] as const) {
     for (let skip = 0; ; skip += SUBGRAPH_FIRST_MAX) {
@@ -267,9 +289,19 @@ export async function fetchVeMezoLockCreations(options: {
   toTs: number
 }): Promise<VeMezoLockCreation[]> {
   // The warehouse matches the explorer: locks from block 7,739,500 on.
-  if (isWarehouseSource(CHAIN_ID.mainnet)) {
-    return fetchWarehouseVeMezoLockCreations(options)
-  }
+  return withWarehouseFallback(
+    CHAIN_ID.mainnet,
+    "veMEZO lock creations",
+    () => fetchWarehouseVeMezoLockCreations(options),
+    () => fetchEarnLockCreations(options),
+  )
+}
+
+// Mezo's earn-locks: the source before the warehouse, and its fallback.
+async function fetchEarnLockCreations(options: {
+  fromTs: number
+  toTs: number
+}): Promise<VeMezoLockCreation[]> {
   const veMezo = CONTRACTS.mainnet.veMEZO.toLowerCase()
   const locks: VeMezoLockCreation[] = []
   let lastId = ""

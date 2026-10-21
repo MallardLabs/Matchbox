@@ -43,6 +43,15 @@ up for the tick plus the 5-minute suspend timeout.
 - Steady traffic is the risk: if misses arrive more often than every 5
   minutes around the clock, the compute never sleeps and the month needs
   about 180 CU-h. Neon then suspends the project until the next month.
+- If that happens (or Neon is down): Classic falls back on its own. A
+  warehouse read that fails or takes over 6 s is served from the frozen
+  explorer plus earn-votes (`degraded: ["warehouse"]` in `/api/activity`
+  meta; the gauge pages use earn-votes and earn-locks), and a breaker skips
+  the warehouse for 2 minutes per isolate so the dead endpoint is not
+  hammered. Once `matchbox-explorer/3.4.0` is deleted (step 10), only the
+  vote rows survive that fallback. Pro returns 503 `warehouse_unavailable`
+  for activity and transaction pages (earnings and ledgers are RPC and keep
+  working, without claim links).
 - `/health` on the indexer queries the database: check it by hand, at most
   hourly, never from an uptime monitor.
 - Watch: Neon Console → `matchbox-warehouse` → Monitoring (or Billing,
@@ -302,7 +311,10 @@ Precondition: the deployed `main` has the webapp changes from this branch:
   veMEZO. With it, a dev window of 2,636 rows matched the explorer exactly;
 - the 5-minute read cache (`apps/webapp/src/lib/warehouse.ts`) and the
   45-minute "as of" threshold. Without the cache, traffic keeps the compute
-  awake.
+  awake;
+- the automatic fallback: a failed or timed-out warehouse read is served from
+  the explorer and earn-votes, behind a 2-minute breaker
+  (`withWarehouseFallback`, `lib/warehouse.ts`).
 
 ```bash
 printf '%s' "$READER_URL" | pnpm --filter @repo/matchbox-indexer exec wrangler secret put MATCHBOX_WAREHOUSE_URL --name matchbox
