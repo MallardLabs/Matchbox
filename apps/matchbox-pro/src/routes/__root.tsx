@@ -5,6 +5,7 @@ import Sidebar from "@/app/Sidebar"
 import TopBar from "@/app/TopBar"
 import { WalletDialogProvider } from "@/components/wallet/WalletDialogContext"
 import { SearchPaletteProvider } from "@/features/query/SearchPalette"
+import StuartWorkspace from "@/features/query/StuartWorkspace"
 import { DESKTOP_QUERY, useMediaQuery } from "@/hooks/useMediaQuery"
 import * as AppShell from "@repo/ui/app-shell"
 import { Outlet, createRootRoute } from "@tanstack/react-router"
@@ -51,9 +52,12 @@ function Shell(): ReactElement {
       <AppShell.Body>
         <TopBar showTicker={collapsed} />
         <ShellBanner />
-        <AppShell.Main>
-          <Outlet />
-        </AppShell.Main>
+        <div className="flex min-w-0 flex-1">
+          <AppShell.Main>
+            <Outlet />
+          </AppShell.Main>
+          <StuartWorkspace />
+        </div>
       </AppShell.Body>
       <MobileNav />
     </AppShell.Root>
