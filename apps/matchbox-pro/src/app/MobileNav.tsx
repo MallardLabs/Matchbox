@@ -3,7 +3,7 @@ import * as AppShell from "@repo/ui/app-shell"
 import * as Dialog from "@repo/ui/dialog"
 import * as ThemeToggle from "@repo/ui/theme-toggle"
 import { Link, useRouterState } from "@tanstack/react-router"
-import { ArrowUpRight, Menu } from "lucide-react"
+import { ArrowUpRight, History, Menu } from "lucide-react"
 import { type ReactElement, useState } from "react"
 import XLogo from "./XLogo"
 import { X_URL, isNavActive, moreNav, primaryNav } from "./nav"
@@ -105,7 +105,12 @@ export default function MobileNav(): ReactElement {
                   href={CLASSIC_URL}
                   className="flex h-12 items-center gap-3 rounded-lg px-3 text-nav font-500 text-ink hover:bg-inset"
                 >
-                  <span className="w-[18px]" />
+                  <History
+                    aria-hidden="true"
+                    size={18}
+                    strokeWidth={1.75}
+                    className="text-secondary"
+                  />
                   <span className="flex-1">Matchbox Classic</span>
                   <ArrowUpRight
                     aria-hidden="true"
