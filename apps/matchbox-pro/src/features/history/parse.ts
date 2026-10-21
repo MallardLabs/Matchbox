@@ -37,6 +37,11 @@ export type TokenAmount = {
   usdAtEarnMicro: bigint | null
   /** micro-USD at the current price; null when unpriced. */
   usdNowMicro: bigint | null
+  /**
+   * In aggregates: this token's lines left out of the USD sums. Always set
+   * by the parser; optional so hand-built amounts stay valid.
+   */
+  unpriced?: number | undefined
 }
 
 export type Totals = {
@@ -80,6 +85,8 @@ export type WalletEarnings = {
     projected: Totals
   }
   verified: boolean
+  /** Some USD is a lower bound while a price read retries; refetch soon. */
+  partial: boolean
 }
 
 export type LedgerStatus = WireLedgerRow["status"]
@@ -115,6 +122,7 @@ export type LedgerRow = EpochWindow & {
 export type WalletLedger = {
   rows: LedgerRow[]
   nextCursor: string | null
+  partial: boolean
 }
 
 export type ActivityLock = {
@@ -251,6 +259,7 @@ export function parseTokenAmount(wire: WireTokenAmount): TokenAmount {
     amount: big(wire.amount),
     usdAtEarnMicro: usdMicro(wire.usdAtEarn),
     usdNowMicro: usdMicro(wire.usdNow),
+    unpriced: wire.unpriced ?? 0,
   }
 }
 
@@ -287,6 +296,7 @@ export function parseEarnings(wire: WireEarnings): WalletEarnings {
       projected: parseTotals(wire.totals.projected),
     },
     verified: wire.verified,
+    partial: wire.partial,
   }
 }
 
@@ -324,7 +334,11 @@ export function parseLedgerRow(wire: WireLedgerRow): LedgerRow {
 }
 
 export function parseLedger(wire: WireLedger): WalletLedger {
-  return { rows: wire.rows.map(parseLedgerRow), nextCursor: wire.nextCursor }
+  return {
+    rows: wire.rows.map(parseLedgerRow),
+    nextCursor: wire.nextCursor,
+    partial: wire.partial,
+  }
 }
 
 export function parseActivityItem(wire: WireActivityItem): ActivityItem {

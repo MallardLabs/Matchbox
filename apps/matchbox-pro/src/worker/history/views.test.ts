@@ -40,6 +40,7 @@ function close(epochStart: bigint, mezoUsd: string | null): EpochClosePrice {
     mezoUsd,
     mezoBlock: 1n,
     baseBlock: 1n,
+    settled: true,
   }
 }
 

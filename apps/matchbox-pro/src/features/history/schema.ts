@@ -49,6 +49,8 @@ export const tokenAmountSchema = z.object({
   amount: uint,
   usdAtEarn: usd.nullable(),
   usdNow: usd.nullable(),
+  /** In aggregates: this token's lines left out of the USD sums. */
+  unpriced: z.number().int().nonnegative().optional(),
 })
 export type WireTokenAmount = z.infer<typeof tokenAmountSchema>
 
@@ -94,6 +96,11 @@ export const earningsSchema = z.object({
   }),
   /** Σ claimable per (lock, bribe, token) equals the contract's `earned()`. */
   verified: z.boolean(),
+  /**
+   * A price read missed transiently: USD sums are lower bounds ("≥") and
+   * the response isn't cached; refetch shortly.
+   */
+  partial: z.boolean(),
 })
 export type WireEarnings = z.infer<typeof earningsSchema>
 
@@ -135,6 +142,8 @@ export type WireLedgerRow = z.infer<typeof ledgerRowSchema>
 export const ledgerSchema = z.object({
   rows: z.array(ledgerRowSchema),
   nextCursor: z.string().nullable(),
+  /** Same as earnings `partial`: some USD at earn is still missing. */
+  partial: z.boolean(),
 })
 export type WireLedger = z.infer<typeof ledgerSchema>
 

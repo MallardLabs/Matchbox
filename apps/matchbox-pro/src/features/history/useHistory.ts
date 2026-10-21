@@ -77,6 +77,11 @@ export type HistoryPagesResult<T> = HistoryResult<T[]> & {
   fetchNextPage: () => void
   /** Reloads every loaded page. */
   refetch: () => void
+  /**
+   * Ledger only: some USD at earn is still missing while the Worker retries
+   * a price read; the hook refetches until it settles.
+   */
+  partial?: boolean
 }
 
 export type {
@@ -102,6 +107,9 @@ export type { HistoryNetwork } from "./client"
 export { ACTIVITY_KINDS, EPOCH_SECONDS } from "./schema"
 
 type Params = Record<string, QueryValue>
+
+/** How soon a partial (prices still retrying) result is asked for again. */
+const PARTIAL_REFETCH_MS = 5_000
 
 const UNAVAILABLE: HistoryResult<never> = {
   status: "unavailable",
@@ -242,6 +250,9 @@ export function useWalletEarnings(
       ),
     enabled: !!wallet,
     ...QUERY_PROFILES.SHORT_CACHE,
+    // Prices still retrying on the Worker: USD is a lower bound, ask again.
+    refetchInterval: (current) =>
+      current.state.data?.data.partial ? PARTIAL_REFETCH_MS : false,
   })
   return toResult(query, !!wallet)
 }
@@ -342,12 +353,17 @@ export function useWalletLedger(
     getNextPageParam: (last: Envelope<WalletLedger>) => last.data.nextCursor,
     enabled: !!wallet,
     ...QUERY_PROFILES.SHORT_CACHE,
+    refetchInterval: (current) =>
+      current.state.data?.pages.some((page) => page.data.partial)
+        ? PARTIAL_REFETCH_MS
+        : false,
   })
   const rows = useMemo(
     () => query.data?.pages.flatMap((page) => page.data.rows),
     [query.data],
   )
-  return toPagesResult(query, rows, !!wallet)
+  const partial = query.data?.pages.some((page) => page.data.partial) ?? false
+  return { ...toPagesResult(query, rows, !!wallet), partial }
 }
 
 /**

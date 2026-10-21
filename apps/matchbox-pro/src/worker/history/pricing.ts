@@ -19,6 +19,12 @@ import { fetchMezoUsdPrice } from "../mezoPrice"
 import { cached } from "../router"
 import { ORACLE_ABI, mezoHistoryClient } from "./chain"
 import { EPOCH } from "./math"
+import {
+  type Attempt,
+  type RetryDeps,
+  type RetryPolicy,
+  readEach,
+} from "./retry"
 import { persistedGet, persistedPut, sealedGet, sealedSet } from "./store"
 
 // USD at earn = the price at epoch close (the last block before epochEnd):
@@ -38,8 +44,20 @@ const CLOSE_TOLERANCE_SECONDS = 120n
 const MAX_SEARCH_ROUNDS = 10
 const PRICE_CAP_WHOLE = 1_000_000n
 const MULTICALL3 = "0xcA11bde05977b3631167028862bE2a173976CA11"
-const BASE_CALLS_PER_WAVE = 15
-const BASE_WAVE_MS = 1_100
+
+/** Public Base RPC: ~25 calls/s per client, 429 beyond. */
+export const BASE_POLICY: RetryPolicy = {
+  attempts: 6,
+  concurrency: 4,
+  baseDelayMs: 400,
+  jitterMs: 400,
+}
+const MEZO_POLICY: RetryPolicy = {
+  attempts: 3,
+  concurrency: 10,
+  baseDelayMs: 250,
+  jitterMs: 250,
+}
 
 const POOL_ABI = parseAbi([
   "function slot0() view returns (uint160 sqrtPriceX96, int24 tick, uint16 observationIndex, uint16 observationCardinality, uint16 observationCardinalityNext, bool unlocked)",
@@ -53,6 +71,12 @@ export type EpochClosePrice = PriceRefs & {
   epochEnd: bigint
   mezoBlock: bigint | null
   baseBlock: bigint | null
+  /**
+   * Both prices are final: read, or permanently absent (MEZO before the
+   * pool existed). False means a transient RPC miss; the row is retried on
+   * the next request and USD built from it is a lower bound.
+   */
+  settled: boolean
 }
 
 export type PricingEnv = { BASE_RPC_URL?: string | undefined }
@@ -97,12 +121,22 @@ async function readBlock(
   rpc: PublicClient,
   blockNumber: bigint,
 ): Promise<BlockRef | undefined> {
-  try {
-    const block = await rpc.getBlock({ blockNumber })
-    return { number: block.number, timestamp: block.timestamp }
-  } catch {
-    return undefined
-  }
+  const [outcome] = await readEach(
+    [blockNumber],
+    async (number): Promise<Attempt<BlockRef | undefined>> => {
+      try {
+        const block = await rpc.getBlock({ blockNumber: number })
+        return {
+          value: { number: block.number, timestamp: block.timestamp },
+          retry: false,
+        }
+      } catch {
+        return { value: undefined, retry: true }
+      }
+    },
+    MEZO_POLICY,
+  )
+  return outcome?.value
 }
 
 function blocksFor(seconds: bigint): bigint {
@@ -205,10 +239,11 @@ export async function mezoBlocksAtOrBefore(
   return result
 }
 
+// One call per HTTP request: a 429 then fails one read, which is retried on
+// its own, instead of a whole batch.
 function baseClient(env: PricingEnv): PublicClient {
   return createPublicClient({
     transport: http(env.BASE_RPC_URL ?? "https://mainnet.base.org", {
-      batch: { batchSize: BASE_CALLS_PER_WAVE },
       retryCount: 0,
       timeout: 20_000,
     }),
@@ -239,7 +274,7 @@ async function btcAt(
   rpc: PublicClient,
   blockNumber: bigint,
   decimals: number,
-): Promise<string | null> {
+): Promise<Attempt<string | null>> {
   try {
     const round = await rpc.readContract({
       address: SKIP_ORACLE,
@@ -248,9 +283,12 @@ async function btcAt(
       blockNumber,
     })
     const answer = round[1]
-    return answer > 0n ? formatFixedPoint(answer, decimals) : null
+    return {
+      value: answer > 0n ? formatFixedPoint(answer, decimals) : null,
+      retry: false,
+    }
   } catch {
-    return null
+    return { value: null, retry: true }
   }
 }
 
@@ -265,8 +303,6 @@ export function mezoPriceFromPool(
   return BigInt(whole) >= PRICE_CAP_WHOLE ? null : price
 }
 
-type PoolRead = { price: string | null; final: boolean }
-
 function isNoCode(error: unknown): boolean {
   return (
     error instanceof BaseError &&
@@ -275,11 +311,15 @@ function isNoCode(error: unknown): boolean {
   )
 }
 
-/** slot0 + liquidity in one multicall eth_call at a historical Base block. */
-async function mezoAt(
-  rpc: PublicClient,
+/**
+ * slot0 + liquidity in one multicall eth_call at a historical Base block.
+ * No code at that block means the pool didn't exist yet, which is final;
+ * any other failure (429, timeout) is a transient miss.
+ */
+export async function mezoAt(
+  rpc: Pick<PublicClient, "multicall">,
   blockNumber: bigint,
-): Promise<PoolRead> {
+): Promise<Attempt<string | null>> {
   try {
     const [slot0, liquidity] = await rpc.multicall({
       contracts: [
@@ -292,48 +332,14 @@ async function mezoAt(
     })
     if (slot0.status === "success" && liquidity.status === "success") {
       return {
-        price: mezoPriceFromPool(slot0.result[0], liquidity.result),
-        final: true,
+        value: mezoPriceFromPool(slot0.result[0], liquidity.result),
+        retry: false,
       }
     }
-    // No code at that block: the pool didn't exist yet, which never changes.
-    return { price: null, final: isNoCode(slot0.error) }
+    return { value: null, retry: !isNoCode(slot0.error) }
   } catch {
-    return { price: null, final: false }
+    return { value: null, retry: true }
   }
-}
-
-function pause(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms))
-}
-
-/**
- * Public Base RPC allows ~25 calls/s, so historical pool reads go out in
- * paced waves, and transient misses get one more paced try.
- */
-async function mezoPricesAt(
-  rpc: PublicClient,
-  blocks: readonly bigint[],
-): Promise<PoolRead[]> {
-  const results: PoolRead[] = blocks.map(() => ({ price: null, final: false }))
-  let pending = blocks.map((_, index) => index)
-  for (let attempt = 0; attempt < 2 && pending.length > 0; attempt += 1) {
-    const retry: number[] = []
-    for (let start = 0; start < pending.length; start += BASE_CALLS_PER_WAVE) {
-      if (start > 0 || attempt > 0) await pause(BASE_WAVE_MS)
-      const wave = pending.slice(start, start + BASE_CALLS_PER_WAVE)
-      const reads = await Promise.all(
-        wave.map((index) => mezoAt(rpc, blocks[index] ?? 0n)),
-      )
-      wave.forEach((index, offset) => {
-        const read = reads[offset] ?? { price: null, final: false }
-        results[index] = read
-        if (read.price === null && !read.final) retry.push(index)
-      })
-    }
-    pending = retry
-  }
-  return results
 }
 
 function priceKey(epochStart: bigint): string {
@@ -359,6 +365,7 @@ function toStored(row: EpochClosePrice): z.infer<typeof storedPriceSchema> {
 }
 
 function fromStored(value: unknown): EpochClosePrice | undefined {
+  // Only settled rows are ever stored.
   const parsed = storedPriceSchema.safeParse(value)
   if (!parsed.success) return undefined
   const epochStart = BigInt(parsed.data.epochStart)
@@ -371,18 +378,27 @@ function fromStored(value: unknown): EpochClosePrice | undefined {
       parsed.data.mezoBlock === null ? null : BigInt(parsed.data.mezoBlock),
     baseBlock:
       parsed.data.baseBlock === null ? null : BigInt(parsed.data.baseBlock),
+    settled: true,
   }
 }
 
 /**
  * Prices at the close of each sealed epoch. Epochs that haven't ended are
- * skipped (use `currentPrices`). Unreadable prices are null and are retried
- * on later requests rather than memoized.
+ * skipped (use `currentPrices`). Each epoch is read once per isolate and
+ * shared by every endpoint; a row that missed after all retries comes back
+ * with `settled: false` and is read again on the next request.
  */
+/** Test seam: a stand-in Base client and clock. */
+export type CloseReaders = {
+  base?: Pick<PublicClient, "multicall">
+  deps?: RetryDeps
+}
+
 export async function epochClosePrices(
   epochStarts: readonly bigint[],
   env: PricingEnv,
   now: bigint,
+  readers?: CloseReaders,
 ): Promise<Map<bigint, EpochClosePrice>> {
   const result = new Map<bigint, EpochClosePrice>()
   const unmemoized: bigint[] = []
@@ -410,7 +426,8 @@ export async function epochClosePrices(
   if (missing.length === 0) return result
 
   const rpc = mezoHistoryClient()
-  const baseRpc = baseClient(env)
+  const baseRpc = readers?.base ?? baseClient(env)
+  const deps = readers?.deps
   const closeTimestamps = missing.map((epochStart) => epochStart + EPOCH - 1n)
   const [blocks, decimals] = await Promise.all([
     mezoBlocksAtOrBefore(closeTimestamps).catch(
@@ -422,31 +439,36 @@ export async function epochClosePrices(
     baseBlockAtOrBefore(epochStart + EPOCH - 1n),
   )
   const [btcPrices, mezoPrices] = await Promise.all([
-    Promise.all(
-      missing.map((epochStart) => {
+    readEach(
+      missing,
+      (epochStart): Promise<Attempt<string | null>> => {
         const block = blocks.get(epochStart + EPOCH - 1n)
         return block && decimals !== null
           ? btcAt(rpc, block.number, decimals)
-          : Promise.resolve(null)
-      }),
+          : Promise.resolve({ value: null, retry: true })
+      },
+      MEZO_POLICY,
+      deps,
     ),
-    mezoPricesAt(baseRpc, baseBlocks),
+    readEach(baseBlocks, (block) => mezoAt(baseRpc, block), BASE_POLICY, deps),
   ])
   const rows = missing.map((epochStart, index): EpochClosePrice => {
     const mezoBlock = blocks.get(epochStart + EPOCH - 1n) ?? null
     const baseBlock = baseBlocks[index] ?? null
-    const btcUsd = btcPrices[index] ?? null
-    const mezo = mezoPrices[index] ?? { price: null, final: false }
+    const btc = btcPrices[index] ?? { value: null, retry: true }
+    const mezo = mezoPrices[index] ?? { value: null, retry: true }
+    const settled = btc.value !== null && !btc.retry && !mezo.retry
     const row: EpochClosePrice = {
       epochStart,
       epochEnd: epochStart + EPOCH,
-      btcUsd,
-      mezoUsd: mezo.price,
+      btcUsd: btc.value,
+      mezoUsd: mezo.value,
       mezoBlock: mezoBlock?.number ?? null,
       baseBlock,
+      settled,
     }
     // Transient misses are retried next time; only settled rows seal.
-    if (btcUsd !== null && mezo.final) {
+    if (settled) {
       sealedSet(priceKey(epochStart), row)
       void persistedPut(priceKey(epochStart), toStored(row))
     }

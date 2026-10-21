@@ -1,7 +1,7 @@
 import { ledgerStatusSchema } from "../../features/history/schema"
 import { activityRoutes } from "../history/activityRoutes"
 import { MAX_LOCKS } from "../history/earnings"
-import { gaugeEpochs, incentiveEpochs } from "../history/gauges"
+import { gaugeEpochsWithStatus, incentiveEpochs } from "../history/gauges"
 import {
   RPC_FRESHNESS,
   UNAVAILABLE_FRESHNESS,
@@ -61,7 +61,12 @@ function ledgerOffset(url: URL): number {
   return 0
 }
 
-async function earnings({ url, params, env }: ApiContext): Promise<Response> {
+async function earnings({
+  url,
+  params,
+  env,
+  waitUntil,
+}: ApiContext): Promise<Response> {
   const network = parseNetwork(url)
   const wallet = parseAddress(params.address)
   const epochs = parseInteger(url, "epochs", 8, 1, 52)
@@ -76,15 +81,22 @@ async function earnings({ url, params, env }: ApiContext): Promise<Response> {
       },
     )
   }
+  const data = await walletEarnings(wallet, tokenIds, epochs, env, waitUntil)
+  // A partial result (prices still retrying) must not be cached anywhere.
   return envelope(
     network,
     RPC_FRESHNESS,
-    await walletEarnings(wallet, tokenIds, epochs, env),
-    { kind: "private", maxAge: 30 },
+    data,
+    data.partial ? { kind: "no-store" } : { kind: "private", maxAge: 30 },
   )
 }
 
-async function ledger({ url, params, env }: ApiContext): Promise<Response> {
+async function ledger({
+  url,
+  params,
+  env,
+  waitUntil,
+}: ApiContext): Promise<Response> {
   const network = parseNetwork(url)
   const wallet = parseAddress(params.address)
   const query = ledgerQuery(url)
@@ -94,11 +106,11 @@ async function ledger({ url, params, env }: ApiContext): Promise<Response> {
     return envelope(
       network,
       UNAVAILABLE_FRESHNESS,
-      { rows: [], nextCursor: null },
+      { rows: [], nextCursor: null, partial: false },
       { kind: "no-store" },
     )
   }
-  const rows = await walletLedger(wallet, query, env)
+  const { rows, partial } = await walletLedger(wallet, query, env, waitUntil)
   const page = rows.slice(offset, offset + limit)
   return envelope(
     network,
@@ -109,8 +121,9 @@ async function ledger({ url, params, env }: ApiContext): Promise<Response> {
         offset + limit < rows.length
           ? encodeCursor({ o: offset + limit })
           : null,
+      partial,
     },
-    { kind: "private", maxAge: 30 },
+    partial ? { kind: "no-store" } : { kind: "private", maxAge: 30 },
   )
 }
 
@@ -118,17 +131,20 @@ async function ledgerCsvFile({
   url,
   params,
   env,
+  waitUntil,
 }: ApiContext): Promise<Response> {
   const network = parseNetwork(url)
   const wallet = parseAddress(params.address)
-  const rows =
-    network === "mezo" ? await walletLedger(wallet, ledgerQuery(url), env) : []
+  const { rows, partial } =
+    network === "mezo"
+      ? await walletLedger(wallet, ledgerQuery(url), env, waitUntil)
+      : { rows: [], partial: false }
   return new Response(ledgerCsv(rows), {
     headers: {
       "content-type": "text/csv; charset=utf-8",
       "content-disposition": `attachment; filename="matchbox-rewards-${wallet.slice(0, 10)}.csv"`,
       "access-control-allow-origin": "*",
-      "cache-control": "private, max-age=30",
+      "cache-control": partial ? "no-store" : "private, max-age=30",
     },
   })
 }
@@ -148,17 +164,20 @@ async function gauge({ url, params, env }: ApiContext): Promise<Response> {
       },
     )
   }
+  const { data, complete } = await gaugeEpochsWithStatus({
+    gauge: address,
+    count,
+    boostTokenId,
+    now: nowSeconds(),
+    env,
+  })
   return envelope(
     network,
     RPC_FRESHNESS,
-    await gaugeEpochs({
-      gauge: address,
-      count,
-      boostTokenId,
-      now: nowSeconds(),
-      env,
-    }),
-    { kind: "shared", sMaxAge: 300, staleWhileRevalidate: 600 },
+    data,
+    complete
+      ? { kind: "shared", sMaxAge: 300, staleWhileRevalidate: 600 }
+      : { kind: "no-store" },
   )
 }
 
@@ -175,11 +194,18 @@ async function incentives({ url, env }: ApiContext): Promise<Response> {
       },
     )
   }
+  const { data, complete } = await incentiveEpochs({
+    count,
+    now: nowSeconds(),
+    env,
+  })
   return envelope(
     network,
     RPC_FRESHNESS,
-    await incentiveEpochs({ count, now: nowSeconds(), env }),
-    { kind: "shared", sMaxAge: 300, staleWhileRevalidate: 600 },
+    data,
+    complete
+      ? { kind: "shared", sMaxAge: 300, staleWhileRevalidate: 600 }
+      : { kind: "no-store" },
   )
 }
 

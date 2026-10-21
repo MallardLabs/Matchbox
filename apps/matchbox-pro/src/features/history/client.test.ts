@@ -73,6 +73,7 @@ describe("history client", () => {
               projected: TOTALS,
             },
             verified: true,
+            partial: false,
           },
         }),
       ),

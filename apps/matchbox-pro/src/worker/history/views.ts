@@ -66,6 +66,7 @@ type Accumulator = {
   amount: bigint
   usdAtEarn: bigint | null
   usdNow: bigint | null
+  unpriced: number
 }
 
 function addMicro(sum: bigint | null, value: bigint | null): bigint | null {
@@ -89,6 +90,7 @@ export function summarize(
       amount: 0n,
       usdAtEarn: null,
       usdNow: null,
+      unpriced: 0,
     }
     acc.amount += line.amount
     if (atEarn) {
@@ -100,7 +102,10 @@ export function summarize(
             tokenPrice(line.token, line.symbol, refs),
           )
         : null
-      if (value === null) unpriced += 1
+      if (value === null) {
+        unpriced += 1
+        acc.unpriced += 1
+      }
       acc.usdAtEarn = addMicro(acc.usdAtEarn, value)
       usdAtEarn = addMicro(usdAtEarn, value)
     }
@@ -114,13 +119,17 @@ export function summarize(
         acc.meta.decimals,
         tokenPrice(acc.meta.token, acc.meta.symbol, book.now),
       )
-      if (now === null && !atEarn) unpriced += 1
+      if (now === null && !atEarn) {
+        unpriced += 1
+        acc.unpriced += 1
+      }
       usdNow = addMicro(usdNow, now)
       return {
         ...acc.meta,
         amount: acc.amount.toString(),
         usdAtEarn: atEarn ? usdString(acc.usdAtEarn) : null,
         usdNow: usdString(now),
+        unpriced: acc.unpriced,
       }
     })
   const empty = lines.length === 0
@@ -130,6 +139,30 @@ export function summarize(
     usdNow: usdString(empty ? 0n : usdNow),
     unpriced,
   }
+}
+
+/** A price class we can value (stables, BTC-pegged, MEZO). */
+function priceable(token: string, symbol: string): boolean {
+  return tokenPrice(token, symbol, { btcUsd: "1", mezoUsd: "1" }) !== null
+}
+
+/**
+ * Some USD is still a lower bound because a price read missed transiently
+ * (an epoch close not yet settled, or no live price right now). Tokens with
+ * no price class, and MEZO before its pool existed, are final, not partial.
+ */
+export function isPartial(
+  model: WalletEarningsModel,
+  book: PriceBook,
+): boolean {
+  for (const line of flatten(model)) {
+    if (!priceable(line.token, line.symbol)) continue
+    if (tokenPrice(line.token, line.symbol, book.now) === null) return true
+    if (line.status === "pending") continue
+    const close = book.closes.get(line.epochStart)
+    if (!close?.settled) return true
+  }
+  return false
 }
 
 export function earningsView(
@@ -188,6 +221,7 @@ export function earningsView(
       projected,
     },
     verified: model.verified,
+    partial: isPartial(model, book),
   }
 }
 

@@ -4,7 +4,7 @@ import type {
   WireLedgerRow,
   WirePricingEpochs,
 } from "../../features/history/schema"
-import { type WorkerEnv, cached } from "../router"
+import { type WaitUntil, type WorkerEnv, cached, cachedStale } from "../router"
 import { linkClaims, walletClaims } from "./claims"
 import {
   BOOST_FIRST_EPOCH,
@@ -17,47 +17,90 @@ import {
 import { EPOCH, epochStartOf } from "./math"
 import { type PricingEnv, currentPrices, epochClosePrices } from "./pricing"
 import { sourceConfig } from "./sources"
-import { type PriceBook, earningsView, ledgerRows, pricedEpochs } from "./views"
+import {
+  type PriceBook,
+  earningsView,
+  isPartial,
+  ledgerRows,
+  pricedEpochs,
+} from "./views"
 
-// Composes a wallet's earnings model with its prices. One 30s memo serves the
-// earnings, ledger and CSV routes for the same wallet.
+// Composes a wallet's earnings model with its prices. One memo serves the
+// earnings, ledger and CSV routes for the same wallet, so they can't
+// disagree. Only complete histories are memoized: one with a transient price
+// gap is returned marked `partial` and recomputed on the next request (the
+// prices that did settle are reused from the per-epoch price memo.)
 
 export type WalletHistory = {
   model: WalletEarningsModel
   book: PriceBook
+  partial: boolean
+}
+
+const HISTORY_TTL = { freshMs: 30_000, staleMs: 120_000 }
+
+class PartialHistory extends Error {
+  readonly history: WalletHistory
+
+  constructor(history: WalletHistory) {
+    super("Wallet history has transient price gaps")
+    this.history = history
+  }
 }
 
 export function nowSeconds(): bigint {
   return BigInt(Math.floor(Date.now() / 1000))
 }
 
-export function walletHistory(
+async function computeHistory(
   wallet: Address,
   tokenIds: readonly bigint[],
   env: PricingEnv,
 ): Promise<WalletHistory> {
-  const key = `history:wallet:${wallet}:${tokenIds.join(",")}`
-  return cached(key, 30_000, async () => {
-    const now = nowSeconds()
-    // Close prices are global and memoized forever, so fetch every boost
-    // epoch's alongside the wallet reads instead of after them.
-    const allCloses = epochClosePrices(
-      sealedEpochsSince(BOOST_FIRST_EPOCH, epochStartOf(now)),
-      env,
-      now,
-    )
-    const prices = currentPrices(env)
-    const ids = tokenIds.length > 0 ? tokenIds : await walletLockIds(wallet)
-    const model = await computeWalletEarnings({
-      tokenIds: ids.slice(0, MAX_LOCKS),
-      now,
-    })
-    const needed = new Set(pricedEpochs(model))
-    const closes = new Map(
-      [...(await allCloses).entries()].filter(([epoch]) => needed.has(epoch)),
-    )
-    return { model, book: { now: await prices, closes } }
+  const now = nowSeconds()
+  // Close prices are global and memoized forever, so fetch every boost
+  // epoch's alongside the wallet reads instead of after them.
+  const allCloses = epochClosePrices(
+    sealedEpochsSince(BOOST_FIRST_EPOCH, epochStartOf(now)),
+    env,
+    now,
+  )
+  const prices = currentPrices(env)
+  const ids = tokenIds.length > 0 ? tokenIds : await walletLockIds(wallet)
+  const model = await computeWalletEarnings({
+    tokenIds: ids.slice(0, MAX_LOCKS),
+    now,
   })
+  const needed = new Set(pricedEpochs(model))
+  const closes = new Map(
+    [...(await allCloses).entries()].filter(([epoch]) => needed.has(epoch)),
+  )
+  const book = { now: await prices, closes }
+  return { model, book, partial: isPartial(model, book) }
+}
+
+export async function walletHistory(
+  wallet: Address,
+  tokenIds: readonly bigint[],
+  env: PricingEnv,
+  waitUntil: WaitUntil,
+): Promise<WalletHistory> {
+  const key = `history:wallet:${wallet}:${tokenIds.join(",")}`
+  try {
+    return await cachedStale(
+      key,
+      HISTORY_TTL,
+      async () => {
+        const history = await computeHistory(wallet, tokenIds, env)
+        if (history.partial) throw new PartialHistory(history)
+        return history
+      },
+      waitUntil,
+    )
+  } catch (error) {
+    if (error instanceof PartialHistory) return error.history
+    throw error
+  }
 }
 
 export async function walletEarnings(
@@ -65,8 +108,9 @@ export async function walletEarnings(
   tokenIds: readonly bigint[],
   epochs: number,
   env: PricingEnv,
+  waitUntil: WaitUntil,
 ): Promise<WireEarnings> {
-  const { model, book } = await walletHistory(wallet, tokenIds, env)
+  const { model, book } = await walletHistory(wallet, tokenIds, env, waitUntil)
   return earningsView(model, book, epochs)
 }
 
@@ -90,6 +134,7 @@ export function emptyEarnings(now: bigint): WireEarnings {
       projected: empty,
     },
     verified: false,
+    partial: false,
   }
 }
 
@@ -129,8 +174,14 @@ export async function walletLedger(
   wallet: Address,
   query: LedgerQuery,
   env: WorkerEnv,
-): Promise<WireLedgerRow[]> {
-  const { model, book } = await walletHistory(wallet, [], env)
+  waitUntil: WaitUntil,
+): Promise<{ rows: WireLedgerRow[]; partial: boolean }> {
+  const { model, book, partial } = await walletHistory(
+    wallet,
+    [],
+    env,
+    waitUntil,
+  )
   const rows = ledgerRows(model, book).filter((row) => {
     const epoch = BigInt(row.epochStart)
     if (query.from !== undefined && epoch < query.from) return false
@@ -144,7 +195,7 @@ export async function walletLedger(
     }
     return true
   })
-  return withClaimLinks(wallet, rows, env)
+  return { rows: await withClaimLinks(wallet, rows, env), partial }
 }
 
 /** BTC / MEZO at each of the last `count` epoch closes, oldest first. */

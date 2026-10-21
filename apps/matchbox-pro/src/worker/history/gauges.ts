@@ -19,6 +19,7 @@ import {
 import { HistoryError } from "./http"
 import { EPOCH, epochStartOf, priorIndex } from "./math"
 import {
+  type EpochClosePrice,
   type PriceRefs,
   type PricingEnv,
   currentPrices,
@@ -151,13 +152,13 @@ async function boostAtCloses(
  * boost needs the gauge's veBTC token id (from its profile); without it the
  * boost column is null.
  */
-export async function gaugeEpochs(input: {
+export async function gaugeEpochsWithStatus(input: {
   gauge: Address
   count: number
   boostTokenId: bigint | undefined
   now: bigint
   env: PricingEnv
-}): Promise<WireGaugeEpochs> {
+}): Promise<{ data: WireGaugeEpochs; complete: boolean }> {
   const bribes = await boostBribes()
   const bribe = bribes.find((item) => item.gauge === input.gauge)
   if (!bribe) {
@@ -196,7 +197,7 @@ export async function gaugeEpochs(input: {
   ])
   const supplies = checkpoints.get(supplyKey) ?? []
 
-  return {
+  const data: WireGaugeEpochs = {
     rows: epochs.map((epoch) => {
       const isCurrent = epoch === currentEpoch
       const supplyIndex = priorIndex(supplies, epoch + EPOCH - 1n)
@@ -235,6 +236,22 @@ export async function gaugeEpochs(input: {
       }
     }),
   }
+  return { data, complete: settledAll(closes, sealed) }
+}
+
+/** The rows alone (Stuart's gauge tools); the route also uses `complete`. */
+export async function gaugeEpochs(
+  input: Parameters<typeof gaugeEpochsWithStatus>[0],
+): Promise<WireGaugeEpochs> {
+  return (await gaugeEpochsWithStatus(input)).data
+}
+
+/** Every sealed epoch's close price came back (no transient misses). */
+function settledAll(
+  closes: ReadonlyMap<bigint, EpochClosePrice>,
+  sealed: readonly bigint[],
+): boolean {
+  return sealed.every((epoch) => closes.get(epoch)?.settled ?? false)
 }
 
 type EpochAggregate = {
@@ -288,7 +305,7 @@ export async function incentiveEpochs(input: {
   count: number
   now: bigint
   env: PricingEnv
-}): Promise<WireIncentiveEpochs> {
+}): Promise<{ data: WireIncentiveEpochs; complete: boolean }> {
   const bribes = await boostBribes()
   const currentEpoch = epochStartOf(input.now)
   const epochs = windowEpochs(currentEpoch, input.count).reverse()
@@ -345,7 +362,7 @@ export async function incentiveEpochs(input: {
       bribe.tokens.find((item) => item.token === token)?.currentDeposit ?? 0n,
   )
 
-  return {
+  const data: WireIncentiveEpochs = {
     rows: epochs.map((epoch) => {
       const isCurrent = epoch === currentEpoch
       const row = isCurrent
@@ -368,4 +385,5 @@ export async function incentiveEpochs(input: {
       }
     }),
   }
+  return { data, complete: settledAll(closes, sealed) }
 }
