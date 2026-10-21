@@ -61,7 +61,7 @@ Worker `vars` (string `"true"`/`"false"`), read through
 | `MATCHBOX_ID_ENABLED` | matchbox-id | `/oauth/*`, `/api/*` return `503 {error:{code:"service_disabled"}}`; SPA shows a static unavailable state |
 | `DEVELOPER_CONSOLE_ENABLED` | developer-console | same shape; SPA shows unavailable |
 | `GAUGE_PROFILE_API_ENABLED` | developer-api | `/v1/*` except `/v1/health` and `/openapi.json` return 503 |
-| `DISCORD_CLAIMS_ENABLED` | matchbox-id | `discord:*` scopes are dropped from discovery, refused at authorize (`invalid_scope`), and omitted from userinfo |
+| `DISCORD_CLAIMS_ENABLED` | matchbox-id | `discord:*` scopes are dropped from discovery and omitted from userinfo; at authorize, optional ones are ignored (like unknown scopes) and required ones fail with `invalid_scope` |
 
 All default to `"false"` in checked-in wrangler files.
 
@@ -489,7 +489,7 @@ Issuer: `https://id.matchbox.markets`.
 | --- | --- |
 | `GET /.well-known/openid-configuration` | generated from contracts |
 | `GET /oauth/jwks` | public keys from `OIDC_SIGNING_KEYS` |
-| `GET /oauth/authorize` | validates request server-side, then 302 to SPA `/authorize?request=<id>` (request stored 10 min in `mbx_id_authorization_requests`, see below); errors before redirect-URI validation render the SPA error page, never redirect |
+| `GET /oauth/authorize` | validates request server-side, then 302 to SPA `/authorize?request=<id>` (request stored 10 min in `mbx_id_authorization_requests`, see below); errors before redirect-URI validation render the SPA error page, never redirect. Unknown `scope` values are ignored (OIDC Core §3.1.2.1, `parseRequestedOidcScopes`); `openid` is still required |
 | `POST /oauth/token` | `authorization_code` (PKCE S256 required for every client) and `refresh_token` grants; client auth `client_secret_basic`/`client_secret_post` for confidential, `none` for public |
 | `GET/POST /oauth/userinfo` | bearer access token; claims per granted scopes |
 | `POST /oauth/revoke` | RFC 7009; refresh tokens revoke the family, access tokens by jti |
@@ -520,9 +520,12 @@ Optional scopes (owner decision 2026-10-21): each environment marks a subset
 of its requested OIDC scopes optional (`optional_scopes`; `openid` is always
 required). Consent shows required scopes without a toggle and optional ones
 with a toggle (`consentScopeSchema.requirement`); the decision body carries
-`declinedScopes`. `resolveConsentDecision` grants the rest, skips
-unavailable optional scopes (not stored, offered again once available) and
-fails on a declined or unavailable required scope. The grant stores the
+`declinedScopes` (omitted = keep the grant's earlier declined set).
+`resolveConsentDecision` grants the rest, skips unavailable optional scopes
+(not stored, offered again once available) and fails on a declined or
+unavailable required scope: the client is redirected with `access_denied`
+and error_description `required-scope-declined` (or `discord-not-linked` /
+`scope-unavailable`). The grant stores the
 granted subset in `scopes` and the switched-off ones in `declined_scopes`
 (`mergeGrantScopes`); codes, refresh tokens, the token response `scope`, the
 ID token and userinfo carry only granted scopes (`pickGrantedClaims` as the

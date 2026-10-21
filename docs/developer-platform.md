@@ -81,12 +81,12 @@ api.matchbox.markets        → Worker matchbox-developer-api      Hono, DO Rate
 Flags are Worker `vars` (`"true"`/`"false"`); all are `"false"` in the
 checked-in wrangler files.
 
-| Flag                        | Worker                     | Off behaviour                                                                                            |
-| --------------------------- | -------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `DEVELOPER_CONSOLE_ENABLED` | matchbox-developer-console | `/api/*` → `503 service_disabled`; SPA shows unavailable                                                 |
-| `GAUGE_PROFILE_API_ENABLED` | matchbox-developer-api     | `/v1/*` except `/v1/health` and `/openapi.json` → `503 service_disabled`                                 |
-| `MATCHBOX_ID_ENABLED`       | matchbox-id                | `/api/*`, `/oauth/*`, `/.well-known/*` → `503 service_disabled`; SPA shows unavailable                   |
-| `DISCORD_CLAIMS_ENABLED`    | matchbox-id                | `discord:*` scopes dropped from discovery, refused at authorize (`invalid_scope`), omitted from userinfo |
+| Flag                        | Worker                     | Off behaviour                                                                                                                                         |
+| --------------------------- | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DEVELOPER_CONSOLE_ENABLED` | matchbox-developer-console | `/api/*` → `503 service_disabled`; SPA shows unavailable                                                                                              |
+| `GAUGE_PROFILE_API_ENABLED` | matchbox-developer-api     | `/v1/*` except `/v1/health` and `/openapi.json` → `503 service_disabled`                                                                              |
+| `MATCHBOX_ID_ENABLED`       | matchbox-id                | `/api/*`, `/oauth/*`, `/.well-known/*` → `503 service_disabled`; SPA shows unavailable                                                                |
+| `DISCORD_CLAIMS_ENABLED`    | matchbox-id                | `discord:*` scopes dropped from discovery and omitted from userinfo; at authorize, optional ones are ignored, required ones fail with `invalid_scope` |
 
 Changing a flag: edit `wrangler.jsonc` and deploy (durable), or edit the
 variable in the dashboard (Worker → Settings → Variables), which deploys a new
