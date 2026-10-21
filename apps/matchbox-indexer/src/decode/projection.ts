@@ -36,7 +36,7 @@ const logger = createLogger("matchbox-indexer-projection")
 export class ProjectionReplayRequiredError extends Error {
   constructor(network: Network, built: number) {
     super(
-      `${network} projection was built with decoder v${built}, current is v${DECODER_VERSION}. Run scripts/project.ts --replay.`,
+      `${network} projection was built with decoder v${built}, current is v${DECODER_VERSION}. Run scripts/rebuild.ts --replay.`,
     )
     this.name = "ProjectionReplayRequiredError"
   }
@@ -410,8 +410,12 @@ export async function runProjection(
   return result
 }
 
+const otherNetworkSchema = z.object({ other: z.boolean() })
+
 // Clears the projection for one network so runProjection rebuilds it from the
-// first raw log under the current decoder version.
+// first raw log under the current decoder version. A table holding only this
+// network is truncated: a DELETE leaves the space to autovacuum, and a
+// replay would briefly need twice the projection under a storage cap.
 export async function resetProjection(
   db: ClientBase,
   network: Network,
@@ -428,7 +432,16 @@ export async function resetProjection(
       "matchbox.reward_deposits",
       "matchbox.trove_updates",
     ]) {
-      await db.query(`DELETE FROM ${table} WHERE network = $1`, [network])
+      const result = await db.query(
+        `SELECT EXISTS (SELECT 1 FROM ${table} WHERE network <> $1) AS other`,
+        [network],
+      )
+      const shared = z.array(otherNetworkSchema).parse(result.rows)[0]?.other
+      if (shared === false) {
+        await db.query(`TRUNCATE ${table}`)
+      } else {
+        await db.query(`DELETE FROM ${table} WHERE network = $1`, [network])
+      }
     }
     await db.query(
       "DELETE FROM matchbox.indexer_checkpoints WHERE network = $1 AND stream = $2",

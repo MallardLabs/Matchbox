@@ -5,11 +5,15 @@
   "compatibility_date": "2026-08-30",
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
-  // Each tick ingests from the logs checkpoint to head minus confirmations.
+  // Each tick ingests from the logs checkpoint to head minus confirmations,
+  // projects it and prunes old raw rows. Every 15 minutes, not every
+  // minute: each tick wakes the Neon compute for at least its 5-minute
+  // suspend timeout, and the Free plan has 100 CU-hours a month (GO-LIVE.md,
+  // "Free-tier budget"). Fallback: "*/30 * * * *".
   // DATABASE_URL is a secret (`wrangler secret put DATABASE_URL`): the direct
   // Neon URL for the matchbox_indexer login, never committed here.
   "triggers": {
-    "crons": ["* * * * *"]
+    "crons": ["*/15 * * * *"]
   },
   "observability": {
     "enabled": true,

@@ -53,6 +53,11 @@ Neon. There is no Goldsky pipeline. Go-live steps are in `GO-LIVE.md`.
     Windows below the start (the mUSD history) never move it.
 - **Finality.** Mezo is CometBFT (instant finality, not independently verified).
   Ingest stays 2 blocks behind head and stores `block_hash`.
+- **Retention.** Raw logs and transactions are deleted once projected and more
+  than 160,000 blocks (about 7 days) behind ingest (`src/maintenance.ts`).
+  Nothing outside the indexer reads `matchbox_raw`; a replay re-ingests
+  history from RPC (`rebuild:history -- --replay`). This keeps the warehouse
+  inside Neon Free's 1 GB (`GO-LIVE.md`, "Free-tier budget").
 
 ## Decoder
 
@@ -61,11 +66,11 @@ Neon. There is no Goldsky pipeline. Go-live steps are in `GO-LIVE.md`.
 and the warehouse-only `reward_deposits` and `trove_updates`. Rows the explorer
 would not have produced have `explorer_parity = false`; `parity` compares the
 rest with frozen `matchbox-explorer` 3.4.0. `DECODER_VERSION` is 2. A database
-built by another version halts projection until `project -- --replay`.
+built by another version halts projection until `rebuild:history -- --replay`.
 
 ## Commands
 
-Migrations, roles, the backfill, projection and parity need the direct
+Migrations, roles, the loads, projection and parity need the direct
 (non-pooler) `DATABASE_URL_UNPOOLED`. The linked Neon development branch puts it
 in the repository-root ignored `.env.local`.
 
@@ -75,12 +80,19 @@ pnpm --filter @repo/matchbox-indexer roles   # re-run after new migrations
 pnpm --filter @repo/matchbox-indexer verify:warehouse
 pnpm --filter @repo/matchbox-indexer vacuum:raw   # after a migration that trims raw rows
 
-# Full history. --from defaults to block 178,630 (mUSD); resumable, and stops
-# cleanly over --max-db-mb.
+# Full load or replay: ingest, project and prune 500,000 blocks at a time, so
+# raw never holds more than one chunk plus the retention tail. --from defaults
+# to block 178,630 (mUSD); resumable after the projection checkpoint; stops
+# before 90% of the storage cap. --replay truncates the projection first.
+pnpm --filter @repo/matchbox-indexer rebuild:history -- --network mezo \
+  [--replay] [--from N] [--to N] [--chunk 500000] [--concurrency 4]
+
+# Raw ingest alone, without projecting or pruning (the cron prunes what it
+# projects later). Resumable, and stops cleanly over --max-db-mb.
 pnpm --filter @repo/matchbox-indexer backfill -- --network mezo \
   [--from N] [--to N] [--concurrency 4] [--max-db-mb 900] [--skip-discovery]
 
-# Project raw logs (--replay rebuilds from scratch under the current decoder).
+# Project raw logs. --replay refuses once raw is pruned: use rebuild:history.
 pnpm --filter @repo/matchbox-indexer project -- --network mezo [--replay]
 
 # Row-level diff against frozen matchbox-explorer 3.4.0 (exits 1 on a diff).
@@ -96,14 +108,23 @@ full address set up front.
 
 ## Worker
 
-`src/index.ts` runs every minute (`wrangler.jsonc` cron). Each tick ingests
-from the `logs` checkpoint to head minus 2, at most 50,000 blocks, then
-projects what it ingested. `GET /health` reports head, last block and lag.
+`src/index.ts` runs every 15 minutes (`wrangler.jsonc` cron; each tick wakes
+the Neon compute, and Neon Free has 100 CU-hours a month). Each tick:
+
+1. checks the storage guard: at 90% of `neon.max_cluster_size` it logs
+   "WAREHOUSE NEAR STORAGE CAP" and writes nothing;
+2. ingests from the `logs` checkpoint to head minus 2, at most 50,000 blocks;
+3. projects what it ingested;
+4. prunes raw past the retention window, at most 250,000 blocks per tick.
+
+`GET /health` reports head, last block, lag, projection state and
+`database` (`bytes`, `capBytes`, `usedPercent`, `writable`). It queries the
+database, so it wakes the compute: check it by hand, not from a monitor.
 
 - `DATABASE_URL` is a secret: `wrangler secret put DATABASE_URL`. Use the
   direct URL for a login granted `matchbox_indexer`.
 - On an empty `logs` checkpoint the cron starts at the network start, so the
-  mUSD history before it only arrives through `backfill`.
+  mUSD history before it only arrives through `rebuild:history`.
 
 ## History
 

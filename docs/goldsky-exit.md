@@ -39,7 +39,8 @@ Everything else on `/activity` stays frozen at 2026-09-24 until phase 2.
 ## Phase 2: warehouse
 
 Neon project `fragrant-math-82213579`. Build and verify on the dev branch
-(root `.env.local`). Production gets its own branch at go-live.
+(root `.env.local`). Production gets its own Neon project at go-live (see
+"Free-tier design").
 
 ### Ingest (`apps/matchbox-indexer/src/ingest/`)
 
@@ -187,8 +188,9 @@ Intended differences, in addition to the two listed under the parity result:
   logs and 205,761 transactions, about 400 MB. Projection replay: about 16
   minutes, 195,873 activity rows (163,195 explorer parity, 32,678
   warehouse-only), 12,767 votes, 6,346 locks, 1,094 reward deposits, 7,421
-  trove updates. The branch is 696 MB of its 1,024 MB cap (36 MB are the
-  Goldsky spike tables); growth is about 50 MB a month.
+  trove updates. With full raw history the branch was 696 MB of its 1,024
+  MB cap (36 MB are the Goldsky spike tables), growing about 50 MB a month;
+  raw retention (below) brings that to about 285 MB and 25 MB a month.
 - **Voter bribes:** registered 719 / 24 / 7, equal to `length()` on
   BoostVoter, ValidatorsVoter and ThirdPartyVoter. 2,185 bribe claims
   (2,099 boost, 86 validator; ThirdPartyVoter bribes have none yet).
@@ -203,6 +205,14 @@ Intended differences, in addition to the two listed under the parity result:
 - **Troves:** 400 `LOAN_REPAID` rows checked against the borrower's MUSD
   burn in the same receipt: 399 exact, 1 off by 1 wei. Principal and
   collateral of 60 sampled borrowers equal `TroveManager.Troves()` at head.
+- **Pruned replay:** `rebuild:history -- --replay` on the dev branch
+  re-ingested 178,630 to 12,664,962 from RPC in about 110 minutes, pruning as
+  it went, and parity stayed exact (147,270 rows, 17,367 enriched). Raw ended
+  at the 7-day tail (6,340 logs, 3,923 transactions). Compacted, the
+  database is 320 MB, 37 MB of it the old Goldsky spike tables: a fresh
+  production load is about 285 MB, of which the projection is 265 MB.
+- **Tick cost:** a 15-minute tick (about 235 blocks) took about 5 to 8 s of
+  wall time and 0.3 to 0.5 s of CPU in Node, TLS set-up included.
 
 ### A6 (not built): sealed earnings and prices
 
@@ -219,14 +229,44 @@ Intended differences, in addition to the two listed under the parity result:
 - Both are writes by the indexer Worker into `matchbox`, so they need no new
   role; the Pro BFF switches its ledger `method` to `warehouse-sealed-v1`.
 
+## Free-tier design (2026-10-21)
+
+Production runs on Neon's Free plan: 100 CU-hours and 1 GB per project, and
+the compute suspends after 5 idle minutes (not configurable). So:
+
+- **Own project.** Production is a new Neon project, `matchbox-warehouse`,
+  not a branch of `fragrant-math-82213579` (its dev branch alone is 696 MB).
+  Compute fixed at 0.25 CU.
+- **15-minute cron.** A per-minute cron keeps 0.25 CU awake around the clock
+  (about 180 CU-h a month). Every 15 minutes, each tick (about 8 s of work)
+  keeps the compute up for about 5 minutes: about 62 CU-h a month, leaving
+  about 38 for reads. Fallback: every 30 minutes (about 31 CU-h).
+- **Raw retention.** After projection, raw logs and transactions more than
+  160,000 blocks (about 7 days) behind ingest are deleted
+  (`src/maintenance.ts`). Nothing outside the indexer reads `matchbox_raw`
+  (the webapp, Pro and `parity` read only `matchbox.*`). A replay re-ingests
+  from RPC with `rebuild:history -- --replay`, which loads, projects and
+  prunes 500,000 blocks at a time; `project -- --replay` refuses on a pruned
+  database. The initial load uses the same path.
+- **Size guard.** Ticks stop writing at 90% of `neon.max_cluster_size`, and
+  `/health` reports the usage.
+- **Read cache.** The webapp caches every warehouse read for 5 minutes per
+  query (Workers Cache API plus a per-isolate memo), and the activity route
+  rounds its default window to that. Shorter TTLs would keep the compute
+  awake under steady traffic. The "as of" chip waits 45 minutes.
+
+`apps/matchbox-indexer/GO-LIVE.md`, "Free-tier budget", has the numbers and
+what to watch.
+
 ## Go-live (needs account access)
 
 `apps/matchbox-indexer/GO-LIVE.md` is the step-by-step runbook, each
 outward-facing step marked. In short:
 
-1. Neon: create a production branch, apply the migrations and roles, create
-   the two logins, backfill from block 178,630, project, and pass `parity`.
-2. Cloudflare (mallard account): deploy `matchbox-indexer` with its 1-minute
+1. Neon: create the `matchbox-warehouse` project (Free, 0.25 CU), apply the
+   migrations and roles, create the two logins, load history from block
+   178,630 with `rebuild:history`, and pass `parity`.
+2. Cloudflare (mallard account): deploy `matchbox-indexer` with its 15-minute
    cron and `DATABASE_URL` secret. On the `matchbox` Worker, set
    `MATCHBOX_WAREHOUSE_URL` and `MEZO_ACTIVITY_SOURCE=warehouse`. After
    Pro's first deploy, set `MATCHBOX_WAREHOUSE_URL` on `matchbox-pro` to the

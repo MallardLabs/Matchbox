@@ -12,6 +12,7 @@
     "migrate": "tsx scripts/migrate.ts",
     "parity": "tsx scripts/parity.ts",
     "project": "tsx scripts/project.ts",
+    "rebuild:history": "tsx scripts/rebuild.ts",
     "refetch:claims": "tsx scripts/refetch-claim-calldata.ts",
     "roles": "tsx scripts/create-roles.ts",
     "test": "vitest run",
