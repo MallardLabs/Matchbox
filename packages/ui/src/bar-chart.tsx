@@ -24,6 +24,8 @@ export type RootProps = HTMLAttributes<HTMLDivElement> & {
   formatTick: (value: number) => string
   /** Plot height in px (the design uses 178). */
   height?: number
+  /** compact: tighter columns so 8+ date-labelled epochs fit a half-width card. */
+  spacing?: "comfortable" | "compact"
 }
 
 /** Rounds up to 1, 2 or 5 × 10ⁿ so every chart shares readable ticks. */
@@ -41,13 +43,22 @@ export function niceCeiling(value: number): number {
  * instead of a zero bar. A visually hidden table carries the exact values.
  */
 export const Root = forwardRef<HTMLDivElement, RootProps>(function BarChart(
-  { bars, title, formatTick, height = 178, className, ...props },
+  {
+    bars,
+    title,
+    formatTick,
+    height = 178,
+    spacing = "comfortable",
+    className,
+    ...props
+  },
   ref,
 ): ReactElement {
   const max = niceCeiling(
     Math.max(0, ...bars.map((bar) => (bar.value === null ? 0 : bar.value))),
   )
   const ticks = [max, max / 2, 0]
+  const gap = spacing === "compact" ? "gap-1 sm:gap-1.5" : "gap-2 sm:gap-4"
 
   return (
     <div ref={ref} className={cn("flex flex-col", className)} {...props}>
@@ -61,7 +72,7 @@ export const Root = forwardRef<HTMLDivElement, RootProps>(function BarChart(
               <span key={tick}>{formatTick(tick)}</span>
             ))}
           </div>
-          <div className="flex h-full min-w-0 flex-1 items-end gap-2 sm:gap-4">
+          <div className={cn("flex h-full min-w-0 flex-1 items-end", gap)}>
             {bars.map((bar) => (
               <BarColumn key={bar.key} bar={bar} max={max} height={height} />
             ))}
@@ -70,7 +81,7 @@ export const Root = forwardRef<HTMLDivElement, RootProps>(function BarChart(
         <div className="h-px w-full bg-line" />
         <div className="flex gap-1 pt-2">
           <span className="w-[34px] shrink-0" />
-          <div className="flex min-w-0 flex-1 gap-2 sm:gap-4">
+          <div className={cn("flex min-w-0 flex-1", gap)}>
             {bars.map((bar) => (
               <span
                 key={bar.key}
