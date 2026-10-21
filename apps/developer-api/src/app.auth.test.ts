@@ -288,5 +288,7 @@ describe("API key auth", () => {
     expect(anonymous?.blobs[1]).toBe("")
     expect(anonymous?.blobs[4]).toBe("401")
     expect(anonymous?.blobs[5]).toBe("none")
+    expect(ok?.blobs[9]).toBe("")
+    expect(anonymous?.blobs[9]).toBe("unauthorized")
   })
 })

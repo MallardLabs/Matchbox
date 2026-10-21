@@ -212,6 +212,24 @@ export async function createMemoryApiStore(options: {
       }
     },
 
+    async latestChainSync(network) {
+      let newest: ChainStateRow | null = null
+      for (const row of chainStates.values()) {
+        if (
+          row.network === network &&
+          (newest === null ||
+            Date.parse(row.checkedAt) > Date.parse(newest.checkedAt))
+        ) {
+          newest = row
+        }
+      }
+      return {
+        network,
+        checkedAt: newest?.checkedAt ?? null,
+        blockNumber: newest?.blockNumber ?? null,
+      }
+    },
+
     async listProfilesForReconciliation() {
       return profiles.map((profile) => ({
         network: profile.network,

@@ -14,7 +14,7 @@ of truth). Per-app detail: [matchbox-id](../apps/matchbox-id/README.md),
 | ----------------------------- | -------------------------- | ---------------------------- | ---------------------------- | -------------------------------------------------------------------------------- |
 | `apps/matchbox-id`            | `@repo/matchbox-id`        | `matchbox-id`                | `id.matchbox.markets`        | OIDC provider (SIWE wallet sign-in), consent, connected apps, sessions           |
 | `apps/developer-console`      | `@repo/developer-console`  | `matchbox-developer-console` | `developer.matchbox.markets` | Passkey developer console: orgs, apps, environments, keys, usage; staff `/admin` |
-| `apps/developer-api`          | `@repo/developer-api`      | `matchbox-developer-api`     | `api.matchbox.markets`       | Gauge Profile API (`/v1/*`), chain-state reconciliation cron                     |
+| `apps/developer-api`          | `@repo/developer-api`      | `matchbox-developer-api`     | `api.matchbox.markets`       | Gauge Profile API (`/v1/*`), health-probe + chain-state reconciliation crons     |
 | `packages/ui`                 | `@repo/ui`                 | —                            | —                            | React component + token library                                                  |
 | `packages/platform-contracts` | `@repo/platform-contracts` | —                            | —                            | Zod schemas, OpenAPI document, scopes, rate-limit policies                       |
 | `packages/platform-server`    | `@repo/platform-server`    | —                            | —                            | Worker helpers: Supabase admin, flags, crypto, middleware, `RateLimiter` DO      |
@@ -31,6 +31,10 @@ Migrations (apply in order; all additive):
    console transactional functions, recovery-passkey step-up block.
 3. `supabase/migrations/20260930000003_matchbox_id_functions.sql` — SIWE
    network binding, refresh-token families, purge function.
+4. `supabase/migrations/20261021000002_developer_platform_optional_scopes.sql`
+   — `mbx_dev_environments.optional_scopes`, `mbx_id_grants.declined_scopes`,
+   re-consent index. Apply before deploying Workers that read them (PostgREST
+   rejects selects of a missing column).
 
 Each file has a manual rollback block in its header comment.
 
@@ -38,8 +42,8 @@ Each file has a manual rollback block in its header comment.
 
 ```text
 id.matchbox.markets         → Worker matchbox-id                 Hono + Vite SPA, DO RateLimiter, cron
-developer.matchbox.markets  → Worker matchbox-developer-console  Hono + Vite SPA, DO RateLimiter, send_email EMAIL
-api.matchbox.markets        → Worker matchbox-developer-api      Hono, DO RateLimiter, Analytics Engine REQUEST_LOG, cron
+developer.matchbox.markets  → Worker matchbox-developer-console  Hono + Vite SPA, DO RateLimiter, DO API_RATE_LIMITER (API's, read-only), send_email EMAIL
+api.matchbox.markets        → Worker matchbox-developer-api      Hono, DO RateLimiter, Analytics Engine REQUEST_LOG + HEALTH_LOG, crons
                                   │
                                   └─ Supabase Postgres (service role over PostgREST; data store only)
 ```
@@ -49,14 +53,21 @@ api.matchbox.markets        → Worker matchbox-developer-api      Hono, DO Rate
 - Supabase: service role only. RLS on every `mbx_*` relation, no
   anon/authenticated policies or privileges. No Supabase Auth.
 - Analytics Engine: the API writes one data point per request to dataset
-  `mbx_api_requests` (binding `REQUEST_LOG`); the console reads it through the
-  Analytics Engine SQL API using `CF_ACCOUNT_ID` + `CF_ANALYTICS_TOKEN`.
+  `mbx_api_requests` (binding `REQUEST_LOG`) and one per health probe to
+  `mbx_platform_health` (binding `HEALTH_LOG`); the console reads both through
+  the Analytics Engine SQL API using `CF_ACCOUNT_ID` + `CF_ANALYTICS_TOKEN`.
+- Quota: the console reads the API's rate-limit buckets (`peek`, never
+  consumes) through a cross-script Durable Object binding to the API Worker's
+  `RateLimiter` class, so the API must be deployed first.
 - Email: console binding `EMAIL` (`send_email`), sender
   `no-reply@matchbox.markets` (sign-up/recovery codes, invitations, review
   notices). A missing binding in production is logged as an error.
 - Cron triggers:
   - `matchbox-id` `17 * * * *` — purges expired nonces, authorization
     requests, codes, tokens and empty token families (`mbx_id_purge_expired`).
+  - `matchbox-developer-api` `* * * * *` — health probes: public
+    `/v1/health`, Matchbox ID discovery, chain-state freshness per network →
+    `mbx_platform_health` (console Overview status tiles).
   - `matchbox-developer-api` `*/10 * * * *` — reconciles
     `mbx_api_gauge_chain_state` (Multicall3, one block per network).
 - `workers_dev: true` is set for the console and API; `matchbox-id` does not
@@ -86,7 +97,7 @@ from a checkout with `"false"` turns that product off.**
 Safe rollout order:
 
 1. Keep every flag `"false"`.
-2. Apply migrations 0001 → 0002 → 0003 (`supabase db push` from a linked CLI,
+2. Apply migrations in order, 20260930000001 → 20261021000002 (`supabase db push` from a linked CLI,
    or run each file once, in order, in the Supabase SQL editor). Test against
    realistic data first per
    [agent-instructions/supabase-migrations.md](../agent-instructions/supabase-migrations.md).
@@ -148,7 +159,8 @@ pnpm --filter @repo/developer-api exec wrangler secret list
 
 Vars already in the wrangler files: `ENVIRONMENT=production`, `ISSUER` (ID);
 `WEBAUTHN_RP_ID`, `WEBAUTHN_ORIGIN`, `PUBLIC_API_ORIGIN`, `ID_ORIGIN`
-(console); `API_VERSION`, `PUBLISHABLE_QUOTA_SHARE` (API). Leave
+(console); `API_VERSION`, `PUBLISHABLE_QUOTA_SHARE`, `HEALTH_API_URL`,
+`HEALTH_ID_URL` (API; health probe targets, blank skips one). Leave
 `PLATFORM_STORE` unset in production (`memory` is refused when
 `ENVIRONMENT=production`).
 
@@ -222,6 +234,10 @@ pnpm --filter @repo/matchbox-id run deploy             # vite build && wrangler 
 
 - The API's Durable Object migration `v2` deletes the beta `ApiQuotaLimiter`
   class and adds `RateLimiter`.
+- Deploy the API before the console: the console's `API_RATE_LIMITER`
+  binding points at the API Worker's `RateLimiter` class (`script_name`).
+- The API uses the `global_fetch_strictly_public` compatibility flag so its
+  health cron can fetch its own custom domain through the public front door.
 - Logs: `pnpm --filter <package> exec wrangler tail`.
 - Bad version: `pnpm --filter <package> exec wrangler rollback`.
 - Workers Builds (CI) projects for these Workers are not defined in the repo.
@@ -244,9 +260,10 @@ pnpm --filter @repo/matchbox-id run deploy             # vite build && wrangler 
   <https://developers.cloudflare.com/email-service/get-started/send-emails/> ·
   <https://developers.cloudflare.com/email-service/configuration/send-bindings/> ·
   <https://developers.cloudflare.com/email-service/platform/limits/>
-- **Analytics Engine dataset** `mbx_api_requests` — created implicitly by the
-  API Worker's first write; nothing to provision. After the first API request,
-  confirm with `SHOW TABLES` against the SQL API.
+- **Analytics Engine datasets** `mbx_api_requests` and
+  `mbx_platform_health` — created implicitly by the API Worker's first write;
+  nothing to provision. After the first API request (and the first minute of
+  cron), confirm with `SHOW TABLES` against the SQL API.
   <https://developers.cloudflare.com/analytics/analytics-engine/>
 - **Analytics read token** (`CF_ANALYTICS_TOKEN`) — custom API token with
   Account → Account Analytics → Read, limited to the Matchbox account.
@@ -308,7 +325,12 @@ pnpm --filter @repo/developer-api dev             # Supabase-backed; needs .dev.
 - Publishable test-key origins: `http://localhost:3000`,
   `http://localhost:5173`.
 - Cron: `pnpm --filter @repo/developer-api exec wrangler dev --test-scheduled`,
-  then `curl http://localhost:8787/__scheduled`.
+  then `curl "http://localhost:8787/__scheduled?cron=*+*+*+*+*"` (health
+  probes; set `HEALTH_API_URL=http://localhost:8787/v1/health` and a blank
+  `HEALTH_ID_URL` in `.dev.vars`) or `?cron=*/10+*+*+*+*` (reconciliation).
+- The console's platform-health tile shows fixed local data
+  (`source: "local"`) in memory mode; it reads `mbx_platform_health` only
+  with `CF_ACCOUNT_ID`/`CF_ANALYTICS_TOKEN`.
 
 To run any app against Supabase, remove `PLATFORM_STORE=memory` and fill
 `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` (use a non-production project).
@@ -343,6 +365,19 @@ curl -i -H "Authorization: Bearer $MBX_TEST_SK" -H "Origin: https://example.com"
 
 Check `X-Request-Id`, `RateLimit-*` and `ETag` headers, then confirm the
 requests appear in the console Usage view.
+
+Health probes: two minutes after deploy, the console Overview shows the API
+and chain-sync tiles; or query the dataset directly:
+
+```sql
+SELECT index1 AS target, blob2 AS outcome, blob3 AS error, SUM(_sample_interval) AS probes
+FROM mbx_platform_health
+WHERE blob1 = 'production' AND timestamp > NOW() - INTERVAL '10' MINUTE
+GROUP BY target, outcome, error
+```
+
+`gauge-profile-api` `down` / `service-disabled` means the kill switch is off;
+`matchbox-id` `down` / `service-disabled` means `MATCHBOX_ID_ENABLED` is off.
 
 ### 7.3 Matchbox ID enabled
 
@@ -478,9 +513,16 @@ Pepper rotation consequences (there is no dual-pepper overlap):
 - Staff are added by SQL only; there is no staff UI and no staff-side API-key
   revoke (SQL fallback above).
 - Revocation latency: API keys ≤ 15 s; quota overrides ≤ 60 s. Rate limiters
-  fail open if the Durable Object is unavailable.
-- `discord:*` without a linked Discord fails with `access_denied`
-  (`discord-not-linked`); optional scopes are not supported.
+  fail open if the Durable Object is unavailable; console quota reads then
+  show "—".
+- Quota limits shown in the console are the policy a bucket last enforced
+  (or the resolved policy when unused today): a new override shows after the
+  next request.
+- Health probes run inside the API Worker: if the Worker cannot run at all,
+  no probes are written and the console shows `unknown` after 5 min rather
+  than `down`. Analytics Engine ingestion adds up to about a minute of lag.
+- A required `discord:*` scope without a linked Discord fails with
+  `access_denied` (`discord-not-linked`); optional ones are skipped.
 - `pool_address` in chain state is always null.
 - Matchbox MCP hosting is out of scope.
 - `matchbox-id` has no `workers_dev` setting, so its first live test is on

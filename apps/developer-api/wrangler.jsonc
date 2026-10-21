@@ -3,7 +3,10 @@
   "name": "matchbox-developer-api",
   "main": "src/index.ts",
   "compatibility_date": "2026-09-01",
-  "compatibility_flags": ["nodejs_compat"],
+  // global_fetch_strictly_public: the health cron fetches this Worker's own
+  // custom domain (/v1/health) through the public front door; without it a
+  // Custom Domain Worker fetching its own hostname gets a 522.
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
   "workers_dev": true,
   "routes": [{ "pattern": "api.matchbox.markets", "custom_domain": true }],
   "durable_objects": {
@@ -17,12 +20,16 @@
       "new_sqlite_classes": ["RateLimiter"],
     },
   ],
-  // One data point per request; layout in @repo/platform-contracts/api-request-log.
+  // REQUEST_LOG: one data point per request (layout in
+  // @repo/platform-contracts/api-request-log). HEALTH_LOG: one data point per
+  // health probe (layout in @repo/platform-contracts/platform-health).
   "analytics_engine_datasets": [
     { "binding": "REQUEST_LOG", "dataset": "mbx_api_requests" },
+    { "binding": "HEALTH_LOG", "dataset": "mbx_platform_health" },
   ],
-  // Chain-state reconciliation (mbx_api_gauge_chain_state).
-  "triggers": { "crons": ["*/10 * * * *"] },
+  // "* * * * *": health probes (src/health/probes.ts).
+  // "*/10 * * * *": chain-state reconciliation (mbx_api_gauge_chain_state).
+  "triggers": { "crons": ["* * * * *", "*/10 * * * *"] },
   "observability": {
     "enabled": true,
     "head_sampling_rate": 1,
@@ -37,6 +44,9 @@
     "API_VERSION": "2.0.0",
     // Publishable keys' share of each environment's quota (0, 1].
     "PUBLISHABLE_QUOTA_SHARE": "0.5",
+    // Health cron targets (blank = skip that probe).
+    "HEALTH_API_URL": "https://api.matchbox.markets/v1/health",
+    "HEALTH_ID_URL": "https://id.matchbox.markets/.well-known/openid-configuration",
   },
   // Staging on workers.dev (no custom domain):
   // `pnpm --filter @repo/developer-api exec wrangler deploy --env staging`.
@@ -52,13 +62,16 @@
       "migrations": [{ "tag": "v1", "new_sqlite_classes": ["RateLimiter"] }],
       "analytics_engine_datasets": [
         { "binding": "REQUEST_LOG", "dataset": "mbx_api_requests" },
+        { "binding": "HEALTH_LOG", "dataset": "mbx_platform_health" },
       ],
-      "triggers": { "crons": ["*/10 * * * *"] },
+      "triggers": { "crons": ["* * * * *", "*/10 * * * *"] },
       "vars": {
         "ENVIRONMENT": "preview",
         "GAUGE_PROFILE_API_ENABLED": "true",
         "API_VERSION": "2.0.0",
         "PUBLISHABLE_QUOTA_SHARE": "0.5",
+        "HEALTH_API_URL": "https://matchbox-developer-api-staging.mallard.workers.dev/v1/health",
+        "HEALTH_ID_URL": "https://matchbox-id-staging.mallard.workers.dev/.well-known/openid-configuration",
       },
     },
   },

@@ -98,6 +98,12 @@ describe("rate limits", () => {
     expect(limited.headers.get("RateLimit-Remaining")).toBe("0")
     expect(Number(limited.headers.get("Retry-After"))).toBeGreaterThan(0)
     expect(limited.headers.get("Access-Control-Allow-Origin")).toBe(testOrigin)
+    // 429s reach the request log with the environment, so usage counts them.
+    const logged = harness.dataPoints.at(-1)
+    expect(logged?.indexes).toEqual([ids.testEnv])
+    expect(logged?.blobs[4]).toBe("429")
+    expect(logged?.blobs[9]).toBe("rate_limited")
+    expect(logged?.doubles[1]).toBe(429)
     harness.clock.advance(60_000)
     const recovered = await harness.get(path, {
       key: keys.pkTest,

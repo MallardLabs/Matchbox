@@ -24,6 +24,7 @@ import type {
   ApiKeyRecord,
   ApiStore,
   ChainStateRow,
+  ChainSyncSnapshot,
   GaugeProfileListRequest,
   GaugeProfilePage,
   ReconciliationTarget,
@@ -34,6 +35,7 @@ import {
   chainStateColumns,
   chainStateFromRow,
   chainStateRowSchema,
+  chainSyncRowSchema,
   profileFromRow,
   profileViewColumns,
   profileViewRowSchema,
@@ -386,6 +388,22 @@ export function createSupabaseApiStore(
           .from(chainStateTable)
           .upsert(chunk, { onConflict: "network,gauge_address" })
         if (error !== null) throw new StoreError("upsert chain state", error)
+      }
+    },
+
+    async latestChainSync(network: NetworkSlug): Promise<ChainSyncSnapshot> {
+      const { data, error } = await supabase
+        .from(chainStateTable)
+        .select("checked_at, block_number::text")
+        .eq("network", network)
+        .order("checked_at", { ascending: false })
+        .limit(1)
+      if (error !== null) throw new StoreError("latest chain sync", error)
+      const row = parseRows(chainSyncRowSchema, data, log, "chain sync")[0]
+      return {
+        network,
+        checkedAt: row?.checked_at ?? null,
+        blockNumber: row?.block_number ?? null,
       }
     },
 

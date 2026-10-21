@@ -50,7 +50,12 @@ Vars: `ENVIRONMENT` (`production`), `API_VERSION`,
 `GAUGE_PROFILE_API_ENABLED` (kill switch, default `"false"`: `/v1/*` except
 `/v1/health` and `/openapi.json` returns 503 `service_disabled`),
 `PUBLISHABLE_QUOTA_SHARE` (publishable keys' share of the environment quota,
-`(0, 1]`, default `0.5`).
+`(0, 1]`, default `0.5`), `HEALTH_API_URL` / `HEALTH_ID_URL` (health probe
+targets; blank skips that probe).
+
+Compatibility flag `global_fetch_strictly_public`: the health cron fetches this
+Worker's own custom domain through the public front door (a Custom Domain
+Worker fetching its own hostname otherwise gets a 522).
 
 Durable Object `RATE_LIMITER` → `RateLimiter` from
 `@repo/platform-server/rate-limiter`. Migration `v2` deletes the beta
@@ -68,6 +73,10 @@ Durable Object `RATE_LIMITER` → `RateLimiter` from
   scaled by `PUBLISHABLE_QUOTA_SHARE`. Publishable keys also use
   `pk:<keyId>:<ipPrefix>`. Restricted apps get test limits. The limiter
   fails open if the Durable Object is unavailable.
+- The developer console reads the `env:*` buckets (quota used / remaining /
+  reset) with `RateLimiter.peek()` through a cross-script Durable Object
+  binding; peeking never consumes. 429s land in the request log with error
+  code `rate_limited`.
 - Live keys need `review_state = approved` with `gauge-profiles:read` in
   `approved_scopes` and an `active`/`restricted` app.
 - `last_used_at` is written at most once per key per 5 min (`waitUntil`).
@@ -76,15 +85,25 @@ Durable Object `RATE_LIMITER` → `RateLimiter` from
 
 Analytics Engine binding `REQUEST_LOG`, dataset `mbx_api_requests`. Layout:
 `API_REQUEST_LOG_LAYOUT` in `@repo/platform-contracts/api-request-log`
-(index1 environment id or `anonymous`; blob1–9 requestId, keyId,
-routeTemplate, method, status, cacheStatus, colo, country, environmentKind;
-double1 latencyMs, double2 statusCode).
+(index1 environment id or `anonymous`; blob1–10 requestId, keyId,
+routeTemplate, method, status, cacheStatus, colo, country, environmentKind,
+errorCode; double1 latencyMs, double2 statusCode).
 
-## Cron
+## Crons
+
+`* * * * *` runs the health probes (`src/health/probes.ts`): `GET
+HEALTH_API_URL` (`/v1/health`, validated, kill switch off = down),
+`GET HEALTH_ID_URL` (discovery document) and the newest chain-state row per
+network plus the RPC head. One data point per probe goes to binding
+`HEALTH_LOG`, dataset `mbx_platform_health` (layout
+`PLATFORM_HEALTH_LAYOUT` in `@repo/platform-contracts/platform-health`). The
+console reads it for the Overview status tiles.
 
 `*/10 * * * *` reconciles `mbx_api_gauge_chain_state` for every profile in
 `mbx_api_gauge_profiles`: Multicall3 reads (`isAlive`, `rewardsBeneficiary`,
 `boostableTokenIdToGauge`, veBTC `ownerOf`) pinned to one block per network,
 40 gauges per batch, 3 batches in flight. A network without an RPC URL is
 skipped. Failures are logged; the handler never throws. Test locally with
-`wrangler dev --test-scheduled` and `curl /__scheduled`.
+`wrangler dev --test-scheduled` and
+`curl "http://localhost:8787/__scheduled?cron=*/10+*+*+*+*"` (or
+`?cron=*+*+*+*+*` for the health probes).

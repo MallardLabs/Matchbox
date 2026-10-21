@@ -71,8 +71,26 @@ export {
   securityHeaders,
 } from "./middleware"
 export {
+  type AnalyticsSqlClient,
+  type HealthQueryInput,
+  type PlatformHealthReader,
+  PlatformHealthDataError,
+  buildHealthLatencySql,
+  buildHealthRecentSql,
+  buildHealthUptimeSql,
+  createPlatformHealthReader,
+  localPlatformHealth,
+  summarizePlatformHealth,
+} from "./platform-health"
+export {
+  type EnvironmentQuotaInput,
+  default as readEnvironmentQuota,
+} from "./quota"
+export {
   type RateLimitClient,
   type RateLimitCounter,
+  type RateLimitReader,
+  type RateLimitSnapshot,
   type RateLimitState,
   type RateLimiterNamespace,
   checkRateLimit,
@@ -80,8 +98,12 @@ export {
   createDurableRateLimitClient,
   createMemoryRateLimitClient,
   dayMs,
+  emptyRateLimitSnapshot,
   emptyRateLimitState,
   minuteMs,
+  peekRateLimit,
+  quotaBucketStatus,
   rateLimitHeaders,
+  rateLimitSnapshotSchema,
 } from "./rate-limit"
 export { type SupabaseEnv, default as createSupabaseAdmin } from "./supabase"

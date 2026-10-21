@@ -16,7 +16,7 @@ import { apiKeyKindSchema, clientIdSchema } from "./credentials"
 import { grantRevokedReasonSchema } from "./identity"
 import { environmentKindSchema, networkSlugSchema } from "./network"
 import { endpointClassSchema } from "./rate-limits"
-import { platformScopeSchema } from "./scopes"
+import { oidcScopeSchema, platformScopeSchema } from "./scopes"
 
 /**
  * Request/response schemas for the developer console `/api/*` routes.
@@ -538,6 +538,60 @@ export const reviewSchema = z.object({
 
 export type Review = z.infer<typeof reviewSchema>
 
+/** Who closed a review: staff, the auto-approval policy, or the developer
+ * (withdrawn). Null while open. */
+export const reviewDecidedBySchema = z.enum(["staff", "auto", "developer"])
+
+export type ReviewDecidedBy = z.infer<typeof reviewDecidedBySchema>
+
+export function reviewDecidedBy(
+  review: Pick<Review, "state" | "reviewerId">,
+): ReviewDecidedBy | null {
+  if (review.state === "open") return null
+  if (review.state === "withdrawn") return "developer"
+  return review.reviewerId === null ? "auto" : "staff"
+}
+
+/** When a review last changed: decision time, else submission time. */
+export function reviewActivityAt(
+  review: Pick<Review, "createdAt" | "decidedAt">,
+): string {
+  return review.decidedAt ?? review.createdAt
+}
+
+/** Sort comparator: most recent activity first, then newest submission. */
+export function compareReviewsNewestFirst(
+  left: Pick<Review, "createdAt" | "decidedAt">,
+  right: Pick<Review, "createdAt" | "decidedAt">,
+): number {
+  const byActivity =
+    Date.parse(reviewActivityAt(right)) - Date.parse(reviewActivityAt(left))
+  if (byActivity !== 0) return byActivity
+  return Date.parse(right.createdAt) - Date.parse(left.createdAt)
+}
+
+/**
+ * A review as developers see it, decided ones included. `reviewerNote` is
+ * the staff "Note to developer" (shown on Overview + Environments).
+ */
+export const developerReviewSchema = reviewSchema.extend({
+  decidedBy: reviewDecidedBySchema.nullable(),
+  /** Submitter's display name; null when the account is gone. */
+  submitterName: z.string().nullable(),
+})
+
+export type DeveloperReview = z.infer<typeof developerReviewSchema>
+
+/** GET /api/environments/{environmentId}/reviews — every review of the
+ * environment (open + decided), `compareReviewsNewestFirst` order. */
+export const environmentReviewListResponseSchema = z.object({
+  data: z.array(developerReviewSchema),
+})
+
+export type EnvironmentReviewListResponse = z.infer<
+  typeof environmentReviewListResponseSchema
+>
+
 export const environmentSummarySchema = z.object({
   id: uuidSchema,
   kind: environmentKindSchema,
@@ -545,6 +599,11 @@ export const environmentSummarySchema = z.object({
   clientId: clientIdSchema,
   reviewState: reviewStateSchema,
   approvedScopes: z.array(platformScopeSchema),
+  /**
+   * Requested scopes (approved ones plus any pending review). Always
+   * populate; optional only for older servers.
+   */
+  requestedScopes: z.array(platformScopeSchema).optional(),
 })
 
 export type EnvironmentSummary = z.infer<typeof environmentSummarySchema>
@@ -616,6 +675,12 @@ export const environmentSchema = z.object({
   reviewState: reviewStateSchema,
   requestedScopes: z.array(platformScopeSchema),
   approvedScopes: z.array(platformScopeSchema),
+  /**
+   * Requested OIDC scopes users may decline at consent (toggles); the rest
+   * are required. Validate with `validateOptionalScopes` (scopes). Always
+   * populate; optional only for older servers.
+   */
+  optionalScopes: z.array(oidcScopeSchema).optional(),
   scopeVersion: z.number().int().positive(),
   redirectUris: z.array(z.string()),
   origins: z.array(z.string()),
@@ -649,6 +714,8 @@ export const replaceOriginsRequestSchema = z.object({
 /** PUT /api/environments/{environmentId}/scopes -> environmentSchema */
 export const updateRequestedScopesRequestSchema = z.object({
   requestedScopes: z.array(platformScopeSchema).max(16),
+  /** Omitted = keep the current optional subset (minus removed scopes). */
+  optionalScopes: z.array(oidcScopeSchema).max(8).optional(),
 })
 
 /** POST /api/environments/{environmentId}/submit-review */
@@ -833,6 +900,53 @@ export type UsageQuery = z.output<typeof usageQuerySchema>
 
 const latencySchema = z.number().nonnegative().nullable()
 
+const countSchema = z.number().int().nonnegative()
+
+/**
+ * Status split shared by every usage view. `errors` = all >= 400;
+ * `clientErrors` = 4xx excluding 429; `rateLimited` = 429;
+ * `serverErrors` = 5xx (so errors = clientErrors + rateLimited +
+ * serverErrors). Analytics Engine predicates on `double2` (status code):
+ * clientErrors `>= 400 AND < 500 AND != 429`, rateLimited `= 429`,
+ * serverErrors `>= 500`.
+ */
+export const usageCountsSchema = z.object({
+  requests: countSchema,
+  errors: countSchema,
+  clientErrors: countSchema,
+  rateLimited: countSchema,
+  serverErrors: countSchema,
+})
+
+export type UsageCounts = z.infer<typeof usageCountsSchema>
+
+/** Counts plus error rate and latency for a whole range. */
+export const usageSummarySchema = usageCountsSchema.extend({
+  /** errors / requests in [0, 1]; null when there were no requests. */
+  errorRate: z.number().min(0).max(1).nullable(),
+  p50LatencyMs: latencySchema,
+  p95LatencyMs: latencySchema,
+})
+
+export type UsageSummary = z.infer<typeof usageSummarySchema>
+
+export const usageSplitSeriesPointSchema = usageCountsSchema.extend({
+  start: isoDateTimeSchema,
+  p50LatencyMs: latencySchema,
+  p95LatencyMs: latencySchema,
+})
+
+export type UsageSplitSeriesPoint = z.infer<typeof usageSplitSeriesPointSchema>
+
+/** errors / requests, or null when there were no requests. */
+export function usageErrorRate(counts: {
+  requests: number
+  errors: number
+}): number | null {
+  if (counts.requests <= 0) return null
+  return Math.min(Math.max(counts.errors / counts.requests, 0), 1)
+}
+
 export const usageTotalsSchema = z.object({
   requests: z.number().int().nonnegative(),
   errors: z.number().int().nonnegative(),
@@ -840,6 +954,11 @@ export const usageTotalsSchema = z.object({
   errorRate: z.number().min(0).max(1).nullable(),
   p50LatencyMs: latencySchema,
   p95LatencyMs: latencySchema,
+  /** Split of `errors` (see `usageCountsSchema`). Always populate;
+   * optional only for older servers. */
+  clientErrors: countSchema.optional(),
+  rateLimited: countSchema.optional(),
+  serverErrors: countSchema.optional(),
 })
 
 export type UsageTotals = z.infer<typeof usageTotalsSchema>
@@ -850,6 +969,10 @@ export const usageSeriesPointSchema = z.object({
   errors: z.number().int().nonnegative(),
   p50LatencyMs: latencySchema,
   p95LatencyMs: latencySchema,
+  /** Split of `errors` (see `usageCountsSchema`). Always populate. */
+  clientErrors: countSchema.optional(),
+  rateLimited: countSchema.optional(),
+  serverErrors: countSchema.optional(),
 })
 
 export const usageRouteSchema = z.object({
@@ -885,6 +1008,28 @@ export const requestStatusClassSchema = z.enum([
   "server-error",
 ])
 
+/**
+ * Request-log status filter (All / 2xx / 4xx / 5xx / 429 chips):
+ * `client-error` here excludes 429, which has its own `rate-limited`.
+ * Supersedes `requestStatusClassSchema` for new code.
+ */
+export const requestStatusFilterSchema = z.enum([
+  "success",
+  "client-error",
+  "rate-limited",
+  "server-error",
+])
+
+export type RequestStatusFilter = z.infer<typeof requestStatusFilterSchema>
+
+/** Which filter bucket a status code falls in. */
+export function requestStatusFilterFor(status: number): RequestStatusFilter {
+  if (status === 429) return "rate-limited"
+  if (status >= 500) return "server-error"
+  if (status >= 400) return "client-error"
+  return "success"
+}
+
 export const requestLogEntrySchema = z.object({
   requestId: z.string(),
   timestamp: isoDateTimeSchema,
@@ -896,6 +1041,9 @@ export const requestLogEntrySchema = z.object({
   colo: z.string().nullable(),
   country: z.string().nullable(),
   latencyMs: z.number().nonnegative(),
+  /** Platform error code (`rate_limited`, `not_found`, …) from the request
+   * log's `errorCode` column; null for successes and older rows. */
+  errorCode: z.string().nullable().optional(),
 })
 
 export type RequestLogEntry = z.infer<typeof requestLogEntrySchema>
@@ -913,6 +1061,112 @@ export const requestLogResponseSchema = z.object({
   data: z.array(requestLogEntrySchema),
 })
 
+// ---------------------------------------------------------------------------
+// Organization usage (C06): every app and environment of the org
+// ---------------------------------------------------------------------------
+
+export const environmentKindFilterSchema = z.enum(["live", "test", "both"])
+
+export type EnvironmentKindFilter = z.infer<typeof environmentKindFilterSchema>
+
+/** GET /api/orgs/{orgId}/usage (and /usage.csv) query. */
+export const orgUsageQuerySchema = z
+  .object({
+    from: isoDateTimeSchema,
+    to: isoDateTimeSchema,
+    bucket: usageBucketSchema.default("day"),
+    environmentKind: environmentKindFilterSchema.default("both"),
+    appId: uuidSchema.optional(),
+    apiKeyId: uuidSchema.optional(),
+  })
+  .refine((query) => Date.parse(query.from) < Date.parse(query.to), {
+    message: "`from` must be before `to`",
+    path: ["from"],
+  })
+  .refine(
+    (query) =>
+      (Date.parse(query.to) - Date.parse(query.from)) / 1000 <=
+      usageMaxRangeSeconds[query.bucket],
+    { message: "Range too long for bucket", path: ["to"] },
+  )
+
+export type OrgUsageQuery = z.output<typeof orgUsageQuerySchema>
+
+export const orgUsageEnvironmentSchema = z.object({
+  app: z.object({ id: uuidSchema, name: z.string(), status: appStatusSchema }),
+  environmentId: uuidSchema,
+  environmentKind: environmentKindSchema,
+  network: networkSlugSchema,
+  /** All zeros + null latency = "No traffic" (a real zero, not missing). */
+  summary: usageSummarySchema,
+  /** One point per UTC day of the range (the "7 d" sparkline). */
+  daily: z.array(z.object({ start: isoDateTimeSchema, requests: countSchema })),
+})
+
+export type OrgUsageEnvironment = z.infer<typeof orgUsageEnvironmentSchema>
+
+export const orgUsageKeySchema = z.object({
+  apiKeyId: uuidSchema.nullable(),
+  displayPrefix: z.string().nullable(),
+  app: z.object({ id: uuidSchema, name: z.string() }).nullable(),
+  environmentKind: environmentKindSchema.nullable(),
+  requests: countSchema,
+  errors: countSchema,
+})
+
+export type OrgUsageKey = z.infer<typeof orgUsageKeySchema>
+
+/**
+ * Org-wide usage across the selected environments (`both` = Live + Test).
+ * `byEnvironment` lists every environment in scope, including those
+ * without traffic, so per-app "Requests · 7 d" on Apps (C03) is the sum of
+ * an app's rows.
+ */
+export const orgUsageResponseSchema = z.object({
+  from: isoDateTimeSchema,
+  to: isoDateTimeSchema,
+  bucket: usageBucketSchema,
+  environmentKind: environmentKindFilterSchema,
+  totals: usageSummarySchema,
+  series: z.array(usageSplitSeriesPointSchema),
+  byEnvironment: z.array(orgUsageEnvironmentSchema),
+  topRoutes: z.array(usageRouteSchema),
+  byKey: z.array(orgUsageKeySchema),
+})
+
+export type OrgUsageResponse = z.infer<typeof orgUsageResponseSchema>
+
+// GET /api/environments/{environmentId}/quota
+//   -> rate-limits environmentQuotaStatusSchema
+// GET /api/orgs/{orgId}/quotas?environmentKind
+//   -> rate-limits environmentQuotaListResponseSchema
+// GET /api/platform/health
+//   -> platform-health platformHealthResponseSchema
+
+// ---------------------------------------------------------------------------
+// Organization reviews (C02 "Reviews")
+// ---------------------------------------------------------------------------
+
+export const orgReviewSchema = developerReviewSchema.extend({
+  app: z.object({ id: uuidSchema, name: z.string() }),
+  environmentKind: environmentKindSchema,
+})
+
+export type OrgReview = z.infer<typeof orgReviewSchema>
+
+/** GET /api/orgs/{orgId}/reviews — newest first
+ * (`compareReviewsNewestFirst`); `state` omitted = every state. */
+export const orgReviewQuerySchema = z.object({
+  state: reviewRecordStateSchema.optional(),
+  limit: z.coerce.number().int().min(1).max(50).default(10),
+})
+
+export const orgReviewListResponseSchema = z.object({
+  data: z.array(orgReviewSchema),
+})
+
+export type OrgReviewListResponse = z.infer<typeof orgReviewListResponseSchema>
+
 // GET /api/environments/{environmentId}/requests/{requestId}
 //   -> requestLogEntrySchema | 404 not_found
 
@@ -925,6 +1179,20 @@ export const oauthStatsQuerySchema = z.object({
   from: isoDateTimeSchema,
   to: isoDateTimeSchema,
 })
+
+/**
+ * Active grants consented at a lower `scope_version` than the
+ * environment's: their next sign-in shows consent again (C04d "Awaiting
+ * re-consent · scope v2 → v3").
+ */
+export const reconsentSummarySchema = z.object({
+  count: z.number().int().nonnegative(),
+  currentScopeVersion: z.number().int().positive(),
+  /** Lowest scope version among those grants; null when `count` is 0. */
+  oldestScopeVersion: z.number().int().positive().nullable(),
+})
+
+export type ReconsentSummary = z.infer<typeof reconsentSummarySchema>
 
 export const oauthStatsResponseSchema = z.object({
   activeGrants: z.number().int().nonnegative(),
@@ -942,6 +1210,8 @@ export const oauthStatsResponseSchema = z.object({
       activeGrants: z.number().int().nonnegative(),
     }),
   ),
+  /** Always populate; optional only for older servers. */
+  awaitingReconsent: reconsentSummarySchema.optional(),
 })
 
 export type OAuthStatsResponse = z.infer<typeof oauthStatsResponseSchema>
@@ -975,6 +1245,8 @@ export type AdminReview = z.infer<typeof adminReviewSchema>
 /** GET /api/admin/reviews */
 export const adminReviewQuerySchema = z.object({
   state: reviewRecordStateSchema.default("open"),
+  /** Only reviews whose requested scopes include this scope. */
+  scope: platformScopeSchema.optional(),
   cursor: z.string().min(1).max(1024).optional(),
   limit: z.coerce.number().int().min(1).max(100).default(50),
 })
@@ -985,6 +1257,92 @@ export const adminReviewListResponseSchema = z.object({
 })
 
 // GET /api/admin/reviews/{reviewId} -> adminReviewSchema
+
+/**
+ * GET /api/admin/reviews/stats (C09 header). Decisions count staff
+ * decisions only (auto-approvals and withdrawals excluded); the median wait
+ * is over those decisions, submission → decision.
+ */
+export const adminReviewStatsResponseSchema = z.object({
+  open: z.number().int().nonnegative(),
+  oldestOpen: z
+    .object({
+      reviewId: uuidSchema,
+      appName: z.string(),
+      createdAt: isoDateTimeSchema,
+    })
+    .nullable(),
+  decided7d: z.object({
+    total: z.number().int().nonnegative(),
+    approved: z.number().int().nonnegative(),
+    changesRequested: z.number().int().nonnegative(),
+    rejected: z.number().int().nonnegative(),
+  }),
+  medianWaitSeconds: z.number().int().nonnegative().nullable(),
+})
+
+export type AdminReviewStatsResponse = z.infer<
+  typeof adminReviewStatsResponseSchema
+>
+
+export const adminReviewStatsWindowSeconds = 7 * 86_400
+
+/** Computes the stats from open reviews plus recently decided ones. */
+export function adminReviewStats(
+  reviews: readonly (Pick<
+    Review,
+    "id" | "state" | "reviewerId" | "createdAt" | "decidedAt"
+  > & { appName: string })[],
+  now: Date,
+): AdminReviewStatsResponse {
+  const since = now.getTime() - adminReviewStatsWindowSeconds * 1000
+  const open = reviews
+    .filter((review) => review.state === "open")
+    .sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt))
+  const waits: number[] = []
+  const decided7d = { total: 0, approved: 0, changesRequested: 0, rejected: 0 }
+  for (const review of reviews) {
+    if (review.decidedAt === null || reviewDecidedBy(review) !== "staff") {
+      continue
+    }
+    const decidedAt = Date.parse(review.decidedAt)
+    if (decidedAt < since || decidedAt > now.getTime()) continue
+    decided7d.total += 1
+    if (review.state === "approved") decided7d.approved += 1
+    if (review.state === "changes-requested") decided7d.changesRequested += 1
+    if (review.state === "rejected") decided7d.rejected += 1
+    waits.push(
+      Math.max(
+        Math.round((decidedAt - Date.parse(review.createdAt)) / 1000),
+        0,
+      ),
+    )
+  }
+  waits.sort((a, b) => a - b)
+  const middle = Math.floor(waits.length / 2)
+  const upper = waits[middle]
+  const lower = waits[middle - 1]
+  const median =
+    upper === undefined
+      ? null
+      : waits.length % 2 === 1 || lower === undefined
+        ? upper
+        : Math.round((lower + upper) / 2)
+  const oldest = open[0]
+  return {
+    open: open.length,
+    oldestOpen:
+      oldest === undefined
+        ? null
+        : {
+            reviewId: oldest.id,
+            appName: oldest.appName,
+            createdAt: oldest.createdAt,
+          },
+    decided7d,
+    medianWaitSeconds: median,
+  }
+}
 
 /** POST /api/admin/reviews/{reviewId}/decision -> adminReviewSchema */
 export const reviewDecisionRequestSchema = z.object({

@@ -16,3 +16,9 @@ MEZO_TESTNET_RPC_URL=https://rpc.test.mezo.org
 ENVIRONMENT=development
 GAUGE_PROFILE_API_ENABLED=true
 # PLATFORM_STORE=memory
+
+# Health cron targets (wrangler vars default to production). Blank skips a
+# probe. Trigger locally: `wrangler dev --test-scheduled`, then
+# curl "http://localhost:8787/__scheduled?cron=*+*+*+*+*"
+HEALTH_API_URL=http://localhost:8787/v1/health
+HEALTH_ID_URL=

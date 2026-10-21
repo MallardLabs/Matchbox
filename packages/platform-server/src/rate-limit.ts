@@ -1,7 +1,10 @@
 import {
+  type QuotaBucketStatus,
+  type QuotaWindow,
   type RateLimitPolicy,
   type RateLimitResult,
   rateLimitHeaderNames,
+  rateLimitPolicySchema,
   rateLimitResultSchema,
 } from "@repo/platform-contracts/rate-limits"
 import { z } from "zod"
@@ -114,6 +117,67 @@ export type RateLimitClient = {
   consume(key: string, policy: RateLimitPolicy): Promise<RateLimitResult>
 }
 
+/** A bucket's stored counters plus the policy it last enforced (null
+ * before its first allowed request). */
+export const rateLimitSnapshotSchema = z.object({
+  state: rateLimitStateSchema,
+  policy: rateLimitPolicySchema.nullable(),
+})
+
+export type RateLimitSnapshot = z.infer<typeof rateLimitSnapshotSchema>
+
+export const emptyRateLimitSnapshot: RateLimitSnapshot = {
+  state: emptyRateLimitState,
+  policy: null,
+}
+
+/** Read-only access for dashboards; `peek` never consumes quota. */
+export type RateLimitReader = {
+  peek(key: string): Promise<RateLimitSnapshot>
+}
+
+function quotaWindowView(
+  counter: RateLimitCounter | null,
+  window: number,
+  windowMs: number,
+  limit: number,
+): QuotaWindow {
+  const used = counter !== null && counter.window === window ? counter.count : 0
+  return {
+    used,
+    limit,
+    remaining: Math.max(limit - used, 0),
+    resetAt: new Date((window + 1) * windowMs).toISOString(),
+  }
+}
+
+/**
+ * Daily (UTC) and burst windows of a bucket at `nowMs`. Counters from an
+ * earlier window read as a real zero. Limits come from the policy the
+ * bucket last enforced, else `fallback` (the policy it would get now).
+ */
+export function quotaBucketStatus(
+  snapshot: RateLimitSnapshot,
+  fallback: RateLimitPolicy,
+  nowMs: number,
+): QuotaBucketStatus {
+  const policy = snapshot.policy ?? fallback
+  return {
+    daily: quotaWindowView(
+      snapshot.state.day,
+      Math.floor(nowMs / dayMs),
+      dayMs,
+      policy.perDay,
+    ),
+    burst: quotaWindowView(
+      snapshot.state.minute,
+      Math.floor(nowMs / minuteMs),
+      minuteMs,
+      policy.perMinute,
+    ),
+  }
+}
+
 export type RateLimiterNamespace = DurableObjectNamespace<RateLimiter>
 
 /** One `RateLimiter` Durable Object per key (`idFromName(key)`). */
@@ -127,12 +191,29 @@ export async function checkRateLimit(
   return rateLimitResultSchema.parse(result)
 }
 
+/** Reads a bucket without consuming it. */
+export async function peekRateLimit(
+  namespace: RateLimiterNamespace,
+  key: string,
+): Promise<RateLimitSnapshot> {
+  const stub = namespace.get(namespace.idFromName(key))
+  return rateLimitSnapshotSchema.parse(await stub.peek())
+}
+
+/**
+ * Durable Object client. Another Worker can read the developer-api's
+ * buckets through a cross-script binding (`script_name`) to its
+ * `RateLimiter` class and `peek` them.
+ */
 export function createDurableRateLimitClient(
   namespace: RateLimiterNamespace,
-): RateLimitClient {
+): RateLimitClient & RateLimitReader {
   return {
     consume(key, policy) {
       return checkRateLimit(namespace, key, policy)
+    },
+    peek(key) {
+      return peekRateLimit(namespace, key)
     },
   }
 }
@@ -140,20 +221,20 @@ export function createDurableRateLimitClient(
 /** In-memory limiter with the same window maths, for tests and dev. */
 export function createMemoryRateLimitClient(
   now: () => number = () => Date.now(),
-): RateLimitClient & { reset(): void } {
-  const states = new Map<string, RateLimitState>()
+): RateLimitClient & RateLimitReader & { reset(): void } {
+  const snapshots = new Map<string, RateLimitSnapshot>()
   return {
     async consume(key, policy) {
-      const { state, result } = consumeRateLimit(
-        states.get(key) ?? emptyRateLimitState,
-        policy,
-        now(),
-      )
-      states.set(key, state)
+      const stored = snapshots.get(key) ?? emptyRateLimitSnapshot
+      const { state, result } = consumeRateLimit(stored.state, policy, now())
+      if (result.allowed) snapshots.set(key, { state, policy })
       return result
     },
+    async peek(key) {
+      return structuredClone(snapshots.get(key) ?? emptyRateLimitSnapshot)
+    },
     reset() {
-      states.clear()
+      snapshots.clear()
     },
   }
 }

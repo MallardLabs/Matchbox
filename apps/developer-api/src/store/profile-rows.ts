@@ -113,6 +113,12 @@ export const chainStateRowSchema = z.object({
 
 export type ChainStateViewRow = z.output<typeof chainStateRowSchema>
 
+/** `checked_at, block_number::text` of the newest chain-state row. */
+export const chainSyncRowSchema = chainStateRowSchema.pick({
+  checked_at: true,
+  block_number: true,
+})
+
 export function chainStateFromRow(
   row: ChainStateViewRow | undefined,
 ): GaugeProfileChainState {

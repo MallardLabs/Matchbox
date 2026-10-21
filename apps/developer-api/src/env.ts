@@ -61,12 +61,21 @@ export const workerEnvSchema = z
     API_KEY_PEPPER: optionalText,
     MEZO_MAINNET_RPC_URL: optionalText.pipe(z.url().nullable()),
     MEZO_TESTNET_RPC_URL: optionalText.pipe(z.url().nullable()),
+    /** Health cron targets; blank skips that probe. */
+    HEALTH_API_URL: optionalText.pipe(z.url().nullable()),
+    HEALTH_ID_URL: optionalText.pipe(z.url().nullable()),
     RATE_LIMITER: z.custom<RateLimiterNamespace>(isRateLimiterNamespace, {
       message: "RATE_LIMITER Durable Object binding is missing",
     }),
     REQUEST_LOG: z
       .custom<AnalyticsEngineDataset>(isAnalyticsDataset, {
         message: "REQUEST_LOG must be an Analytics Engine dataset",
+      })
+      .optional(),
+    /** `mbx_platform_health`; absent disables probe writes. */
+    HEALTH_LOG: z
+      .custom<AnalyticsEngineDataset>(isAnalyticsDataset, {
+        message: "HEALTH_LOG must be an Analytics Engine dataset",
       })
       .optional(),
   })

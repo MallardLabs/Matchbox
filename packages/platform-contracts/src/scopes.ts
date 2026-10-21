@@ -40,6 +40,12 @@ export type ScopeDefinition = {
   consentDescription: string
   claims: readonly OidcClaim[]
   requiresReview: boolean
+  /**
+   * Whether an environment may mark the scope optional, so users can decline
+   * it at consent and still sign in. `openid` (the subject) is always
+   * required; API key scopes are never consented to.
+   */
+  optionalAllowed: boolean
 }
 
 export const scopeDefinitions = {
@@ -50,6 +56,7 @@ export const scopeDefinitions = {
     consentDescription: "Read public gauge profiles",
     claims: [],
     requiresReview: false,
+    optionalAllowed: false,
   },
   openid: {
     scope: "openid",
@@ -58,6 +65,7 @@ export const scopeDefinitions = {
     consentDescription: "A unique ID for this app",
     claims: ["sub"],
     requiresReview: false,
+    optionalAllowed: false,
   },
   wallet: {
     scope: "wallet",
@@ -66,6 +74,7 @@ export const scopeDefinitions = {
     consentDescription: "Wallet address and network",
     claims: ["wallet_address", "wallet_network"],
     requiresReview: false,
+    optionalAllowed: true,
   },
   "discord:id": {
     scope: "discord:id",
@@ -74,6 +83,7 @@ export const scopeDefinitions = {
     consentDescription: "Linked Discord user ID",
     claims: ["discord_id"],
     requiresReview: true,
+    optionalAllowed: true,
   },
   "discord:profile": {
     scope: "discord:profile",
@@ -82,6 +92,7 @@ export const scopeDefinitions = {
     consentDescription: "Discord username, display name and avatar",
     claims: ["discord_username", "discord_display_name", "discord_avatar_url"],
     requiresReview: true,
+    optionalAllowed: true,
   },
 } as const satisfies {
   [Scope in PlatformScope]: ScopeDefinition & { scope: Scope }
@@ -201,4 +212,54 @@ export function oidcScopesOf(scopes: readonly PlatformScope[]): OidcScope[] {
     if (parsed.success) oidcScopes.push(parsed.data)
   }
   return normalizeScopes(oidcScopes)
+}
+
+// ---------------------------------------------------------------------------
+// Optional scopes (consent toggles)
+// ---------------------------------------------------------------------------
+
+/**
+ * Per environment, each requested OIDC scope is `required` (no toggle; the
+ * user must grant it to sign in) or `optional` (a consent toggle; declining
+ * it still signs the user in and the app receives no claims for it). The
+ * environment stores the optional subset (`optionalScopes`); everything else
+ * requested is required.
+ */
+export const scopeRequirementSchema = z.enum(["required", "optional"])
+
+export type ScopeRequirement = z.infer<typeof scopeRequirementSchema>
+
+export function scopeMayBeOptional(scope: PlatformScope): boolean {
+  return scopeDefinitions[scope].optionalAllowed
+}
+
+export function scopeRequirement(
+  scope: PlatformScope,
+  optionalScopes: readonly PlatformScope[],
+): ScopeRequirement {
+  return scopeMayBeOptional(scope) && optionalScopes.includes(scope)
+    ? "optional"
+    : "required"
+}
+
+export type OptionalScopeProblem = {
+  scope: PlatformScope
+  reason: "not-requested" | "always-required"
+}
+
+/** Problems with an environment's optional subset (empty when valid). */
+export function validateOptionalScopes(input: {
+  requested: readonly PlatformScope[]
+  optional: readonly PlatformScope[]
+}): OptionalScopeProblem[] {
+  const requested = new Set(input.requested)
+  const problems: OptionalScopeProblem[] = []
+  for (const scope of normalizeScopes(input.optional)) {
+    if (!scopeMayBeOptional(scope)) {
+      problems.push({ scope, reason: "always-required" })
+    } else if (!requested.has(scope)) {
+      problems.push({ scope, reason: "not-requested" })
+    }
+  }
+  return problems
 }

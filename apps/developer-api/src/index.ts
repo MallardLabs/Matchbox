@@ -8,6 +8,7 @@ import {
 } from "@repo/platform-server"
 import { type ApiApp, createApp } from "./app"
 import { type WorkerEnv, memoryModePepper, parseWorkerEnv } from "./env"
+import runHealthProbes from "./health/probes"
 import {
   type ChainReader,
   createViemChainReader,
@@ -111,6 +112,35 @@ function chainReaders(
   return readers
 }
 
+/** `triggers.crons` in wrangler.jsonc; each schedule runs one task. */
+export const healthProbeCron = "* * * * *"
+export const reconcileCron = "*/10 * * * *"
+
+async function runHealthCheck(raw: unknown): Promise<void> {
+  try {
+    const loaded = await loadRuntime(raw)
+    if (!loaded.ok) return
+    const { env, store } = loaded.runtime
+    const readers = chainReaders(env)
+    await runHealthProbes({
+      fetch: (input, init) => fetch(input, init),
+      apiHealthUrl: env.HEALTH_API_URL,
+      idDiscoveryUrl: env.HEALTH_ID_URL,
+      latestChainSync: (network) => store.latestChainSync(network),
+      headBlock: async (network) => {
+        const reader = readers[network]
+        return reader === undefined ? null : reader.blockNumber()
+      },
+      deployment: env.ENVIRONMENT,
+      now: () => new Date(),
+      sink: env.HEALTH_LOG ?? null,
+      logger: logger.child({ task: "health-probes" }),
+    })
+  } catch (error) {
+    logger.error({ message: "Scheduled health probes crashed", error })
+  }
+}
+
 async function runReconciliation(raw: unknown): Promise<void> {
   try {
     const loaded = await loadRuntime(raw)
@@ -138,10 +168,14 @@ export default {
   },
 
   async scheduled(
-    _controller: ScheduledController,
+    controller: ScheduledController,
     env: unknown,
     ctx: ExecutionContext,
   ): Promise<void> {
+    if (controller.cron === healthProbeCron) {
+      ctx.waitUntil(runHealthCheck(env))
+      return
+    }
     ctx.waitUntil(runReconciliation(env))
   },
 } satisfies ExportedHandler<unknown>

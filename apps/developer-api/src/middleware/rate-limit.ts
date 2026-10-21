@@ -3,7 +3,9 @@ import {
   type QuotaOverride,
   type RateLimitPolicy,
   type RateLimitResult,
+  environmentQuotaBucketKey,
   publishableIpRateLimitPolicy,
+  publishablePolicy,
   resolveRateLimitPolicy,
 } from "@repo/platform-contracts/rate-limits"
 import {
@@ -18,23 +20,11 @@ import type { ApiStore } from "../store/api-store"
 /** Quota overrides are re-read at most once a minute per environment. */
 export const quotaOverrideCacheTtlMs = 60_000
 
-/**
- * Share of an environment's quota that publishable-key traffic may use
- * (`PUBLISHABLE_QUOTA_SHARE`). Publishable keys ship to browsers, so anyone
- * can spend them; their own bucket keeps them from starving secret keys.
- */
-export const defaultPublishableQuotaShare = 0.5
-
-/** The publishable bucket's policy: `share` of the environment policy. */
-export function publishablePolicy(
-  policy: RateLimitPolicy,
-  share: number,
-): RateLimitPolicy {
-  return {
-    perMinute: Math.max(1, Math.floor(policy.perMinute * share)),
-    perDay: Math.max(1, Math.floor(policy.perDay * share)),
-  }
-}
+// Shared with the console's quota read path (`readEnvironmentQuota`).
+export {
+  defaultPublishableQuotaShare,
+  publishablePolicy,
+} from "@repo/platform-contracts/rate-limits"
 
 export function createOverrideCache(
   now: () => number,
@@ -69,7 +59,10 @@ function mostRestrictive(results: readonly RateLimitResult[]) {
  * (`resolveRateLimitPolicy` + overrides) and `env:<environmentId>:publishable`
  * gets `publishableQuotaShare` of it. Publishable keys also have a
  * `pk:<keyId>:<ipPrefix>` bucket. The limiter fails open: an unavailable
- * Durable Object is logged, not surfaced.
+ * Durable Object is logged, not surfaced, and the request is served without
+ * `RateLimit-*` headers. Rejections are 429 `rate_limited` and are counted
+ * in usage through the request log. The console reads the environment
+ * buckets with `peek` (no consumption).
  */
 export function rateLimit(options: RateLimitOptions): ApiMiddleware {
   const { store, rateLimits, now, logger } = options
@@ -129,7 +122,7 @@ export function rateLimit(options: RateLimitOptions): ApiMiddleware {
       now: now(),
     })
     const perEnvironment = await consume(
-      `env:${auth.environmentId}:${auth.keyKind}`,
+      environmentQuotaBucketKey(auth.environmentId, auth.keyKind),
       auth.keyKind === "publishable"
         ? publishablePolicy(policy, options.publishableQuotaShare)
         : policy,

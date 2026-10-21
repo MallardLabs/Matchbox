@@ -20,6 +20,7 @@ import { environmentKindSchema } from "./network"
  * | `blob7`   | `colo`            | Cloudflare colo (`request.cf.colo`), `""` if absent |
  * | `blob8`   | `country`         | ISO country (`request.cf.country`), `""` if absent |
  * | `blob9`   | `environmentKind` | `test` / `live`, `""` when unknown              |
+ * | `blob10`  | `errorCode`       | platform error code (`rate_limited`, …), `""` on success |
  * | `double1` | `latencyMs`       | Worker wall time for the request               |
  * | `double2` | `statusCode`      | HTTP status as a number                        |
  *
@@ -57,6 +58,8 @@ export const apiRequestLogSchema = z.object({
   country: z.string().nullable(),
   environmentKind: environmentKindSchema.nullable(),
   latencyMs: z.number().nonnegative(),
+  /** `error.code` of the response body; null for successes. */
+  errorCode: z.string().nullable(),
 })
 
 export type ApiRequestLog = z.infer<typeof apiRequestLogSchema>
@@ -73,6 +76,7 @@ export const API_REQUEST_LOG_LAYOUT = {
   colo: "blob7",
   country: "blob8",
   environmentKind: "blob9",
+  errorCode: "blob10",
   latencyMs: "double1",
   statusCode: "double2",
 } as const
@@ -83,6 +87,7 @@ export type ApiRequestLogColumn =
 export type ApiRequestLogDataPoint = {
   indexes: [string]
   blobs: [
+    string,
     string,
     string,
     string,
@@ -112,6 +117,7 @@ export function apiRequestLogDataPoint(
       record.colo ?? "",
       record.country ?? "",
       record.environmentKind ?? "",
+      record.errorCode ?? "",
     ],
     doubles: [record.latencyMs, record.statusCode],
   }

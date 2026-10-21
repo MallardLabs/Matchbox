@@ -62,6 +62,7 @@ export function errorResponse(
   options: ErrorResponseOptions = {},
 ): Response {
   const requestId = currentRequestId(c)
+  c.set("errorCode", code)
   const body = buildErrorBody({
     code,
     requestId,

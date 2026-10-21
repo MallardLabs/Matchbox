@@ -118,3 +118,15 @@ describe("createMemoryRateLimitClient", () => {
     expect((await client.consume("env:a", policy)).remaining).toBe(2)
   })
 })
+
+describe("createMemoryRateLimitClient peek", () => {
+  it("does not record rejected requests or their policy", async () => {
+    const client = createMemoryRateLimitClient(() => start)
+    for (let index = 0; index < 5; index++) {
+      await client.consume("env:c", policy)
+    }
+    const snapshot = await client.peek("env:c")
+    expect(snapshot.state.minute?.count).toBe(3)
+    expect(snapshot.policy).toEqual(policy)
+  })
+})

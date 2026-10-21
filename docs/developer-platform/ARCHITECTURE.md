@@ -74,7 +74,7 @@ All default to `"false"` in checked-in wrangler files.
 | `CLIENT_SECRET_PEPPER` | developer-console (issue), matchbox-id (verify) |
 | `SESSION_PEPPER` | matchbox-id, developer-console (session/token hashing) |
 | `OIDC_SIGNING_KEYS` | matchbox-id — JSON array of private ES256 JWKs, each with `kid`; index 0 signs, all publish in JWKS |
-| `CF_ACCOUNT_ID`, `CF_ANALYTICS_TOKEN` | developer-console (Analytics Engine SQL API, read-only token) |
+| `CF_ACCOUNT_ID`, `CF_ANALYTICS_TOKEN` | developer-console (Analytics Engine SQL API, read-only token: `mbx_api_requests` usage and `mbx_platform_health`) |
 | `MEZO_MAINNET_RPC_URL`, `MEZO_TESTNET_RPC_URL` | matchbox-id (ERC-1271/6492 SIWE verification), developer-api (reconciliation cron) |
 
 Rotation of `OIDC_SIGNING_KEYS`: prepend new key, deploy, wait > max token
@@ -238,6 +238,20 @@ Additions to the column lists above, all additive:
 - The view is `security_invoker = true`; `anon`/`authenticated` have no
   privileges on any v2 relation; no policies exist on `mbx_*` tables.
 
+### 4.5 Optional scopes and re-consent (migration `20261021000001`)
+
+- `mbx_dev_environments.optional_scopes text[] not null default '{}'` —
+  requested OIDC scopes users may decline at consent. CHECKs: values in
+  `wallet`, `discord:id`, `discord:profile` (`openid` and API key scopes are
+  always required) and `optional_scopes <@ requested_scopes` (write both
+  columns in the same UPDATE when removing a scope).
+- `mbx_id_grants.declined_scopes text[] not null default '{}'` — optional
+  scopes the user switched off; CHECK disjoint from `scopes`, which stays the
+  granted subset (codes, refresh tokens and claims use it).
+- Partial index `(environment_id, scope_version) WHERE revoked_at IS NULL`
+  for the console's "awaiting re-consent" count (active grants with
+  `scope_version` below the environment's).
+
 ## 5. Shared contracts (`@repo/platform-contracts`)
 
 - `network.ts` — `networkSlugSchema = z.enum(["mezo","mezo-testnet"])`,
@@ -278,10 +292,39 @@ Additions to the column lists above, all additive:
 - `identity.ts` — request/response schemas for the ID `/api/*`.
 - `rate-limits.ts` — `rateLimitPolicies` by environment kind and endpoint
   class (`gauge-profiles`, `unauthenticated`, `oidc-token`, `siwe`,
-  `userinfo`).
+  `userinfo`); `activeQuotaOverride`, `publishablePolicy` +
+  `defaultPublishableQuotaShare`, `environmentQuotaBucketKey(envId,
+  "secret" | "publishable")`, and the readable quota status
+  `environmentQuotaStatusSchema` (`secret` / `publishable` buckets, each
+  `{ daily, burst }` of `{ used, limit, remaining, resetAt }`; null =
+  limiter unreadable, `used: 0` = real zero) + `environmentQuotaListResponseSchema`.
+- `platform-health.ts` — `mbx_platform_health` Analytics Engine layout
+  (`PLATFORM_HEALTH_LAYOUT`, `healthProbeSchema`, `healthProbeDataPoint`),
+  probe grading (`healthProbeThresholds`, `httpProbeOutcome`,
+  `chainSyncOutcome`, `healthStatusFromProbes`) and the console read model
+  `platformHealthResponseSchema` (per product: status
+  `operational | degraded | down | unknown`, 24 h / 7 d uptime, 24 h
+  p50/p95, last check; per network: block, `checked_at`, lag, RPC head,
+  blocks behind; `source: "probes" | "local"`).
+- `consent.ts` — optional-scope consent rules: `resolveConsentDecision`
+  (granted / declined / skipped; a declined or unavailable required scope
+  fails), `mergeGrantScopes`, `grantCoversRequest` (skip consent when every
+  optional scope is granted, declined or currently unavailable),
+  `pickGrantedClaims` (final claim filter). `scopes.ts` adds
+  `optionalAllowed` per scope, `scopeRequirement`, `validateOptionalScopes`.
 - `api-request-log.ts` — Analytics Engine layout for `mbx_api_requests`
   (`API_REQUEST_LOG_LAYOUT`, `apiRequestLogSchema`, `apiRequestLogDataPoint`,
   `apiRequestLogDataset`, `apiRequestCacheStatusSchema`); see §6.
+- `console.ts` additions for the console v2 screens: the usage status split
+  (`usageCountsSchema`: `errors` = all >= 400, `clientErrors` = 4xx excluding
+  429, `rateLimited` = 429, `serverErrors` = 5xx; optional on the existing
+  `usageTotalsSchema` / `usageSeriesPointSchema`), `requestStatusFilterSchema`,
+  org-wide usage (`orgUsageQuerySchema` / `orgUsageResponseSchema`, Live /
+  Test / Both), decided reviews for developers (`developerReviewSchema`,
+  `environmentReviewListResponseSchema`, `orgReviewListResponseSchema`,
+  `reviewDecidedBy`, `compareReviewsNewestFirst`), `reconsentSummarySchema`
+  on OAuth stats, `adminReviewStatsResponseSchema` + `adminReviewStats`, and
+  `environmentSchema.optionalScopes`.
 - `openapi.ts` + `scripts/generate-openapi.ts` — builds the public OpenAPI 3.1
   document from the schemas (`z.toJSONSchema`, draft-2020-12) and writes
   `packages/platform-contracts/openapi.json`. A test asserts the checked-in
@@ -295,6 +338,20 @@ from each Worker entry and declare it with a `new_sqlite_classes`
 migration). Everything else is on `@repo/platform-server`. Routes should
 depend on the `RateLimitClient` type (`createDurableRateLimitClient`, or
 `createMemoryRateLimitClient` in tests).
+
+Rate-limit buckets are readable: the `RateLimiter` DO stores the policy it
+last enforced next to its counters and exposes `peek()` (never consumes);
+`createDurableRateLimitClient` / `createMemoryRateLimitClient` implement
+`RateLimitReader.peek(key)`, `quotaBucketStatus(snapshot, fallback, now)`
+turns a snapshot into daily/burst windows, and
+`readEnvironmentQuota({ limiter, environmentId, environmentKind,
+appStatus, overrides, publishableShare?, rateLimitedToday, now })` returns
+`environmentQuotaStatusSchema` (a failed read gives a null bucket; it never
+throws). Platform health reads: `createPlatformHealthReader({ client,
+deployment }).read(now)` runs three Analytics Engine SQL queries
+(`buildHealthUptimeSql`, `buildHealthLatencySql`, `buildHealthRecentSql`)
+and `summarizePlatformHealth`; `localPlatformHealth(now)` is the memory-mode
+fixture. `errorResponse` sets `c.var.errorCode` for request logs.
 
 `createSupabaseAdmin(env)` (supabase-js, no session persistence),
 `flags(env)`, crypto (`randomToken(bytes)`, `hmacHex(pepper, value)`,
@@ -363,6 +420,7 @@ Rules:
   | `blob7` | colo | `""` when absent |
   | `blob8` | country | `""` when absent |
   | `blob9` | environment kind | `test` / `live` / `""` |
+  | `blob10` | error code | `rate_limited`, `not_found`, … / `""` on success |
   | `double1` | latency ms | |
   | `double2` | status code | |
 - Errors never echo upstream detail; logs carry request id.
@@ -397,6 +455,24 @@ Rules:
   secret-key responses never carry `Access-Control-Allow-Origin`; responses
   with no verified key echo the origin on errors only (no data); health and
   `openapi.json` use `*`. `Vary: Origin, Authorization` everywhere.
+- Health cron (`* * * * *`, `src/health/probes.ts`): fetches
+  `HEALTH_API_URL` (this Worker's public `/v1/health`; needs the
+  `global_fetch_strictly_public` compatibility flag, since a Custom Domain
+  Worker fetching its own hostname otherwise gets a 522) and `HEALTH_ID_URL`
+  (Matchbox ID discovery), and reads the newest `mbx_api_gauge_chain_state`
+  row per network plus the RPC head. One data point per probe goes to
+  `HEALTH_LOG` → dataset `mbx_platform_health` (layout in
+  `@repo/platform-contracts/platform-health`; `blob1` = `ENVIRONMENT`, so
+  staging and production share the dataset without mixing). Outcomes: HTTP
+  probe `up`, `degraded` (>= 1.5 s, `slow`) or `down` (timeout 5 s, non-2xx,
+  invalid body, kill switch off → `service-disabled`); chain sync `degraded`
+  after 20 min and `down` after 60 min or with no rows. A blank URL skips that
+  probe. The console reads the dataset with the existing read token
+  (`createPlatformHealthReader`); a target with no probe in 5 min shows
+  `unknown`.
+- 429s are request-log rows like any other (status 429, `blob10`
+  `rate_limited`), so usage splits them out; rejected requests still do not
+  consume quota. The limiter fails open (logged) and quota reads fail soft.
 - Chain-state cron: Multicall3 (`0xcA11…CA11`) pinned to one block per
   network; boost gauges read `BoostVoter.isAlive`,
   `boostableTokenIdToGauge(tokenId)` (the token is stored only when it maps
@@ -438,9 +514,20 @@ Claims: `sub` (pairwise per `sector_id`), `wallet_address` (+
 (10 min), `auth_time`, `nonce`, `azp`, and requested claims. `discord:*`
 scopes require an approved review and a linked Discord; when no link exists,
 consent shows the scope as unavailable with the Discord bot link instructions
-and the decision proceeds without it only if the app marks it optional
-(`optionalScopes` param is out of scope — v1 fails with `access_denied`
-reason `discord-not-linked`).
+and the decision proceeds without it only if the app marks it optional.
+
+Optional scopes (owner decision 2026-10-21): each environment marks a subset
+of its requested OIDC scopes optional (`optional_scopes`; `openid` is always
+required). Consent shows required scopes without a toggle and optional ones
+with a toggle (`consentScopeSchema.requirement`); the decision body carries
+`declinedScopes`. `resolveConsentDecision` grants the rest, skips
+unavailable optional scopes (not stored, offered again once available) and
+fails on a declined or unavailable required scope. The grant stores the
+granted subset in `scopes` and the switched-off ones in `declined_scopes`
+(`mergeGrantScopes`); codes, refresh tokens, the token response `scope`, the
+ID token and userinfo carry only granted scopes (`pickGrantedClaims` as the
+final filter). Consent is skipped when `grantCoversRequest` holds;
+`prompt=consent` always asks.
 
 Security: the `__Host-mbx_id` session cookie is `SameSite=Lax` (Strict would
 hide the session from the cross-site top-level redirect into
@@ -499,6 +586,18 @@ secrets, usage (Analytics Engine SQL: requests, error rate, p50/p95 latency,
 top routes, by key, time buckets; request-id lookup; CSV export), OAuth
 (grant counts, revocations, consent preview), and `/api/admin/*` for staff
 (review queue, decide, app status changes, quota overrides, audit search).
+
+Console v2 additions (schemas in `@repo/platform-contracts`, routes in the
+console Worker): `GET /api/platform/health` (`platformHealthResponseSchema`;
+memory mode answers `localPlatformHealth`, `source: "local"`),
+`GET /api/environments/{id}/quota` and `GET /api/orgs/{orgId}/quotas`
+(`readEnvironmentQuota` over a cross-script Durable Object binding
+`API_RATE_LIMITER` → class `RateLimiter`, `script_name`
+`matchbox-developer-api`), `GET /api/orgs/{orgId}/usage` (org-wide, Live /
+Test / Both), `GET /api/environments/{id}/reviews` and
+`GET /api/orgs/{orgId}/reviews` (decided reviews with reviewer notes, newest
+first), `awaitingReconsent` on OAuth stats, and
+`GET /api/admin/reviews/stats`.
 
 Auto-approval: a live environment requesting only `gauge-profiles:read`
 moves to `approved` on submit when the org's owner email is verified, the app

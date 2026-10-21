@@ -5,6 +5,7 @@ import {
   rateLimitPolicySchema,
 } from "@repo/platform-contracts/rate-limits"
 import {
+  type RateLimitSnapshot,
   consumeRateLimit,
   dayMs,
   emptyRateLimitState,
@@ -12,6 +13,8 @@ import {
 } from "./rate-limit"
 
 const stateKey = "state"
+/** The policy the last allowed request was checked against (for `peek`). */
+const policyKey = "policy"
 
 /**
  * Fixed-window rate limiter, one instance per key. Declare it in each
@@ -21,6 +24,8 @@ const stateKey = "state"
  *   export { RateLimiter } from "@repo/platform-server/rate-limiter"
  *
  * Storage is wiped by an alarm once the UTC day window has passed.
+ * `peek()` returns the counters and last-enforced policy without consuming
+ * (dashboards read quota used / remaining / reset through it).
  */
 export class RateLimiter extends DurableObject {
   async consume(policy: RateLimitPolicy, cost = 1): Promise<RateLimitResult> {
@@ -35,11 +40,23 @@ export class RateLimiter extends DurableObject {
       now,
       cost,
     )
-    if (result.allowed) await this.ctx.storage.put(stateKey, state)
+    if (result.allowed) {
+      await this.ctx.storage.put({ [stateKey]: state, [policyKey]: limits })
+    }
     if ((await this.ctx.storage.getAlarm()) === null) {
       await this.ctx.storage.setAlarm(nextCleanupAt(now))
     }
     return result
+  }
+
+  async peek(): Promise<RateLimitSnapshot> {
+    const stored = await this.ctx.storage.get([stateKey, policyKey])
+    const state = rateLimitStateSchema.safeParse(stored.get(stateKey))
+    const policy = rateLimitPolicySchema.safeParse(stored.get(policyKey))
+    return {
+      state: state.success ? state.data : emptyRateLimitState,
+      policy: policy.success ? policy.data : null,
+    }
   }
 
   async alarm(): Promise<void> {

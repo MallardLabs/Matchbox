@@ -19,6 +19,7 @@ describe("apiRequestLogDataPoint", () => {
       country: "GB",
       environmentKind: "test",
       latencyMs: 12.5,
+      errorCode: null,
     })
     const point = apiRequestLogDataPoint(record)
     expect(point).toEqual({
@@ -33,6 +34,7 @@ describe("apiRequestLogDataPoint", () => {
         "LHR",
         "GB",
         "test",
+        "",
       ],
       doubles: [12.5, 200],
     })
@@ -55,9 +57,11 @@ describe("apiRequestLogDataPoint", () => {
       country: null,
       environmentKind: null,
       latencyMs: 1,
+      errorCode: "unauthorized",
     })
     expect(point.indexes).toEqual(["anonymous"])
     expect(point.blobs[1]).toBe("")
     expect(point.blobs[8]).toBe("")
+    expect(point.blobs[9]).toBe("unauthorized")
   })
 })

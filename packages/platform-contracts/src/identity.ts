@@ -1,7 +1,11 @@
 import { z } from "zod"
 import { addressSchema, isoDateTimeSchema, uuidSchema } from "./common"
 import { environmentKindSchema, networkSlugSchema } from "./network"
-import { oidcClaimSchema, oidcScopeSchema } from "./scopes"
+import {
+  oidcClaimSchema,
+  oidcScopeSchema,
+  scopeRequirementSchema,
+} from "./scopes"
 
 /** Request/response schemas for the Matchbox ID `/api/*` routes. */
 
@@ -41,11 +45,17 @@ export const linkedDiscordSchema = z.object({
 
 export type LinkedDiscord = z.infer<typeof linkedDiscordSchema>
 
+export const signerKindSchema = z.enum(["eoa", "contract"])
+
+export type SignerKind = z.infer<typeof signerKindSchema>
+
 export const identityAccountSchema = z.object({
   walletAddress: addressSchema,
   discord: linkedDiscordSchema.nullable(),
   /** Network the current session's SIWE signature was verified on. */
   signedInNetwork: networkSlugSchema.nullable(),
+  /** How the session's SIWE signature verified; null for older sessions. */
+  signerKind: signerKindSchema.nullable().optional(),
 })
 
 export type IdentityAccount = z.infer<typeof identityAccountSchema>
@@ -69,6 +79,24 @@ export type SessionResponse = z.infer<typeof sessionResponseSchema>
 // GET /api/authorization-requests/{id} --------------------------------------
 
 export const authorizationRequestIdSchema = uuidSchema
+
+/**
+ * GET /api/authorization-requests/{id}/summary: public (no session), for
+ * "Continue to <app>" on sign-in. 404 when unknown or expired.
+ */
+export const authorizationRequestSummarySchema = z.object({
+  app: z.object({
+    name: z.string(),
+    logoUrl: z.string().nullable(),
+    verified: z.boolean(),
+  }),
+  environmentKind: environmentKindSchema,
+  network: networkSlugSchema,
+})
+
+export type AuthorizationRequestSummary = z.infer<
+  typeof authorizationRequestSummarySchema
+>
 
 export const consentAppSchema = z.object({
   name: z.string(),
@@ -109,6 +137,13 @@ export const consentScopeSchema = z.object({
   unavailableReason: scopeUnavailableReasonSchema.nullable(),
   /** True when an existing grant already covers this scope. */
   previouslyGranted: z.boolean(),
+  /**
+   * `optional` renders a toggle; declining it still signs the user in.
+   * Absent = `required` (servers predating optional scopes).
+   */
+  requirement: scopeRequirementSchema.optional(),
+  /** Optional scope the user declined on an existing grant (toggle off). */
+  previouslyDeclined: z.boolean().optional(),
 })
 
 export type ConsentScope = z.infer<typeof consentScopeSchema>
@@ -124,6 +159,8 @@ export const authorizationRequestDetailSchema = z.object({
     .object({
       id: uuidSchema,
       scopes: z.array(oidcScopeSchema),
+      /** Optional scopes declined on this grant. */
+      declinedScopes: z.array(oidcScopeSchema).optional(),
       createdAt: isoDateTimeSchema,
     })
     .nullable(),
@@ -132,7 +169,10 @@ export const authorizationRequestDetailSchema = z.object({
     removed: z.array(oidcScopeSchema),
     unchanged: z.array(oidcScopeSchema),
   }),
-  /** True when the decision can be approved (all scopes available). */
+  /**
+   * True when the decision can be approved: every required scope is
+   * available (unavailable optional scopes are declined automatically).
+   */
   approvable: z.boolean(),
   expiresAt: isoDateTimeSchema,
 })
@@ -147,6 +187,14 @@ export const authorizationDecisionSchema = z.enum(["approve", "deny"])
 
 export const authorizationDecisionRequestSchema = z.object({
   decision: authorizationDecisionSchema,
+  /**
+   * Optional scopes the user switched off. Declining a required scope is
+   * refused (`invalid_request`); omitted = none declined.
+   */
+  declinedScopes: z
+    .array(oidcScopeSchema)
+    .max(oidcScopeSchema.options.length)
+    .optional(),
 })
 
 export type AuthorizationDecisionRequest = z.infer<
@@ -171,15 +219,40 @@ export const connectedAppGrantSchema = z.object({
     websiteUrl: z.string().nullable(),
   }),
   environmentKind: environmentKindSchema,
+  network: networkSlugSchema.optional(),
+  /** Live environment whose review is approved. */
+  verified: z.boolean().optional(),
+  /** Granted scopes (claims are released for these only). */
   scopes: z.array(oidcScopeSchema),
+  /** Optional scopes the user declined. */
+  declinedScopes: z.array(oidcScopeSchema).optional(),
   createdAt: isoDateTimeSchema,
   updatedAt: isoDateTimeSchema,
 })
 
 export type ConnectedAppGrant = z.infer<typeof connectedAppGrantSchema>
 
+/** A revoked grant (connected-apps history). */
+export const endedGrantSchema = z.object({
+  id: uuidSchema,
+  app: z.object({
+    name: z.string(),
+    logoUrl: z.string().nullable(),
+    websiteUrl: z.string().nullable(),
+  }),
+  environmentKind: environmentKindSchema,
+  network: networkSlugSchema,
+  scopes: z.array(oidcScopeSchema),
+  revokedAt: isoDateTimeSchema,
+  revokedReason: grantRevokedReasonSchema.nullable(),
+})
+
+export type EndedGrant = z.infer<typeof endedGrantSchema>
+
 export const grantListResponseSchema = z.object({
   data: z.array(connectedAppGrantSchema),
+  /** Most recently revoked grants, newest first (at most 20). */
+  ended: z.array(endedGrantSchema).max(20).optional(),
 })
 
 export type GrantListResponse = z.infer<typeof grantListResponseSchema>

@@ -74,6 +74,15 @@ export type ChainStateRow = {
   blockNumber: string | null
 }
 
+/** Freshness of a network's chain state: its newest row. */
+export type ChainSyncSnapshot = {
+  network: NetworkSlug
+  /** `checked_at` of the newest row; null when the network has none. */
+  checkedAt: string | null
+  /** That row's block (decimal string). */
+  blockNumber: string | null
+}
+
 export type ReconciliationTarget = {
   network: NetworkSlug
   profileType: GaugeProfileType
@@ -100,6 +109,8 @@ export type ApiStore = {
   touchKeyLastUsed(keyId: string, at: Date): Promise<void>
   upsertChainState(rows: readonly ChainStateRow[]): Promise<void>
   listProfilesForReconciliation(): Promise<ReconciliationTarget[]>
+  /** Newest chain-state row per network (health probes). */
+  latestChainSync(network: NetworkSlug): Promise<ChainSyncSnapshot>
 }
 
 /** Keyset ordering: `updated_at DESC, gauge_address ASC`. */
