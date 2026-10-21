@@ -176,7 +176,12 @@ export function EpochIncentivesCard({
           <p role="alert" className="m-0 text-body-sm text-neg">
             Incentives unavailable
           </p>
-          <Button.Root variant="secondary" size="sm" onClick={onRetry}>
+          <Button.Root
+            variant="secondary"
+            size="sm"
+            onClick={onRetry}
+            className="relative after:absolute after:inset-x-0 after:-inset-y-2 after:content-['']"
+          >
             Retry
           </Button.Root>
         </div>

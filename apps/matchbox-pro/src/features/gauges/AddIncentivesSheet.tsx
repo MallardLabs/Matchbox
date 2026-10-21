@@ -217,7 +217,7 @@ function SheetContent({
           <Dialog.Close
             aria-label="Close"
             disabled={busy}
-            className="-mr-1.5 flex size-8 shrink-0 items-center justify-center rounded-md text-muted transition-colors hover:bg-inset hover:text-ink disabled:opacity-40"
+            className="-my-1.5 -mr-3 flex size-11 shrink-0 items-center justify-center rounded-md text-muted transition-colors hover:bg-inset hover:text-ink disabled:opacity-40"
           >
             <X aria-hidden="true" size={16} strokeWidth={1.75} />
           </Dialog.Close>
@@ -260,7 +260,10 @@ function SheetContent({
               ) : (
                 <div className="flex flex-wrap gap-1.5">
                   {allowlisted.map((token) => (
-                    <label key={token.address} className="relative">
+                    <label
+                      key={token.address}
+                      className="relative after:absolute after:inset-x-0 after:-inset-y-1.5 after:content-['']"
+                    >
                       <input
                         type="radio"
                         name={`${ids}-token`}
@@ -318,7 +321,7 @@ function SheetContent({
                       ),
                     )
                   }}
-                  className="rounded px-0.5 font-700 text-accent-ink disabled:text-faint"
+                  className="relative rounded px-0.5 font-700 text-accent-ink after:absolute after:-inset-x-2 after:-inset-y-4 after:content-[''] disabled:text-faint"
                 >
                   MAX
                 </button>
@@ -358,11 +361,7 @@ function SheetContent({
           {signing ? null : (
             <SheetAction>
               {viewer.mode === "disconnected" ? (
-                <Button.Root
-                  size="lg"
-                  onClick={openConnect}
-                  className="w-full rounded-lg text-body"
-                >
+                <Button.Root size="lg" onClick={openConnect} className={CTA}>
                   Connect wallet
                 </Button.Root>
               ) : viewer.mode === "watching" ? (
@@ -374,7 +373,7 @@ function SheetContent({
                     size="lg"
                     variant="secondary"
                     onClick={stopWatching}
-                    className="w-full rounded-lg text-body"
+                    className={CTA}
                   >
                     Stop watching
                   </Button.Root>
@@ -384,16 +383,12 @@ function SheetContent({
                   size="lg"
                   loading={isSwitching}
                   onClick={() => void switchWalletToApp()}
-                  className="w-full rounded-lg text-body"
+                  className={CTA}
                 >
                   Switch to Mezo
                 </Button.Root>
               ) : noGas ? (
-                <Button.Root
-                  size="lg"
-                  disabled
-                  className="w-full rounded-lg text-body"
-                >
+                <Button.Root size="lg" disabled className={CTA}>
                   No BTC for gas
                 </Button.Root>
               ) : (
@@ -402,7 +397,7 @@ function SheetContent({
                   size="lg"
                   loading={preparing}
                   disabled={!ready}
-                  className="w-full rounded-lg text-body"
+                  className={CTA}
                 >
                   Continue
                 </Button.Root>
@@ -426,6 +421,14 @@ function InlineLoading({ className }: { className: string }): ReactElement {
     </>
   )
 }
+
+// 40px tall as drawn; the hit area reaches 44px.
+const CTA =
+  "relative w-full rounded-lg text-body after:absolute after:inset-x-0 after:-inset-y-0.5 after:content-['']"
+
+// Signing-panel actions sit in a wrapped row; their hit areas reach 44px.
+const ROW_ACTION =
+  "relative after:absolute after:inset-x-0 after:-inset-y-2 after:content-['']"
 
 function SheetAction({ children }: { children: ReactNode }): ReactElement {
   return <div className="flex flex-col gap-2">{children}</div>
@@ -455,7 +458,7 @@ function TxLink({
       href={`${explorer}/tx/${hash}`}
       target="_blank"
       rel="noreferrer noopener"
-      className="font-600 text-accent-ink underline-offset-2 hover:underline"
+      className="relative font-600 text-accent-ink underline-offset-2 after:absolute after:-inset-x-1 after:-inset-y-3 after:content-[''] hover:underline"
     >
       View transaction
       <span className="sr-only"> (opens in a new tab)</span>
@@ -520,7 +523,7 @@ function SigningPanel({
           variant="secondary"
           size="lg"
           onClick={onDone}
-          className="w-full rounded-lg lg:w-fit lg:px-6"
+          className="h-11 w-full rounded-lg lg:w-fit lg:px-6"
         >
           Done
         </Button.Root>
@@ -568,10 +571,17 @@ function stepAction({
         variant="secondary"
         disabled={busy}
         onClick={() => onRetry(step.id)}
+        className={ROW_ACTION}
       >
         Retry
       </Button.Root>
-      <Button.Root size="sm" variant="ghost" disabled={busy} onClick={onEdit}>
+      <Button.Root
+        size="sm"
+        variant="ghost"
+        disabled={busy}
+        onClick={onEdit}
+        className={ROW_ACTION}
+      >
         Edit amount
       </Button.Root>
     </>

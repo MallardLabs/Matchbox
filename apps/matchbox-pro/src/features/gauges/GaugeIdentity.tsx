@@ -56,7 +56,9 @@ const RESPONSIVE_TILE = {
   fontSize: undefined,
 } as const
 
-const actionClass = "h-9 w-full rounded-[7px] px-3 text-body-sm md:w-[148px]"
+// 36px tall as drawn; the hit area extends to 44px into the 8px gaps.
+const actionClass =
+  "relative h-9 w-full rounded-[7px] px-3 text-body-sm after:absolute after:inset-x-0 after:-inset-y-1 after:content-[''] md:w-[148px]"
 
 /** Pen J07 "Gauge header": identity tile, chips, profile copy, actions. */
 export default function GaugeIdentity({
@@ -157,7 +159,7 @@ export default function GaugeIdentity({
                     href={link.href}
                     target="_blank"
                     rel="noreferrer noopener"
-                    className="inline-flex h-7 items-center rounded-[7px] bg-surface px-2.5 text-label font-400 text-secondary transition-colors hover:bg-inset hover:text-ink"
+                    className="relative inline-flex h-7 items-center rounded-[7px] bg-surface px-2.5 text-label font-400 text-secondary transition-colors after:absolute after:inset-x-0 after:-inset-y-2 after:content-[''] hover:bg-inset hover:text-ink"
                   >
                     {link.label}
                     <span className="sr-only"> (opens in a new tab)</span>

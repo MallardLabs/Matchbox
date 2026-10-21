@@ -39,7 +39,7 @@ function BackLink(): ReactElement {
   return (
     <Link
       to="/vote"
-      className="inline-flex w-fit items-center gap-1.5 rounded text-body-sm font-500 text-muted transition-colors hover:text-ink"
+      className="relative inline-flex w-fit items-center gap-1.5 rounded text-body-sm font-500 text-muted transition-colors after:absolute after:-inset-x-2 after:-inset-y-3 after:content-[''] hover:text-ink"
     >
       <ArrowLeft aria-hidden="true" size={14} strokeWidth={1.75} />
       Vote
@@ -235,7 +235,7 @@ function GaugeMissing({
         </p>
         <Link
           to="/vote"
-          className="mt-1 w-fit text-body-sm font-600 text-accent-ink underline-offset-2 hover:underline"
+          className="relative mt-1 w-fit text-body-sm font-600 text-accent-ink underline-offset-2 after:absolute after:-inset-x-2 after:-inset-y-3 after:content-[''] hover:underline"
         >
           Back to Vote
         </Link>
