@@ -22,6 +22,7 @@ import {
   type EpochClosePrice,
   type PriceRefs,
   type PricingEnv,
+  closePricesWithin,
   currentPrices,
   epochClosePrices,
   mezoBlocksAtOrBefore,
@@ -158,6 +159,8 @@ export async function gaugeEpochsWithStatus(input: {
   boostTokenId: bigint | undefined
   now: bigint
   env: PricingEnv
+  /** Answer by this wall-clock deadline; unsettled prices keep loading. */
+  budget?: PriceBudget | undefined
 }): Promise<{ data: WireGaugeEpochs; complete: boolean }> {
   const bribes = await boostBribes()
   const bribe = bribes.find((item) => item.gauge === input.gauge)
@@ -191,7 +194,7 @@ export async function gaugeEpochsWithStatus(input: {
         })),
       ),
     ),
-    epochClosePrices(sealed, input.env, input.now),
+    closesFor(sealed, input),
     currentPrices(input.env),
     boostAtCloses(input.gauge, input.boostTokenId, sealed),
   ])
@@ -244,6 +247,26 @@ export async function gaugeEpochs(
   input: Parameters<typeof gaugeEpochsWithStatus>[0],
 ): Promise<WireGaugeEpochs> {
   return (await gaugeEpochsWithStatus(input)).data
+}
+
+export type PriceBudget = {
+  deadline: number
+  waitUntil: (promise: Promise<unknown>) => void
+}
+
+function closesFor(
+  sealed: readonly bigint[],
+  input: { env: PricingEnv; now: bigint; budget?: PriceBudget | undefined },
+): Promise<Map<bigint, EpochClosePrice>> {
+  return input.budget
+    ? closePricesWithin(
+        sealed,
+        input.env,
+        input.now,
+        input.budget.deadline,
+        input.budget.waitUntil,
+      )
+    : epochClosePrices(sealed, input.env, input.now)
 }
 
 /** Every sealed epoch's close price came back (no transient misses). */
@@ -305,6 +328,8 @@ export async function incentiveEpochs(input: {
   count: number
   now: bigint
   env: PricingEnv
+  /** Answer by this wall-clock deadline; unsettled prices keep loading. */
+  budget?: PriceBudget | undefined
 }): Promise<{ data: WireIncentiveEpochs; complete: boolean }> {
   const bribes = await boostBribes()
   const currentEpoch = epochStartOf(input.now)
@@ -338,7 +363,7 @@ export async function incentiveEpochs(input: {
         ),
       ),
     ),
-    epochClosePrices(sealed, input.env, input.now),
+    closesFor(sealed, input),
     currentPrices(input.env),
   ])
   for (const epoch of missing) {

@@ -19,6 +19,7 @@ import {
 } from "../history/http"
 import { ledgerCsv } from "../history/views"
 import {
+  HISTORY_BUDGET_MS,
   type LedgerQuery,
   emptyEarnings,
   nowSeconds,
@@ -149,7 +150,12 @@ async function ledgerCsvFile({
   })
 }
 
-async function gauge({ url, params, env }: ApiContext): Promise<Response> {
+async function gauge({
+  url,
+  params,
+  env,
+  waitUntil,
+}: ApiContext): Promise<Response> {
   const network = parseNetwork(url)
   const address = parseAddress(params.address)
   const count = parseInteger(url, "count", 8, 1, 26)
@@ -170,6 +176,7 @@ async function gauge({ url, params, env }: ApiContext): Promise<Response> {
     boostTokenId,
     now: nowSeconds(),
     env,
+    budget: { deadline: Date.now() + HISTORY_BUDGET_MS, waitUntil },
   })
   return envelope(
     network,
@@ -181,7 +188,11 @@ async function gauge({ url, params, env }: ApiContext): Promise<Response> {
   )
 }
 
-async function incentives({ url, env }: ApiContext): Promise<Response> {
+async function incentives({
+  url,
+  env,
+  waitUntil,
+}: ApiContext): Promise<Response> {
   const network = parseNetwork(url)
   const count = parseInteger(url, "count", 8, 1, 26)
   if (network !== "mezo") {
@@ -198,6 +209,7 @@ async function incentives({ url, env }: ApiContext): Promise<Response> {
     count,
     now: nowSeconds(),
     env,
+    budget: { deadline: Date.now() + HISTORY_BUDGET_MS, waitUntil },
   })
   return envelope(
     network,
@@ -209,7 +221,7 @@ async function incentives({ url, env }: ApiContext): Promise<Response> {
   )
 }
 
-async function pricing({ url, env }: ApiContext): Promise<Response> {
+async function pricing({ url, env, waitUntil }: ApiContext): Promise<Response> {
   const network = parseNetwork(url)
   const count = parseInteger(url, "count", 8, 1, 52)
   if (network !== "mezo") {
@@ -222,13 +234,14 @@ async function pricing({ url, env }: ApiContext): Promise<Response> {
       },
     )
   }
-  const data = await pricingEpochs(count, env)
-  // Sealed rows never change; refresh hourly so a missed price can fill in.
-  const complete = data.rows.every((row) => row.btcUsd !== null)
-  return envelope(network, RPC_FRESHNESS, data, {
-    kind: "shared",
-    sMaxAge: complete ? 3600 : 300,
-  })
+  const { data, complete } = await pricingEpochs(count, env, waitUntil)
+  // Settled rows never change; anything still pricing must not be cached.
+  return envelope(
+    network,
+    RPC_FRESHNESS,
+    data,
+    complete ? { kind: "shared", sMaxAge: 3600 } : { kind: "no-store" },
+  )
 }
 
 export const historyRoutes: ApiRoute[] = [

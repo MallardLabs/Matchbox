@@ -15,7 +15,13 @@ import {
   walletLockIds,
 } from "./earnings"
 import { EPOCH, epochStartOf } from "./math"
-import { type PricingEnv, currentPrices, epochClosePrices } from "./pricing"
+import {
+  type PriceRefs,
+  type PricingEnv,
+  closePricesWithin,
+  currentPrices,
+  withinDeadline,
+} from "./pricing"
 import { sourceConfig } from "./sources"
 import {
   type PriceBook,
@@ -52,20 +58,25 @@ export function nowSeconds(): bigint {
   return BigInt(Math.floor(Date.now() / 1000))
 }
 
+/** Wall time a wallet request waits for prices before answering partial. */
+export const HISTORY_BUDGET_MS = 7_500
+
+const NO_PRICES: PriceRefs = { btcUsd: null, mezoUsd: null }
+
 async function computeHistory(
   wallet: Address,
   tokenIds: readonly bigint[],
   env: PricingEnv,
+  waitUntil: WaitUntil,
+  deadline: number,
 ): Promise<WalletHistory> {
   const now = nowSeconds()
-  // Close prices are global and memoized forever, so fetch every boost
-  // epoch's alongside the wallet reads instead of after them.
-  const allCloses = epochClosePrices(
-    sealedEpochsSince(BOOST_FIRST_EPOCH, epochStartOf(now)),
-    env,
-    now,
-  )
-  const prices = currentPrices(env)
+  const epochs = sealedEpochsSince(BOOST_FIRST_EPOCH, epochStartOf(now))
+  // Close prices are global and memoized forever, so price every boost epoch
+  // alongside the wallet reads; whatever hasn't settled by the deadline keeps
+  // going in the background and the answer is marked partial.
+  const allCloses = closePricesWithin(epochs, env, now, deadline, waitUntil)
+  const prices = withinDeadline(currentPrices(env), deadline, waitUntil)
   const ids = tokenIds.length > 0 ? tokenIds : await walletLockIds(wallet)
   const model = await computeWalletEarnings({
     tokenIds: ids.slice(0, MAX_LOCKS),
@@ -75,7 +86,7 @@ async function computeHistory(
   const closes = new Map(
     [...(await allCloses).entries()].filter(([epoch]) => needed.has(epoch)),
   )
-  const book = { now: await prices, closes }
+  const book = { now: (await prices) ?? NO_PRICES, closes }
   return { model, book, partial: isPartial(model, book) }
 }
 
@@ -91,7 +102,13 @@ export async function walletHistory(
       key,
       HISTORY_TTL,
       async () => {
-        const history = await computeHistory(wallet, tokenIds, env)
+        const history = await computeHistory(
+          wallet,
+          tokenIds,
+          env,
+          waitUntil,
+          Date.now() + HISTORY_BUDGET_MS,
+        )
         if (history.partial) throw new PartialHistory(history)
         return history
       },
@@ -202,15 +219,23 @@ export async function walletLedger(
 export async function pricingEpochs(
   count: number,
   env: PricingEnv,
-): Promise<WirePricingEpochs> {
+  waitUntil: WaitUntil,
+): Promise<{ data: WirePricingEpochs; complete: boolean }> {
   const now = nowSeconds()
   const current = epochStartOf(now)
   const epochs = Array.from(
     { length: count },
     (_, index) => current - BigInt(count - index) * EPOCH,
   )
-  const closes = await epochClosePrices(epochs, env, now)
-  return {
+  const closes = await closePricesWithin(
+    epochs,
+    env,
+    now,
+    Date.now() + HISTORY_BUDGET_MS,
+    waitUntil,
+  )
+  const complete = epochs.every((epoch) => closes.get(epoch)?.settled)
+  const data: WirePricingEpochs = {
     rows: epochs.map((epoch) => {
       const close = closes.get(epoch)
       return {
@@ -227,4 +252,5 @@ export async function pricingEpochs(
       }
     }),
   }
+  return { data, complete }
 }

@@ -35,6 +35,10 @@ export function timedGet<T>(key: string): T | undefined {
   return hit.value as T
 }
 
+export function timedDelete(key: string): void {
+  timed.delete(key)
+}
+
 export function timedSet(key: string, value: unknown, ttlMs: number): void {
   if (timed.size >= MAX_ENTRIES) {
     const oldest = timed.keys().next()
