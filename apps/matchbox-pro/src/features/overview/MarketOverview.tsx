@@ -113,8 +113,7 @@ export default function MarketOverview(): ReactElement {
       : topology.isError
         ? { status: "unavailable" }
         : { status: "ready", usdMicro: totalMicro },
-    next: { status: "unavailable" },
-  }).filter((bar) => bar.key !== "next")
+  })
 
   return (
     <div className="flex flex-col gap-7">

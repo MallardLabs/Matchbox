@@ -3,10 +3,16 @@ import { cn } from "@repo/ui/cn"
 import { type ReactElement, useState } from "react"
 import { formatTick } from "./earnings"
 
-export type LegendItem = "realized" | "claimable" | "projected" | "deposited"
+export type LegendItem =
+  | "realized"
+  | "latest"
+  | "claimable"
+  | "projected"
+  | "deposited"
 
 const LEGEND: Record<LegendItem, { label: string; swatch: string }> = {
   realized: { label: "Realized", swatch: "bg-line" },
+  latest: { label: "Last epoch", swatch: "bg-accent" },
   claimable: { label: "Claimable", swatch: "bg-accent" },
   projected: {
     label: "Projected",

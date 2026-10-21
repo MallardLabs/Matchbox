@@ -3,6 +3,7 @@ import type { ClaimGroup } from "@/features/locks/claims"
 import { epochLabel } from "@/lib/epoch"
 import { formatApyBasisPoints, formatMicroUsd } from "@/lib/money"
 import { formatCompactNumber, formatWholeUsd } from "@/lib/overview"
+import { useViewer } from "@/lib/viewer"
 import * as Badge from "@repo/ui/badge"
 import * as Button from "@repo/ui/button"
 import { cn } from "@repo/ui/cn"
@@ -21,13 +22,16 @@ export default function OverviewHero({
 }: {
   overview: Overview
 }): ReactElement {
-  const { claims, claimable, projected, epoch, locksState } = overview
+  const { viewer } = useViewer()
+  const { claims, projected, epoch, locksState } = overview
   const hasLocks = locksState === "ready"
+  // Realized per sealed epoch plus Next; claimable stays in the hero so no
+  // money is drawn twice.
   const bars = earningsBars({
     history: overview.history,
     epochStart: epoch.epochStart,
-    current: claimable,
     next: projected,
+    historyEpochs: 6,
   })
   const historyNote =
     overview.history.status === "ready"
@@ -51,7 +55,7 @@ export default function OverviewHero({
           id="overview-title"
           className="m-0 text-title font-600 text-ink max-md:sr-only"
         >
-          Overview
+          {viewer.mode === "watching" ? "Watching this wallet" : "Overview"}
         </h1>
         <p className="m-0 flex items-center gap-1.5 text-label text-accent-ink md:mt-3.5 md:text-body-sm md:font-600">
           <span
@@ -100,26 +104,14 @@ export default function OverviewHero({
       <EarningsChart
         title="Earnings by epoch"
         bars={bars}
-        legend={["realized", "claimable", "projected"]}
+        legend={["realized", "latest", "projected"]}
         note={historyNote}
-        busy={claimable.status === "loading"}
+        busy={overview.history.status === "loading"}
         detail={(bar) => {
           if (bar.value === null) return null
-          if (bar.key === "current") {
-            return {
-              heading: `${epochLabel(epoch.epochStart)} · claimable`,
-              value: formatMicroUsd(claims.usdMicro),
-              note: null,
-              rows: claims.groups.map((group) => ({
-                key: group.id,
-                label: group.label,
-                value: formatMicroUsd(group.usdMicro),
-              })),
-            }
-          }
           if (bar.key === "next") {
             return {
-              heading: "Next epoch · projected",
+              heading: `${epochLabel(epoch.epochStart)} · projected`,
               value: bar.display,
               note:
                 overview.apyBasisPoints === null
@@ -129,7 +121,9 @@ export default function OverviewHero({
             }
           }
           return {
-            heading: `Epoch ${bar.label} · realized`,
+            heading: /^\d+$/.test(bar.label)
+              ? `Epoch ${bar.label} · realized`
+              : `${bar.label} · realized`,
             value: bar.display,
             note: null,
             rows: [],
@@ -329,7 +323,7 @@ function ClaimSources({ groups }: { groups: ClaimGroup[] }): ReactElement {
                   aria-hidden="true"
                   size={14}
                   strokeWidth={1.75}
-                  className="text-muted transition-transform group-open:rotate-90"
+                  className="text-muted transition-transform group-open:rotate-90 motion-reduce:transition-none"
                 />
                 {group.label}
               </span>

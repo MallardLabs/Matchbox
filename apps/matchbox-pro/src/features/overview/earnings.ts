@@ -40,11 +40,15 @@ function epochAxisLabel(epochStart: bigint): string {
 }
 
 /**
- * Earnings by epoch: realized history (grey), this epoch's claimable
- * (accent) and the projection for the epoch still accruing (hollow, "Next"),
- * all on one scale. History that hasn't loaded or isn't served draws dashed
- * stubs, never zeros. The history's own projected entry (the current epoch,
- * still accruing) never counts as realized.
+ * Epoch bar chart on one scale. History bars are the sealed epochs before
+ * `epochStart`; history that hasn't loaded or isn't served draws dashed
+ * stubs, never zeros.
+ *
+ * - `current`: a live value for the in-progress epoch (public deposits so
+ *   far). Omit it for earnings: claimable money is already inside the
+ *   realized bars, so the newest sealed epoch is highlighted instead.
+ * - `next`: the in-progress epoch's projection ("Next"). The history's own
+ *   projected entry backs it up and never counts as realized.
  */
 export function earningsBars({
   history,
@@ -55,8 +59,8 @@ export function earningsBars({
 }: {
   history: HistoryResult<EpochEarning[]>
   epochStart: bigint | undefined
-  current: LiveValue
-  next: LiveValue
+  current?: LiveValue | undefined
+  next?: LiveValue | undefined
   historyEpochs?: number
 }): Bar[] {
   const bars: Bar[] = []
@@ -69,16 +73,19 @@ export function earningsBars({
   const accruing = entries.find((item) => item.projected === true)
 
   if (realized.length > 0) {
-    for (const item of realized.slice(-historyEpochs)) {
+    const shown = realized.slice(-historyEpochs)
+    shown.forEach((item, index) => {
       const start = BigInt(item.startsAt)
+      const latest = current === undefined && index === shown.length - 1
       bars.push({
         key: `epoch-${item.startsAt}`,
         label: epochAxisLabel(start),
         value: item.usdMicro === null ? null : geometry(item.usdMicro),
         display: item.usdMicro === null ? "Unpriced" : barUsd(item.usdMicro),
-        tone: item.usdMicro === null ? "unavailable" : "past",
+        tone:
+          item.usdMicro === null ? "unavailable" : latest ? "current" : "past",
       })
-    }
+    })
   } else if (epochStart !== undefined) {
     for (let back = historyEpochs; back >= 1; back -= 1) {
       const start = epochStart - WEEK_SECONDS * BigInt(back)
@@ -92,20 +99,22 @@ export function earningsBars({
     }
   }
 
-  bars.push(liveBar("current", current, epochStart))
-  // The live projection drives the hero's Projected figure too, so it wins;
-  // the history's accruing entry fills in when the live read can't.
-  bars.push(
-    liveBar(
-      "next",
-      next.status === "ready" || !accruing
-        ? next
-        : accruing.usdMicro === null
-          ? { status: "unavailable" }
-          : { status: "ready", usdMicro: accruing.usdMicro },
-      epochStart,
-    ),
-  )
+  if (current !== undefined) bars.push(liveBar("current", current, epochStart))
+  if (next !== undefined) {
+    // The live projection drives the hero's Projected figure too, so it wins;
+    // the history's accruing entry fills in when the live read can't.
+    bars.push(
+      liveBar(
+        "next",
+        next.status === "ready" || !accruing
+          ? next
+          : accruing.usdMicro === null
+            ? { status: "unavailable" }
+            : { status: "ready", usdMicro: accruing.usdMicro },
+        epochStart,
+      ),
+    )
+  }
   return bars
 }
 

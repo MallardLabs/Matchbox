@@ -78,6 +78,67 @@ describe("earningsBars", () => {
   })
 })
 
+describe("earningsBars for wallet earnings (no claimable bar)", () => {
+  const epochStart = LAUNCH_EPOCH_START + 7n * WEEK
+
+  it("highlights the newest sealed epoch and never draws claimable twice", () => {
+    const bars = earningsBars({
+      history: {
+        status: "ready",
+        lagSeconds: 0,
+        data: [
+          ...[4n, 5n, 6n].map((n) => ({
+            epoch: Number(n),
+            startsAt: Number(LAUNCH_EPOCH_START + n * WEEK),
+            usdMicro: n * 1_000_000n,
+          })),
+          {
+            epoch: 7,
+            startsAt: Number(epochStart),
+            usdMicro: 500_000n,
+            projected: true,
+          },
+        ],
+      },
+      epochStart,
+      next: { status: "ready", usdMicro: 400_000n },
+      historyEpochs: 6,
+    })
+    expect(
+      bars.map((bar) => [bar.key, bar.label, bar.tone, bar.display]),
+    ).toEqual([
+      [`epoch-${LAUNCH_EPOCH_START + 4n * WEEK}`, "4", "past", "$4"],
+      [`epoch-${LAUNCH_EPOCH_START + 5n * WEEK}`, "5", "past", "$5"],
+      [`epoch-${LAUNCH_EPOCH_START + 6n * WEEK}`, "6", "current", "$6"],
+      ["next", "Next", "projected", "<$1"],
+    ])
+    expect(bars.some((bar) => bar.key === "current")).toBe(false)
+  })
+
+  it("draws six dashed stubs plus Next when history is unavailable", () => {
+    const bars = earningsBars({
+      history: {
+        status: "unavailable",
+        data: undefined,
+        lagSeconds: undefined,
+      },
+      epochStart,
+      next: { status: "loading" },
+      historyEpochs: 6,
+    })
+    expect(bars.map((bar) => bar.label)).toEqual([
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "6",
+      "Next",
+    ])
+    expect(bars.every((bar) => bar.tone === "unavailable")).toBe(true)
+  })
+})
+
 describe("earningsBars with an accruing epoch", () => {
   it("never counts the projected entry as realized; it backs up Next", () => {
     const epochStart = LAUNCH_EPOCH_START + 7n * WEEK
