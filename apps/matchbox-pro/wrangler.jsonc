@@ -12,7 +12,32 @@
   "observability": {
     "enabled": true
   },
+  // Secrets (wrangler secret put): ANTHROPIC_API_KEY, PROPOSAL_HMAC_SECRET,
+  // SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, MATCHBOX_WAREHOUSE_URL.
+  // Without PROPOSAL_HMAC_SECRET, Stuart proposal handles only refresh inside
+  // the isolate that issued them.
   "vars": {
-    "BASE_RPC_URL": "https://mainnet.base.org"
-  }
+    "BASE_RPC_URL": "https://mainnet.base.org",
+    "ANTHROPIC_MODEL": "claude-haiku-5-5",
+    "STUART_CLAUDE_ENABLED": "true",
+    "STUART_ALLOWED_ORIGINS": "https://pro.matchbox.markets",
+    "SUPABASE_URL": "https://xyeyuamvydligyjgzqnt.supabase.co"
+  },
+  "ratelimits": [
+    {
+      "name": "STUART_QUERY_LIMITER",
+      "namespace_id": "4101",
+      "simple": { "limit": 20, "period": 60 }
+    },
+    {
+      "name": "STUART_REFRESH_LIMITER",
+      "namespace_id": "4102",
+      "simple": { "limit": 30, "period": 60 }
+    },
+    {
+      "name": "STUART_SUPPORT_LIMITER",
+      "namespace_id": "4103",
+      "simple": { "limit": 3, "period": 60 }
+    }
+  ]
 }

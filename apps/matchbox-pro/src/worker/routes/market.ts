@@ -1,6 +1,7 @@
 import { topologyChainId } from "../../lib/topology"
 import { fetchBtcUsdPrice } from "../btcPrice"
 import { fetchMezoUsdPrice } from "../mezoPrice"
+import { claudeAvailable, readStuartConfig } from "../query/env"
 import { type ApiRoute, cached, json } from "../router"
 import { computeGaugeTopology } from "../topology"
 
@@ -8,7 +9,14 @@ export const marketRoutes: ApiRoute[] = [
   {
     method: "GET",
     path: "/api/health",
-    handler: async () => json({ service: "matchbox-pro", ok: true }),
+    handler: async ({ env }) =>
+      json({
+        service: "matchbox-pro",
+        ok: true,
+        stuart: claudeAvailable(readStuartConfig(env))
+          ? "claude"
+          : "deterministic",
+      }),
   },
   {
     method: "GET",

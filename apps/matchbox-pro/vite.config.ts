@@ -72,15 +72,9 @@ const themeScriptPlugin: Plugin = {
 }
 
 export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, process.cwd(), "")
-  const workerEnv: WorkerEnv = {
-    BASE_RPC_URL: env.BASE_RPC_URL,
-    MEZO_RPC_URL: env.MEZO_RPC_URL,
-    GROQ_API_KEY: env.GROQ_API_KEY,
-    GROQ_MODEL: env.GROQ_MODEL,
-    MATCHBOX_API_ORIGIN: env.MATCHBOX_API_ORIGIN,
-    MATCHBOX_WAREHOUSE_URL: env.MATCHBOX_WAREHOUSE_URL,
-  }
+  // The dev middleware runs the Worker in Node, so it gets every server-side
+  // variable from .env files, like `wrangler dev` gets .dev.vars.
+  const workerEnv: WorkerEnv = loadEnv(mode, process.cwd(), "")
   return {
     plugins: [
       tanstackRouter({

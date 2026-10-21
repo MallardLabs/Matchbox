@@ -7,8 +7,6 @@ export type WorkerEnv = {
   }
   BASE_RPC_URL?: string | undefined
   MEZO_RPC_URL?: string | undefined
-  GROQ_API_KEY?: string | undefined
-  GROQ_MODEL?: string | undefined
   MATCHBOX_API_ORIGIN?: string | undefined
   /** Neon pooled URL for the warehouse's read-only role. */
   MATCHBOX_WAREHOUSE_URL?: string | undefined
@@ -28,6 +26,8 @@ export type ApiRoute = {
   /** Exact path ("/api/health") or a pattern with `:name` segments. */
   path: string
   handler: (context: ApiContext) => Promise<Response>
+  /** Refuse cross-origin preflight; the handler checks Origin itself. */
+  sameOrigin?: boolean
 }
 
 export class ApiError extends Error {
@@ -109,6 +109,16 @@ export function createApiHandler(routes: ApiRoute[]) {
     if (!url.pathname.startsWith("/api/")) return null
 
     if (request.method === "OPTIONS") {
+      const sameOriginOnly = routes.some(
+        (route) =>
+          route.sameOrigin === true && matchPath(route.path, url.pathname),
+      )
+      if (sameOriginOnly) {
+        return new Response(null, {
+          status: 403,
+          headers: { "cache-control": "no-store" },
+        })
+      }
       return new Response(null, {
         status: 204,
         headers: {
