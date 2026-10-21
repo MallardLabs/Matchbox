@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest"
 import {
   type Names,
   activityCsvRows,
+  activityNotice,
   allocation,
   allocationText,
   eventAmount,
@@ -208,41 +209,72 @@ describe("per-row staleness", () => {
     lagSeconds: 2_280_000,
     state: "stale" as const,
   }
+  const lagging = {
+    ...frozen,
+    source: "warehouse" as const,
+    indexedThroughBlock: 12_627_200n,
+    indexedAt: "2026-10-21T10:00:00.000Z",
+    lagBlocks: 184n,
+    lagSeconds: 720,
+  }
   const at = (iso: string): number => Date.parse(iso) / 1000
 
-  it("marks rows from the lagging index Stale", () => {
+  it("never marks frozen-archive rows Stale: they are final history", () => {
     expect(
       eventStale(
         { blockNumber: 12_000_000n, timestamp: at("2026-09-20T00:00:00Z") },
         frozen,
       ),
-    ).toBe(true)
-  })
-
-  it("keeps live vote rows newer than the freeze Final", () => {
-    // earn-votes rows carry no block; they're judged by time.
+    ).toBe(false)
     expect(
       eventStale(
         { blockNumber: 0n, timestamp: at("2026-10-20T18:01:00Z") },
         frozen,
       ),
     ).toBe(false)
+  })
+
+  it("marks rows from a lagging warehouse Stale, newer rows Final", () => {
     expect(
       eventStale(
-        { blockNumber: 0n, timestamp: at("2026-09-01T00:00:00Z") },
-        frozen,
+        { blockNumber: 12_600_000n, timestamp: at("2026-10-20T00:00:00Z") },
+        lagging,
       ),
     ).toBe(true)
+    expect(
+      eventStale(
+        { blockNumber: 0n, timestamp: at("2026-10-21T11:00:00Z") },
+        lagging,
+      ),
+    ).toBe(false)
   })
 
   it("is never stale when the index is fresh", () => {
     expect(
       eventStale(
         { blockNumber: 1n, timestamp: 1 },
-        { ...frozen, state: "fresh" },
+        { ...lagging, state: "fresh" },
       ),
     ).toBe(false)
     expect(eventStale({ blockNumber: 1n, timestamp: 1 }, undefined)).toBe(false)
+  })
+
+  it("labels the archive quietly, the lagging warehouse loudly, fresh not at all", () => {
+    expect(activityNotice(frozen)).toEqual({
+      kind: "archive",
+      label: "Votes live · other events to Sep 24",
+    })
+    expect(activityNotice({ ...frozen, indexedAt: null })).toEqual({
+      kind: "archive",
+      label: "Votes live · other events archived",
+    })
+    expect(activityNotice(lagging)).toEqual({
+      kind: "lagging",
+      label: "Index is 12 min behind · last block 12,627,200",
+    })
+    expect(activityNotice({ ...lagging, state: "fresh" })).toBeNull()
+    expect(activityNotice({ ...frozen, state: "unavailable" })).toBeNull()
+    expect(activityNotice(undefined)).toBeNull()
   })
 })
 

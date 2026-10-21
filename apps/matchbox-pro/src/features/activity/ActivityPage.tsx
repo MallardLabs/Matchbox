@@ -11,7 +11,6 @@ import { csvFilename, downloadCsv, toCsv } from "@/features/rewards/csv"
 import {
   epochStartOf,
   epochTitle,
-  formatEpochDate,
   periodFrom,
 } from "@/features/rewards/ledgerModel"
 import { DESKTOP_QUERY, useMediaQuery } from "@/hooks/useMediaQuery"
@@ -33,6 +32,7 @@ import {
   type ActivityEvent,
   KIND_FILTERS,
   activityCsvRows,
+  activityNotice,
   eventStale,
   filterKinds,
   groupEvents,
@@ -66,16 +66,6 @@ const MAX_AUTO_PAGES = 10
 /** Same windows as Rewards: this epoch, or eight sealed plus current. */
 function rangeFrom(range: ActivityRange, now: number): number | undefined {
   return periodFrom(range === "all" ? "lifetime" : range, now)
-}
-
-function formatLag(seconds: number): string {
-  if (seconds < 3600) return `${Math.max(1, Math.round(seconds / 60))} min`
-  if (seconds < 172_800) return `${Math.round(seconds / 3600)} h`
-  return `${Math.round(seconds / 86_400)} days`
-}
-
-function groupThousands(value: bigint): string {
-  return value.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",")
 }
 
 type ActivityPageProps = {
@@ -184,8 +174,9 @@ export default function ActivityPage({
       : null
 
   const freshness = feed.freshness
-  const stale = freshness?.state === "stale"
-  const lagSeconds = freshness?.lagSeconds ?? null
+  const notice = activityNotice(freshness)
+  // Only a lagging warehouse is "stale"; the frozen archive is just older.
+  const lagging = notice?.kind === "lagging"
   const permalinkAddress =
     scope === "wallet" && wallet
       ? wallet
@@ -216,7 +207,7 @@ export default function ActivityPage({
 
   return (
     <div className="flex flex-col gap-3 md:gap-4 xl:gap-5">
-      {stale && freshness ? (
+      {notice?.kind === "lagging" ? (
         <section
           aria-label="Index status"
           className="flex min-h-[52px] flex-wrap items-center gap-x-2.5 gap-y-2 rounded-lg bg-warn-soft px-4 py-2.5"
@@ -230,12 +221,7 @@ export default function ActivityPage({
             aria-live="polite"
             className="min-w-0 flex-1 text-body-sm text-ink"
           >
-            {freshness.source === "frozen-explorer" && freshness.indexedAt
-              ? `Index frozen · as of ${formatEpochDate(Date.parse(freshness.indexedAt) / 1000)}`
-              : `Index is ${lagSeconds === null ? "behind" : `${formatLag(lagSeconds)} behind`}`}
-            {freshness.indexedThroughBlock !== null
-              ? ` · last block ${groupThousands(freshness.indexedThroughBlock)}`
-              : ""}
+            {notice.label}
           </p>
           <Button.Root size="sm" className="font-600" onClick={retry}>
             Retry index
@@ -252,7 +238,7 @@ export default function ActivityPage({
                 ? shortenAddress(pinned)
                 : "this wallet"
               : "protocol"}
-            {stale ? " · index lagging" : ""}
+            {lagging ? " · index lagging" : ""}
           </p>
           <h1 className="text-[22px] font-600 leading-7 text-ink md:text-[26px] md:leading-8 xl:text-title">
             Activity
@@ -329,11 +315,18 @@ export default function ActivityPage({
             }}
           />
           <span aria-hidden="true">·</span>
-          <span className={cn(stale && "text-warn")}>
-            {stale ? "Stale" : "Finalized"}
+          <span className={cn(lagging && "text-warn")}>
+            {lagging ? "Stale" : "Finalized"}
           </span>
         </span>
       </div>
+
+      {notice?.kind === "archive" ? (
+        <p className="m-0 flex items-center gap-1.5 text-label text-muted">
+          <History aria-hidden="true" size={13} className="shrink-0" />
+          {notice.label}
+        </p>
+      ) : null}
 
       {txMissing && txHash ? (
         <p aria-live="polite" className="text-body-sm text-warn">
@@ -416,9 +409,7 @@ export default function ActivityPage({
                   {!canLoadMore && feed.truncated ? (
                     <>
                       <span aria-hidden="true">·</span>
-                      <span className="text-warn">
-                        Older rows not in frozen index
-                      </span>
+                      <span>Older rows not in the archive</span>
                     </>
                   ) : null}
                   {canLoadMore ? (

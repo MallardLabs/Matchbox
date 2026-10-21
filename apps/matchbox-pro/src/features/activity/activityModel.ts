@@ -4,6 +4,7 @@ import type {
   Freshness,
 } from "@/features/history/useHistory"
 import { formatNative } from "@/features/rewards/claimSources"
+import { formatEpochDate } from "@/features/rewards/ledgerModel"
 import { epochNumberFor } from "@/lib/epoch"
 
 // Normalized activity rows → the explorer's events. One event per
@@ -342,15 +343,17 @@ export function formatWhen(seconds: number, dateOnly = false): string {
 }
 
 /**
- * Stale only when the index behind the feed is lagging and the row came from
- * it (at or before its indexed-through point). Rows newer than that, such as
- * live vote rows merged into the frozen explorer, are current: Final.
+ * Stale only when the warehouse index is lagging and the row came from it (at
+ * or before its indexed-through point). The frozen explorer's rows are final
+ * history, not lagging data: what it lacks is newer non-vote rows, which the
+ * page notes once instead of marking every row.
  */
 export function eventStale(
   event: Pick<ActivityEvent, "blockNumber" | "timestamp">,
   freshness: Freshness | undefined,
 ): boolean {
   if (freshness?.state !== "stale") return false
+  if (freshness.source === "frozen-explorer") return false
   if (event.blockNumber > 0n && freshness.indexedThroughBlock !== null) {
     return event.blockNumber <= freshness.indexedThroughBlock
   }
@@ -358,6 +361,55 @@ export function eventStale(
     return event.timestamp * 1000 <= Date.parse(freshness.indexedAt)
   }
   return true
+}
+
+/**
+ * What the page says about its source, if anything:
+ * - `archive`: the frozen explorer serves the feed. Votes stay live (they come
+ *   from the voting API); other events stop at the freeze. A quiet label;
+ *   retrying can't change it.
+ * - `lagging`: the warehouse is behind the chain (34d banner, Retry).
+ * Nothing once the warehouse reports fresh.
+ */
+export type ActivityNotice =
+  | { kind: "archive"; label: string }
+  | { kind: "lagging"; label: string }
+
+export function activityNotice(
+  freshness: Freshness | undefined,
+): ActivityNotice | null {
+  if (!freshness || freshness.state === "unavailable") return null
+  if (freshness.source === "frozen-explorer") {
+    const until = freshness.indexedAt
+      ? formatEpochDate(Date.parse(freshness.indexedAt) / 1000)
+      : null
+    return {
+      kind: "archive",
+      label: until
+        ? `Votes live · other events to ${until}`
+        : "Votes live · other events archived",
+    }
+  }
+  if (freshness.state !== "stale") return null
+  const lag =
+    freshness.lagSeconds === null
+      ? "behind"
+      : `${formatLag(freshness.lagSeconds)} behind`
+  const block =
+    freshness.indexedThroughBlock === null
+      ? ""
+      : ` · last block ${groupThousands(freshness.indexedThroughBlock)}`
+  return { kind: "lagging", label: `Index is ${lag}${block}` }
+}
+
+function formatLag(seconds: number): string {
+  if (seconds < 3600) return `${Math.max(1, Math.round(seconds / 60))} min`
+  if (seconds < 172_800) return `${Math.round(seconds / 3600)} h`
+  return `${Math.round(seconds / 86_400)} days`
+}
+
+function groupThousands(value: bigint): string {
+  return value.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",")
 }
 
 export function permalinkPath(address: string, txHash: string): string {
