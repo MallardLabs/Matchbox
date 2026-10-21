@@ -15,7 +15,8 @@ export const buttonStyles = tv({
       secondary:
         "border border-line bg-surface font-600 text-ink hover:border-line-2 hover:bg-raised",
       ghost: "font-550 text-secondary hover:bg-inset hover:text-ink",
-      danger: "bg-neg font-700 text-white hover:brightness-95",
+      danger:
+        "bg-neg font-700 text-white hover:brightness-95 dark:text-on-accent",
       soft: "bg-accent-soft font-650 text-accent-ink hover:bg-accent-soft-2",
     },
     size: {
