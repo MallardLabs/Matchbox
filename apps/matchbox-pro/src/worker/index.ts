@@ -2,6 +2,7 @@ import { type WorkerEnv, createApiHandler } from "./router"
 import { historyRoutes } from "./routes/history"
 import { marketRoutes } from "./routes/market"
 import { queryRoutes } from "./routes/query"
+import { voteRoutes } from "./routes/vote"
 
 export type { WorkerEnv } from "./router"
 
@@ -9,6 +10,7 @@ export const handleApiRequest = createApiHandler([
   ...marketRoutes,
   ...historyRoutes,
   ...queryRoutes,
+  ...voteRoutes,
 ])
 
 export default {
