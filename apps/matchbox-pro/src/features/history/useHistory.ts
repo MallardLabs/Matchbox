@@ -67,12 +67,16 @@ export type HistoryResult<T> = {
   lagSeconds: number | undefined
   /** Source and index position behind `data`; `state: "stale"` → "Stale". */
   freshness?: Freshness | undefined
+  /** Re-runs the request (e.g. a Retry button on the error state). */
+  refetch?: () => void
 }
 
 export type HistoryPagesResult<T> = HistoryResult<T[]> & {
   hasNextPage: boolean
   isFetchingNextPage: boolean
   fetchNextPage: () => void
+  /** Reloads every loaded page. */
+  refetch: () => void
 }
 
 export type {
@@ -122,6 +126,9 @@ function toResult<T>(
   enabled: boolean,
 ): HistoryResult<T> {
   if (!enabled) return UNAVAILABLE
+  const refetch = () => {
+    void query.refetch()
+  }
   if (query.data) {
     const { freshness } = query.data
     return {
@@ -129,6 +136,7 @@ function toResult<T>(
       data: query.data.data,
       lagSeconds: freshness.lagSeconds ?? undefined,
       freshness,
+      refetch,
     }
   }
   if (query.isPending) {
@@ -138,6 +146,7 @@ function toResult<T>(
     status: isUnavailableError(query.error) ? "unavailable" : "error",
     data: undefined,
     lagSeconds: undefined,
+    refetch,
   }
 }
 
@@ -173,6 +182,9 @@ function toPagesResult<P, R>(
     isFetchingNextPage: query.isFetchingNextPage,
     fetchNextPage: () => {
       void query.fetchNextPage()
+    },
+    refetch: () => {
+      if (enabled) void query.refetch()
     },
   }
 }
@@ -266,7 +278,7 @@ export function useEpochEarnings(
             ...earnings.epochs.map((epoch) => ({
               epoch: epoch.epochStart / EPOCH_SECONDS,
               startsAt: epoch.epochStart,
-              usdMicro: epoch.usdAtEarnMicro,
+              usdMicro: epoch.unpriced > 0 ? null : epoch.usdAtEarnMicro,
             })),
             {
               epoch: earnings.current.epochStart / EPOCH_SECONDS,
@@ -392,7 +404,9 @@ function useActivityPages(
   key: string,
   path: string | undefined,
   params: Params,
+  enabled = true,
 ): HistoryPagesResult<ActivityItem> {
+  const active = enabled && !!path
   const query = useInfiniteQuery({
     queryKey: ["history", key, path, params],
     queryFn: ({ signal, pageParam }) =>
@@ -404,7 +418,7 @@ function useActivityPages(
       ),
     initialPageParam: null as string | null,
     getNextPageParam: (last: Envelope<ActivityPage>) => last.data.nextCursor,
-    enabled: !!path,
+    enabled: active,
     staleTime: 15_000,
     gcTime: 300_000,
   })
@@ -412,7 +426,7 @@ function useActivityPages(
     () => query.data?.pages.flatMap((page) => page.data.items),
     [query.data],
   )
-  return toPagesResult(query, rows, !!path)
+  return toPagesResult(query, rows, active)
 }
 
 /** A wallet's on-chain activity, newest first, cursor-paged. */
@@ -429,15 +443,20 @@ export function useWalletActivity(
   )
 }
 
-/** Protocol-wide activity (no wallet scope), newest first. */
+/**
+ * Protocol-wide activity (no wallet scope), newest first. Pass
+ * `{ enabled: false }` to skip the request (reported as `unavailable`).
+ */
 export function useProtocolActivity(
   filters: ProtocolActivityFilters = {},
+  options: { enabled?: boolean | undefined } = {},
 ): HistoryPagesResult<ActivityItem> {
   const network = useHistoryNetwork()
   return useActivityPages(
     "protocol-activity",
     "/api/protocol/activity",
     activityParams(network, filters),
+    options.enabled ?? true,
   )
 }
 
@@ -473,14 +492,20 @@ export function useActivityTx(
 export function useGaugeEpochHistory(
   gauge: string | undefined,
   count = 8,
+  boostTokenId?: bigint | undefined,
 ): HistoryResult<GaugeEpochRow[]> {
   const network = useHistoryNetwork()
   const address = normalizeAddress(gauge)
+  const boostId = boostTokenId?.toString()
   const query = useQuery({
-    queryKey: ["history", "gauge-epochs", network, address, count],
+    queryKey: ["history", "gauge-epochs", network, address, count, boostId],
     queryFn: ({ signal }) =>
       fetchHistory(
-        historyUrl(`/api/gauges/${address}/epochs`, { network, count }),
+        historyUrl(`/api/gauges/${address}/epochs`, {
+          network,
+          count,
+          boostTokenId: boostId,
+        }),
         gaugeEpochsSchema,
         parseGaugeEpochs,
         signal,
@@ -512,8 +537,9 @@ const WAD_PER_BPS = 10n ** 14n
 export function useGaugeEpochs(
   gauge: string,
   epochs = 8,
+  boostTokenId?: bigint | undefined,
 ): HistoryResult<GaugeEpoch[]> {
-  const result = useGaugeEpochHistory(gauge, epochs)
+  const result = useGaugeEpochHistory(gauge, epochs, boostTokenId)
   const rows = result.data
   const data = useMemo(
     () =>

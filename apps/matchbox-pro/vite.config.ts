@@ -79,6 +79,7 @@ export default defineConfig(({ mode }) => {
     GROQ_API_KEY: env.GROQ_API_KEY,
     GROQ_MODEL: env.GROQ_MODEL,
     MATCHBOX_API_ORIGIN: env.MATCHBOX_API_ORIGIN,
+    MATCHBOX_WAREHOUSE_URL: env.MATCHBOX_WAREHOUSE_URL,
   }
   return {
     plugins: [

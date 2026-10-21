@@ -189,6 +189,11 @@ export const activityItemSchema = z.object({
   totalWeight: nullableUint,
   boost: nullableUint,
   boostableTokenId: nullableUint,
+  /** Escrow the row's lock belongs to (locks, ballots, boost refreshes). */
+  escrow: z.enum(["veMEZO", "veBTC"]).nullable(),
+  /** Token of `amount` (lock rows: the escrow's MEZO / BTC); null if unknown. */
+  symbol: z.string().nullable(),
+  decimals: z.number().int().min(0).max(36).nullable(),
   lock: z
     .object({
       prevAmount: nullableUint,

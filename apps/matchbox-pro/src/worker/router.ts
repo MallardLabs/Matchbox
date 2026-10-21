@@ -10,6 +10,8 @@ export type WorkerEnv = {
   GROQ_API_KEY?: string | undefined
   GROQ_MODEL?: string | undefined
   MATCHBOX_API_ORIGIN?: string | undefined
+  /** Neon pooled URL for the warehouse's read-only role. */
+  MATCHBOX_WAREHOUSE_URL?: string | undefined
 }
 
 export type ApiMethod = "GET" | "POST"

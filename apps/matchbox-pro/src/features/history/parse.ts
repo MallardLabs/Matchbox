@@ -156,6 +156,10 @@ export type ActivityItem = {
   /** Boost wad, 1e18 = 1×. */
   boost: bigint | null
   boostableTokenId: bigint | null
+  escrow: "veMEZO" | "veBTC" | null
+  /** Token of `amount`; null when unknown. */
+  symbol: string | null
+  decimals: number | null
   lock: ActivityLock | undefined
 }
 
@@ -349,6 +353,9 @@ export function parseActivityItem(wire: WireActivityItem): ActivityItem {
     totalWeight: bigOrNull(wire.totalWeight),
     boost: bigOrNull(wire.boost),
     boostableTokenId: bigOrNull(wire.boostableTokenId),
+    escrow: wire.escrow,
+    symbol: wire.symbol,
+    decimals: wire.decimals,
     lock: wire.lock
       ? {
           prevAmount: bigOrNull(wire.lock.prevAmount),
