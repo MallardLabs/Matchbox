@@ -8,15 +8,18 @@ import {
   networkNames,
   networkSlugSchema,
 } from "@repo/platform-contracts/network"
+import type { OidcScope } from "@repo/platform-contracts/scopes"
 import * as Badge from "@repo/ui/badge"
 import * as Button from "@repo/ui/button"
-import * as Card from "@repo/ui/card"
-import * as WalletAddress from "@repo/ui/wallet-address"
-import { BadgeCheck, ExternalLink } from "lucide-react"
-import { type ReactElement, useId } from "react"
-import AppLogo from "./AppLogo"
+import { cn } from "@repo/ui/cn"
+import * as Switch from "@repo/ui/switch"
+import { shortenAddress } from "@repo/ui/wallet-address"
+import { BadgeCheck } from "lucide-react"
+import { type ReactElement, useId, useState } from "react"
+import AppMark from "./AppMark"
 import DiscordLinkHint from "./DiscordLinkHint"
-import EnvironmentBadge from "./EnvironmentBadge"
+import EnvChip from "./EnvChip"
+import Identicon from "./Identicon"
 
 export type ConsentDecision = "approve" | "deny"
 
@@ -25,14 +28,46 @@ export type ConsentViewProps = {
   account: IdentityAccount
   pending: ConsentDecision | null
   error: string | null
-  onDecision: (decision: ConsentDecision) => void
+  /** `declinedScopes`: optional scopes switched off (approve only). */
+  onDecision: (decision: ConsentDecision, declinedScopes: OidcScope[]) => void
   onSwitchAccount: () => void
+}
+
+/** Servers predating optional scopes send no requirement: required. */
+function isOptional(scope: ConsentScope): boolean {
+  return scope.requirement === "optional"
+}
+
+/** Optional scopes start off when declined before or unavailable now. */
+function initiallyOff(scopes: readonly ConsentScope[]): Set<OidcScope> {
+  return new Set(
+    scopes
+      .filter(
+        (scope) =>
+          isOptional(scope) &&
+          (scope.previouslyDeclined === true || !scope.available),
+      )
+      .map((scope) => scope.scope),
+  )
+}
+
+function websiteHost(url: string): string {
+  try {
+    return new URL(url).host.replace(/^www\./, "")
+  } catch {
+    return "Website"
+  }
 }
 
 function ClaimValue({ claim }: { claim: ClaimPreview }): ReactElement | null {
   if (claim.value === null) return null
   if (claim.claim === "wallet_address") {
-    return <WalletAddress.Root address={claim.value} copyable={false} />
+    return (
+      <span title={claim.value} className="font-mono text-label text-ink">
+        <span aria-hidden="true">{shortenAddress(claim.value)}</span>
+        <span className="sr-only">{claim.value}</span>
+      </span>
+    )
   }
   if (claim.claim === "wallet_network") {
     const network = networkSlugSchema.safeParse(claim.value)
@@ -46,50 +81,95 @@ function ClaimValue({ claim }: { claim: ClaimPreview }): ReactElement | null {
         src={claim.value}
         alt=""
         referrerPolicy="no-referrer"
-        className="size-5 rounded-full bg-inset"
+        className="size-5 rounded-full bg-inset-2"
       />
     )
   }
   if (claim.claim === "discord_id") {
-    return <span className="font-mono text-[12px]">{claim.value}</span>
+    return <span className="font-mono text-label">{claim.value}</span>
   }
-  return <span>{claim.value}</span>
+  return <span className="min-w-0 break-words">{claim.value}</span>
 }
 
-function ScopeRow({ scope }: { scope: ConsentScope }): ReactElement {
+const claimLabels: Partial<Record<ClaimPreview["claim"], string>> = {
+  wallet_address: "Address",
+  wallet_network: "Network",
+  discord_id: "Discord ID",
+  discord_username: "Username",
+  discord_display_name: "Display name",
+  discord_avatar_url: "Avatar",
+}
+
+function ScopeRow({
+  scope,
+  on,
+  disabled,
+  onToggle,
+}: {
+  scope: ConsentScope
+  on: boolean
+  disabled: boolean
+  onToggle: (on: boolean) => void
+}): ReactElement {
+  const labelId = useId()
+  const optional = isOptional(scope)
+  const isNew = !scope.previouslyGranted && scope.previouslyDeclined !== true
   const shown = scope.claims.filter(
     (claim) => claim.claim !== "sub" && claim.value !== null,
   )
   return (
-    <li className="flex flex-col gap-2 border-t border-line py-3 first:border-t-0">
-      <p className="flex flex-wrap items-center justify-between gap-2">
-        <span className="text-[14px] font-600 text-ink">{scope.label}</span>
-        {scope.available ? (
-          scope.previouslyGranted ? (
-            <Badge.Root>Granted</Badge.Root>
-          ) : (
-            <Badge.Root tone="accent">New</Badge.Root>
-          )
-        ) : (
-          <Badge.Root tone="neg" dot>
-            Unavailable
-          </Badge.Root>
-        )}
-      </p>
+    <li className="flex flex-col gap-2 border-t border-line py-3">
+      <div className="flex min-h-[22px] items-center gap-2">
+        <h3 id={labelId} className="text-body font-600 text-ink">
+          {scope.label}
+        </h3>
+        <span className="text-caption text-secondary">
+          {optional ? "Optional" : "Required"}
+        </span>
+        <span className="ml-auto flex items-center gap-2">
+          {isNew && scope.available ? (
+            <Badge.Root tone="accent" className="font-600">
+              New
+            </Badge.Root>
+          ) : null}
+          {!scope.available && !optional ? (
+            <Badge.Root tone="neg" dot>
+              Unavailable
+            </Badge.Root>
+          ) : null}
+          {optional ? (
+            <Switch.Root
+              aria-labelledby={labelId}
+              checked={on}
+              disabled={disabled || !scope.available}
+              onCheckedChange={onToggle}
+            />
+          ) : null}
+        </span>
+      </div>
       {scope.unavailableReason === "discord-not-linked" ? (
-        <p className="text-[13px]">
+        <p className="text-body-sm">
           <DiscordLinkHint />
         </p>
+      ) : scope.scope === "openid" ? (
+        <p className="text-label text-secondary">Unique to this app</p>
       ) : shown.length === 0 ? (
-        <p className="text-[12px] text-secondary">{scope.description}</p>
+        <p className="text-label text-secondary">{scope.description}</p>
       ) : (
-        <dl className="m-0 flex flex-col gap-1.5">
+        <dl
+          className={cn(
+            "m-0 flex flex-col gap-1.5 transition-opacity",
+            on ? "" : "opacity-40",
+          )}
+        >
           {shown.map((claim) => (
             <div
               key={claim.claim}
-              className="flex items-center justify-between gap-4 text-[13px]"
+              className="flex min-w-0 items-center justify-between gap-3 text-body-sm"
             >
-              <dt className="text-secondary">{claim.label}</dt>
+              <dt className="shrink-0 text-secondary">
+                {claimLabels[claim.claim] ?? claim.label}
+              </dt>
               <dd className="m-0 flex min-w-0 items-center justify-end text-right font-500 text-ink">
                 <ClaimValue claim={claim} />
               </dd>
@@ -101,40 +181,48 @@ function ScopeRow({ scope }: { scope: ConsentScope }): ReactElement {
   )
 }
 
-function ExternalLinks({
-  app,
+function AppLinks({
+  request,
 }: {
-  app: AuthorizationRequestView["app"]
-}): ReactElement | null {
+  request: AuthorizationRequestView
+}): ReactElement {
+  const { app } = request
   const links = [
-    { label: "Website", href: app.websiteUrl },
+    {
+      label: app.websiteUrl === null ? null : websiteHost(app.websiteUrl),
+      href: app.websiteUrl,
+    },
     { label: "Privacy", href: app.privacyUrl },
     { label: "Terms", href: app.termsUrl },
   ].filter(
-    (link): link is { label: string; href: string } => link.href !== null,
+    (link): link is { label: string; href: string } =>
+      link.href !== null && link.label !== null,
   )
-  if (links.length === 0) return null
   return (
-    <ul className="m-0 flex list-none flex-wrap gap-x-4 gap-y-1 p-0 text-[12px]">
-      {links.map((link) => (
-        <li key={link.label}>
-          <a
-            href={link.href}
-            target="_blank"
-            rel="noreferrer noopener"
-            className="inline-flex items-center gap-1 font-600 text-accent-ink underline-offset-2 hover:underline"
-          >
-            {link.label}
-            <ExternalLink aria-hidden="true" size={11} strokeWidth={2} />
-            <span className="sr-only">(opens in a new tab)</span>
-          </a>
-        </li>
-      ))}
-    </ul>
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+      <EnvChip kind={request.environmentKind} network={request.network} />
+      {links.length === 0 ? null : (
+        <ul className="m-0 flex list-none flex-wrap gap-x-3 gap-y-1 p-0 text-label font-600">
+          {links.map((link) => (
+            <li key={link.label}>
+              <a
+                href={link.href}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="rounded-sm text-accent-ink underline-offset-2 hover:underline"
+              >
+                {link.label}
+                <span className="sr-only"> (opens in a new tab)</span>
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   )
 }
 
-/** Consent screen: who is asking, as which wallet, for what, sent where. */
+/** Consent card: who is asking, as which wallet, for what, sent where. */
 export default function ConsentView({
   request,
   account,
@@ -145,43 +233,68 @@ export default function ConsentView({
 }: ConsentViewProps): ReactElement {
   const titleId = useId()
   const scopesId = useId()
+  const [off, setOff] = useState(() => initiallyOff(request.scopes))
   const { app } = request
+  const declinedScopes = request.scopes
+    .filter(
+      (scope) => isOptional(scope) && scope.available && off.has(scope.scope),
+    )
+    .map((scope) => scope.scope)
+
+  function toggle(scope: OidcScope, on: boolean): void {
+    setOff((current) => {
+      const next = new Set(current)
+      if (on) next.delete(scope)
+      else next.add(scope)
+      return next
+    })
+  }
+
   return (
-    <Card.Root variant="panel" aria-labelledby={titleId} className="w-full">
-      <header className="flex items-start gap-3 border-b border-line p-5">
-        <AppLogo name={app.name} logoUrl={app.logoUrl} size="lg" />
+    <article
+      aria-labelledby={titleId}
+      className="w-full bg-surface md:max-w-[480px] md:rounded-xl md:border md:border-line md:shadow-pop"
+    >
+      <header className="flex items-start gap-3.5 border-b border-line p-4 md:p-5">
+        <AppMark name={app.name} logoUrl={app.logoUrl} size="lg" />
         <div className="flex min-w-0 flex-col gap-1.5">
           <h1
             id={titleId}
-            className="flex flex-wrap items-center gap-2 text-[20px] font-650 leading-tight text-ink"
+            className="flex flex-wrap items-center gap-2 text-[20px] font-400 leading-[26px] text-ink"
           >
             <span className="min-w-0 break-words">{app.name}</span>
             {app.verified ? (
-              <Badge.Root tone="pos">
+              <Badge.Root tone="pos" className="font-600">
                 <BadgeCheck aria-hidden="true" size={12} strokeWidth={2} />
                 Verified
               </Badge.Root>
             ) : null}
-            <EnvironmentBadge kind={request.environmentKind} />
           </h1>
-          <ExternalLinks app={app} />
+          <AppLinks request={request} />
         </div>
       </header>
 
       <section
         aria-label="Account"
-        className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-3"
+        className="flex min-w-0 items-center gap-2.5 border-b border-line px-4 py-3 md:px-5"
       >
-        <p className="flex min-w-0 items-center gap-2 text-[13px] text-secondary">
-          Account
-          <WalletAddress.Root
-            address={account.walletAddress}
-            copyable={false}
-          />
-        </p>
+        <span className="text-body-sm text-secondary">Account</span>
+        <span className="flex h-[26px] min-w-0 items-center gap-1.5 rounded-md bg-inset px-2">
+          <Identicon address={account.walletAddress} />
+          <span
+            title={account.walletAddress}
+            className="font-mono text-label font-500 text-ink"
+          >
+            <span aria-hidden="true">
+              {shortenAddress(account.walletAddress)}
+            </span>
+            <span className="sr-only">{account.walletAddress}</span>
+          </span>
+        </span>
         <Button.Root
           variant="ghost"
           size="sm"
+          className="ml-auto"
           onClick={onSwitchAccount}
           disabled={pending !== null}
         >
@@ -189,52 +302,63 @@ export default function ConsentView({
         </Button.Root>
       </section>
 
-      <section aria-labelledby={scopesId} className="px-5 pt-4">
+      <section
+        aria-labelledby={scopesId}
+        className="px-4 pb-0.5 pt-3.5 md:px-5"
+      >
         <h2
           id={scopesId}
-          className="text-[11px] font-650 uppercase tracking-[0.04em] text-secondary"
+          className="pb-2 text-caption uppercase tracking-[0.04em] text-secondary"
         >
           Requested
         </h2>
-        <ol className="m-0 list-none p-0">
+        <ul className="m-0 list-none p-0">
           {request.scopes.map((scope) => (
-            <ScopeRow key={scope.scope} scope={scope} />
+            <ScopeRow
+              key={scope.scope}
+              scope={scope}
+              on={!off.has(scope.scope) && scope.available}
+              disabled={pending !== null}
+              onToggle={(on) => toggle(scope.scope, on)}
+            />
           ))}
-        </ol>
+        </ul>
       </section>
 
-      <p className="flex flex-wrap items-center justify-between gap-2 border-t border-line px-5 py-3 text-[13px] text-secondary">
+      <p className="flex min-w-0 items-center gap-2.5 border-t border-line px-4 py-3 text-body-sm text-secondary md:px-5">
         Redirect
-        <span className="break-all font-mono text-[12px] text-ink-2">
+        <span className="ml-auto min-w-0 break-all text-right font-mono text-label text-ink-2">
           {request.redirectHost}
         </span>
       </p>
 
       {error === null ? null : (
-        <p role="alert" className="px-5 pb-2 text-[13px] text-neg">
+        <p role="alert" className="px-4 pb-1 text-body-sm text-neg md:px-5">
           {error}
         </p>
       )}
 
-      <footer className="flex flex-col-reverse gap-2 border-t border-line p-5 sm:flex-row sm:justify-end">
+      <footer className="flex flex-col-reverse gap-2 border-t border-line p-4 md:flex-row md:justify-end md:px-5">
         <Button.Root
           variant="secondary"
           size="lg"
+          className="h-11 text-body"
           loading={pending === "deny"}
           disabled={pending !== null}
-          onClick={() => onDecision("deny")}
+          onClick={() => onDecision("deny", [])}
         >
           Cancel
         </Button.Root>
         <Button.Root
           size="lg"
+          className="h-11 text-body"
           loading={pending === "approve"}
           disabled={pending !== null || !request.approvable}
-          onClick={() => onDecision("approve")}
+          onClick={() => onDecision("approve", declinedScopes)}
         >
           Allow
         </Button.Root>
       </footer>
-    </Card.Root>
+    </article>
   )
 }

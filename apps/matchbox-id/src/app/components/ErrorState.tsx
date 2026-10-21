@@ -1,6 +1,5 @@
 import * as Badge from "@repo/ui/badge"
 import * as Button from "@repo/ui/button"
-import * as PageHeader from "@repo/ui/page-header"
 import { Link } from "@tanstack/react-router"
 import type { ReactElement } from "react"
 import { usePageTitle } from "../lib/page-title"
@@ -30,17 +29,21 @@ export default function ErrorState({ code }: { code: string }): ReactElement {
   const title = errorTitle(code)
   usePageTitle(title)
   return (
-    <section className="flex flex-col items-start gap-5 py-10">
-      <PageHeader.Root>
-        <PageHeader.Heading>
-          <PageHeader.Title>{title}</PageHeader.Title>
-        </PageHeader.Heading>
-      </PageHeader.Root>
+    <section
+      aria-labelledby="error-title"
+      className="mx-auto flex w-full max-w-[492px] flex-1 flex-col items-start gap-4 px-4 pb-10 pt-6 md:justify-center md:py-12"
+    >
+      <h1
+        id="error-title"
+        className="text-[26px] font-600 leading-[32px] text-ink md:text-[30px] md:leading-[36px]"
+      >
+        {title}
+      </h1>
       <Badge.Root mono tone="neutral">
         {code}
       </Badge.Root>
       {code === "service_disabled" ? null : (
-        <Button.Root asChild variant="secondary">
+        <Button.Root asChild variant="secondary" size="lg">
           <Link to="/">Account</Link>
         </Button.Root>
       )}

@@ -4,6 +4,11 @@ const dateFormat = new Intl.DateTimeFormat(undefined, {
   day: "numeric",
 })
 
+const shortDateFormat = new Intl.DateTimeFormat(undefined, {
+  month: "short",
+  day: "numeric",
+})
+
 const dateTimeFormat = new Intl.DateTimeFormat(undefined, {
   month: "short",
   day: "numeric",
@@ -13,6 +18,14 @@ const dateTimeFormat = new Intl.DateTimeFormat(undefined, {
 
 export function formatDate(iso: string): string {
   return dateFormat.format(new Date(iso))
+}
+
+/** "Oct 21" this year, "Oct 21, 2025" otherwise. */
+export function formatShortDate(iso: string, now: Date = new Date()): string {
+  const date = new Date(iso)
+  return date.getFullYear() === now.getFullYear()
+    ? shortDateFormat.format(date)
+    : dateFormat.format(date)
 }
 
 export function formatDateTime(iso: string): string {

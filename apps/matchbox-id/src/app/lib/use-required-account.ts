@@ -1,10 +1,12 @@
-import type { IdentityAccount } from "@repo/platform-contracts/identity"
 import { useNavigate } from "@tanstack/react-router"
 import { useEffect } from "react"
+import type { IdentityAccountView } from "../../shared/contracts"
 import { useSession } from "./queries"
 
 /** The signed-in account; sends signed-out visitors to /sign-in. */
-export function useRequiredAccount(returnTo: string): IdentityAccount | null {
+export function useRequiredAccount(
+  returnTo: string,
+): IdentityAccountView | null {
   const session = useSession()
   const navigate = useNavigate()
   const account = session.data?.account ?? null

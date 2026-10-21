@@ -1,13 +1,18 @@
+import { resolveConsentDecision } from "@repo/platform-contracts/consent"
 import {
+  type AuthorizationRequestSummary,
   type AuthorizationRequestView,
+  type ScopeUnavailableReason,
   authorizationDecisionRequestSchema,
   authorizationDecisionResponseSchema,
+  authorizationRequestSummarySchema,
   authorizationRequestViewSchema,
   idPathParamsSchema,
 } from "@repo/platform-contracts/identity"
 import { networkNames } from "@repo/platform-contracts/network"
 import { redirectUriMatches } from "@repo/platform-contracts/redirects"
 import {
+  type OidcScope,
   claimLabels,
   diffScopes,
   scopeDefinitions,
@@ -18,6 +23,7 @@ import {
   ipPrefix,
   jsonBody,
   pathParams,
+  rateLimitHeaders,
 } from "@repo/platform-server"
 import { Hono } from "hono"
 import { errorPageUrl } from "../../shared/error-page"
@@ -29,6 +35,7 @@ import {
   clientErrorRedirectUrl,
 } from "../oidc/responses"
 import { createAuthorizationCode } from "../oidc/tokens"
+import { firstRateLimitRejection } from "../rate-limit"
 import {
   type ActiveSession,
   requireSession,
@@ -40,12 +47,16 @@ import type {
   DiscordLinkRecord,
   EnvironmentRecord,
 } from "../store/id-store"
+import { authorizeIpRateLimitPolicy } from "./authorize"
 
 /** Consent screen data and the Allow / Cancel decision. */
 
-type LoadedRequest = {
+type OpenRequest = {
   request: AuthorizationRequestRecord
   client: ClientRecord
+}
+
+type LoadedRequest = OpenRequest & {
   discordLink: DiscordLinkRecord | null
   consent: ReturnType<typeof evaluateConsent>
   reauthenticationRequired: boolean
@@ -62,24 +73,46 @@ export function consentVerified(environment: EnvironmentRecord): boolean {
   return environment.kind === "live" && environment.reviewState === "approved"
 }
 
+function isAppUnavailable(client: ClientRecord): boolean {
+  return client.app.status === "suspended" || client.app.status === "retired"
+}
+
+/** `error_description` when required scopes cannot be granted. */
+function unavailableDescription(
+  scopes: readonly OidcScope[],
+  unavailable: ReadonlyMap<OidcScope, ScopeUnavailableReason>,
+): "discord-not-linked" | "scope-unavailable" {
+  return scopes.some((scope) => unavailable.get(scope) === "discord-not-linked")
+    ? "discord-not-linked"
+    : "scope-unavailable"
+}
+
 export default function consentRoutes(deps: AppDeps): Hono {
   const app = new Hono()
+
+  /** Unconsumed, unexpired request and its client; null otherwise. */
+  async function openRequest(id: string): Promise<OpenRequest | null> {
+    const request = await deps.store.findAuthorizationRequest(id)
+    if (
+      request === null ||
+      request.consumedAt !== null ||
+      request.expiresAt <= deps.now()
+    ) {
+      return null
+    }
+    const client = await deps.store.findEnvironment(request.environmentId)
+    return client === null ? null : { request, client }
+  }
 
   async function loadRequest(
     id: string,
     active: ActiveSession,
   ): Promise<LoadedRequest> {
-    const request = await deps.store.findAuthorizationRequest(id)
-    const now = deps.now()
-    if (
-      request === null ||
-      request.consumedAt !== null ||
-      request.expiresAt <= now
-    ) {
+    const opened = await openRequest(id)
+    if (opened === null) {
       throw new PlatformError("not_found", { message: "Request expired." })
     }
-    const client = await deps.store.findEnvironment(request.environmentId)
-    if (client === null) throw new PlatformError("not_found")
+    const { request, client } = opened
     const [grant, discordLink] = await Promise.all([
       deps.store.findActiveGrant(active.account.id, client.environment.id),
       deps.store.findDiscordLink(active.account.walletAddress),
@@ -106,6 +139,40 @@ export default function consentRoutes(deps: AppDeps): Hono {
     }
   }
 
+  // "Continue to <app>" before sign-in. Request ids are random, short-lived
+  // and only ever reach the visitor's own browser.
+  app.get("/api/authorization-requests/:id/summary", async (c) => {
+    const rejected = await firstRateLimitRejection(deps, [
+      {
+        key: `authorize-summary:ip:${ipPrefix(c.req.raw) ?? "unknown"}`,
+        policy: authorizeIpRateLimitPolicy,
+      },
+    ])
+    if (rejected !== null) {
+      throw new PlatformError("rate_limited", {
+        headers: rateLimitHeaders(rejected, deps.now().getTime()),
+      })
+    }
+    const { id } = pathParams(c, idPathParamsSchema)
+    const opened = await openRequest(id)
+    if (opened === null || isAppUnavailable(opened.client)) {
+      throw new PlatformError("not_found", { message: "Request expired." })
+    }
+    const { app: clientApp, environment } = opened.client
+    const summary: AuthorizationRequestSummary = {
+      app: {
+        name: clientApp.name,
+        logoUrl: clientApp.logoUrl,
+        verified: consentVerified(environment),
+      },
+      environmentKind: environment.kind,
+      network: environment.network,
+    }
+    return c.json(authorizationRequestSummarySchema.parse(summary), 200, {
+      "Cache-Control": "no-store",
+    })
+  })
+
   app.get("/api/authorization-requests/:id", async (c) => {
     const active = await requireSession(c, deps)
     const { id } = pathParams(c, idPathParamsSchema)
@@ -117,6 +184,8 @@ export default function consentRoutes(deps: AppDeps): Hono {
     }
     const grant = consent.grant
     const previous = grant?.scopes ?? []
+    const declined = grant?.declinedScopes ?? []
+    const required = new Set(consent.required)
     const redirect = new URL(request.redirectUri)
     const view: AuthorizationRequestView = {
       id: request.id,
@@ -155,6 +224,9 @@ export default function consentRoutes(deps: AppDeps): Hono {
             grant !== null &&
             grant.scopeVersion === environment.scopeVersion &&
             previous.includes(scope),
+          requirement: required.has(scope) ? "required" : "optional",
+          // Not tied to the scope version: a past "no" stays the default.
+          previouslyDeclined: declined.includes(scope),
         }
       }),
       existingGrant:
@@ -163,6 +235,7 @@ export default function consentRoutes(deps: AppDeps): Hono {
           : {
               id: grant.id,
               scopes: grant.scopes,
+              declinedScopes: grant.declinedScopes,
               createdAt: grant.createdAt.toISOString(),
             },
       diff: diffScopes(previous, request.scopes),
@@ -180,12 +253,12 @@ export default function consentRoutes(deps: AppDeps): Hono {
   app.post("/api/authorization-requests/:id/decision", async (c) => {
     const active = await requireSession(c, deps)
     const { id } = pathParams(c, idPathParamsSchema)
-    const { decision } = await jsonBody(c, authorizationDecisionRequestSchema)
+    const body = await jsonBody(c, authorizationDecisionRequestSchema)
     const loaded = await loadRequest(id, active)
-    if (decision === "approve" && loaded.reauthenticationRequired) {
+    if (body.decision === "approve" && loaded.reauthenticationRequired) {
       throw new PlatformError("forbidden", { message: "Sign in again." })
     }
-    if (decision === "approve" && loaded.networkSignInRequired) {
+    if (body.decision === "approve" && loaded.networkSignInRequired) {
       throw new PlatformError("forbidden", {
         message: `Sign in on ${networkNames[loaded.client.environment.network]}.`,
       })
@@ -221,50 +294,64 @@ export default function consentRoutes(deps: AppDeps): Hono {
         description,
         state: request.state,
       })
+    const requiredUnavailable = consent.required.filter((scope) =>
+      consent.unavailable.has(scope),
+    )
 
     let redirectTo: string
-    if (client.app.status === "suspended" || client.app.status === "retired") {
+    if (isAppUnavailable(client)) {
       redirectTo = denied("app-unavailable")
-    } else if (decision === "deny") {
+    } else if (body.decision === "deny") {
       redirectTo = denied(
-        consent.unavailable.size > 0 &&
-          [...consent.unavailable.values()].includes("discord-not-linked")
+        unavailableDescription(requiredUnavailable, consent.unavailable) ===
+          "discord-not-linked"
           ? "discord-not-linked"
           : "user-denied",
       )
-    } else if (!consent.approvable) {
-      redirectTo = denied(
-        [...consent.unavailable.values()].includes("discord-not-linked")
-          ? "discord-not-linked"
-          : "scope-unavailable",
-      )
     } else {
-      const grant = await upsertGrant(deps, {
-        account: active.account,
-        client,
-        scopes: request.scopes,
-        existing: consent.grant,
-        discordLink: loaded.discordLink,
-        audit: {
-          ipPrefix: ipPrefix(c.req.raw),
-          requestId: currentRequestId(c),
-        },
+      const decided = resolveConsentDecision({
+        requested: request.scopes,
+        optionalScopes: client.environment.optionalScopes,
+        unavailable: [...consent.unavailable.keys()],
+        // Omitted: keep the choices on the existing grant (silent approval).
+        declined: body.declinedScopes ?? consent.grant?.declinedScopes ?? [],
       })
-      const code = await createAuthorizationCode(deps, {
-        grant,
-        client,
-        redirectUri: request.redirectUri,
-        codeChallenge: request.codeChallenge,
-        nonce: request.nonce,
-        scopes: request.scopes,
-        authTime: active.session.createdAt,
-      })
-      redirectTo = clientCodeRedirectUrl({
-        redirectUri: request.redirectUri,
-        issuer: deps.config.issuer,
-        code,
-        state: request.state,
-      })
+      if (!decided.ok) {
+        redirectTo = denied(
+          decided.reason === "required-scope-declined"
+            ? "required-scope-declined"
+            : unavailableDescription(decided.scopes, consent.unavailable),
+        )
+      } else {
+        const grant = await upsertGrant(deps, {
+          account: active.account,
+          client,
+          requested: request.scopes,
+          granted: decided.granted,
+          declined: decided.declined,
+          existing: consent.grant,
+          discordLink: loaded.discordLink,
+          audit: {
+            ipPrefix: ipPrefix(c.req.raw),
+            requestId: currentRequestId(c),
+          },
+        })
+        const code = await createAuthorizationCode(deps, {
+          grant,
+          client,
+          redirectUri: request.redirectUri,
+          codeChallenge: request.codeChallenge,
+          nonce: request.nonce,
+          scopes: decided.granted,
+          authTime: active.session.createdAt,
+        })
+        redirectTo = clientCodeRedirectUrl({
+          redirectUri: request.redirectUri,
+          issuer: deps.config.issuer,
+          code,
+          state: request.state,
+        })
+      }
     }
     return c.json(
       authorizationDecisionResponseSchema.parse({ redirectTo }),

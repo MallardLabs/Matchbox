@@ -74,6 +74,10 @@ export type MemoryIdStore = IdStore & {
       environmentId: string,
       scopes: EnvironmentRecord["approvedScopes"],
     ): void
+    setOptionalScopes(
+      environmentId: string,
+      scopes: EnvironmentRecord["optionalScopes"],
+    ): void
     /** Replaces (or removes) a wallet's Discord link like the DB trigger. */
     setDiscordLink(
       walletAddress: string,
@@ -156,6 +160,7 @@ export async function createMemoryIdStore(options: {
     reviewState: "approved",
     requestedScopes: ["openid", "wallet", "discord:id", "discord:profile"],
     approvedScopes: ["openid", "wallet", "discord:id", "discord:profile"],
+    optionalScopes: ["discord:id", "discord:profile"],
     scopeVersion: 1,
     sectorId: memorySeed.liveEnvironmentId,
   })
@@ -169,6 +174,7 @@ export async function createMemoryIdStore(options: {
     reviewState: "development",
     requestedScopes: ["openid", "wallet", "discord:id", "discord:profile"],
     approvedScopes: ["openid", "wallet"],
+    optionalScopes: [],
     scopeVersion: 1,
     sectorId: memorySeed.testEnvironmentId,
   })
@@ -483,6 +489,26 @@ export async function createMemoryIdStore(options: {
           right.grant.createdAt.getTime() - left.grant.createdAt.getTime(),
       )
     },
+    async listEndedGrants(accountId, limit) {
+      const ended = []
+      for (const grant of grants.values()) {
+        if (grant.accountId !== accountId || grant.revokedAt === null) continue
+        const client = await store.findEnvironment(grant.environmentId)
+        if (client === null) continue
+        ended.push({
+          grant: clone(grant),
+          app: client.app,
+          environment: client.environment,
+          revokedAt: grant.revokedAt,
+        })
+      }
+      return ended
+        .sort(
+          (left, right) => right.revokedAt.getTime() - left.revokedAt.getTime(),
+        )
+        .slice(0, Math.max(limit, 0))
+        .map(({ revokedAt: _revokedAt, ...connected }) => connected)
+    },
     async revokeGrant(grantId, reason, now) {
       const grant = grants.get(grantId)
       if (grant === undefined || grant.revokedAt !== null) return false
@@ -677,6 +703,10 @@ export async function createMemoryIdStore(options: {
       setApprovedScopes(environmentId, scopes) {
         const environment = environments.get(environmentId)
         if (environment !== undefined) environment.approvedScopes = [...scopes]
+      },
+      setOptionalScopes(environmentId, scopes) {
+        const environment = environments.get(environmentId)
+        if (environment !== undefined) environment.optionalScopes = [...scopes]
       },
       setDiscordLink(walletAddress, link, now) {
         const previous = discordLinks.get(walletAddress)

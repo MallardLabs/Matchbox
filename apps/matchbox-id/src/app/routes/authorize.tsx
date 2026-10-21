@@ -1,9 +1,10 @@
 import { chainIdByNetwork } from "@repo/platform-contracts/network"
+import type { OidcScope } from "@repo/platform-contracts/scopes"
+import * as Skeleton from "@repo/ui/skeleton"
 import { createFileRoute, useNavigate } from "@tanstack/react-router"
-import { type ReactElement, useEffect, useRef } from "react"
+import { type ReactElement, type ReactNode, useEffect, useRef } from "react"
 import ConsentView, { type ConsentDecision } from "../components/ConsentView"
 import ErrorState from "../components/ErrorState"
-import PageSkeleton from "../components/PageSkeleton"
 import { isApiError } from "../lib/api"
 import { usePageTitle } from "../lib/page-title"
 import {
@@ -18,9 +19,37 @@ export const Route = createFileRoute("/authorize")({
   component: AuthorizePage,
 })
 
+function Ground({ children }: { children: ReactNode }): ReactElement {
+  return (
+    <div className="flex flex-1 justify-center md:items-center md:px-6 md:py-12">
+      {children}
+    </div>
+  )
+}
+
+function CardSkeleton(): ReactElement {
+  return (
+    <div
+      aria-busy="true"
+      className="flex w-full flex-col gap-4 bg-surface p-4 md:max-w-[480px] md:rounded-xl md:border md:border-line md:p-5"
+    >
+      <output className="sr-only">Loading</output>
+      <div className="flex items-center gap-3.5">
+        <Skeleton.Root className="size-12 rounded-[10px]" />
+        <div className="flex flex-1 flex-col gap-2">
+          <Skeleton.Root className="h-5 w-40" />
+          <Skeleton.Root className="w-56" />
+        </div>
+      </div>
+      <Skeleton.Root shape="block" className="h-40" />
+      <Skeleton.Root shape="block" className="h-11" />
+    </div>
+  )
+}
+
 function Redirecting(): ReactElement {
   return (
-    <output className="block py-10 text-[14px] font-500 text-secondary">
+    <output className="flex flex-1 items-center justify-center py-10 text-body font-500 text-secondary">
       Redirecting…
     </output>
   )
@@ -61,9 +90,11 @@ function AuthorizePage(): ReactElement {
     }
   }, [navigate, reauthenticate, returnPath, signInChain, signedOut])
 
-  function decide(choice: ConsentDecision): void {
+  function decide(choice: ConsentDecision, declinedScopes: OidcScope[]): void {
     decision.mutate(
-      { decision: choice },
+      choice === "approve"
+        ? { decision: choice, declinedScopes }
+        : { decision: choice },
       { onSuccess: ({ redirectTo }) => window.location.replace(redirectTo) },
     )
   }
@@ -71,6 +102,7 @@ function AuthorizePage(): ReactElement {
   const skipConsent =
     detail.data !== undefined && !detail.data.consentRequired && !reauthenticate
 
+  // Covered by the existing grant: approve with its earlier choices.
   useEffect(() => {
     if (skipConsent && !autoApproved.current) {
       autoApproved.current = true
@@ -93,13 +125,17 @@ function AuthorizePage(): ReactElement {
       />
     )
   }
-  if (account === null || detail.data === undefined || reauthenticate) {
-    return <PageSkeleton />
-  }
   if (skipConsent || decision.isSuccess) return <Redirecting />
+  if (account === null || detail.data === undefined || reauthenticate) {
+    return (
+      <Ground>
+        <CardSkeleton />
+      </Ground>
+    )
+  }
 
   return (
-    <div className="mx-auto flex w-full max-w-[520px] flex-col py-2 sm:py-8">
+    <Ground>
       <ConsentView
         request={detail.data}
         account={account}
@@ -121,6 +157,6 @@ function AuthorizePage(): ReactElement {
           })
         }
       />
-    </div>
+    </Ground>
   )
 }

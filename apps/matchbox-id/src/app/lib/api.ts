@@ -7,14 +7,17 @@ import {
 import {
   type AuthorizationDecisionRequest,
   authorizationDecisionResponseSchema,
+  authorizationRequestSummarySchema,
   authorizationRequestViewSchema,
-  grantListResponseSchema,
   sessionListResponseSchema,
-  sessionResponseSchema,
   siweNonceResponseSchema,
-  siweVerifyResponseSchema,
 } from "@repo/platform-contracts/identity"
 import type { z } from "zod"
+import {
+  grantListViewResponseSchema,
+  sessionViewResponseSchema,
+  siweVerifyViewResponseSchema,
+} from "../../shared/contracts"
 
 /** Typed client for the Matchbox ID Worker `/api/*` routes. */
 
@@ -78,13 +81,13 @@ async function request<Schema extends z.ZodType>(
 }
 
 export const api = {
-  session: () => request("/api/session", sessionResponseSchema),
+  session: () => request("/api/session", sessionViewResponseSchema),
   signOut: () =>
     request("/api/session/sign-out", okResponseSchema, { method: "POST" }),
   siweNonce: () =>
     request("/api/siwe/nonce", siweNonceResponseSchema, { method: "POST" }),
   siweVerify: (body: { message: string; signature: string }) =>
-    request("/api/siwe/verify", siweVerifyResponseSchema, {
+    request("/api/siwe/verify", siweVerifyViewResponseSchema, {
       method: "POST",
       body,
     }),
@@ -93,13 +96,18 @@ export const api = {
       `/api/authorization-requests/${encodeURIComponent(id)}`,
       authorizationRequestViewSchema,
     ),
+  authorizationRequestSummary: (id: string) =>
+    request(
+      `/api/authorization-requests/${encodeURIComponent(id)}/summary`,
+      authorizationRequestSummarySchema,
+    ),
   decide: (id: string, body: AuthorizationDecisionRequest) =>
     request(
       `/api/authorization-requests/${encodeURIComponent(id)}/decision`,
       authorizationDecisionResponseSchema,
       { method: "POST", body },
     ),
-  grants: () => request("/api/grants", grantListResponseSchema),
+  grants: () => request("/api/grants", grantListViewResponseSchema),
   revokeGrant: (id: string) =>
     request(`/api/grants/${encodeURIComponent(id)}`, okResponseSchema, {
       method: "DELETE",

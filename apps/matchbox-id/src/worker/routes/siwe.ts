@@ -1,7 +1,6 @@
 import {
   siweNonceResponseSchema,
   siweVerifyRequestSchema,
-  siweVerifyResponseSchema,
 } from "@repo/platform-contracts/identity"
 import { oidcLifetimes } from "@repo/platform-contracts/oidc"
 import { rateLimitPolicies } from "@repo/platform-contracts/rate-limits"
@@ -18,6 +17,7 @@ import {
 } from "@repo/platform-server"
 import { type Context, Hono } from "hono"
 import { isHex } from "viem"
+import { siweVerifyViewResponseSchema } from "../../shared/contracts"
 import type { AppDeps } from "../deps"
 import { firstRateLimitRejection } from "../rate-limit"
 import {
@@ -168,8 +168,8 @@ export default function siweRoutes(deps: AppDeps): Hono {
     })
     setSessionCookie(c, token)
     return c.json(
-      siweVerifyResponseSchema.parse({
-        account: await identityAccount(deps, account, checked.chainId),
+      siweVerifyViewResponseSchema.parse({
+        account: await identityAccount(deps, account, session),
       }),
       200,
       { "Cache-Control": "no-store" },

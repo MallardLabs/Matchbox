@@ -1,7 +1,9 @@
 import type {
   AuthorizationRequestView,
+  ConsentScope,
   IdentityAccount,
 } from "@repo/platform-contracts/identity"
+import type { OidcScope } from "@repo/platform-contracts/scopes"
 import { render, screen, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { describe, expect, it, vi } from "vitest"
@@ -18,6 +20,63 @@ const account: IdentityAccount = {
     displayName: "Matchbox Dev",
     avatarUrl: null,
   },
+}
+
+const openid: ConsentScope = {
+  scope: "openid",
+  label: "Sign-in ID",
+  description: "A unique ID for this app",
+  claims: [{ claim: "sub", label: "Sign-in ID", value: null }],
+  available: true,
+  unavailableReason: null,
+  previouslyGranted: true,
+  requirement: "required",
+  previouslyDeclined: false,
+}
+
+const walletScope: ConsentScope = {
+  scope: "wallet",
+  label: "Wallet",
+  description: "Wallet address and network",
+  claims: [
+    { claim: "wallet_address", label: "Wallet address", value: wallet },
+    { claim: "wallet_network", label: "Wallet network", value: "mezo" },
+  ],
+  available: true,
+  unavailableReason: null,
+  previouslyGranted: false,
+  requirement: "required",
+  previouslyDeclined: false,
+}
+
+const discordId: ConsentScope = {
+  scope: "discord:id",
+  label: "Discord ID",
+  description: "Linked Discord user ID",
+  claims: [
+    { claim: "discord_id", label: "Discord ID", value: "100000000000000001" },
+  ],
+  available: true,
+  unavailableReason: null,
+  previouslyGranted: false,
+  requirement: "optional",
+  previouslyDeclined: false,
+}
+
+const discordProfile: ConsentScope = {
+  scope: "discord:profile",
+  label: "Discord profile",
+  description: "Discord username, display name and avatar",
+  claims: [
+    { claim: "discord_username", label: "Username", value: "matchbox-dev" },
+    { claim: "discord_display_name", label: "Name", value: "Matchbox Dev" },
+    { claim: "discord_avatar_url", label: "Avatar", value: null },
+  ],
+  available: true,
+  unavailableReason: null,
+  previouslyGranted: false,
+  requirement: "optional",
+  previouslyDeclined: true,
 }
 
 function request(
@@ -38,29 +97,7 @@ function request(
     network: "mezo",
     redirectOrigin: "https://scout.example",
     redirectHost: "scout.example",
-    scopes: [
-      {
-        scope: "openid",
-        label: "Sign-in ID",
-        description: "A unique ID for this app",
-        claims: [{ claim: "sub", label: "Sign-in ID", value: null }],
-        available: true,
-        unavailableReason: null,
-        previouslyGranted: true,
-      },
-      {
-        scope: "wallet",
-        label: "Wallet",
-        description: "Wallet address and network",
-        claims: [
-          { claim: "wallet_address", label: "Wallet address", value: wallet },
-          { claim: "wallet_network", label: "Wallet network", value: "mezo" },
-        ],
-        available: true,
-        unavailableReason: null,
-        previouslyGranted: false,
-      },
-    ],
+    scopes: [openid, walletScope],
     existingGrant: null,
     diff: { added: ["wallet"], removed: [], unchanged: ["openid"] },
     approvable: true,
@@ -74,7 +111,10 @@ function request(
 
 function renderConsent(
   view: AuthorizationRequestView,
-  onDecision: (decision: ConsentDecision) => void = () => {},
+  onDecision: (
+    decision: ConsentDecision,
+    declinedScopes: OidcScope[],
+  ) => void = () => {},
 ) {
   return render(
     <ConsentView
@@ -97,53 +137,86 @@ describe("ConsentView", () => {
       screen.getByRole("heading", { level: 1, name: /Gauge Scout/ }),
     ).toBeInTheDocument()
     expect(screen.getByText("Verified")).toBeInTheDocument()
-    expect(screen.queryByText("Test")).not.toBeInTheDocument()
+    expect(screen.getByText(/Live/)).toBeInTheDocument()
     expect(screen.getByRole("link", { name: /Privacy/ })).toHaveAttribute(
       "href",
       "https://scout.example/privacy",
     )
-    expect(screen.getByText("scout.example")).toBeInTheDocument()
+    expect(screen.getAllByText("scout.example").length).toBeGreaterThan(0)
 
     const scopes = within(screen.getByRole("region", { name: "Requested" }))
-    expect(scopes.getByText("Wallet")).toBeInTheDocument()
-    expect(screen.getAllByText(wallet).length).toBeGreaterThan(0)
-    expect(screen.getByText("Mezo")).toBeInTheDocument()
-    expect(screen.getByText("Granted")).toBeInTheDocument()
-    expect(screen.getByText("New")).toBeInTheDocument()
+    expect(scopes.getByRole("heading", { name: "Wallet" })).toBeInTheDocument()
+    expect(scopes.getAllByText("Required")).toHaveLength(2)
+    expect(scopes.getByText("Unique to this app")).toBeInTheDocument()
+    expect(scopes.getAllByText(wallet).length).toBeGreaterThan(0)
+    expect(scopes.getByText("Mezo")).toBeInTheDocument()
+    // Only the wallet scope is new; required scopes have no toggle.
+    expect(scopes.getAllByText("New")).toHaveLength(1)
+    expect(scopes.queryByRole("switch")).not.toBeInTheDocument()
 
     await userEvent.click(screen.getByRole("button", { name: "Allow" }))
-    expect(onDecision).toHaveBeenCalledWith("approve")
+    expect(onDecision).toHaveBeenCalledWith("approve", [])
     await userEvent.click(screen.getByRole("button", { name: "Cancel" }))
-    expect(onDecision).toHaveBeenCalledWith("deny")
+    expect(onDecision).toHaveBeenCalledWith("deny", [])
   })
 
-  it("marks test apps and blocks Allow when Discord is not linked", () => {
+  it("lets the user switch optional scopes off and sends them as declined", async () => {
+    const onDecision = vi.fn()
     renderConsent(
+      request({ scopes: [openid, walletScope, discordId, discordProfile] }),
+      onDecision,
+    )
+    const discordIdSwitch = screen.getByRole("switch", { name: "Discord ID" })
+    const profileSwitch = screen.getByRole("switch", {
+      name: "Discord profile",
+    })
+    // New optional scopes start on; a past "no" stays off.
+    expect(discordIdSwitch).toBeChecked()
+    expect(profileSwitch).not.toBeChecked()
+    expect(screen.getAllByText("Optional")).toHaveLength(2)
+
+    await userEvent.click(screen.getByRole("button", { name: "Allow" }))
+    expect(onDecision).toHaveBeenLastCalledWith("approve", ["discord:profile"])
+
+    // Keyboard: Space toggles the focused switch.
+    discordIdSwitch.focus()
+    await userEvent.keyboard(" ")
+    expect(discordIdSwitch).not.toBeChecked()
+    await userEvent.click(profileSwitch)
+    expect(profileSwitch).toBeChecked()
+    await userEvent.click(screen.getByRole("button", { name: "Allow" }))
+    expect(onDecision).toHaveBeenLastCalledWith("approve", ["discord:id"])
+  })
+
+  it("keeps Allow for unavailable optional scopes and blocks it for required ones", () => {
+    const unlinked: ConsentScope = {
+      ...discordId,
+      claims: [{ claim: "discord_id", label: "Discord ID", value: null }],
+      available: false,
+      unavailableReason: "discord-not-linked",
+    }
+    const { unmount } = renderConsent(
       request({
         environmentKind: "test",
         network: "mezo-testnet",
-        app: {
-          ...request().app,
-          verified: false,
-        },
-        approvable: false,
-        scopes: [
-          {
-            scope: "discord:id",
-            label: "Discord ID",
-            description: "Linked Discord user ID",
-            claims: [{ claim: "discord_id", label: "Discord ID", value: null }],
-            available: false,
-            unavailableReason: "discord-not-linked",
-            previouslyGranted: false,
-          },
-        ],
+        app: { ...request().app, verified: false },
+        scopes: [openid, unlinked],
       }),
     )
-    expect(screen.getByText("Test")).toBeInTheDocument()
+    expect(screen.getByText(/Test/)).toBeInTheDocument()
     expect(screen.queryByText("Verified")).not.toBeInTheDocument()
     expect(screen.getByText("Not linked")).toBeInTheDocument()
-    expect(screen.getByText("/link")).toBeInTheDocument()
+    expect(screen.getByRole("switch", { name: "Discord ID" })).toBeDisabled()
+    expect(screen.getByRole("button", { name: "Allow" })).toBeEnabled()
+    unmount()
+
+    renderConsent(
+      request({
+        approvable: false,
+        scopes: [openid, { ...unlinked, requirement: "required" }],
+      }),
+    )
+    expect(screen.getByText("Unavailable")).toBeInTheDocument()
     expect(screen.getByRole("button", { name: "Allow" })).toBeDisabled()
     expect(screen.getByRole("button", { name: "Cancel" })).toBeEnabled()
   })

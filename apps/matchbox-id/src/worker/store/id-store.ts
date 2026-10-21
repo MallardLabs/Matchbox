@@ -43,6 +43,8 @@ export type EnvironmentRecord = {
   reviewState: ReviewState
   requestedScopes: PlatformScope[]
   approvedScopes: PlatformScope[]
+  /** Requested scopes users may decline at consent (the rest are required). */
+  optionalScopes: OidcScope[]
   scopeVersion: number
   sectorId: string
 }
@@ -117,7 +119,10 @@ export type GrantRecord = {
   accountId: string
   appId: string
   environmentId: string
+  /** Granted scopes: the only ones tokens and userinfo release claims for. */
   scopes: OidcScope[]
+  /** Optional scopes the user switched off (disjoint from `scopes`). */
+  declinedScopes: OidcScope[]
   scopeVersion: number
   claimsSnapshot: Array<{ claim: string; label: string }>
   discordUserId: string | null
@@ -190,7 +195,11 @@ export type NewGrant = Omit<
 
 export type GrantUpdate = Pick<
   GrantRecord,
-  "scopes" | "scopeVersion" | "claimsSnapshot" | "discordUserId"
+  | "scopes"
+  | "declinedScopes"
+  | "scopeVersion"
+  | "claimsSnapshot"
+  | "discordUserId"
 >
 
 export type NewAuthorizationCode = Omit<AuthorizationCodeRecord, "consumedAt">
@@ -304,6 +313,11 @@ export type IdStore = {
     now: Date,
   ): Promise<GrantRecord>
   listActiveGrants(accountId: string): Promise<ConnectedGrantRecord[]>
+  /** Revoked grants, most recently revoked first. */
+  listEndedGrants(
+    accountId: string,
+    limit: number,
+  ): Promise<ConnectedGrantRecord[]>
   /** Revokes the grant and every refresh/access token issued under it. */
   revokeGrant(
     grantId: string,

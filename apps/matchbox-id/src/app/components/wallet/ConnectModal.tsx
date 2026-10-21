@@ -4,16 +4,14 @@ import * as WalletAddress from "@repo/ui/wallet-address"
 import { ArrowLeft, ArrowRight } from "lucide-react"
 import { type ReactElement, type ReactNode, useState } from "react"
 import { type Connector, useAccount, useConnect, useDisconnect } from "wagmi"
+import { legalLinks } from "../../lib/legal"
 import { isUserRejection } from "../../lib/wallet-errors"
-import NetworkLabel from "../NetworkLabel"
+import NetworkChip from "../NetworkChip"
 
 type ConnectModalProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
 }
-
-const TERMS_URL = "https://mezo.org/legal/terms"
-const PRIVACY_URL = "https://mezo.org/legal/privacy"
 
 /** Matchbox Pro's wallet picker (wagmi connectors from the RainbowKit list). */
 export default function ConnectModal({
@@ -54,7 +52,7 @@ export default function ConnectModal({
         <WalletAddress.Root address={address} className="text-[16px]" />
         <p className="flex items-center justify-between gap-3 rounded-lg bg-inset px-3 py-2.5 text-[13px] text-secondary">
           Network
-          <NetworkLabel chainId={chainId} />
+          <NetworkChip chainId={chainId} />
         </p>
         <Button.Root
           variant="secondary"
@@ -119,7 +117,7 @@ export default function ConnectModal({
         <p className="text-[11px] text-secondary">
           <a
             className="font-650 text-accent-ink underline-offset-2 hover:underline"
-            href={TERMS_URL}
+            href={legalLinks.terms}
             target="_blank"
             rel="noreferrer"
           >
@@ -128,7 +126,7 @@ export default function ConnectModal({
           {" · "}
           <a
             className="font-650 text-accent-ink underline-offset-2 hover:underline"
-            href={PRIVACY_URL}
+            href={legalLinks.privacy}
             target="_blank"
             rel="noreferrer"
           >

@@ -1,12 +1,12 @@
 import { okResponseSchema } from "@repo/platform-contracts/common"
 import {
-  type IdentityAccount,
-  grantListResponseSchema,
   idPathParamsSchema,
   sessionListResponseSchema,
-  sessionResponseSchema,
 } from "@repo/platform-contracts/identity"
-import { networkForChainId } from "@repo/platform-contracts/network"
+import {
+  type NetworkSlug,
+  networkForChainId,
+} from "@repo/platform-contracts/network"
 import { oidcScopesOf } from "@repo/platform-contracts/scopes"
 import {
   PlatformError,
@@ -15,6 +15,13 @@ import {
   pathParams,
 } from "@repo/platform-server"
 import { Hono } from "hono"
+import {
+  type GrantListViewResponse,
+  type IdentityAccountView,
+  endedGrantLimit,
+  grantListViewResponseSchema,
+  sessionViewResponseSchema,
+} from "../../shared/contracts"
 import type { AppDeps } from "../deps"
 import { discordAvatarUrl } from "../oidc/claims"
 import {
@@ -24,7 +31,8 @@ import {
   sessionManages,
   sessionVerifiedFor,
 } from "../session"
-import type { AccountRecord } from "../store/id-store"
+import type { AccountRecord, SessionRecord } from "../store/id-store"
+import { consentVerified } from "./consent"
 
 /**
  * Session, connected apps (grants) and device sessions for the SPA. A
@@ -34,16 +42,26 @@ import type { AccountRecord } from "../store/id-store"
 
 const noStore = { "Cache-Control": "no-store" } as const
 
+/** Grants a session may see: its network only, for contract accounts. */
+function sessionVisible(
+  session: SessionRecord,
+): (connected: { environment: { network: NetworkSlug } }) => boolean {
+  return ({ environment }) => sessionVerifiedFor(session, environment.network)
+}
+
 export async function identityAccount(
   deps: AppDeps,
   account: AccountRecord,
-  siweChainId: number | null,
-): Promise<IdentityAccount> {
+  session: Pick<SessionRecord, "siweChainId" | "signerKind">,
+): Promise<IdentityAccountView> {
   const link = await deps.store.findDiscordLink(account.walletAddress)
   return {
     walletAddress: account.walletAddress,
     signedInNetwork:
-      siweChainId === null ? null : networkForChainId(siweChainId),
+      session.siweChainId === null
+        ? null
+        : networkForChainId(session.siweChainId),
+    signerKind: session.signerKind,
     discord:
       link === null
         ? null
@@ -62,15 +80,11 @@ export default function accountRoutes(deps: AppDeps): Hono {
   app.get("/api/session", async (c) => {
     const active = await loadSession(c, deps)
     return c.json(
-      sessionResponseSchema.parse({
+      sessionViewResponseSchema.parse({
         account:
           active === null
             ? null
-            : await identityAccount(
-                deps,
-                active.account,
-                active.session.siweChainId,
-              ),
+            : await identityAccount(deps, active.account, active.session),
       }),
       200,
       noStore,
@@ -101,31 +115,55 @@ export default function accountRoutes(deps: AppDeps): Hono {
 
   app.get("/api/grants", async (c) => {
     const { account, session } = await requireSession(c, deps)
-    const grants = await deps.store.listActiveGrants(account.id)
-    return c.json(
-      grantListResponseSchema.parse({
-        data: grants
-          .filter(
-            ({ app: grantApp, environment }) =>
-              grantApp.status !== "retired" &&
-              sessionVerifiedFor(session, environment.network),
-          )
-          .map(({ grant, app: grantApp, environment }) => ({
-            id: grant.id,
-            app: {
-              name: grantApp.name,
-              logoUrl: grantApp.logoUrl,
-              websiteUrl: grantApp.websiteUrl,
-            },
-            environmentKind: environment.kind,
-            scopes: oidcScopesOf(grant.scopes),
-            createdAt: grant.createdAt.toISOString(),
-            updatedAt: grant.updatedAt.toISOString(),
-          })),
-      }),
-      200,
-      noStore,
-    )
+    const [active, ended] = await Promise.all([
+      deps.store.listActiveGrants(account.id),
+      deps.store.listEndedGrants(account.id, endedGrantLimit),
+    ])
+    const visible = sessionVisible(session)
+    const body: GrantListViewResponse = {
+      data: active
+        .filter(
+          (connected) =>
+            connected.app.status !== "retired" && visible(connected),
+        )
+        .map(({ grant, app: grantApp, environment }) => ({
+          id: grant.id,
+          app: {
+            name: grantApp.name,
+            logoUrl: grantApp.logoUrl,
+            websiteUrl: grantApp.websiteUrl,
+          },
+          environmentKind: environment.kind,
+          network: environment.network,
+          verified: consentVerified(environment),
+          scopes: oidcScopesOf(grant.scopes),
+          declinedScopes: grant.declinedScopes,
+          createdAt: grant.createdAt.toISOString(),
+          updatedAt: grant.updatedAt.toISOString(),
+        })),
+      ended: ended
+        .filter(visible)
+        .flatMap(({ grant, app: grantApp, environment }) =>
+          grant.revokedAt === null
+            ? []
+            : [
+                {
+                  id: grant.id,
+                  app: {
+                    name: grantApp.name,
+                    logoUrl: grantApp.logoUrl,
+                    websiteUrl: grantApp.websiteUrl,
+                  },
+                  environmentKind: environment.kind,
+                  network: environment.network,
+                  scopes: oidcScopesOf(grant.scopes),
+                  revokedAt: grant.revokedAt.toISOString(),
+                  revokedReason: grant.revokedReason,
+                },
+              ],
+        ),
+    }
+    return c.json(grantListViewResponseSchema.parse(body), 200, noStore)
   })
 
   app.delete("/api/grants/:id", async (c) => {

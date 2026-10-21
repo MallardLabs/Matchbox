@@ -24,6 +24,7 @@ import { z } from "zod"
 import type {
   AccountRecord,
   ClientRecord,
+  ConnectedGrantRecord,
   GrantRecord,
   IdStore,
   PurgeCounts,
@@ -69,6 +70,8 @@ const environmentColumns = {
   review_state: reviewStateSchema,
   requested_scopes: z.array(platformScopeSchema),
   approved_scopes: z.array(platformScopeSchema),
+  // Absent until the optional-scopes migration: every scope is required.
+  optional_scopes: z.array(oidcScopeSchema).default([]),
   scope_version: z.number().int(),
   sector_id: z.string(),
 }
@@ -86,6 +89,7 @@ function environmentFromRow(
     reviewState: row.review_state,
     requestedScopes: row.requested_scopes,
     approvedScopes: row.approved_scopes,
+    optionalScopes: row.optional_scopes,
     scopeVersion: row.scope_version,
     sectorId: row.sector_id,
   }
@@ -232,6 +236,7 @@ const grantRowSchema = z
     app_id: z.string(),
     environment_id: z.string(),
     scopes: z.array(oidcScopeSchema),
+    declined_scopes: z.array(oidcScopeSchema).default([]),
     scope_version: z.number().int(),
     claims_snapshot: claimsSnapshotSchema,
     discord_user_id: z.string().nullable(),
@@ -247,6 +252,7 @@ const grantRowSchema = z
       appId: row.app_id,
       environmentId: row.environment_id,
       scopes: row.scopes,
+      declinedScopes: row.declined_scopes,
       scopeVersion: row.scope_version,
       claimsSnapshot: row.claims_snapshot,
       discordUserId: row.discord_user_id,
@@ -262,6 +268,9 @@ const connectedGrantRowSchema = z.object({
   app: appRowSchema,
   environment: environmentRowSchema,
 })
+
+const connectedGrantColumns =
+  "*, app:mbx_dev_apps!inner(*), environment:mbx_dev_environments!inner(*)"
 
 const authorizationCodeRowSchema = z
   .object({
@@ -422,6 +431,22 @@ function parseRow<Schema extends z.ZodType>(
     throw new Error(`Unexpected ${operation} row`, { cause: parsed.error })
   }
   return parsed.data
+}
+
+/** Grant rows selected with `connectedGrantColumns` (app + environment). */
+function parseConnectedGrants(data: unknown): ConnectedGrantRecord[] {
+  const rows = z
+    .array(
+      z
+        .object({ app: z.unknown(), environment: z.unknown() })
+        .loose()
+        .transform((row) => {
+          const { app, environment, ...grant } = row
+          return { grant, app, environment }
+        }),
+    )
+    .parse(data ?? [])
+  return parseRows("connected grant", connectedGrantRowSchema, rows)
 }
 
 function iso(date: Date): string {
@@ -699,6 +724,7 @@ export default function createSupabaseIdStore(
           app_id: input.appId,
           environment_id: input.environmentId,
           scopes: input.scopes,
+          declined_scopes: input.declinedScopes,
           scope_version: input.scopeVersion,
           claims_snapshot: input.claimsSnapshot,
           discord_user_id: input.discordUserId,
@@ -717,6 +743,7 @@ export default function createSupabaseIdStore(
         .from("mbx_id_grants")
         .update({
           scopes: update.scopes,
+          declined_scopes: update.declinedScopes,
           scope_version: update.scopeVersion,
           claims_snapshot: update.claimsSnapshot,
           discord_user_id: update.discordUserId,
@@ -733,25 +760,23 @@ export default function createSupabaseIdStore(
     async listActiveGrants(accountId) {
       const { data, error } = await supabase
         .from("mbx_id_grants")
-        .select(
-          "*, app:mbx_dev_apps!inner(*), environment:mbx_dev_environments!inner(*)",
-        )
+        .select(connectedGrantColumns)
         .eq("account_id", accountId)
         .is("revoked_at", null)
         .order("created_at", { ascending: false })
       if (error !== null) fail("list grants", error)
-      const rows = z
-        .array(
-          z
-            .object({ app: z.unknown(), environment: z.unknown() })
-            .loose()
-            .transform((row) => {
-              const { app, environment, ...grant } = row
-              return { grant, app, environment }
-            }),
-        )
-        .parse(data ?? [])
-      return parseRows("connected grant", connectedGrantRowSchema, rows)
+      return parseConnectedGrants(data)
+    },
+    async listEndedGrants(accountId, limit) {
+      const { data, error } = await supabase
+        .from("mbx_id_grants")
+        .select(connectedGrantColumns)
+        .eq("account_id", accountId)
+        .not("revoked_at", "is", null)
+        .order("revoked_at", { ascending: false })
+        .limit(limit)
+      if (error !== null) fail("list ended grants", error)
+      return parseConnectedGrants(data)
     },
     async revokeGrant(grantId, reason, now) {
       const { data, error } = await supabase

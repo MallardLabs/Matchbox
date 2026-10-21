@@ -1,3 +1,7 @@
+import {
+  grantCoversRequest,
+  pickGrantedClaims,
+} from "@repo/platform-contracts/consent"
 import type { ScopeUnavailableReason } from "@repo/platform-contracts/identity"
 import {
   type OidcClaim,
@@ -8,7 +12,6 @@ import {
   normalizeScopes,
   oidcScopesOf,
   scopeRequiresReview,
-  scopesCovered,
 } from "@repo/platform-contracts/scopes"
 import type { IdFlags } from "../config"
 import type {
@@ -17,6 +20,7 @@ import type {
   EnvironmentRecord,
   GrantRecord,
 } from "../store/id-store"
+import { grantedForRequest, requiredScopesOf } from "./scope-policy"
 
 /**
  * OIDC scopes this environment may request: approved scopes, plus requested
@@ -44,13 +48,21 @@ export function discordAvatarUrl(link: DiscordLinkRecord): string | null {
 
 export type ConsentEvaluation = {
   grant: GrantRecord | null
-  /** Active grant at the current scope version already covers the request. */
+  /** The active grant answers the request without a consent screen. */
   covered: boolean
   unavailable: Map<OidcScope, ScopeUnavailableReason>
+  /** Requested scopes the user cannot switch off. */
+  required: OidcScope[]
+  /** No required scope is unavailable. */
   approvable: boolean
+  /** Requested scopes the active grant releases now (silent approval). */
+  granted: OidcScope[]
 }
 
-/** Whether `scopes` can be granted now and whether consent can be skipped. */
+/**
+ * Whether `scopes` can be granted now and whether consent can be skipped
+ * (see `scope-policy.ts` for required vs optional scopes).
+ */
 export function evaluateConsent(input: {
   grant: GrantRecord | null
   environment: EnvironmentRecord
@@ -69,18 +81,37 @@ export function evaluateConsent(input: {
       unavailable.set(scope, "discord-not-linked")
     }
   }
-  const approvable = unavailable.size === 0
+  const unavailableScopes = [...unavailable.keys()]
+  const required = requiredScopesOf(
+    input.scopes,
+    input.environment.optionalScopes,
+  )
+  const approvable = required.every((scope) => !unavailable.has(scope))
   const grant = input.grant
-  const wantsDiscord = input.scopes.some((scope) => isDiscordScope(scope))
+  const active = grant !== null && grant.revokedAt === null ? grant : null
+  const granted =
+    active === null
+      ? []
+      : grantedForRequest({
+          grant: active,
+          requested: input.scopes,
+          unavailable: unavailableScopes,
+        })
+  const sameDiscord =
+    !granted.some((scope) => isDiscordScope(scope)) ||
+    active?.discordUserId === (input.discordLink?.discordUserId ?? null)
   const covered =
     approvable &&
-    grant !== null &&
-    grant.revokedAt === null &&
-    grant.scopeVersion === input.environment.scopeVersion &&
-    scopesCovered(grant.scopes, input.scopes) &&
-    (!wantsDiscord ||
-      grant.discordUserId === (input.discordLink?.discordUserId ?? null))
-  return { grant, covered, unavailable, approvable }
+    active !== null &&
+    sameDiscord &&
+    grantCoversRequest({
+      grant: active,
+      scopeVersion: input.environment.scopeVersion,
+      requested: input.scopes,
+      optionalScopes: input.environment.optionalScopes,
+      unavailable: unavailableScopes,
+    })
+  return { grant, covered, unavailable, required, approvable, granted }
 }
 
 export function claimsSnapshot(
@@ -137,7 +168,8 @@ export function releasedClaims(input: {
       claims.discord_avatar_url = discordAvatarUrl(link)
     }
   }
-  return claims
+  // Last line of defence: nothing a declined scope would release.
+  return pickGrantedClaims(claims, scopes)
 }
 
 /** Consent-screen preview of the signed-in user's own value for a claim. */

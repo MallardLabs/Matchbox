@@ -3,11 +3,15 @@ import type { ReactElement } from "react"
 
 export default function PageSkeleton(): ReactElement {
   return (
-    <div aria-busy="true" className="flex flex-col gap-4 py-2">
+    <div
+      aria-busy="true"
+      className="mx-auto flex w-full max-w-[1008px] flex-col gap-4 px-4 pt-6 md:px-6 md:pt-9"
+    >
       <output className="sr-only">Loading</output>
-      <Skeleton.Root shape="line" className="h-7 w-48" />
+      <Skeleton.Root className="w-20" />
+      <Skeleton.Root className="h-8 w-56" />
+      <Skeleton.Root shape="block" className="h-16" />
       <Skeleton.Root shape="block" className="h-40" />
-      <Skeleton.Root shape="block" className="h-24" />
     </div>
   )
 }

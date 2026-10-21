@@ -17,3 +17,8 @@ export const signInSearchSchema = z.object({
 export const authorizeSearchSchema = z.object({
   request: z.string().max(64).catch(""),
 })
+
+/** `/?tab=sessions`; connected apps otherwise. */
+export const accountSearchSchema = z.object({
+  tab: z.enum(["sessions"]).optional().catch(undefined),
+})

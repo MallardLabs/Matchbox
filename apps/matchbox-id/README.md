@@ -37,7 +37,8 @@ pnpm dev
 - Test client `mbx_test_ExampleTestClient0000001` (public; redirects
   `http://localhost:5174/callback`, `http://127.0.0.1:5174/callback`).
 - Live client `mbx_live_ExampleLiveClient0000001` (confidential; redirect
-  `https://localhost:5174/callback`; dev secret in the seed file).
+  `https://localhost:5174/callback`; dev secret in the seed file; Discord
+  scopes optional).
 - Wallet `0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266` (Hardhat account #0)
   with a linked Discord. No dev sign-in: SIWE needs a wallet signature.
 
@@ -49,7 +50,38 @@ Vars (`wrangler.jsonc`): `ENVIRONMENT`, `ISSUER`, `MATCHBOX_ID_ENABLED`,
 - `MATCHBOX_ID_ENABLED=false`: `/api/*`, `/oauth/*`, `/.well-known/*` return
   503 `service_disabled`; config is not validated.
 - `DISCORD_CLAIMS_ENABLED=false`: `discord:*` scopes are dropped from
-  discovery, refused at authorize and omitted from userinfo.
+  discovery and omitted from tokens and userinfo; at authorize, optional
+  ones are ignored and required ones fail with `invalid_scope`.
+
+## Scopes and consent
+
+- Unknown `scope` values are ignored (OIDC Core §3.1.2.1); `openid` is
+  required. Known scopes the environment is not approved for fail with
+  `invalid_scope`.
+- Each environment marks some requested scopes optional
+  (`optionalScopes`, developer console; `openid` is always required). The
+  consent screen shows a switch for each optional scope; declining one still
+  signs the user in.
+- A grant stores the granted scopes and the declined optional ones. Codes,
+  tokens (`scope`), the ID token and userinfo carry granted scopes only.
+  Declined scopes are not asked for again until the app sends
+  `prompt=consent`; a scope the grant has never decided (a new one) brings
+  the consent screen back with a "New" chip. An optional scope that cannot be
+  granted right now (Discord not linked) is neither granted nor declined, so
+  it is asked for once it becomes available.
+- `POST /api/authorization-requests/{id}/decision` takes `declinedScopes`
+  (omitted: keep the grant's earlier choices). Declining a required scope, or
+  a required scope being unavailable, answers the client with
+  `access_denied` (`required-scope-declined`, `discord-not-linked` or
+  `scope-unavailable`).
+- `GET /api/authorization-requests/{id}/summary` (no session) gives the app
+  name and logo for "Continue to <app>" on the sign-in page.
+
+## Pages
+
+`/sign-in` (wallet, then the exact EIP-4361 message to sign), `/authorize`
+(consent), `/` (connected apps with revoke and ended grants; sessions on
+`/?tab=sessions`; `/apps` redirects here), `/error?code=`.
 
 Secrets (`wrangler secret put`): `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`,
 `SESSION_PEPPER`, `CLIENT_SECRET_PEPPER` (same value as the developer

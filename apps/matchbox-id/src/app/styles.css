@@ -2,3 +2,26 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Sign-in page: a soft accent glow from the top edge. */
+.id-glow {
+  background-image: radial-gradient(
+    ellipse 70% 55% at 50% 0%,
+    color-mix(in srgb, var(--accent) 12%, transparent),
+    transparent
+  );
+  background-repeat: no-repeat;
+}
+
+.dark .id-glow {
+  background-image: radial-gradient(
+    ellipse 70% 55% at 50% 0%,
+    color-mix(in srgb, var(--accent) 9%, transparent),
+    transparent
+  );
+}
+
+/* RainbowKit's provider wraps pages in a div; keep the page layout flowing. */
+main [data-rk] {
+  display: contents;
+}

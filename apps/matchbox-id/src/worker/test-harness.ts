@@ -238,13 +238,18 @@ export async function decide(
   cookie: string,
   requestId: string,
   decision: "approve" | "deny",
+  declinedScopes?: string[],
 ): Promise<URL> {
   const response = await harness.app.request(
     url(`/api/authorization-requests/${requestId}/decision`),
     {
       method: "POST",
       headers: apiHeaders(cookie),
-      body: JSON.stringify({ decision }),
+      body: JSON.stringify(
+        declinedScopes === undefined
+          ? { decision }
+          : { decision, declinedScopes },
+      ),
     },
   )
   if (response.status !== 200) {

@@ -9,10 +9,7 @@ import {
   resolveRateLimitPolicy,
 } from "@repo/platform-contracts/rate-limits"
 import { redirectUriMatches } from "@repo/platform-contracts/redirects"
-import {
-  isDiscordScope,
-  parseOidcScopeString,
-} from "@repo/platform-contracts/scopes"
+import { type OidcScope, isDiscordScope } from "@repo/platform-contracts/scopes"
 import { ipPrefix } from "@repo/platform-server"
 import { Hono } from "hono"
 import type { AppDeps } from "../deps"
@@ -23,6 +20,7 @@ import {
   errorPageRedirect,
   redirect,
 } from "../oidc/responses"
+import { isOptionalScope, parseRequestedScopes } from "../oidc/scope-policy"
 import { createAuthorizationCode } from "../oidc/tokens"
 import {
   type QuotaOverrideLookup,
@@ -177,18 +175,24 @@ export default function authorizeRoutes(
     }
     const request = parsed.data
 
-    const scopeResult = parseOidcScopeString(request.scope)
-    if (!scopeResult.ok) return fail("invalid_scope", "Unknown scope")
-    const scopes = scopeResult.scopes
-    if (!scopes.includes("openid")) {
+    // Unknown scope values are ignored (OIDC Core §3.1.2.1). With the
+    // Discord kill switch on, optional Discord scopes are ignored the same
+    // way (they leave discovery); required ones cannot be granted.
+    const requested = parseRequestedScopes(request.scope)
+    if (!requested.includes("openid")) {
       return fail("invalid_scope", "openid scope is required")
     }
+    const optionalScopes = client.environment.optionalScopes
+    const discordOff = (scope: OidcScope) =>
+      !deps.flags.discordClaims && isDiscordScope(scope)
     if (
-      !deps.flags.discordClaims &&
-      scopes.some((scope) => isDiscordScope(scope))
+      requested.some(
+        (scope) => discordOff(scope) && !isOptionalScope(scope, optionalScopes),
+      )
     ) {
       return fail("invalid_scope", "Discord scopes are unavailable")
     }
+    const scopes = requested.filter((scope) => !discordOff(scope))
     const allowed = new Set(
       environmentOidcScopes(client.environment, deps.flags),
     )
@@ -230,7 +234,7 @@ export default function authorizeRoutes(
           redirectUri,
           codeChallenge: request.code_challenge,
           nonce: request.nonce ?? null,
-          scopes,
+          scopes: consent.granted,
           authTime: active.session.createdAt,
         })
         return redirect(

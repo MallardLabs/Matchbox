@@ -1,8 +1,5 @@
-import {
-  type OidcScope,
-  isDiscordScope,
-  normalizeScopes,
-} from "@repo/platform-contracts/scopes"
+import { mergeGrantScopes } from "@repo/platform-contracts/consent"
+import { type OidcScope, isDiscordScope } from "@repo/platform-contracts/scopes"
 import type { AppDeps } from "../deps"
 import type {
   AccountRecord,
@@ -19,15 +16,18 @@ export type AuditContext = {
 
 /**
  * Records consent: creates the (single) active grant for the account and
- * environment, or widens it to the union of old and new scopes at the
- * environment's current scope version.
+ * environment, or updates it at the environment's current scope version.
+ * Requested scopes take this decision (granted or declined); scopes outside
+ * the request keep their previous state.
  */
 export async function upsertGrant(
   deps: AppDeps,
   input: {
     account: AccountRecord
     client: ClientRecord
-    scopes: readonly OidcScope[]
+    requested: readonly OidcScope[]
+    granted: readonly OidcScope[]
+    declined: readonly OidcScope[]
     existing: GrantRecord | null
     discordLink: DiscordLinkRecord | null
     audit: AuditContext
@@ -38,12 +38,18 @@ export async function upsertGrant(
   const existing =
     input.existing ??
     (await deps.store.findActiveGrant(account.id, client.environment.id))
-  const scopes = normalizeScopes([...(existing?.scopes ?? []), ...input.scopes])
+  const { scopes, declinedScopes } = mergeGrantScopes({
+    existing,
+    requested: input.requested,
+    granted: input.granted,
+    declined: input.declined,
+  })
   const discordUserId = scopes.some((scope) => isDiscordScope(scope))
     ? (input.discordLink?.discordUserId ?? null)
     : null
   const update = {
     scopes,
+    declinedScopes,
     scopeVersion: client.environment.scopeVersion,
     claimsSnapshot: claimsSnapshot(scopes),
     discordUserId,
@@ -63,14 +69,15 @@ export async function upsertGrant(
     const unchanged =
       existing.scopeVersion === update.scopeVersion &&
       existing.discordUserId === update.discordUserId &&
-      existing.scopes.join(" ") === scopes.join(" ")
+      existing.scopes.join(" ") === scopes.join(" ") &&
+      existing.declinedScopes.join(" ") === declinedScopes.join(" ")
     if (unchanged) return existing
     const grant = await deps.store.updateGrant(existing.id, update, now)
     await deps.store.recordAudit({
       ...auditBase,
       action: "grant-updated",
       targetId: grant.id,
-      metadata: { scopes, scopeVersion: update.scopeVersion },
+      metadata: { scopes, declinedScopes, scopeVersion: update.scopeVersion },
     })
     return grant
   }
@@ -88,7 +95,7 @@ export async function upsertGrant(
     ...auditBase,
     action: "grant-created",
     targetId: grant.id,
-    metadata: { scopes, scopeVersion: update.scopeVersion },
+    metadata: { scopes, declinedScopes, scopeVersion: update.scopeVersion },
   })
   return grant
 }

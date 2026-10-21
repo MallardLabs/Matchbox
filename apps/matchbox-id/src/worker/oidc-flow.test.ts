@@ -631,6 +631,16 @@ describe("claims", () => {
     )
     expect(withoutDiscord.discord_id).toBeUndefined()
     expect(withoutDiscord.wallet_address).toBe(memorySeed.devWallet)
+    // Kill switch: optional Discord scopes are ignored like unknown ones,
+    // required ones cannot be granted.
+    const ignored = await authorize(harness, cookie, {
+      pkce: challenge,
+      clientId: memorySeed.liveClientId,
+      redirectUri: memorySeed.liveRedirectUris[0],
+      scope: "openid discord:id",
+    })
+    expect(ignored.searchParams.get("code")).not.toBeNull()
+    harness.store.admin.setOptionalScopes(memorySeed.liveEnvironmentId, [])
     const refused = await authorize(harness, cookie, {
       pkce: challenge,
       clientId: memorySeed.liveClientId,
@@ -676,8 +686,9 @@ describe("claims", () => {
     expect(await oauthError(refresh)).toBe("invalid_grant")
   })
 
-  it("marks Discord scopes unavailable without a link", async () => {
+  it("marks required Discord scopes unavailable without a link", async () => {
     const harness = await createHarness()
+    harness.store.admin.setOptionalScopes(memorySeed.liveEnvironmentId, [])
     const cookie = await signIn(harness, otherAccount)
     const location = await authorize(harness, cookie, {
       pkce: await pkce(),

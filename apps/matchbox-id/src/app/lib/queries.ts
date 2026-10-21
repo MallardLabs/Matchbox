@@ -1,9 +1,8 @@
 import type {
   AuthorizationDecisionRequest,
+  AuthorizationRequestSummary,
   AuthorizationRequestView,
-  GrantListResponse,
   SessionListResponse,
-  SessionResponse,
 } from "@repo/platform-contracts/identity"
 import {
   type UseMutationResult,
@@ -12,6 +11,10 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query"
+import type {
+  GrantListViewResponse,
+  SessionViewResponse,
+} from "../../shared/contracts"
 import { ApiError, api, isApiError } from "./api"
 
 export const queryKeys = {
@@ -19,6 +22,10 @@ export const queryKeys = {
   grants: ["grants"],
   sessions: ["sessions"],
   authorizationRequest: (id: string) => ["authorization-request", id],
+  authorizationRequestSummary: (id: string) => [
+    "authorization-request-summary",
+    id,
+  ],
 } as const
 
 function retryUnlessClientError(count: number, error: unknown): boolean {
@@ -27,8 +34,8 @@ function retryUnlessClientError(count: number, error: unknown): boolean {
   return count < 2
 }
 
-export function useSession(): UseQueryResult<SessionResponse, ApiError> {
-  return useQuery<SessionResponse, ApiError>({
+export function useSession(): UseQueryResult<SessionViewResponse, ApiError> {
+  return useQuery<SessionViewResponse, ApiError>({
     queryKey: queryKeys.session,
     queryFn: api.session,
     retry: retryUnlessClientError,
@@ -38,8 +45,8 @@ export function useSession(): UseQueryResult<SessionResponse, ApiError> {
 
 export function useGrants(
   enabled: boolean,
-): UseQueryResult<GrantListResponse, ApiError> {
-  return useQuery<GrantListResponse, ApiError>({
+): UseQueryResult<GrantListViewResponse, ApiError> {
+  return useQuery<GrantListViewResponse, ApiError>({
     queryKey: queryKeys.grants,
     queryFn: api.grants,
     enabled,
@@ -71,12 +78,27 @@ export function useAuthorizationRequest(
   })
 }
 
+/** The app behind an authorization request ("Continue to <app>"). */
+export function useAuthorizationRequestSummary(
+  id: string | null,
+): UseQueryResult<AuthorizationRequestSummary, ApiError> {
+  return useQuery<AuthorizationRequestSummary, ApiError>({
+    queryKey: queryKeys.authorizationRequestSummary(id ?? ""),
+    queryFn: () => api.authorizationRequestSummary(id ?? ""),
+    enabled: id !== null,
+    retry: retryUnlessClientError,
+    staleTime: Number.POSITIVE_INFINITY,
+  })
+}
+
 export function useSignOut(): UseMutationResult<unknown, ApiError, void> {
   const client = useQueryClient()
   return useMutation<unknown, ApiError, void>({
     mutationFn: api.signOut,
     onSuccess: () => {
-      client.setQueryData<SessionResponse>(queryKeys.session, { account: null })
+      client.setQueryData<SessionViewResponse>(queryKeys.session, {
+        account: null,
+      })
       client.removeQueries({ queryKey: queryKeys.grants })
       client.removeQueries({ queryKey: queryKeys.sessions })
     },
@@ -101,7 +123,7 @@ export function useRevokeSession(): UseMutationResult<
     mutationFn: ({ id }) => api.revokeSession(id),
     onSuccess: (_data, { current }) => {
       if (current) {
-        client.setQueryData<SessionResponse>(queryKeys.session, {
+        client.setQueryData<SessionViewResponse>(queryKeys.session, {
           account: null,
         })
       }
