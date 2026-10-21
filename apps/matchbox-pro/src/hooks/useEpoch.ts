@@ -18,11 +18,16 @@ function compactRemaining(seconds: number): string {
   return `${secs}s`
 }
 
+function minuteTimestamp(): bigint {
+  return BigInt(Math.floor(Date.now() / 60_000) * 60)
+}
+
 export function useEpoch() {
   const { chainId } = useNetwork()
   const contracts = getContractConfig(chainId)
-  // Minute-rounded so consumers mounted together share one cached read.
-  const [nowArg] = useState(() => BigInt(Math.floor(Date.now() / 60_000) * 60))
+  // Minute-rounded so consumers mounted together share one cached read; it
+  // only moves when the epoch flips, which re-reads the next boundary.
+  const [nowArg, setNowArg] = useState(() => minuteTimestamp())
   const [now, setNow] = useState(() => Math.floor(Date.now() / 1000))
 
   const { data, isLoading } = useReadContract({
@@ -44,6 +49,12 @@ export function useEpoch() {
     }, tickMs)
     return () => window.clearInterval(id)
   }, [tickMs])
+
+  useEffect(() => {
+    if (epochNext !== undefined && BigInt(now) >= epochNext) {
+      setNowArg(minuteTimestamp())
+    }
+  }, [epochNext, now])
 
   return {
     epochNext,

@@ -2,6 +2,7 @@ import { getContractConfig } from "@/lib/contracts"
 import supportsAtomicBatch from "@/lib/eip5792"
 import { ERC20_APPROVE_ABI } from "@/lib/escrowAbi"
 import { useNetwork } from "@/lib/network"
+import { describeWriteError } from "@/lib/writeErrors"
 import { useCallback, useRef, useState } from "react"
 import type { Address, Hex } from "viem"
 import { sendCalls, waitForCallsStatus } from "viem/actions"
@@ -17,6 +18,10 @@ export type WriteStep = {
   write: () => Promise<Hex>
   call?: { to: Address; data: Hex }
 }
+
+// Wallets can sit on a bundle; viem's 60s default gives up while the bundle
+// may still land.
+const BUNDLE_TIMEOUT_MS = 180_000
 
 export type WriteStepHandler = (
   id: string,
@@ -56,18 +61,14 @@ export function useSequentialWrites() {
               onStep(
                 step.id,
                 "failed",
-                "Transaction failed. Your ballot was not changed.",
+                "Transaction reverted on-chain. Nothing was changed.",
               )
               return
             }
           }
           onStep(step.id, "done")
         } catch (error) {
-          onStep(
-            step.id,
-            "failed",
-            error instanceof Error ? error.message : "Transaction failed",
-          )
+          onStep(step.id, "failed", describeWriteError(error).message)
           return
         }
       }
@@ -91,19 +92,58 @@ export function useSequentialWrites() {
         if (canBatch) {
           setBatched(true)
           for (const step of steps) onStep(step.id, "signing")
+          let bundleId: string | undefined
           try {
-            const { id } = await sendCalls(walletClient, {
+            const sent = await sendCalls(walletClient, {
               account: address,
               calls: steps.flatMap((step) =>
                 step.call ? [{ to: step.call.to, data: step.call.data }] : [],
               ),
               forceAtomic: true,
             })
-            await waitForCallsStatus(walletClient, { id })
-            for (const step of steps) onStep(step.id, "done")
-            return
-          } catch {
+            bundleId = sent.id
+          } catch (error) {
+            const failure = describeWriteError(error)
+            // Only an unsupported bundle may fall back to one-by-one signing;
+            // a rejection must not re-prompt the user step by step.
+            if (failure.kind !== "unsupported") {
+              for (const step of steps) {
+                onStep(step.id, "failed", failure.message)
+              }
+              return
+            }
             setBatched(false)
+          }
+
+          if (bundleId) {
+            try {
+              const result = await waitForCallsStatus(walletClient, {
+                id: bundleId,
+                timeout: BUNDLE_TIMEOUT_MS,
+              })
+              const reverted =
+                result.status !== "success" ||
+                (result.receipts ?? []).some(
+                  (receipt) => receipt.status !== "success",
+                )
+              for (const step of steps) {
+                if (reverted) {
+                  onStep(
+                    step.id,
+                    "failed",
+                    "The bundle reverted on-chain. Nothing was changed.",
+                  )
+                } else {
+                  onStep(step.id, "done")
+                }
+              }
+            } catch (error) {
+              const failure = describeWriteError(error)
+              for (const step of steps) {
+                onStep(step.id, "failed", failure.message)
+              }
+            }
+            return
           }
         }
 
