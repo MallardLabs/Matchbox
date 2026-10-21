@@ -1,6 +1,6 @@
 import { parseArgs } from "node:util"
 import { createLogger } from "@repo/shared/logger"
-import { Pool } from "pg"
+import { Pool, type PoolClient } from "pg"
 import { z } from "zod"
 import {
   DECODER_VERSION,
@@ -51,6 +51,24 @@ const { values } = parseArgs({
 
 const checkpointSchema = z.object({ last_block: z.string().transform(BigInt) })
 
+// Neon Free suspends the compute after 5 minutes without a query and drops
+// every connection, and the RPC-only stretches (the factory pre-scan, a
+// chunk's fetch) run longer than that. A cheap query every minute keeps it
+// awake for the run.
+const HEARTBEAT_MS = 60_000
+
+async function withClient<T>(
+  pool: Pool,
+  run: (client: PoolClient) => Promise<T>,
+): Promise<T> {
+  const client = await pool.connect()
+  try {
+    return await run(client)
+  } finally {
+    client.release()
+  }
+}
+
 async function projectionCheckpoint(
   pool: Pool,
   network: string,
@@ -84,12 +102,23 @@ async function main(): Promise<void> {
   })
   const rpc = new RpcClient({ endpoints: config.endpoints, network })
   const deps: IngestDeps = { config, rpc, store: new PgIngestStore(pool) }
-  const client = await pool.connect()
+  // An idle pooled connection the server closes is replaced on next use.
+  pool.on("error", (error) => {
+    logger.warn({
+      message: "Idle database connection closed",
+      error: error.message,
+    })
+  })
+  const heartbeat = setInterval(() => {
+    pool.query("SELECT 1").catch(() => {
+      // The next real query reconnects (and wakes the compute) if needed.
+    })
+  }, HEARTBEAT_MS)
   const startedAt = Date.now()
 
   try {
     if (values.replay) {
-      await resetProjection(client, network)
+      await withClient(pool, (client) => resetProjection(client, network))
       logger.info({ message: "Projection reset", network })
     }
     const head = (await rpc.blockNumber()) - config.confirmations
@@ -127,9 +156,13 @@ async function main(): Promise<void> {
         to: end,
         concurrency,
       })
-      const result = await runProjection(client, network, end)
+      const result = await withClient(pool, (client) =>
+        runProjection(client, network, end),
+      )
       // No per-run cap: the owner role has no statement timeout.
-      const pruned = await pruneRaw(client, network, { maxBlocks: null })
+      const pruned = await withClient(pool, (client) =>
+        pruneRaw(client, network, { maxBlocks: null }),
+      )
       logger.info({
         message: "Rebuild chunk done",
         through: end.toString(),
@@ -153,7 +186,7 @@ async function main(): Promise<void> {
       databaseMb: megabytes((await databaseUsage(pool)).bytes),
     })
   } finally {
-    client.release()
+    clearInterval(heartbeat)
     await pool.end()
   }
 }
