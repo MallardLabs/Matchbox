@@ -8,6 +8,7 @@ import {
   normalizeScopes,
   oidcScopesOf,
   parseOidcScopeString,
+  parseRequestedOidcScopes,
   platformScopeSchema,
   scopeDefinitions,
   scopeRequiresReview,
@@ -69,6 +70,13 @@ describe("scope strings", () => {
       ok: true,
       scopes: ["openid", "wallet"],
     })
+  })
+
+  it("ignores unknown values in an authorize request", () => {
+    expect(
+      parseRequestedOidcScopes("profile openid  email wallet openid"),
+    ).toEqual(["openid", "wallet"])
+    expect(parseRequestedOidcScopes("gauge-profiles:read")).toEqual([])
   })
 
   it("reports unknown scopes", () => {

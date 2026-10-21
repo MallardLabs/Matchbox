@@ -188,8 +188,11 @@ export const authorizationDecisionSchema = z.enum(["approve", "deny"])
 export const authorizationDecisionRequestSchema = z.object({
   decision: authorizationDecisionSchema,
   /**
-   * Optional scopes the user switched off. Declining a required scope is
-   * refused (`invalid_request`); omitted = none declined.
+   * Optional scopes the user switched off. Omitted = keep the grant's
+   * earlier declined set (nothing declined for a new grant). Declining a
+   * required scope ends the request like an unavailable one: the client is
+   * redirected with `access_denied` and error_description
+   * `required-scope-declined`.
    */
   declinedScopes: z
     .array(oidcScopeSchema)

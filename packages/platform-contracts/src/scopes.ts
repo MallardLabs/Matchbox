@@ -148,7 +148,23 @@ export type ScopeStringParseResult =
   | { ok: true; scopes: OidcScope[] }
   | { ok: false; unknownScopes: string[] }
 
-/** Parses an OAuth space-delimited `scope` parameter into OIDC scopes. */
+/**
+ * Parses the `/oauth/authorize` `scope` parameter: unknown values are
+ * ignored (OIDC Core §3.1.2.1); the caller still requires `openid`.
+ */
+export function parseRequestedOidcScopes(value: string): OidcScope[] {
+  const scopes: OidcScope[] = []
+  for (const token of value.split(" ")) {
+    const parsed = oidcScopeSchema.safeParse(token)
+    if (parsed.success) scopes.push(parsed.data)
+  }
+  return normalizeScopes(scopes)
+}
+
+/**
+ * Strict parse of a space-delimited scope string (refresh `scope`, access
+ * token `scope` claim): any unknown value fails.
+ */
 export function parseOidcScopeString(value: string): ScopeStringParseResult {
   const tokens = value.split(" ").filter((token) => token.length > 0)
   const scopes: OidcScope[] = []
