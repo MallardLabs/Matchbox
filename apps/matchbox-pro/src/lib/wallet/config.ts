@@ -14,6 +14,7 @@ import {
 import { mainnet } from "viem/chains"
 import { http, type Config } from "wagmi"
 import { lazyBitcoinWallet } from "./bitcoinWallets"
+import { deferredWallet } from "./deferredConnectors"
 import {
   mezoMainnet as passportMezoMainnet,
   mezoTestnet as passportMezoTestnet,
@@ -85,7 +86,8 @@ const ethereumWallets = [
 
 const defaultWallets: WalletList = [
   { groupName: "Bitcoin", wallets: [...bitcoinWallets] },
-  { groupName: "Ethereum", wallets: ethereumWallets },
+  // SDK-backed connectors stay asleep until used (see ./deferredConnectors).
+  { groupName: "Ethereum", wallets: ethereumWallets.map(deferredWallet) },
 ]
 
 export const wagmiConfig: Config = getDefaultConfig({
