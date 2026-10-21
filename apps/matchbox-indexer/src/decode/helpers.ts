@@ -11,12 +11,14 @@ import {
 } from "./constants"
 import {
   type ActivityEventRow,
+  type BribeVoterSource,
   type LockPositionRow,
   emptyActivity,
 } from "./rows"
 import type { Store } from "./store"
 
-// Ports of apps/activity-subgraph/src/helpers.ts on main.
+// Ports of apps/activity-subgraph/src/helpers.ts on main, plus
+// registerVoterBribe (warehouse-only).
 
 export type Handler = (log: RawLog, tx: RawTx, store: Store) => void
 
@@ -162,5 +164,25 @@ export function upsertVote(
     lastUpdatedEpoch: epochStart(timestamp),
     lastUpdatedAt: timestamp,
     isActive: weight > ZERO,
+  })
+}
+
+// Warehouse-only: a non-pool voter's GaugeCreated starts tracking its bribe
+// reward contract (template VoterBribeReward), so the bribe's claims and
+// deposits project from the gauge's creation block.
+export function registerVoterBribe(
+  store: Store,
+  log: RawLog,
+  voterSource: BribeVoterSource,
+  gauge: Address,
+  bribe: Address,
+): void {
+  store.putDataSource({
+    network: log.network,
+    address: lower(bribe),
+    template: "VoterBribeReward",
+    createdBlock: log.blockNumber,
+    voterSource,
+    gauge: lower(gauge),
   })
 }

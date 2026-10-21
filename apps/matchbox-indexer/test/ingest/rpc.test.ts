@@ -1,4 +1,4 @@
-import { type Address, pad } from "viem"
+import { type Address, pad, toEventSelector } from "viem"
 import { describe, expect, it } from "vitest"
 import { RpcClient } from "../../src/ingest/rpc"
 import {
@@ -144,6 +144,33 @@ describe("RpcClient.getLogsForFilters", () => {
     expect(logs.map((log) => log.logIndex)).toEqual([0, 1])
     expect(chain.callsTo("eth_getLogs")).toHaveLength(2)
     expect(chain.callsTo("eth_getBlockByNumber")).toHaveLength(1)
+  })
+
+  it("scans by topic when the set outgrows one call, keeping the set", async () => {
+    const watched = addresses(3)
+    const [stranger] = addresses(4).slice(3) as [Address]
+    const chain = new FakeChain({
+      head: 100,
+      logs: [...watched, stranger].map((address, index) =>
+        eventLog({ block: 2, logIndex: index, address, signature: "Foo()" }),
+      ),
+    })
+    const topic0 = toEventSelector("Foo()")
+    const logs = await client(chain, 2).getLogsForFilters(1n, 10n, [
+      { addresses: watched, topic0s: [topic0], scanByTopic: true },
+    ])
+
+    expect(logs.map((log) => log.address)).toEqual(watched)
+    const calls = chain.callsTo("eth_getLogs")
+    expect(calls).toHaveLength(1)
+    expect(calls[0]?.params[0]).not.toHaveProperty("address")
+
+    // Within one call's limit the address filter is used as before.
+    const small = new FakeChain({ head: 100, logs: [] })
+    await client(small, 2).getLogsForFilters(1n, 10n, [
+      { addresses: watched.slice(0, 2), topic0s: [topic0], scanByTopic: true },
+    ])
+    expect(small.callsTo("eth_getLogs")[0]?.params[0]).toHaveProperty("address")
   })
 })
 

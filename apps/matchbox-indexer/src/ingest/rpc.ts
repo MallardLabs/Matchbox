@@ -130,7 +130,14 @@ export type RpcClientOptions = {
   batchConcurrency?: number
 }
 
-export type LogFilter = { addresses: Address[]; topic0s?: Hex[] | undefined }
+export type LogFilter = {
+  addresses: Address[]
+  topic0s?: Hex[] | undefined
+  // When the set needs more than one call on an endpoint, query by topic0
+  // alone and keep the logs from `addresses`: one call instead of one per
+  // address chunk. Only for topics the rest of the chain rarely emits.
+  scanByTopic?: boolean
+}
 
 const TX_BATCH_SIZE = 50
 const HEADER_BATCH_SIZE = 50
@@ -230,13 +237,7 @@ export class RpcClient {
     const active = filters.filter((filter) => filter.addresses.length > 0)
     const batches = await Promise.all(
       active.map((filter) =>
-        this.getLogsSplitting(
-          fromBlock,
-          toBlock,
-          filter.addresses,
-          this.maxRangeSplits,
-          filter.topic0s,
-        ),
+        this.getLogsSplitting(fromBlock, toBlock, filter, this.maxRangeSplits),
       ),
     )
     const normalized = await this.normalizeLogs(batches.flat())
@@ -282,19 +283,12 @@ export class RpcClient {
   private async getLogsSplitting(
     fromBlock: bigint,
     toBlock: bigint,
-    addresses: Address[],
+    filter: LogFilter,
     splitsLeft: number,
-    topic0s?: Hex[],
   ): Promise<RpcLog[]> {
     try {
       return await this.withFailover((endpoint) =>
-        this.getLogsOnEndpoint(
-          endpoint,
-          fromBlock,
-          toBlock,
-          addresses,
-          topic0s,
-        ),
+        this.getLogsOnEndpoint(endpoint, fromBlock, toBlock, filter),
       )
     } catch (error) {
       if (splitsLeft <= 0 || fromBlock === toBlock) throw error
@@ -302,16 +296,14 @@ export class RpcClient {
       const left = await this.getLogsSplitting(
         fromBlock,
         middle,
-        addresses,
+        filter,
         splitsLeft - 1,
-        topic0s,
       )
       const right = await this.getLogsSplitting(
         middle + 1n,
         toBlock,
-        addresses,
+        filter,
         splitsLeft - 1,
-        topic0s,
       )
       return [...left, ...right]
     }
@@ -321,14 +313,33 @@ export class RpcClient {
     endpoint: RpcEndpoint,
     fromBlock: bigint,
     toBlock: bigint,
-    addresses: Address[],
-    topic0s?: Hex[],
+    { addresses, topic0s, scanByTopic }: LogFilter,
   ): Promise<RpcLog[]> {
     if (toBlock - fromBlock + 1n > BigInt(endpoint.maxBlockRange)) {
       throw new RpcError(
         `Range ${fromBlock}-${toBlock} exceeds ${endpoint.url} limit`,
         false,
       )
+    }
+    if (
+      scanByTopic === true &&
+      topic0s !== undefined &&
+      addresses.length > endpoint.maxAddresses
+    ) {
+      const wanted = new Set(addresses)
+      const scanned = await this.call(
+        endpoint,
+        "eth_getLogs",
+        [
+          {
+            fromBlock: toHex(fromBlock),
+            toBlock: toHex(toBlock),
+            topics: [topic0s],
+          },
+        ],
+        z.array(rpcLogSchema),
+      )
+      return scanned.filter((log) => wanted.has(log.address))
     }
     const logs: RpcLog[] = []
     for (const addressChunk of chunk(addresses, endpoint.maxAddresses)) {

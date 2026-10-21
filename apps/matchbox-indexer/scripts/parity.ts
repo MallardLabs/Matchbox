@@ -13,7 +13,9 @@ import { createDatabasePool } from "./database"
 
 // Compares matchbox.activity_events with the frozen matchbox-explorer 3.4.0
 // subgraph for every row at or below --through (default: the block the
-// subgraph paused at). Exits non-zero on any difference.
+// subgraph paused at). Only explorer_parity rows take part; warehouse-only
+// rows are counted separately. Exits non-zero on any difference other than
+// the listed enrichments (src/decode/parity.ts).
 //   tsx scripts/parity.ts [--network mezo] [--through 12073396] [--out file]
 
 const logger = createLogger("matchbox-indexer-parity")
@@ -45,13 +47,38 @@ async function readWarehouseRows(
     ).join(", ")
     const result = await pool.query(
       `SELECT ${columns} FROM matchbox.activity_events
-       WHERE network = $1 AND block_number <= $2`,
+       WHERE network = $1 AND block_number <= $2 AND explorer_parity`,
       [network, through.toString()],
     )
     return z
       .array(z.record(z.string(), scalar))
       .parse(result.rows)
       .map((row) => canonicalRow(row))
+  } finally {
+    await pool.end()
+  }
+}
+
+const warehouseOnlyRowSchema = z.object({
+  action_type: z.string(),
+  source: z.string(),
+  rows: z.string(),
+})
+
+async function readWarehouseOnlyCounts(
+  network: string,
+  through: bigint,
+): Promise<z.output<typeof warehouseOnlyRowSchema>[]> {
+  const pool = createDatabasePool()
+  try {
+    const result = await pool.query(
+      `SELECT action_type, source, count(*)::text AS rows
+       FROM matchbox.activity_events
+       WHERE network = $1 AND block_number <= $2 AND NOT explorer_parity
+       GROUP BY action_type, source ORDER BY action_type, source`,
+      [network, through.toString()],
+    )
+    return z.array(warehouseOnlyRowSchema).parse(result.rows)
   } finally {
     await pool.end()
   }
@@ -73,11 +100,12 @@ function printTable(parity: ActionParity[]): void {
       String(p.missingIds.length).padStart(6),
       String(p.extraIds.length).padStart(6),
       String(p.fieldDiffs.length).padStart(6),
+      String(p.enriched).padStart(8),
       fieldSummary,
     ].join(" ")
   })
   process.stdout.write(
-    `${["actionType".padEnd(26), "explorer", "wareh.", "miss", "extra", "fdiff"].join(" ")}\n${lines.join("\n")}\n`,
+    `${["actionType".padEnd(26), "explorer", "wareh.", "miss", "extra", "fdiff", "enriched"].join(" ")}\n${lines.join("\n")}\n`,
   )
 }
 
@@ -96,6 +124,18 @@ async function main(): Promise<void> {
   const warehouseRows = await readWarehouseRows(args.network, args.through)
   const parity = compareRows(explorerRows, warehouseRows)
   printTable(parity)
+  const warehouseOnly = await readWarehouseOnlyCounts(
+    args.network,
+    args.through,
+  )
+  process.stdout.write(
+    `\nWarehouse-only rows (not compared):\n${warehouseOnly
+      .map(
+        (row) =>
+          `${row.action_type.padEnd(26)} ${row.source.padEnd(22)} ${row.rows.padStart(7)}`,
+      )
+      .join("\n")}\n`,
+  )
 
   const failing = parity.filter(
     (p) =>
@@ -122,6 +162,8 @@ async function main(): Promise<void> {
     message: failing.length === 0 ? "Parity exact" : "Parity differences",
     explorerRows: explorerRows.length,
     warehouseRows: warehouseRows.length,
+    actionTypes: parity.length,
+    enrichedFields: parity.reduce((sum, p) => sum + p.enriched, 0),
     failingActionTypes: failing.map((p) => p.actionType),
   })
   if (failing.length > 0) process.exitCode = 1

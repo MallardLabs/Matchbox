@@ -3,7 +3,10 @@ import { resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { describe, expect, it } from "vitest"
 import { parse } from "yaml"
-import { STATIC_CONTRACTS } from "../../src/ingest/static-contracts"
+import {
+  EXPLORER_STATIC_CONTRACTS,
+  WAREHOUSE_STATIC_CONTRACTS,
+} from "../../src/ingest/static-contracts"
 import type { ContractKind } from "../../src/ingest/store"
 import { FILTER_GROUPS, HANDLED_EVENTS } from "../../src/ingest/topics"
 
@@ -38,7 +41,7 @@ const TEMPLATE_KINDS: Record<string, ContractKind> = {
 
 describe("static contracts", () => {
   const statics = new Map(
-    STATIC_CONTRACTS.mezo.map((contract) => [contract.template, contract]),
+    EXPLORER_STATIC_CONTRACTS.map((contract) => [contract.template, contract]),
   )
 
   it("lists every explorer data source at its address", () => {
@@ -62,7 +65,7 @@ describe("static contracts", () => {
     ]
     expect(triples).toHaveLength(18)
     const byAddress = new Map(
-      STATIC_CONTRACTS.mezo.map((contract) => [contract.address, contract]),
+      EXPLORER_STATIC_CONTRACTS.map((contract) => [contract.address, contract]),
     )
     for (const [, reward, pool, gauge] of triples) {
       expect(byAddress.get(reward as `0x${string}`)).toMatchObject({
@@ -76,7 +79,7 @@ describe("static contracts", () => {
 describe("handled topics", () => {
   it("covers every data source handler for its kind", () => {
     const statics = new Map(
-      STATIC_CONTRACTS.mezo.map((contract) => [
+      EXPLORER_STATIC_CONTRACTS.map((contract) => [
         contract.template,
         contract.kind,
       ]),
@@ -107,10 +110,44 @@ describe("handled topics", () => {
   })
 
   it("puts every kind in exactly one filter group", () => {
-    const grouped = FILTER_GROUPS.flat()
+    const grouped = FILTER_GROUPS.flatMap((group) => group.kinds)
     expect(new Set(grouped).size).toBe(grouped.length)
     expect([...grouped].sort()).toEqual(
       (Object.keys(HANDLED_EVENTS) as ContractKind[]).sort(),
     )
+  })
+
+  it("scans only the voter bribe rewards by topic", () => {
+    expect(
+      FILTER_GROUPS.filter((group) => group.scanByTopic).map(
+        (group) => group.kinds,
+      ),
+    ).toEqual([["voterBribeReward"]])
+    expect(HANDLED_EVENTS.voterBribeReward).toEqual(
+      HANDLED_EVENTS.bribeVotingReward,
+    )
+  })
+})
+
+describe("warehouse-only static contracts", () => {
+  it("are not explorer data sources and start at their deployment", () => {
+    const explorerAddresses = new Set(
+      manifest.dataSources.map((source) =>
+        source.source.address?.toLowerCase(),
+      ),
+    )
+    expect(
+      WAREHOUSE_STATIC_CONTRACTS.map((contract) => [
+        contract.template,
+        contract.kind,
+        contract.createdBlock,
+      ]),
+    ).toEqual([
+      ["MusdBorrowerOperations", "musdBorrowerOperations", 178_630n],
+      ["MusdTroveManager", "musdTroveManager", 178_660n],
+    ])
+    for (const contract of WAREHOUSE_STATIC_CONTRACTS) {
+      expect(explorerAddresses.has(contract.address)).toBe(false)
+    }
   })
 })

@@ -3,10 +3,11 @@ import type { ContractKind } from "./store"
 
 // Events the explorer subgraph handles, per contract kind (canonical
 // signatures from apps/activity-subgraph/subgraph.yaml on main;
-// test/ingest/topics.test.ts fails on drift). Ingest stores only these:
-// pools alone emit Sync/Fees/LP Transfer/Approval at roughly twice the rate of
-// everything the decoder reads, which would not fit the warehouse. Widening a
-// set is a config change plus a re-backfill (about 15 minutes).
+// test/ingest/manifest.test.ts fails on drift), plus the warehouse-only kinds
+// at the end. Ingest stores only these: pools alone emit Sync/Fees/LP
+// Transfer/Approval at roughly twice the rate of everything the decoder reads,
+// which would not fit the warehouse. Widening a set is a config change plus a
+// re-backfill (about 30 minutes).
 const VOTE_EVENTS = [
   "Abstained(address,address,uint256,uint256,uint256,uint256)",
   "Voted(address,address,uint256,uint256,uint256,uint256)",
@@ -92,31 +93,63 @@ export const HANDLED_EVENTS: Record<ContractKind, string[]> = {
   ],
   bribeVotingReward: REWARD_EVENTS,
   feeVotingReward: REWARD_EVENTS,
+  // Bribe rewards of BoostVoter, ValidatorsVoter and ThirdPartyVoter gauges.
+  voterBribeReward: REWARD_EVENTS,
+  // mUSD troves. TroveUpdated changed signature in musd 1.0.2: the 6-argument
+  // form is the older one (still emitted on testnet, never on mainnet).
+  musdBorrowerOperations: [
+    "TroveUpdated(address,uint256,uint256,uint256,uint256,uint16,uint256,uint8)",
+    "TroveUpdated(address,uint256,uint256,uint256,uint256,uint8)",
+    "TroveCreated(address,uint256)",
+    "BorrowingFeePaid(address,uint256)",
+    "RefinancingFeePaid(address,uint256)",
+  ],
+  musdTroveManager: [
+    "TroveUpdated(address,uint256,uint256,uint256,uint256,uint16,uint256,uint8)",
+    "TroveUpdated(address,uint256,uint256,uint256,uint256,uint8)",
+    "TroveLiquidated(address,uint256,uint256,uint8)",
+    "Redemption(uint256,uint256,uint256,uint256)",
+  ],
+}
+
+export type FilterGroup = {
+  kinds: ContractKind[]
+  // Fetched by topic0 alone and kept to the registered addresses when the
+  // group outgrows one filter call (RpcClient LogFilter.scanByTopic).
+  scanByTopic: boolean
 }
 
 // eth_getLogs ANDs addresses with topics, so kinds share a filter only when no
 // kind in the group emits another kind's topic it doesn't handle. Escrows
 // (Transfer) and pools (LP Transfer, Swap) get their own filters; the rest
-// share one, which over-includes nothing the probe found.
-export const FILTER_GROUPS: ContractKind[][] = [
-  ["votingEscrow"],
-  ["pool"],
-  [
-    "boostVoter",
-    "poolsVoter",
-    "thirdPartyVoter",
-    "validatorsVoter",
-    "splitter",
-    "minter",
-    "rebaseDistributor",
-    "merkleDistributor",
-    "musdSavingsRate",
-    "pcv",
-    "poolFactory",
-    "gauge",
-    "bribeVotingReward",
-    "feeVotingReward",
-  ],
+// share one, which over-includes nothing the probe found. The ~750 voter
+// bribe contracts would add eight address chunks to every window, so they
+// are scanned by their two reward topics instead.
+export const FILTER_GROUPS: FilterGroup[] = [
+  { kinds: ["votingEscrow"], scanByTopic: false },
+  { kinds: ["pool"], scanByTopic: false },
+  {
+    kinds: [
+      "boostVoter",
+      "poolsVoter",
+      "thirdPartyVoter",
+      "validatorsVoter",
+      "splitter",
+      "minter",
+      "rebaseDistributor",
+      "merkleDistributor",
+      "musdSavingsRate",
+      "pcv",
+      "poolFactory",
+      "gauge",
+      "bribeVotingReward",
+      "feeVotingReward",
+      "musdBorrowerOperations",
+      "musdTroveManager",
+    ],
+    scanByTopic: false,
+  },
+  { kinds: ["voterBribeReward"], scanByTopic: true },
 ]
 
 export function topic0sFor(kinds: ContractKind[]): Hex[] {
@@ -130,7 +163,7 @@ export function topic0sFor(kinds: ContractKind[]): Hex[] {
 }
 
 export function filterGroupOf(kind: ContractKind): number {
-  const index = FILTER_GROUPS.findIndex((group) => group.includes(kind))
+  const index = FILTER_GROUPS.findIndex((group) => group.kinds.includes(kind))
   if (index === -1) throw new Error(`Contract kind ${kind} has no log filter`)
   return index
 }

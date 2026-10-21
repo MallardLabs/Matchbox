@@ -5,11 +5,14 @@ import { ACTION, BOOST_CONTEXT, SOURCE, ZERO } from "../constants"
 import {
   type Handler,
   baseActivity,
+  epochStart,
   eventTopics,
   lower,
+  registerVoterBribe,
   resolveVoteActor,
   upsertVote,
 } from "../helpers"
+import type { BribeVoterSource } from "../rows"
 import type { Store } from "../store"
 
 // Port of apps/activity-subgraph/src/non-pools-voter.ts. ThirdPartyVoter and
@@ -25,7 +28,9 @@ function decode(log: RawLog) {
   })
 }
 
-function sharedHandlers(source: string): Record<string, Handler> {
+function sharedHandlers(
+  source: Exclude<BribeVoterSource, "BOOST_VOTER">,
+): Record<string, Handler> {
   function handleVoted(log: RawLog, tx: RawTx, store: Store): void {
     const event = decode(log)
     if (event.eventName !== "Voted") return
@@ -102,6 +107,13 @@ function sharedHandlers(source: string): Record<string, Handler> {
     activity.gauge = lower(event.args.gauge)
     activity.rewardContract = lower(event.args.bribeVotingReward)
     store.addActivity(activity)
+    registerVoterBribe(
+      store,
+      log,
+      source,
+      event.args.gauge,
+      event.args.bribeVotingReward,
+    )
   }
 
   function handleGaugeKilled(log: RawLog, tx: RawTx, store: Store): void {
@@ -141,6 +153,8 @@ function sharedHandlers(source: string): Record<string, Handler> {
     activity.token = lower(event.args.token)
     activity.amount = event.args.amount
     activity.rewardType = "Bribe"
+    // Warehouse enrichment, as for BoostVoter.BribesAdded.
+    activity.epochStart = epochStart(log.blockTimestamp)
     store.addActivity(activity)
   }
 

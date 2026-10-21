@@ -500,8 +500,36 @@ describe("compareRows", () => {
         missingIds: ["b"],
         extraIds: ["c"],
         fieldDiffs: [],
+        enriched: 0,
       },
     ])
+  })
+
+  it("counts listed enrichments apart from field differences", () => {
+    const parity = compareRows(
+      [
+        { id: "a", actionType: "INCENTIVE_ADDED", epochStart: null },
+        { id: "b", actionType: "VOTE_BRIBE_CLAIMED", tokenId: null },
+        { id: "c", actionType: "SWAP", tokenId: null },
+        { id: "d", actionType: "INCENTIVE_ADDED", epochStart: "1" },
+      ],
+      [
+        { id: "a", actionType: "INCENTIVE_ADDED", epochStart: "1790208000" },
+        { id: "b", actionType: "VOTE_BRIBE_CLAIMED", tokenId: "111" },
+        { id: "c", actionType: "SWAP", tokenId: "5" },
+        { id: "d", actionType: "INCENTIVE_ADDED", epochStart: "2" },
+      ],
+    )
+    const byType = new Map(parity.map((p) => [p.actionType, p]))
+    expect(byType.get("INCENTIVE_ADDED")?.enriched).toBe(1)
+    // A non-null explorer value must still match.
+    expect(byType.get("INCENTIVE_ADDED")?.fieldDiffs).toHaveLength(1)
+    expect(byType.get("VOTE_BRIBE_CLAIMED")).toMatchObject({
+      enriched: 1,
+      fieldDiffs: [],
+    })
+    // Not a listed enrichment for SWAP.
+    expect(byType.get("SWAP")?.fieldDiffs).toHaveLength(1)
   })
 
   it("lists each differing field", () => {

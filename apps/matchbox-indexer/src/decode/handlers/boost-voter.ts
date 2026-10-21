@@ -6,8 +6,10 @@ import {
   type Handler,
   baseActivity,
   detectPokeMethod,
+  epochStart,
   eventTopics,
   lower,
+  registerVoterBribe,
   resolveVoteActor,
   upsertVote,
 } from "../helpers"
@@ -34,6 +36,13 @@ function handleGaugeCreated(log: RawLog, tx: RawTx, store: Store): void {
   activity.gauge = lower(event.args.gauge)
   activity.rewardContract = lower(event.args.bribeVotingReward)
   store.addActivity(activity)
+  registerVoterBribe(
+    store,
+    log,
+    VOTER,
+    event.args.gauge,
+    event.args.bribeVotingReward,
+  )
 }
 
 function handleVoted(log: RawLog, tx: RawTx, store: Store): void {
@@ -120,6 +129,9 @@ function handleBribesAdded(log: RawLog, tx: RawTx, store: Store): void {
   activity.token = lower(event.args.token)
   activity.amount = event.args.amount
   activity.rewardType = "Bribe"
+  // Warehouse enrichment: bribes land in the current epoch (the reward's
+  // NotifyReward epoch). The explorer left epochStart null here.
+  activity.epochStart = epochStart(log.blockTimestamp)
   store.addActivity(activity)
 }
 

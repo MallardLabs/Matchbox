@@ -2,7 +2,7 @@
 
 The Mezo warehouse ingest that replaces the `matchbox-explorer` Goldsky
 subgraph (see `docs/goldsky-exit.md`). It reads `eth_getLogs` from Mezo RPC into
-Neon. There is no Goldsky pipeline.
+Neon. There is no Goldsky pipeline. Go-live steps are in `GO-LIVE.md`.
 
 ## How ingest works
 
@@ -11,16 +11,23 @@ Neon. There is no Goldsky pipeline.
     including the 18 `Legacy*` reward contracts.
   - Children discovered from `PoolsVoter.GaugeCreated` (gauge, bribe and fee reward
     contracts) and `PoolFactory.PoolCreated` (pools).
-  - Both kinds live in `matchbox.contracts`. A `GaugeCreated` links an
+  - Warehouse-only: the bribe reward contracts of BoostVoter, ValidatorsVoter and
+    ThirdPartyVoter gauges (kind `voterBribeReward`, from their 3-argument
+    `GaugeCreated`), and the mUSD `BorrowerOperations` and `TroveManager`
+    (static, from their deployment at block 178,630).
+  - All of them live in `matchbox.contracts`. A `GaugeCreated` links an
     already-registered pool to its gauge, but never registers a pool it only
     names (CL pools were never explorer templates).
 - **Topics.**
-  - Only the events the explorer handles are stored, per contract kind
+  - Only the events a handler reads are stored, per contract kind
     (`src/ingest/topics.ts`), as one `eth_getLogs` filter per topic group.
   - Pools' `Sync`/`Fees`/LP `Transfer`/`Approval` alone would double the raw table.
+  - The ~750 voter bribe contracts are not listed by address: their group is
+    fetched with one address-less filter on the two reward topics
+    (`NotifyReward`, `ClaimRewards`) and kept to the registered set.
   - Widening a set is a config change plus a re-backfill.
-  - `test/ingest/manifest.test.ts` fails if contracts or topics drift from
-    `apps/activity-subgraph/subgraph.yaml`.
+  - `test/ingest/manifest.test.ts` fails if the explorer contracts or topics
+    drift from `apps/activity-subgraph/subgraph.yaml`.
 - **Windows.**
   - Logs are fetched in 10,000-block windows, at most 100 addresses per filter
     on `rpc-internal.mezo.org`. ValidationCloud (30) and Boar are fallbacks.
@@ -34,22 +41,33 @@ Neon. There is no Goldsky pipeline.
   - A header whose hash differs from the log's `blockHash` fails the window.
   - `CHECK (block_timestamp > 0)` guards the table.
 - **Transactions.** Every transaction that emitted a stored log is kept, with
-  `from` and `to`. Its `input` is the 4-byte selector only, because no handler
-  reads further (`src/decode/calldata.ts`). Full calldata was about 80% of
-  each row.
+  `from` and `to`. Its `input` is the 4-byte selector, except for
+  `claimBribes` / `claimFees` / `claimFeesAndBribes` calls sent straight to a
+  voter, which keep their full calldata so claims carry the lock's tokenId
+  (`src/decode/calldata.ts`). Full calldata was about 80% of each row.
 - **Commits.**
   - A window's logs, transactions, registry changes and checkpoint commit in one
     transaction. Re-ingesting is a no-op.
   - The `logs` checkpoint covers a contiguous prefix from the network start
     block (5,000,000). An out-of-order range never advances it past a gap.
+    Windows below the start (the mUSD history) never move it.
 - **Finality.** Mezo is CometBFT (instant finality, not independently verified).
   Ingest stays 2 blocks behind head and stores `block_hash`.
 
+## Decoder
+
+`src/decode` projects raw logs into `matchbox.activity_events` (the explorer's
+`ActivityEvent`, field for field), `lock_positions`, `votes`, `bribe_to_pool`,
+and the warehouse-only `reward_deposits` and `trove_updates`. Rows the explorer
+would not have produced have `explorer_parity = false`; `parity` compares the
+rest with frozen `matchbox-explorer` 3.4.0. `DECODER_VERSION` is 2. A database
+built by another version halts projection until `project -- --replay`.
+
 ## Commands
 
-Migrations, roles and the backfill need the direct (non-pooler)
-`DATABASE_URL_UNPOOLED`. The linked Neon development branch puts it in the
-repository-root ignored `.env.local`.
+Migrations, roles, the backfill, projection and parity need the direct
+(non-pooler) `DATABASE_URL_UNPOOLED`. The linked Neon development branch puts it
+in the repository-root ignored `.env.local`.
 
 ```bash
 pnpm --filter @repo/matchbox-indexer migrate
@@ -57,9 +75,19 @@ pnpm --filter @repo/matchbox-indexer roles   # re-run after new migrations
 pnpm --filter @repo/matchbox-indexer verify:warehouse
 pnpm --filter @repo/matchbox-indexer vacuum:raw   # after a migration that trims raw rows
 
-# Full history (about 30 minutes). Resumable, and stops cleanly over --max-db-mb.
-pnpm --filter @repo/matchbox-indexer backfill -- --network mezo --from 5000000 \
-  [--to N] [--concurrency 4] [--max-db-mb 900] [--skip-discovery]
+# Full history. --from defaults to block 178,630 (mUSD); resumable, and stops
+# cleanly over --max-db-mb.
+pnpm --filter @repo/matchbox-indexer backfill -- --network mezo \
+  [--from N] [--to N] [--concurrency 4] [--max-db-mb 900] [--skip-discovery]
+
+# Project raw logs (--replay rebuilds from scratch under the current decoder).
+pnpm --filter @repo/matchbox-indexer project -- --network mezo [--replay]
+
+# Row-level diff against frozen matchbox-explorer 3.4.0 (exits 1 on a diff).
+pnpm --filter @repo/matchbox-indexer parity -- --network mezo [--out file.json]
+
+# Once, on a database ingested before full claim calldata was kept.
+pnpm --filter @repo/matchbox-indexer refetch:claims -- --network mezo [--dry-run]
 ```
 
 `--skip-discovery` drops the factory pre-scan. Only use it when the range's
@@ -69,12 +97,13 @@ full address set up front.
 ## Worker
 
 `src/index.ts` runs every minute (`wrangler.jsonc` cron). Each tick ingests
-from the `logs` checkpoint to head minus 2, at most 50,000 blocks.
-`GET /health` reports head, last block and lag.
+from the `logs` checkpoint to head minus 2, at most 50,000 blocks, then
+projects what it ingested. `GET /health` reports head, last block and lag.
 
 - `DATABASE_URL` is a secret: `wrangler secret put DATABASE_URL`. Use the
   direct URL for a login granted `matchbox_indexer`.
-- The decoder's `runProjection` is called from the marked hook after ingest.
+- On an empty `logs` checkpoint the cron starts at the network start, so the
+  mUSD history before it only arrives through `backfill`.
 
 ## History
 
