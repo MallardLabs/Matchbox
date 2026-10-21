@@ -282,7 +282,11 @@ async function warehouseActivity(
 
 // -------------------------------------------------------------- explorer
 
-const explorerCursorSchema = z.object({ p: z.number().int().nonnegative() })
+/** Explorer page index; `to` pins the window when paging began mid-list. */
+const explorerCursorSchema = z.object({
+  p: z.number().int().nonnegative(),
+  to: z.number().int().nonnegative().optional(),
+})
 
 type ExplorerProbe = { block: bigint; timestamp: number }
 
@@ -381,21 +385,43 @@ async function explorerFreshness(
   })
 }
 
+type WarehouseCursor = z.infer<typeof warehouseCursorSchema>
+
+/** Newest-first total order: is `item` strictly after (older than) `cursor`? */
+function olderThan(item: WireActivityItem, cursor: WarehouseCursor): boolean {
+  const keys: Array<[bigint, bigint]> = [
+    [BigInt(item.timestamp), BigInt(cursor.t)],
+    [BigInt(item.blockNumber), BigInt(cursor.b)],
+    [BigInt(item.logIndex ?? 0), BigInt(cursor.l)],
+  ]
+  for (const [left, right] of keys) {
+    if (left !== right) return left < right
+  }
+  return item.id < cursor.id
+}
+
 async function explorerActivity(
   origin: string,
   query: ActivityQuery,
   fetcher: typeof fetch,
+  /** Continue a list the warehouse started: rows older than this row. */
+  after?: WarehouseCursor,
 ): Promise<ActivityResult> {
   const cursor = explorerCursorSchema.safeParse(decodeCursor(query.cursor))
-  if (query.cursor && !cursor.success) {
+  if (query.cursor && !cursor.success && !after) {
     throw new HistoryError(400, "invalid_request", "Invalid cursor.")
   }
   const page = cursor.success ? cursor.data.p : 0
+  const to = cursor.success
+    ? (cursor.data.to ?? query.to)
+    : after
+      ? Number(after.t)
+      : query.to
   const params: Record<string, string> = {
     limit: String(query.limit),
     page: String(page),
     from: String(query.from),
-    to: String(query.to),
+    to: String(to),
   }
   if (query.wallet) params.actor = query.wallet
   if (query.gauge) params.gauge = query.gauge
@@ -407,15 +433,20 @@ async function explorerActivity(
     explorerFetch(origin, params, fetcher),
     explorerFreshness(origin, fetcher),
   ])
-  const items = [...result.items].sort(compareActivityDesc)
+  const items = [...result.items]
+    .filter((item) => !after || olderThan(item, after))
+    .sort(compareActivityDesc)
   // The explorer merges its sources in a window of ~1000 rows and keeps
   // saying hasMore past it; a short page is the real end, and older rows in
   // range (mostly votes) aren't served until the warehouse is live.
   const windowEnd = result.hasMore && result.rows < query.limit
+  const pinned = to === query.to ? {} : { to }
   return {
     items: await enrichActivity(collapseRevotes(items)),
     nextCursor:
-      result.hasMore && !windowEnd ? encodeCursor({ p: page + 1 }) : null,
+      result.hasMore && !windowEnd
+        ? encodeCursor({ p: page + 1, ...pinned })
+        : null,
     freshness,
     truncated: windowEnd,
   }
@@ -423,33 +454,62 @@ async function explorerActivity(
 
 // ------------------------------------------------------------ public API
 
+function isWarehouseDown(error: unknown): boolean {
+  return (
+    error instanceof WarehouseUnavailableError ||
+    (error instanceof HistoryError && error.code === "warehouse_unavailable")
+  )
+}
+
+/**
+ * Warehouse first; when it fails (or its breaker is open) the same request
+ * is served by the explorer (Classic's /api/activity, which itself never
+ * needs Neon), marked frozen-explorer / stale. A list the explorer started
+ * stays on the explorer; one the warehouse started continues past its last
+ * row.
+ */
 export async function queryActivity(
   config: SourceConfig,
   query: ActivityQuery,
   fetcher: typeof fetch = fetch,
 ): Promise<ActivityResult> {
-  return config.warehouseUrl
-    ? warehouseActivity(config.warehouseUrl, query, fetcher)
-    : explorerActivity(config.explorerOrigin, query, fetcher)
+  const explorerCursor = explorerCursorSchema.safeParse(
+    decodeCursor(query.cursor),
+  )
+  if (!config.warehouseUrl || (query.cursor && explorerCursor.success)) {
+    return explorerActivity(config.explorerOrigin, query, fetcher)
+  }
+  try {
+    return await warehouseActivity(config.warehouseUrl, query, fetcher)
+  } catch (error) {
+    if (!isWarehouseDown(error)) throw error
+    const after = warehouseCursorSchema.safeParse(decodeCursor(query.cursor))
+    return explorerActivity(
+      config.explorerOrigin,
+      { ...query, cursor: null },
+      fetcher,
+      after.success ? after.data : undefined,
+    )
+  }
 }
 
 export async function activityFreshness(
   config: SourceConfig,
   fetcher: typeof fetch = fetch,
 ): Promise<WireFreshness> {
-  if (!config.warehouseUrl) {
-    return explorerFreshness(config.explorerOrigin, fetcher)
+  if (config.warehouseUrl) {
+    try {
+      const [checkpoint = []] = await queryBatchCached(
+        config.warehouseUrl,
+        [CHECKPOINT_QUERY],
+        fetcher,
+      )
+      return await warehouseFreshness(checkpoint)
+    } catch (error) {
+      if (!isWarehouseDown(error)) throw error
+    }
   }
-  try {
-    const [checkpoint = []] = await queryBatchCached(
-      config.warehouseUrl,
-      [CHECKPOINT_QUERY],
-      fetcher,
-    )
-    return await warehouseFreshness(checkpoint)
-  } catch {
-    return UNAVAILABLE_ACTIVITY
-  }
+  return explorerFreshness(config.explorerOrigin, fetcher)
 }
 
 type TxRef = { blockNumber: bigint; timestamp: bigint; from: string | null }
@@ -514,45 +574,64 @@ export async function queryTx(
   fetcher: typeof fetch = fetch,
 ): Promise<{ data: WireActivityTx; freshness: WireFreshness }> {
   if (config.warehouseUrl) {
-    const { params, add } = sqlParams()
-    const text = `SELECT ${SELECT} FROM matchbox.activity_events a
-      WHERE a.network = ${add(NETWORK)} AND a.tx_hash = ${add(hash)}
-      ORDER BY a.log_index ASC, a.id COLLATE "C" ASC`
-    let rows: SqlRow[]
-    let checkpoint: SqlRow[]
     try {
-      ;[rows = [], checkpoint = []] = await queryBatchCached(
-        config.warehouseUrl,
-        [{ text, params }, CHECKPOINT_QUERY],
-        fetcher,
-      )
+      return await warehouseTx(config.warehouseUrl, hash, fetcher)
     } catch (error) {
-      if (error instanceof WarehouseUnavailableError) {
-        throw warehouseUnavailable(error)
-      }
-      throw error
+      if (!isWarehouseDown(error)) throw error
     }
-    const items = rows.flatMap((row) => {
-      const item = fromWarehouseRow(row)
-      return item ? [item] : []
-    })
-    const [freshness, ref] = await Promise.all([
-      warehouseFreshness(checkpoint),
-      items.length === 0 ? txRef(hash) : Promise.resolve(null),
-    ])
-    await enrichActivity(items)
-    return { data: txView(hash, ref, items, freshness), freshness }
   }
+  return explorerTx(config.explorerOrigin, hash, fetcher)
+}
 
+async function warehouseTx(
+  url: string,
+  hash: `0x${string}`,
+  fetcher: typeof fetch,
+): Promise<{ data: WireActivityTx; freshness: WireFreshness }> {
+  const { params, add } = sqlParams()
+  const text = `SELECT ${SELECT} FROM matchbox.activity_events a
+    WHERE a.network = ${add(NETWORK)} AND a.tx_hash = ${add(hash)}
+    ORDER BY a.log_index ASC, a.id COLLATE "C" ASC`
+  let rows: SqlRow[]
+  let checkpoint: SqlRow[]
+  try {
+    ;[rows = [], checkpoint = []] = await queryBatchCached(
+      url,
+      [{ text, params }, CHECKPOINT_QUERY],
+      fetcher,
+    )
+  } catch (error) {
+    if (error instanceof WarehouseUnavailableError) {
+      throw warehouseUnavailable(error)
+    }
+    throw error
+  }
+  const items = rows.flatMap((row) => {
+    const item = fromWarehouseRow(row)
+    return item ? [item] : []
+  })
+  const [freshness, ref] = await Promise.all([
+    warehouseFreshness(checkpoint),
+    items.length === 0 ? txRef(hash) : Promise.resolve(null),
+  ])
+  await enrichActivity(items)
+  return { data: txView(hash, ref, items, freshness), freshness }
+}
+
+async function explorerTx(
+  origin: string,
+  hash: `0x${string}`,
+  fetcher: typeof fetch,
+): Promise<{ data: WireActivityTx; freshness: WireFreshness }> {
   const [ref, freshness] = await Promise.all([
     txRef(hash),
-    explorerFreshness(config.explorerOrigin, fetcher),
+    explorerFreshness(origin, fetcher),
   ])
   if (!ref) return { data: txView(hash, null, [], freshness), freshness }
   // The explorer has no tx filter: read that block's second and match.
   const second = ref.timestamp.toString()
   const { items } = await explorerFetch(
-    config.explorerOrigin,
+    origin,
     { limit: "1000", from: second, to: second },
     fetcher,
   )

@@ -60,15 +60,20 @@ export function sqlParams(): {
   }
 }
 
+/** A read slower than this counts as the warehouse being unavailable. */
+export const WAREHOUSE_TIMEOUT_MS = 6_000
+
 /** Several reads in one HTTP round trip, in one read-only transaction. */
 export async function queryBatch(
   connectionString: string,
   queries: readonly SqlQuery[],
   fetcher: typeof fetch = fetch,
+  timeoutMs: number = WAREHOUSE_TIMEOUT_MS,
 ): Promise<SqlRow[][]> {
   let response: Response
   try {
     response = await fetcher(sqlEndpoint(connectionString), {
+      signal: AbortSignal.timeout(timeoutMs),
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -145,14 +150,28 @@ export async function warehouseCacheKey(
 }
 
 /**
+ * After a failed read (quota spent and the project suspended, an outage, a
+ * timeout) the warehouse is skipped for this long, per isolate, so requests
+ * go straight to the fallback instead of each waiting on Neon.
+ */
+export const WAREHOUSE_BREAKER_MS = 120_000
+const BREAKER_KEY = "warehouse:breaker"
+
+export function warehouseBreakerOpen(): boolean {
+  return timedGet<boolean>(BREAKER_KEY) === true
+}
+
+/**
  * `queryBatch` behind a 300 s cache: a per-isolate memo, then the Workers
- * Cache API (per colo), then Neon. Failures are never cached.
+ * Cache API (per colo), then Neon. Failures are never cached; one trips the
+ * breaker, and while it's open only cached answers are served.
  */
 export async function queryBatchCached(
   connectionString: string,
   queries: readonly SqlQuery[],
   fetcher: typeof fetch = fetch,
   nowMs: () => number = Date.now,
+  timeoutMs: number = WAREHOUSE_TIMEOUT_MS,
 ): Promise<SqlRow[][]> {
   const key = await warehouseCacheKey(connectionString, queries)
   const ttlMs = WAREHOUSE_TTL_SECONDS * 1000
@@ -163,7 +182,18 @@ export async function queryBatchCached(
     timedSet(key, stored.data.results, stored.data.at + ttlMs - nowMs())
     return stored.data.results
   }
-  const results = await queryBatch(connectionString, queries, fetcher)
+  if (warehouseBreakerOpen()) {
+    throw new WarehouseUnavailableError("Warehouse skipped (breaker open)")
+  }
+  let results: SqlRow[][]
+  try {
+    results = await queryBatch(connectionString, queries, fetcher, timeoutMs)
+  } catch (error) {
+    if (error instanceof WarehouseUnavailableError) {
+      timedSet(BREAKER_KEY, true, WAREHOUSE_BREAKER_MS)
+    }
+    throw error
+  }
   timedSet(key, results, ttlMs)
   await persistedPut(key, { at: nowMs(), results }, WAREHOUSE_TTL_SECONDS)
   return results

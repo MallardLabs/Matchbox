@@ -13,13 +13,17 @@ const {
   queryBatchCached,
   quantiseNow,
   sqlEndpoint,
+  WarehouseUnavailableError,
+  warehouseBreakerOpen,
   warehouseCacheKey,
 } = await import("./neon")
 const { clearHistoryMemo } = await import("./store")
 const {
+  activityFreshness,
   buildWarehouseActivityQuery,
   freshnessFrom,
   queryActivity,
+  queryTx,
   sourceConfig,
 } = await import("./sources")
 
@@ -219,7 +223,7 @@ describe("queryActivity", () => {
     })
   })
 
-  it("maps a warehouse outage to warehouse_unavailable", async () => {
+  it("is unavailable only when the warehouse and explorer are both down", async () => {
     const fetcher = vi.fn(async () => new Response("down", { status: 500 }))
     await expect(
       queryActivity(
@@ -317,14 +321,38 @@ describe("warehouse read cache", () => {
     expect(fetcher).toHaveBeenCalledTimes(2)
   })
 
-  it("never caches a failed read", async () => {
+  it("never caches a failed read; the breaker skips Neon for a while", async () => {
     const down = vi.fn(async () => new Response("down", { status: 500 }))
     await expect(
       queryBatchCached(url, [query], down as unknown as typeof fetch),
     ).rejects.toThrow()
+    expect(warehouseBreakerOpen()).toBe(true)
+    // While open, Neon isn't asked at all.
     const up = vi.fn(async () => answer())
-    await queryBatchCached(url, [query], up as unknown as typeof fetch)
+    await expect(
+      queryBatchCached(url, [query], up as unknown as typeof fetch),
+    ).rejects.toThrow()
+    expect(up).not.toHaveBeenCalled()
+    // Breaker closed again (120 s later): the read goes through.
+    clearHistoryMemo()
+    expect(
+      await queryBatchCached(url, [query], up as unknown as typeof fetch),
+    ).toEqual([[{ n: "1" }]])
     expect(up).toHaveBeenCalledTimes(1)
+  })
+
+  it("treats a slow warehouse as unavailable", async () => {
+    const hang = vi.fn(
+      (_input: string | URL | Request, init?: RequestInit) =>
+        new Promise<Response>((_, reject) => {
+          init?.signal?.addEventListener("abort", () =>
+            reject(new Error("aborted")),
+          )
+        }),
+    )
+    await expect(
+      queryBatch(url, [query], hang as unknown as typeof fetch, 20),
+    ).rejects.toBeInstanceOf(WarehouseUnavailableError)
   })
 
   it("keys by query and params, not credentials", async () => {
@@ -364,5 +392,94 @@ describe("freshness with 15-minute indexer ticks", () => {
   it("is stale after a missed tick (45 min / ~700 blocks)", () => {
     expect(fresh(2_800, 300n)).toBe("stale")
     expect(fresh(600, 710n)).toBe("stale")
+  })
+})
+
+describe("warehouse fallback", () => {
+  const config = {
+    warehouseUrl: "postgres://u:p@ep-x.aws.neon.tech/db",
+    explorerOrigin: "https://explorer.test",
+  }
+  const EXPLORER_ROWS = [
+    { id: "new", timestamp: 1_790_000_300 },
+    { id: "old", timestamp: 1_790_000_100 },
+  ]
+
+  /** Neon answers 500 (quota spent); the explorer serves two rows. */
+  function stub(): {
+    fetcher: typeof fetch
+    neonCalls: () => number
+    explorerUrls: () => URL[]
+  } {
+    let neon = 0
+    const urls: URL[] = []
+    const fetcher = vi.fn(async (input: string | URL | Request) => {
+      const url = new URL(String(input))
+      if (url.host.endsWith("neon.tech")) {
+        neon += 1
+        return new Response("quota exceeded", { status: 500 })
+      }
+      urls.push(url)
+      return jsonResponse({
+        success: true,
+        page: 0,
+        hasMore: false,
+        data: EXPLORER_ROWS.map((row, index) => ({
+          ...row,
+          blockNumber: "12000000",
+          actionType: "lockCreated",
+          boostContext: "unknown",
+          source: "subgraph",
+          contract: "votingEscrow",
+          txHash: `0x${String(index).repeat(64)}`,
+          actorAddress: WALLET,
+          logIndex: 0,
+        })),
+      })
+    })
+    return {
+      fetcher: fetcher as unknown as typeof fetch,
+      neonCalls: () => neon,
+      explorerUrls: () => urls,
+    }
+  }
+
+  it("serves the explorer, marked stale, and stops asking Neon", async () => {
+    const { fetcher, neonCalls } = stub()
+    const first = await queryActivity(config, BASE_QUERY, fetcher)
+    expect(first.items.map((item) => item.id)).toEqual(["new", "old"])
+    expect(first.freshness).toMatchObject({
+      source: "frozen-explorer",
+      state: "stale",
+    })
+    await queryActivity(config, { ...BASE_QUERY, limit: 3 }, fetcher)
+    expect(neonCalls()).toBe(1)
+  })
+
+  it("continues a warehouse-started list past its last row", async () => {
+    const { fetcher, explorerUrls } = stub()
+    const cursor = encodeCursor({
+      t: "1790000200",
+      b: "12000000",
+      l: 0,
+      id: "x",
+    })
+    const result = await queryActivity(
+      config,
+      { ...BASE_QUERY, cursor },
+      fetcher,
+    )
+    expect(result.items.map((item) => item.id)).toEqual(["old"])
+    const listUrl = explorerUrls().find((url) => url.searchParams.has("actor"))
+    expect(listUrl?.searchParams.get("to")).toBe("1790000200")
+  })
+
+  it("falls back for freshness and tx permalinks too", async () => {
+    const { fetcher } = stub()
+    expect((await activityFreshness(config, fetcher)).source).toBe(
+      "frozen-explorer",
+    )
+    const tx = await queryTx(config, `0x${"ab".repeat(32)}`, fetcher)
+    expect(tx.freshness.source).toBe("frozen-explorer")
   })
 })
