@@ -17,7 +17,7 @@ import {
 } from "../../lib/money"
 import { fetchBtcUsdPrice } from "../btcPrice"
 import { fetchMezoUsdPrice } from "../mezoPrice"
-import { cached } from "../router"
+import { type KvNamespace, cached } from "../router"
 import { ORACLE_ABI, mezoHistoryClient } from "./chain"
 import { EPOCH } from "./math"
 import {
@@ -92,7 +92,11 @@ export type EpochClosePrice = PriceRefs & {
   settled: boolean
 }
 
-export type PricingEnv = { BASE_RPC_URL?: string | undefined }
+export type PricingEnv = {
+  BASE_RPC_URL?: string | undefined
+  /** Durable store for settled close prices; absent locally and in tests. */
+  HISTORY_KV?: KvNamespace | undefined
+}
 
 /** USD per whole token, or null when the token class has no price. */
 export function tokenPrice(
@@ -469,9 +473,37 @@ function inflightKey(epochStart: bigint): string {
   return `pricing:${epochStart}`
 }
 
-function seal(row: EpochClosePrice): Promise<void> {
+/** A settled row from KV, or undefined (absent, malformed or KV failing). */
+async function kvGetPrice(
+  kv: KvNamespace | undefined,
+  epochStart: bigint,
+): Promise<EpochClosePrice | undefined> {
+  if (!kv) return undefined
+  try {
+    const raw = await kv.get(priceKey(epochStart))
+    return raw === null ? undefined : fromStored(JSON.parse(raw))
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * Seals a settled row: isolate memo, this colo's Cache API, and KV (durable
+ * across colos and evictions). Only ever called with `settled` rows, which
+ * never change; KV failures are ignored.
+ */
+async function seal(
+  row: EpochClosePrice,
+  kv: KvNamespace | undefined,
+): Promise<void> {
   sealedSet(priceKey(row.epochStart), row)
-  return persistedPut(priceKey(row.epochStart), toStored(row))
+  const stored = toStored(row)
+  await Promise.all([
+    persistedPut(priceKey(row.epochStart), stored),
+    kv?.put(priceKey(row.epochStart), JSON.stringify(stored)).catch(() => {
+      // Best effort: the next request that prices this epoch writes it.
+    }),
+  ])
 }
 
 /** Settled close prices already known to this isolate (no I/O). */
@@ -508,10 +540,18 @@ export async function epochClosePrices(
     if (memo) result.set(epochStart, memo)
     else unmemoized.push(epochStart)
   }
+  // Read-through: this colo's Cache API, then KV (which also warms the
+  // colo cache), then RPC for whatever neither has.
   const persisted = await Promise.all(
-    unmemoized.map(async (epochStart) =>
-      fromStored(await persistedGet(priceKey(epochStart))),
-    ),
+    unmemoized.map(async (epochStart) => {
+      const local = fromStored(await persistedGet(priceKey(epochStart)))
+      if (local) return local
+      const durable = await kvGetPrice(env.HISTORY_KV, epochStart)
+      if (durable) {
+        await persistedPut(priceKey(epochStart), toStored(durable))
+      }
+      return durable
+    }),
   )
   const missing: bigint[] = []
   unmemoized.forEach((epochStart, index) => {
@@ -582,7 +622,7 @@ export async function epochClosePrices(
           settled: btcRead.value !== null && !btcRead.retry,
         }
         rows.set(epochStart, row)
-        if (row.settled) sealing.push(seal(row))
+        if (row.settled) sealing.push(seal(row, env.HISTORY_KV))
         return mezo
       },
       BASE_POLICY,

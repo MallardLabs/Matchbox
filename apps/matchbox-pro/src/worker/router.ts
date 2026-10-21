@@ -1,10 +1,18 @@
 // Shared plumbing for the Pro Worker BFF. Each area registers its routes in
 // its own file under ./routes so features can add endpoints independently.
 
+/** The part of a Workers KV namespace the Worker uses. */
+export type KvNamespace = {
+  get(key: string): Promise<string | null>
+  put(key: string, value: string): Promise<void>
+}
+
 export type WorkerEnv = {
   ASSETS?: {
     fetch: typeof fetch
   }
+  /** Settled epoch close prices (immutable); optional for local and tests. */
+  HISTORY_KV?: KvNamespace | undefined
   BASE_RPC_URL?: string | undefined
   MEZO_RPC_URL?: string | undefined
   MATCHBOX_API_ORIGIN?: string | undefined

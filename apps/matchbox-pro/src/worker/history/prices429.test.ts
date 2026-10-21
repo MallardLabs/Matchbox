@@ -295,3 +295,87 @@ describe("request time budget", () => {
 function baseBlockFor(epochStart: bigint): bigint {
   return (epochStart + EPOCH - 1n - 1_686_789_347n) / 2n
 }
+
+describe("settled prices in KV", () => {
+  function memoryKv(failing = false): {
+    data: Map<string, string>
+    kv: {
+      get: (key: string) => Promise<string | null>
+      put: (key: string, value: string) => Promise<void>
+    }
+  } {
+    const data = new Map<string, string>()
+    return {
+      data,
+      kv: {
+        get: async (key) => {
+          if (failing) throw new Error("KV unavailable")
+          return data.get(key) ?? null
+        },
+        put: async (key, value) => {
+          if (failing) throw new Error("KV unavailable")
+          data.set(key, value)
+        },
+      },
+    }
+  }
+
+  it("writes settled epochs and serves a cold isolate without RPC", async () => {
+    const { data, kv } = memoryKv()
+    stubBase(() => 0)
+    await epochClosePrices(EPOCHS, { HISTORY_KV: kv }, NOW, instant)
+    expect([...data.keys()].sort()).toEqual(
+      EPOCHS.map((epoch) => `price:${epoch}`).sort(),
+    )
+
+    // New isolate, Base down: everything comes from KV.
+    clearHistoryMemo()
+    const outage = stubBase(() => Number.POSITIVE_INFINITY)
+    const closes = await epochClosePrices(
+      EPOCHS,
+      { HISTORY_KV: kv },
+      NOW,
+      instant,
+    )
+    expect(EPOCHS.every((epoch) => closes.get(epoch)?.settled)).toBe(true)
+    expect(closes.get(EPOCHS[0] ?? 0n)?.btcUsd).toBe("80000")
+    expect(outage.calls()).toBe(0)
+  })
+
+  it("never stores a partial price or the current epoch", async () => {
+    const { data, kv } = memoryKv()
+    stubBase(() => Number.POSITIVE_INFINITY)
+    await epochClosePrices(EPOCHS, { HISTORY_KV: kv }, NOW, instant)
+    await epochClosePrices([CURRENT], { HISTORY_KV: kv }, NOW, instant)
+    expect(data.size).toBe(0)
+  })
+
+  it("falls through to RPC when KV fails", async () => {
+    const { kv } = memoryKv(true)
+    stubBase(() => 0)
+    const closes = await epochClosePrices(
+      EPOCHS,
+      { HISTORY_KV: kv },
+      NOW,
+      instant,
+    )
+    expect(EPOCHS.every((epoch) => closes.get(epoch)?.settled)).toBe(true)
+  })
+
+  it("ignores a malformed KV value and prices the epoch", async () => {
+    const { data, kv } = memoryKv()
+    const epoch = EPOCHS[0] ?? 0n
+    data.set(`price:${epoch}`, "{not json")
+    stubBase(() => 0)
+    const closes = await epochClosePrices(
+      [epoch],
+      { HISTORY_KV: kv },
+      NOW,
+      instant,
+    )
+    expect(closes.get(epoch)?.settled).toBe(true)
+    expect(JSON.parse(data.get(`price:${epoch}`) ?? "{}")).toMatchObject({
+      btcUsd: "80000",
+    })
+  })
+})
