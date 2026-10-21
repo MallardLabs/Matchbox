@@ -50,7 +50,12 @@ import {
 } from "./ballot"
 import { MAX_VOTING_TARGETS } from "./contracts"
 import type { VotingWindow } from "./locks"
-import { VOTE_TYPE_META, type VoteTarget, type VoteType } from "./model"
+import {
+  type TargetData,
+  VOTE_TYPE_META,
+  type VoteTarget,
+  type VoteType,
+} from "./model"
 import {
   type AllocationSnapshot,
   optimizeBallot,
@@ -72,12 +77,6 @@ import { type CheckoutLock, useVoteCheckout } from "./useVoteCheckout"
 import { useOwnVotes, useVoteLocks } from "./useVoteLocks"
 
 const PAGE_SIZE = 10
-
-type TargetData = {
-  targets: VoteTarget[]
-  isLoading: boolean
-  incentivesLoading: boolean
-}
 
 export type WorkspaceProps = {
   view: VoteView
@@ -647,6 +646,8 @@ function Workspace({
             onDensityChange={(density) => onViewChange({ density })}
           />
           <TargetList
+            unavailable={data.unavailable ? meta.targetNoun : null}
+            onRetry={data.retry}
             loading={data.isLoading}
             targets={visible}
             tabletUp={tabletUp}
@@ -772,6 +773,8 @@ function Workspace({
 }
 
 function TargetList({
+  unavailable,
+  onRetry,
   loading,
   targets,
   tabletUp,
@@ -785,6 +788,9 @@ function TargetList({
   onShareChange,
   onClearFilters,
 }: {
+  /** Target noun when the data source failed ("validators"). */
+  unavailable: string | null
+  onRetry: () => void
   loading: boolean
   targets: VoteTarget[]
   tabletUp: boolean
@@ -802,6 +808,21 @@ function TargetList({
   const gridClass = compact
     ? "gap-3 [grid-template-columns:repeat(auto-fill,minmax(max(270px,calc((100%_-_24px)/3)),1fr))]"
     : "gap-x-[18px] gap-y-10 [grid-template-columns:repeat(auto-fill,minmax(max(290px,calc((100%_-_36px)/3)),1fr))]"
+
+  if (unavailable)
+    return (
+      <EmptyState.Root>
+        <EmptyState.Title>
+          {unavailable.charAt(0).toUpperCase() + unavailable.slice(1)}{" "}
+          unavailable
+        </EmptyState.Title>
+        <EmptyState.Action>
+          <Button.Root variant="secondary" onClick={onRetry}>
+            Retry
+          </Button.Root>
+        </EmptyState.Action>
+      </EmptyState.Root>
+    )
 
   if (loading)
     return (

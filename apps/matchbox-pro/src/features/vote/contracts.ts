@@ -20,6 +20,7 @@ export const VOTER_ABI = parseAbi([
   "function gaugeToBribe(address gauge) view returns (address)",
   "function gaugeToFees(address gauge) view returns (address)",
   "function totalWeight() view returns (uint256)",
+  "function epochStart(uint256 timestamp) view returns (uint256)",
   "function lastVoted(uint256 tokenId) view returns (uint256)",
   "function usedWeights(uint256 tokenId) view returns (uint256)",
   "function votes(uint256 tokenId, address target) view returns (uint256)",

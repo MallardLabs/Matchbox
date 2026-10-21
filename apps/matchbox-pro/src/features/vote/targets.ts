@@ -14,19 +14,27 @@ export const INFINITE_APY = 10n ** 30n
 
 export type Prices = { btc: string | null; mezo: string | null }
 
+export type UnpricedReward = Omit<RewardToken, "microUsd"> & {
+  /** Market price from the Mezo pools API, used only without a reference price. */
+  priceUsd?: string | null
+}
+
 export function priceRewards(
-  rewards: ReadonlyArray<Omit<RewardToken, "microUsd">>,
+  rewards: readonly UnpricedReward[],
   prices: Prices,
 ): RewardToken[] {
   return rewards
     .filter((reward) => reward.amount > 0n)
-    .map((reward) => {
-      const price = referencePriceUsd({
-        tokenAddress: reward.tokenAddress,
-        symbol: reward.symbol,
-        btcPriceUsd: prices.btc,
-        mezoPriceUsd: prices.mezo,
-      })
+    .map(({ priceUsd, ...reward }) => {
+      const price =
+        referencePriceUsd({
+          tokenAddress: reward.tokenAddress,
+          symbol: reward.symbol,
+          btcPriceUsd: prices.btc,
+          mezoPriceUsd: prices.mezo,
+        }) ??
+        priceUsd ??
+        null
       return {
         ...reward,
         microUsd: price

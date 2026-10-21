@@ -2,7 +2,7 @@ import { useBoostGauges } from "@/hooks/useBoostGauges"
 import { profileForGauge, useGaugeProfiles } from "@/hooks/useProfiles"
 import { useTopology } from "@/hooks/useTopology"
 import { useMemo } from "react"
-import type { VoteTarget } from "./model"
+import type { TargetData, VoteTarget } from "./model"
 import {
   INFINITE_APY,
   PER_10K_VEMEZO,
@@ -25,11 +25,7 @@ function parseAmount(value: string): bigint {
 }
 
 /** veMEZO boost gauges: one card per BoostVoter gauge. */
-export function useVeMezoTargets(prices: Prices): {
-  targets: VoteTarget[]
-  isLoading: boolean
-  incentivesLoading: boolean
-} {
+export function useVeMezoTargets(prices: Prices): TargetData {
   const { gauges, isLoading } = useBoostGauges()
   const { data: profiles } = useGaugeProfiles()
   const topology = useTopology()
@@ -115,5 +111,7 @@ export function useVeMezoTargets(prices: Prices): {
     targets,
     isLoading,
     incentivesLoading: topology.isLoading,
+    unavailable: false,
+    retry: () => void topology.refetch(),
   }
 }

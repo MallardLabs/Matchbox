@@ -68,7 +68,7 @@ export default function LockSelector(props: LockSelectorProps): ReactElement {
             aria-hidden="true"
             className={cn(
               "flex size-[22px] items-center justify-center rounded-full border-2",
-              allSelected || !canSelect
+              allSelected || props.mode === "disconnected"
                 ? "border-accent bg-accent text-on-accent"
                 : "border-line-2 bg-surface",
             )}

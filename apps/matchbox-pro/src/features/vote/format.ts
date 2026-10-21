@@ -13,6 +13,8 @@ export function formatUsdHeadline(microUsd: bigint): string {
 
 /** "~$12,104" pill value; cents only below $100. */
 export function formatUsdApprox(microUsd: bigint): string {
+  // Priced dust reads as "<$0.01", never as a misleading $0.00.
+  if (microUsd > 0n && microUsd < 5_000n) return "<$0.01"
   if (microUsd < 100_000_000n) return `~${formatMicroUsd(microUsd)}`
   return `~$${groupThousands((microUsd + 500_000n) / 1_000_000n)}`
 }

@@ -75,6 +75,16 @@ export type VoteTarget = {
   hasDetail: boolean
 }
 
+/** What each branch's data hook hands the workspace. */
+export type TargetData = {
+  targets: VoteTarget[]
+  isLoading: boolean
+  incentivesLoading: boolean
+  /** The data source failed; show a retry state instead of an empty list. */
+  unavailable: boolean
+  retry: () => void
+}
+
 export type VoteCall = {
   call: { to: Address; data: Hex }
   write: () => Promise<Hex>
