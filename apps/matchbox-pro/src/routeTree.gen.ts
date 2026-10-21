@@ -15,6 +15,7 @@ import { Route as QueryRouteImport } from './routes/query'
 import { Route as RewardsRouteImport } from './routes/rewards'
 import { Route as VoteRouteImport } from './routes/vote'
 import { Route as GaugesAddressRouteImport } from './routes/gauges.$address'
+import { Route as ActivityAddressTxHashRouteImport } from './routes/activity_.$address.tx.$hash'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -46,6 +47,11 @@ const GaugesAddressRoute = GaugesAddressRouteImport.update({
   path: '/gauges/$address',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ActivityAddressTxHashRoute = ActivityAddressTxHashRouteImport.update({
+  id: '/activity_/$address/tx/$hash',
+  path: '/activity/$address/tx/$hash',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -54,6 +60,7 @@ export interface FileRoutesByFullPath {
   '/rewards': typeof RewardsRoute
   '/vote': typeof VoteRoute
   '/gauges/$address': typeof GaugesAddressRoute
+  '/activity/$address/tx/$hash': typeof ActivityAddressTxHashRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -62,6 +69,7 @@ export interface FileRoutesByTo {
   '/rewards': typeof RewardsRoute
   '/vote': typeof VoteRoute
   '/gauges/$address': typeof GaugesAddressRoute
+  '/activity/$address/tx/$hash': typeof ActivityAddressTxHashRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -71,13 +79,27 @@ export interface FileRoutesById {
   '/rewards': typeof RewardsRoute
   '/vote': typeof VoteRoute
   '/gauges/$address': typeof GaugesAddressRoute
+  '/activity_/$address/tx/$hash': typeof ActivityAddressTxHashRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
-    '/' | '/activity' | '/query' | '/rewards' | '/vote' | '/gauges/$address'
+    | '/'
+    | '/activity'
+    | '/query'
+    | '/rewards'
+    | '/vote'
+    | '/gauges/$address'
+    | '/activity/$address/tx/$hash'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/activity' | '/query' | '/rewards' | '/vote' | '/gauges/$address'
+  to:
+    | '/'
+    | '/activity'
+    | '/query'
+    | '/rewards'
+    | '/vote'
+    | '/gauges/$address'
+    | '/activity/$address/tx/$hash'
   id:
     | '__root__'
     | '/'
@@ -86,6 +108,7 @@ export interface FileRouteTypes {
     | '/rewards'
     | '/vote'
     | '/gauges/$address'
+    | '/activity_/$address/tx/$hash'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -95,6 +118,7 @@ export interface RootRouteChildren {
   RewardsRoute: typeof RewardsRoute
   VoteRoute: typeof VoteRoute
   GaugesAddressRoute: typeof GaugesAddressRoute
+  ActivityAddressTxHashRoute: typeof ActivityAddressTxHashRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -141,6 +165,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof GaugesAddressRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/activity_/$address/tx/$hash': {
+      id: '/activity_/$address/tx/$hash'
+      path: '/activity/$address/tx/$hash'
+      fullPath: '/activity/$address/tx/$hash'
+      preLoaderRoute: typeof ActivityAddressTxHashRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -151,6 +182,7 @@ const rootRouteChildren: RootRouteChildren = {
   RewardsRoute: RewardsRoute,
   VoteRoute: VoteRoute,
   GaugesAddressRoute: GaugesAddressRoute,
+  ActivityAddressTxHashRoute: ActivityAddressTxHashRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
