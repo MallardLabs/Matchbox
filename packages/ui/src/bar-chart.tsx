@@ -28,13 +28,18 @@ export type RootProps = HTMLAttributes<HTMLDivElement> & {
   spacing?: "comfortable" | "compact"
 }
 
-/** Rounds up to 1, 2 or 5 × 10ⁿ so every chart shares readable ticks. */
+// Fine enough that bars fill most of the plot; each halves cleanly for the
+// middle tick.
+const NICE_STEPS = [1, 2, 3, 4, 5, 6, 8, 10]
+
+/** Rounds up to a step × 10ⁿ so every chart shares readable ticks. */
 export function niceCeiling(value: number): number {
   if (value <= 0 || !Number.isFinite(value)) return 1
   const exponent = 10 ** Math.floor(Math.log10(value))
   const fraction = value / exponent
-  const nice = fraction <= 1 ? 1 : fraction <= 2 ? 2 : fraction <= 5 ? 5 : 10
-  return nice * exponent
+  const nice = NICE_STEPS.find((step) => fraction <= step) ?? 10
+  // toPrecision drops float noise such as 3 * 0.1 = 0.30000000000000004.
+  return Number((nice * exponent).toPrecision(12))
 }
 
 /**
