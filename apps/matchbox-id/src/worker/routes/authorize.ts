@@ -9,7 +9,11 @@ import {
   resolveRateLimitPolicy,
 } from "@repo/platform-contracts/rate-limits"
 import { redirectUriMatches } from "@repo/platform-contracts/redirects"
-import { type OidcScope, isDiscordScope } from "@repo/platform-contracts/scopes"
+import {
+  type OidcScope,
+  isDiscordScope,
+  parseRequestedOidcScopes,
+} from "@repo/platform-contracts/scopes"
 import { ipPrefix } from "@repo/platform-server"
 import { Hono } from "hono"
 import type { AppDeps } from "../deps"
@@ -20,7 +24,7 @@ import {
   errorPageRedirect,
   redirect,
 } from "../oidc/responses"
-import { isOptionalScope, parseRequestedScopes } from "../oidc/scope-policy"
+import { isOptionalScope } from "../oidc/scope-policy"
 import { createAuthorizationCode } from "../oidc/tokens"
 import {
   type QuotaOverrideLookup,
@@ -178,7 +182,7 @@ export default function authorizeRoutes(
     // Unknown scope values are ignored (OIDC Core §3.1.2.1). With the
     // Discord kill switch on, optional Discord scopes are ignored the same
     // way (they leave discovery); required ones cannot be granted.
-    const requested = parseRequestedScopes(request.scope)
+    const requested = parseRequestedOidcScopes(request.scope)
     if (!requested.includes("openid")) {
       return fail("invalid_scope", "openid scope is required")
     }

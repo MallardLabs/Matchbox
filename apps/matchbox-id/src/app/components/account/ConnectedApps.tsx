@@ -211,8 +211,6 @@ function AppRow({
             <Button.Root
               size="sm"
               variant="danger"
-              // White fails AA on the lighter dark-theme red.
-              className="dark:text-on-accent"
               loading={revoke.isPending}
               onClick={confirm}
             >
