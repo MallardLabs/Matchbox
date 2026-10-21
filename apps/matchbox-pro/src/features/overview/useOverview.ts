@@ -3,7 +3,7 @@ import {
   useWalletEarnings,
 } from "@/features/history/useHistory"
 import { claimGroups, sourcesForLock } from "@/features/locks/claims"
-import { type LockView, isExpired } from "@/features/locks/lockModel"
+import { type LockView, isExpired, isUnvoted } from "@/features/locks/lockModel"
 import { useLockDetails } from "@/features/locks/useLockDetails"
 import type { ClaimSource } from "@/features/rewards/claimSources"
 import { useClaimSources } from "@/features/rewards/useClaimSources"
@@ -12,7 +12,6 @@ import { useEpoch } from "@/hooks/useEpoch"
 import { useVeBTCLocks, useVeMEZOLocks } from "@/hooks/useLocks"
 import { usePersonalProjected } from "@/hooks/usePersonalProjected"
 import { profileForGauge, useGaugeProfiles } from "@/hooks/useProfiles"
-import { useBatchVoteState } from "@/hooks/useVoteState"
 import { gaugeDisplayName } from "@/lib/overview"
 import { calculateAnnualizedReturnBasisPoints } from "@/lib/rewardOptimizer"
 import { useViewer } from "@/lib/viewer"
@@ -45,7 +44,6 @@ export function useOverview() {
   const claimable = useClaimable(veMezoIds)
   const claimSources = useClaimSources()
   const projected = usePersonalProjected(veMezoIds)
-  const { voteStateMap } = useBatchVoteState(veMezoIds)
   const earnings = useWalletEarnings(viewer.address, 6)
   const earningsData = earnings.data
   const chartEpochs = useMemo(
@@ -94,7 +92,6 @@ export function useOverview() {
         isPermanent: lock.isPermanent,
         expired: isExpired(lock, now),
         hasActiveVotes: details.hasActiveVotes.get(key),
-        votedThisEpoch: false,
         gauge,
         profile: gauge ? (profileForGauge(profiles, gauge) ?? null) : null,
         claimable: lockClaimable(sources, "veBTC", lock.tokenId),
@@ -115,7 +112,6 @@ export function useOverview() {
         isPermanent: lock.isPermanent,
         expired: isExpired(lock, now),
         hasActiveVotes: details.hasActiveVotes.get(key),
-        votedThisEpoch: voteStateMap.get(id)?.hasVotedThisEpoch === true,
         gauge: null,
         profile: null,
         claimable: lockClaimable(sources, "veMEZO", lock.tokenId),
@@ -130,7 +126,6 @@ export function useOverview() {
     nowKey,
     profiles,
     sources,
-    voteStateMap,
   ])
 
   const locksState: LocksState =
@@ -165,13 +160,7 @@ export function useOverview() {
     usdMicro: projected.projectedMicro,
   })
 
-  const unvoted = locks.filter(
-    (lock) =>
-      lock.kind === "veMEZO" &&
-      !lock.expired &&
-      lock.votingPower > 0n &&
-      !lock.votedThisEpoch,
-  )
+  const unvoted = locks.filter(isUnvoted)
 
   return {
     viewer,

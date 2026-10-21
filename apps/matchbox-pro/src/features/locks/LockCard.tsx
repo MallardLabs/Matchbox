@@ -281,7 +281,7 @@ function LockFace({
             {tabletUp ? status : lockStatus(lock, nowSeconds, "short")}
           </span>
         </p>
-        {lock.expired ? null : lock.votedThisEpoch ? (
+        {lock.expired ? null : lock.hasActiveVotes ? (
           <span className="mb-px flex h-5 shrink-0 items-center gap-1 rounded bg-white/90 px-1.5 text-caption font-700 text-on-card">
             <Check aria-hidden="true" size={11} strokeWidth={2.5} />
             Voted

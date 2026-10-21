@@ -23,9 +23,12 @@ export type LockView = {
   end: bigint
   isPermanent: boolean
   expired: boolean
-  /** Escrow `voted` flag: the lock has live votes (blocks merge/withdraw). */
+  /**
+   * Escrow `voted` flag: the lock has live votes (blocks merge/withdraw).
+   * Votes carry over epochs and `poke` keeps `lastVoted`, so this, not
+   * `lastVoted`, says whether the lock is voting now.
+   */
   hasActiveVotes: boolean | undefined
-  votedThisEpoch: boolean
   /** veBTC: the boost gauge this lock backs, when it has one. */
   gauge: Address | null
   profile: GaugeProfile | null
@@ -150,6 +153,16 @@ export type LockAction = {
 }
 
 const RESET_VOTES = "Reset votes first"
+
+/** A live veMEZO lock known to hold no votes; unread flags don't count. */
+export function isUnvoted(lock: LockView): boolean {
+  return (
+    lock.kind === "veMEZO" &&
+    !lock.expired &&
+    lock.votingPower > 0n &&
+    lock.hasActiveVotes === false
+  )
+}
 
 /** Face-down action list, in the J02 order. Transfer/Merge sit in the footer. */
 export function lockActions(

@@ -26,6 +26,7 @@ import {
   formatVotingPower,
   initialVotingPower,
   isExpired,
+  isUnvoted,
   lockActions,
   lockStatus,
   mergePlan,
@@ -58,7 +59,6 @@ function lock(overrides: Partial<LockView> = {}): LockView {
     isPermanent: false,
     expired: false,
     hasActiveVotes: false,
-    votedThisEpoch: false,
     gauge: null,
     profile: null,
     claimable: null,
@@ -244,6 +244,24 @@ describe("lockActions", () => {
         (action) => action.id,
       ),
     ).toEqual(["withdraw"])
+  })
+})
+
+describe("isUnvoted", () => {
+  it("counts a veMEZO lock with no live votes", () => {
+    expect(isUnvoted(lock({ hasActiveVotes: false }))).toBe(true)
+  })
+
+  it("treats votes carried over from an earlier epoch as live", () => {
+    // #132 on mainnet: lastVoted is months old, usedWeights > 0 (poked).
+    expect(isUnvoted(lock({ hasActiveVotes: true }))).toBe(false)
+  })
+
+  it("ignores unread flags, expired or powerless locks and veBTC", () => {
+    expect(isUnvoted(lock({ hasActiveVotes: undefined }))).toBe(false)
+    expect(isUnvoted(lock({ expired: true }))).toBe(false)
+    expect(isUnvoted(lock({ votingPower: 0n }))).toBe(false)
+    expect(isUnvoted(lock({ kind: "veBTC", key: "veBTC-1" }))).toBe(false)
   })
 })
 
