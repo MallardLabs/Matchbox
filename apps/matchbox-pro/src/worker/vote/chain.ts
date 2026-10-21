@@ -17,7 +17,7 @@ import {
 } from "../../features/vote/contracts"
 import { chunkArray } from "../../lib/chunk"
 import createMezoClient from "../mezoClient"
-import { cached } from "../router"
+import { type WaitUntil, cachedStale } from "../router"
 import {
   type CallResult,
   type GaugedPool,
@@ -37,12 +37,14 @@ import {
   uniqueTokens,
 } from "./mappers"
 
-// Two cache layers. Structure (target lists, reward contracts, which tokens
-// each pays, names) changes rarely and is kept for minutes; state (weights,
-// liveness, this epoch's amounts) is re-read every 30s. A cold state refresh
-// is then three RPC rounds instead of seven.
-const STRUCTURE_TTL_MS = 120_000
-const PRICES_TTL_MS = 60_000
+// Two cache layers, both stale-while-revalidate. Structure (target lists,
+// reward contracts, which tokens each pays, names) changes rarely; the market
+// payload (weights, liveness, this epoch's amounts) is fresh for 30s. Past
+// that a request gets the last value at once while one refresh runs in the
+// background, so only a cold isolate ever waits on RPC.
+const STRUCTURE_TTL = { freshMs: 120_000, staleMs: 30 * 60_000 }
+const PRICES_TTL = { freshMs: 60_000, staleMs: 10 * 60_000 }
+export const MARKET_TTL = { freshMs: 30_000, staleMs: 5 * 60_000 }
 const MULTICALL_CHUNK = 200
 const POOLS_API: Record<SupportedChainId, string> = {
   [CHAIN_ID.mainnet]: "https://api.mezo.org",
@@ -76,21 +78,27 @@ async function multicall(
  */
 export async function fetchPoolsApiPrices(
   chainId: SupportedChainId,
+  waitUntil: WaitUntil,
   fetchImpl: typeof fetch = fetch,
 ): Promise<Map<string, string>> {
   try {
-    return await cached(`vote:prices:${chainId}`, PRICES_TTL_MS, async () => {
-      const response = await fetchImpl(
-        `${POOLS_API[chainId]}/pools?filter=none`,
-        {
-          // The API only answers its own site's origin, like the webapp proxy.
-          headers: { origin: "https://mezo.org", accept: "application/json" },
-          signal: AbortSignal.timeout(5_000),
-        },
-      )
-      if (!response.ok) throw new Error(`pools API ${response.status}`)
-      return poolsApiPrices(await response.json())
-    })
+    return await cachedStale(
+      `vote:prices:${chainId}`,
+      PRICES_TTL,
+      async () => {
+        const response = await fetchImpl(
+          `${POOLS_API[chainId]}/pools?filter=none`,
+          {
+            // The API only answers its own site's origin, like the webapp proxy.
+            headers: { origin: "https://mezo.org", accept: "application/json" },
+            signal: AbortSignal.timeout(5_000),
+          },
+        )
+        if (!response.ok) throw new Error(`pools API ${response.status}`)
+        return poolsApiPrices(await response.json())
+      },
+      waitUntil,
+    )
   } catch {
     return new Map()
   }
@@ -198,10 +206,11 @@ type ValidatorStructure = {
 
 function validatorStructure(
   chainId: SupportedChainId,
+  waitUntil: WaitUntil,
 ): Promise<ValidatorStructure> {
-  return cached(
+  return cachedStale(
     `vote:validators:structure:${chainId}`,
-    STRUCTURE_TTL_MS,
+    STRUCTURE_TTL,
     async () => {
       const client = createMezoClient(chainId)
       const voter = voterConfig(chainId, "validators").address
@@ -256,6 +265,7 @@ function validatorStructure(
       )
       return { gauges, bribes, operators, registry, rewards }
     },
+    waitUntil,
   )
 }
 
@@ -265,13 +275,14 @@ function validatorStructure(
  */
 export async function computeValidatorMarket(
   chainId: SupportedChainId,
+  waitUntil: WaitUntil,
 ): Promise<WireValidatorMarket> {
   const client = createMezoClient(chainId)
   const voter = voterConfig(chainId, "validators").address
   const [structure, head, prices] = await Promise.all([
-    validatorStructure(chainId),
+    validatorStructure(chainId, waitUntil),
     readHead(client, voter),
-    fetchPoolsApiPrices(chainId),
+    fetchPoolsApiPrices(chainId, waitUntil),
   ])
   const [live, amounts] = await Promise.all([
     multicall(
@@ -324,10 +335,13 @@ type PoolStructure = {
   rewards: RewardStructure
 }
 
-function poolStructure(chainId: SupportedChainId): Promise<PoolStructure> {
-  return cached(
+function poolStructure(
+  chainId: SupportedChainId,
+  waitUntil: WaitUntil,
+): Promise<PoolStructure> {
+  return cachedStale(
     `vote:pools:structure:${chainId}`,
-    STRUCTURE_TTL_MS,
+    STRUCTURE_TTL,
     async () => {
       const client = createMezoClient(chainId)
       const voter = voterConfig(chainId, "pools").address
@@ -405,6 +419,7 @@ function poolStructure(chainId: SupportedChainId): Promise<PoolStructure> {
       })
       return { rows, rewardContracts, meta, pairSymbols, rewards }
     },
+    waitUntil,
   )
 }
 
@@ -414,13 +429,14 @@ function poolStructure(chainId: SupportedChainId): Promise<PoolStructure> {
  */
 export async function computePoolMarket(
   chainId: SupportedChainId,
+  waitUntil: WaitUntil,
 ): Promise<WirePoolMarket> {
   const client = createMezoClient(chainId)
   const voter = voterConfig(chainId, "pools").address
   const [structure, head, prices] = await Promise.all([
-    poolStructure(chainId),
+    poolStructure(chainId, waitUntil),
     readHead(client, voter),
-    fetchPoolsApiPrices(chainId),
+    fetchPoolsApiPrices(chainId, waitUntil),
   ])
   const [live, amounts] = await Promise.all([
     multicall(
