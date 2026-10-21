@@ -1,4 +1,5 @@
 import type { GaugeEpochRow } from "@/features/history/useHistory"
+import { epochNumberFor } from "@/lib/epoch"
 import {
   decimalToScaledBigInt,
   formatApyBasisPoints,
@@ -186,19 +187,27 @@ export function formatBoostWad(wad: bigint): string {
   return `${tenths / 10n}.${tenths % 10n}×`
 }
 
-/** Epoch label by its UTC start date ("Oct 15"); there is no epoch number. */
-export function epochDateLabel(epochStart: number | undefined): string {
+const PRELAUNCH_DATE = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
+  timeZone: "UTC",
+})
+
+/**
+ * The app-wide epoch name, as Overview and Rewards show it: the protocol
+ * number ("6"), or for epochs before launch their UTC start date ("Aug 27").
+ */
+export function epochRowLabel(epochStart: number | undefined): string {
   if (
     epochStart === undefined ||
     !Number.isFinite(epochStart) ||
     epochStart <= 0
   )
     return "Current"
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    timeZone: "UTC",
-  }).format(new Date(epochStart * 1000))
+  const number = epochNumberFor(BigInt(epochStart))
+  return number === null
+    ? PRELAUNCH_DATE.format(new Date(epochStart * 1000))
+    : String(number)
 }
 
 export type EpochTableRow = {
@@ -223,7 +232,7 @@ function historyRow(row: GaugeEpochRow): EpochTableRow {
   ).length
   return {
     key: String(row.epochStart),
-    label: epochDateLabel(row.epochStart),
+    label: epochRowLabel(row.epochStart),
     current: row.status === "current",
     veMezo: formatNative(row.veMezo, 18),
     boost: row.boostWad === null ? "—" : formatBoostWad(row.boostWad),

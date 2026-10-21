@@ -3,8 +3,8 @@ import {
   type EpochTableRow,
   amountInputValue,
   checkAmount,
-  epochDateLabel,
   epochIncentives,
+  epochRowLabel,
   formatBoostWad,
   formatNative,
   gaugeApyBps,
@@ -257,7 +257,7 @@ describe("recent epochs", () => {
   }
   const live: EpochTableRow = {
     key: "live",
-    label: "Oct 15",
+    label: "6",
     current: true,
     veMezo: "8,420",
     boost: "4.2×",
@@ -266,9 +266,11 @@ describe("recent epochs", () => {
     apyKnown: true,
   }
 
-  it("labels epochs by UTC start date", () => {
-    expect(epochDateLabel(1_792_022_400)).toBe("Oct 15")
-    expect(epochDateLabel(undefined)).toBe("Current")
+  it("labels epochs by protocol number, pre-launch ones by date", () => {
+    expect(epochRowLabel(1_792_022_400)).toBe("6")
+    expect(epochRowLabel(1_788_393_600)).toBe("0")
+    expect(epochRowLabel(1_787_788_800)).toBe("Aug 27")
+    expect(epochRowLabel(undefined)).toBe("Current")
   })
 
   it("formats boost wads like the live multiplier", () => {
@@ -287,7 +289,7 @@ describe("recent epochs", () => {
     )
     expect(rows.map((row) => row.key)).toEqual(["live", "1791417600"])
     expect(rows[1]).toMatchObject({
-      label: "Oct 8",
+      label: "5",
       current: false,
       veMezo: "7,110",
       boost: "3.6×",

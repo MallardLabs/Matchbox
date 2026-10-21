@@ -8,6 +8,7 @@ import { useTopology } from "@/hooks/useTopology"
 import { formatApyBasisPoints, formatBoost } from "@/lib/money"
 import { useViewer } from "@/lib/viewer"
 import * as Skeleton from "@repo/ui/skeleton"
+import { shortenAddress } from "@repo/ui/wallet-address"
 import { Link } from "@tanstack/react-router"
 import { ArrowLeft } from "lucide-react"
 import { type ReactElement, useEffect, useMemo, useState } from "react"
@@ -25,8 +26,8 @@ import {
 } from "./GaugeSections"
 import {
   type EpochTableRow,
-  epochDateLabel,
   epochIncentives,
+  epochRowLabel,
   formatNative,
   gaugeApyBps,
   optimalFraction,
@@ -109,7 +110,7 @@ function GaugeDetail({ address }: { address: Address }): ReactElement {
   }
 
   const displayName = profile?.display_name?.trim()
-  const name = displayName ? displayName : `Gauge ${address.slice(0, 6)}`
+  const name = displayName ? displayName : shortenAddress(address)
   const tokenId = gauge.veBTCTokenId?.toString()
   const linked = gauge.veBTCTokenId !== undefined
   const incentivesLoading = topology.isLoading
@@ -150,7 +151,7 @@ function GaugeDetail({ address }: { address: Address }): ReactElement {
     ? undefined
     : {
         key: "live",
-        label: epochDateLabel(
+        label: epochRowLabel(
           Number.isFinite(epochStart) ? epochStart : undefined,
         ),
         current: true,

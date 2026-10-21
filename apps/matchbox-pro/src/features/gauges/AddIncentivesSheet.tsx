@@ -4,10 +4,12 @@ import { formatMicroUsd, tokenUsdMicroValue } from "@/lib/money"
 import { useNetwork } from "@/lib/network"
 import { referencePriceUsd } from "@/lib/tokenUsd"
 import { useViewer } from "@/lib/viewer"
+import { getTokenPriceType } from "@repo/shared"
 import * as Button from "@repo/ui/button"
 import { cn } from "@repo/ui/cn"
 import * as Dialog from "@repo/ui/dialog"
 import * as SigningSteps from "@repo/ui/signing-steps"
+import * as Skeleton from "@repo/ui/skeleton"
 import { shortenAddress } from "@repo/ui/wallet-address"
 import { useQueryClient } from "@tanstack/react-query"
 import { X } from "lucide-react"
@@ -16,6 +18,7 @@ import {
   type ReactNode,
   useEffect,
   useId,
+  useRef,
   useState,
 } from "react"
 import type { Address, Hex } from "viem"
@@ -72,8 +75,9 @@ function SheetContent({
   const { open: openConnect } = useConnectDialog()
   const explorer = usePublicClient({ chainId })?.chain?.blockExplorers?.default
     .url
-  const { data: btcPrice = null } = useBtcPrice()
-  const { data: mezoPrice = null } = useMezoPrice()
+  const { data: btcPrice = null, isLoading: btcPriceLoading } = useBtcPrice()
+  const { data: mezoPrice = null, isLoading: mezoPriceLoading } = useMezoPrice()
+  const amountRef = useRef<HTMLInputElement>(null)
   const signer = viewer.mode === "connected" ? viewer.address : undefined
   const tokenReads = useIncentiveTokens(signer)
   const gas = useBalance({
@@ -123,6 +127,19 @@ function SheetContent({
     price && decimals !== undefined
       ? formatMicroUsd(tokenUsdMicroValue(atomic, decimals, price))
       : "Unpriced"
+  // "Unpriced" only once the reads it depends on have come back empty.
+  const priceKind = selected
+    ? getTokenPriceType(selected.address, selected.symbol)
+    : "unknown"
+  const usdLoading =
+    decimals === undefined
+      ? tokenReads.isLoading
+      : (priceKind === "mezo" && mezoPriceLoading) ||
+        (priceKind === "btc-pegged" && btcPriceLoading)
+  const balanceLoading =
+    signer !== undefined &&
+    (tokenReads.walletLoading ||
+      (decimals === undefined && tokenReads.isLoading))
   const message =
     check.kind === "invalid" || check.kind === "insufficient"
       ? check.message
@@ -176,6 +193,10 @@ function SheetContent({
       hideClose
       onEscapeKeyDown={guard}
       onInteractOutside={guard}
+      onOpenAutoFocus={(event) => {
+        event.preventDefault()
+        amountRef.current?.focus()
+      }}
     >
       <div
         className={cn(
@@ -270,9 +291,14 @@ function SheetContent({
                 </label>
                 <span className="truncate tabular-nums text-muted">
                   Balance{" "}
-                  {selected?.balance !== undefined && decimals !== undefined
-                    ? `${formatNative(selected.balance, decimals)} ${selected.symbol}`
-                    : "—"}
+                  {balanceLoading ? (
+                    <InlineLoading className="w-14" />
+                  ) : selected?.balance !== undefined &&
+                    decimals !== undefined ? (
+                    `${formatNative(selected.balance, decimals)} ${selected.symbol}`
+                  ) : (
+                    "—"
+                  )}
                 </span>
                 <button
                   type="button"
@@ -298,6 +324,7 @@ function SheetContent({
                 </button>
               </div>
               <input
+                ref={amountRef}
                 id={`${ids}-amount`}
                 inputMode="decimal"
                 autoComplete="off"
@@ -306,13 +333,16 @@ function SheetContent({
                 onChange={(event) => setAmount(event.target.value)}
                 aria-invalid={message ? true : undefined}
                 aria-describedby={`${ids}-amount-note`}
-                className="h-[52px] w-full min-w-0 rounded-lg border border-transparent bg-inset px-3 text-metric font-400 tabular-nums text-ink outline-none placeholder:text-faint focus-visible:border-line-2 aria-[invalid=true]:border-neg disabled:text-secondary"
+                className="h-[52px] w-full min-w-0 rounded-lg border border-transparent bg-inset px-3 text-metric font-400 tabular-nums text-ink placeholder:text-faint focus:outline focus:outline-2 focus:outline-offset-2 focus:outline-accent-ink aria-[invalid=true]:border-neg disabled:text-secondary"
               />
               <p
                 id={`${ids}-amount-note`}
                 className="m-0 flex flex-wrap justify-between gap-x-4 gap-y-1 text-body-sm text-muted"
               >
-                <span className="tabular-nums">≈ {usd} this epoch</span>
+                <span className="tabular-nums">
+                  ≈ {usdLoading ? <InlineLoading className="w-12" /> : usd} this
+                  epoch
+                </span>
                 <span aria-live="polite" className="text-neg">
                   {message}
                 </span>
@@ -382,6 +412,18 @@ function SheetContent({
         </form>
       </div>
     </Dialog.Content>
+  )
+}
+
+/** Inline placeholder for a figure still loading; announced as "Loading". */
+function InlineLoading({ className }: { className: string }): ReactElement {
+  return (
+    <>
+      <Skeleton.Root
+        className={cn("inline-block h-3 bg-inset-2 align-[-1px]", className)}
+      />
+      <span className="sr-only">Loading</span>
+    </>
   )
 }
 

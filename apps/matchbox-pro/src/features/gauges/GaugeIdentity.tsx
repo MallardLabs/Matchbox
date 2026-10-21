@@ -2,8 +2,8 @@ import type { GaugeProfile } from "@/lib/supabase"
 import * as Badge from "@repo/ui/badge"
 import * as Button from "@repo/ui/button"
 import { cn } from "@repo/ui/cn"
+import * as CopyField from "@repo/ui/copy-field"
 import * as TokenMark from "@repo/ui/token-mark"
-import * as WalletAddress from "@repo/ui/wallet-address"
 import { Link } from "@tanstack/react-router"
 import { Check } from "lucide-react"
 import type { ReactElement } from "react"
@@ -86,7 +86,7 @@ export default function GaugeIdentity({
           />
         ) : (
           <TokenMark.Monogram
-            name={name.replace(/^Gauge /, "")}
+            name={name}
             seed={address}
             // Sized by class so one tile serves phone (64) and desktop (88).
             style={RESPONSIVE_TILE}
@@ -121,7 +121,13 @@ export default function GaugeIdentity({
           ) : null}
 
           {profile ? null : (
-            <WalletAddress.Root address={address} className="-my-1" />
+            // The name is already the short address; this is the full one.
+            <CopyField.Root
+              value={address}
+              label="gauge address"
+              size="sm"
+              className="max-w-[440px]"
+            />
           )}
 
           {tags.length > 0 ? (
