@@ -224,6 +224,8 @@ export default async function seedDemoData(
   for (let index = 0; index < 12; index++) {
     store.seedGrant({
       environmentId: hubTest.id,
+      // Half consented before the last scope bump: awaiting re-consent.
+      scopeVersion: index % 2 === 0 ? 1 : 2,
       scopes: index % 3 === 0 ? ["openid"] : ["openid", "wallet"],
       createdAt: new Date(
         options.now.getTime() - index * 36 * 60 * 60_000,
@@ -235,6 +237,55 @@ export default async function seedDemoData(
       revokedReason: index % 5 === 4 ? "user-revoked" : null,
     })
   }
+  // App 3: a Discord request sent back with a reviewer note --------------
+  const relayApp = await store.createApp({
+    organizationId: organization.id,
+    name: "Vote Relay",
+    slug: "vote-relay",
+    description: "Relays gauge votes to Discord.",
+    logoUrl: null,
+    websiteUrl: null,
+    privacyUrl: null,
+    termsUrl: null,
+    supportEmail: null,
+  })
+  await audit({
+    action: "app-created",
+    appId: relayApp.id,
+    targetType: "app",
+    targetId: relayApp.id,
+  })
+  await environment(relayApp, "test", { requested: [], approved: [] })
+  const relayLive = await environment(relayApp, "live", {
+    requested: ["openid", "discord:id"],
+    approved: [],
+  })
+  await store.updateEnvironment(relayLive.id, {
+    reviewState: "changes-requested",
+  })
+  const submittedAt = new Date(
+    options.now.getTime() - 4 * 86_400_000,
+  ).toISOString()
+  const relayReview = await store.createReview({
+    environmentId: relayLive.id,
+    requestedScopes: ["openid", "discord:id"],
+    state: "changes-requested",
+    submitterId: teammate.id,
+    submitterNote: "Leaderboard display names.",
+    reviewerId: account.id,
+    reviewerNote:
+      "Add a privacy policy URL and describe how Discord IDs are stored.",
+    createdAt: submittedAt,
+    decidedAt: new Date(options.now.getTime() - 3 * 86_400_000).toISOString(),
+  })
+  await audit({
+    action: "review-changes-requested",
+    appId: relayApp.id,
+    environmentId: relayLive.id,
+    targetType: "review",
+    targetId: relayReview.id,
+  })
+
   await store.createInvitation({
     organizationId: organization.id,
     email: "new.hire@example.com",

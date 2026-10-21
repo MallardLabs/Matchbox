@@ -65,7 +65,7 @@ export default function EnvironmentGate({
             </Button.Root>
           </EmptyState.Action>
           {create.isError ? (
-            <p role="alert" className="w-full text-[12px] font-500 text-neg">
+            <p role="alert" className="w-full text-label font-500 text-neg">
               {errorMessage(create.error)}
             </p>
           ) : null}

@@ -6,7 +6,6 @@ import * as Dialog from "@repo/ui/dialog"
 import * as Field from "@repo/ui/field"
 import * as Fieldset from "@repo/ui/fieldset"
 import * as Input from "@repo/ui/input"
-import * as PageHeader from "@repo/ui/page-header"
 import * as Skeleton from "@repo/ui/skeleton"
 import * as Table from "@repo/ui/table"
 import * as Toast from "@repo/ui/toast"
@@ -16,6 +15,9 @@ import { Fingerprint } from "lucide-react"
 import { type FormEvent, type ReactElement, useState } from "react"
 import ConfirmDialog from "../../components/ConfirmDialog"
 import QueryError from "../../components/QueryError"
+import { Crumb, Crumbs } from "../../components/shell/Breadcrumbs"
+import PageTitle from "../../components/ui/PageTitle"
+import { StatusLabel } from "../../components/ui/Status"
 import * as api from "../../lib/api"
 import { errorMessage } from "../../lib/api-client"
 import { formatDate, formatRelative } from "../../lib/format"
@@ -33,13 +35,12 @@ function AccountPage(): ReactElement {
   useTitle("Account")
   const { me } = useSession()
   return (
-    <div className="flex max-w-4xl flex-col gap-12">
-      <PageHeader.Root>
-        <PageHeader.Heading>
-          <PageHeader.Eyebrow>{me.account.email}</PageHeader.Eyebrow>
-          <PageHeader.Title>Account</PageHeader.Title>
-        </PageHeader.Heading>
-      </PageHeader.Root>
+    <div className="flex max-w-4xl flex-col gap-10">
+      <Crumbs>
+        <Crumb>Settings</Crumb>
+        <Crumb current>Account</Crumb>
+      </Crumbs>
+      <PageTitle eyebrow={me.account.email} title="Account" />
       <ProfileForm key={me.account.displayName} />
       <Passkeys />
       <Sessions />
@@ -455,15 +456,13 @@ function Sessions(): ReactElement {
                   </Table.Cell>
                   <Table.Cell
                     mono
-                    className="hidden text-[11px] text-secondary sm:table-cell"
+                    className="hidden text-caption text-secondary sm:table-cell"
                   >
                     {session.ipPrefix ?? "—"}
                   </Table.Cell>
                   <Table.Cell className="text-secondary">
                     {session.current ? (
-                      <Badge.Root tone="pos" dot>
-                        This device
-                      </Badge.Root>
+                      <StatusLabel tone="pos">This device</StatusLabel>
                     ) : (
                       formatRelative(session.lastSeenAt)
                     )}
@@ -490,7 +489,7 @@ function Sessions(): ReactElement {
             </Table.Body>
           </Table.Root>
           {revoke.isError || revokeOthers.isError ? (
-            <p role="alert" className="text-[12px] font-500 text-neg">
+            <p role="alert" className="text-label font-500 text-neg">
               {errorMessage(revoke.error ?? revokeOthers.error)}
             </p>
           ) : null}

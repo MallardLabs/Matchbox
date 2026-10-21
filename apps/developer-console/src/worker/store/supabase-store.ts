@@ -6,6 +6,7 @@ import {
 import {
   appStatusSchema,
   clientTypeSchema,
+  compareReviewsNewestFirst,
   emailChallengePurposeSchema,
   membershipRoleSchema,
   passkeyDeviceTypeSchema,
@@ -38,6 +39,7 @@ import {
   type ConsoleStore,
   type EnvironmentPatch,
   type OAuthStatsRecord,
+  type OrganizationReviewRecord,
   StoreConflictError,
 } from "./console-store"
 
@@ -310,6 +312,8 @@ const environmentFields = {
   review_state: reviewStateSchema,
   requested_scopes: z.array(platformScopeSchema),
   approved_scopes: z.array(platformScopeSchema),
+  /** Absent until the optional-scopes migration is applied. */
+  optional_scopes: z.array(oidcScopeSchema).optional(),
   scope_version: z.number().int(),
   sector_id: z.string(),
   created_at: timestampSchema,
@@ -329,6 +333,7 @@ function mapEnvironment(row: EnvironmentRowInput) {
     reviewState: row.review_state,
     requestedScopes: row.requested_scopes,
     approvedScopes: row.approved_scopes,
+    optionalScopes: row.optional_scopes ?? [],
     scopeVersion: row.scope_version,
     sectorId: row.sector_id,
     createdAt: row.created_at,
@@ -399,6 +404,46 @@ const adminReviewRow = z
       submitterEmail: row.submitter?.email ?? null,
     }),
   )
+
+const organizationReviewSelect =
+  "*, environment:mbx_dev_environments!inner(*, app:mbx_dev_apps!inner(*))"
+
+const organizationReviewRow = z
+  .object({
+    ...reviewFields,
+    environment: z.object({
+      ...environmentFields,
+      app: z.object(appFields),
+    }),
+  })
+  .transform(
+    (row): OrganizationReviewRecord => ({
+      review: mapReview(row),
+      environment: mapEnvironment(row.environment),
+      app: mapApp(row.environment.app),
+    }),
+  )
+
+const reviewStatsRow = z
+  .object({
+    id: z.string(),
+    state: reviewRecordStateSchema,
+    reviewer_id: z.string().nullable(),
+    created_at: timestampSchema,
+    decided_at: nullableTimestamp,
+    environment: z.object({ app: z.object({ name: z.string() }) }),
+  })
+  .transform((row) => ({
+    id: row.id,
+    state: row.state,
+    reviewerId: row.reviewer_id,
+    createdAt: row.created_at,
+    decidedAt: row.decided_at,
+    appName: row.environment.app.name,
+  }))
+
+/** Bound for per-environment and per-organization review reads. */
+const reviewReadLimit = 200
 
 const apiKeyRow = z
   .object({
@@ -587,6 +632,9 @@ function environmentPatchRow(patch: EnvironmentPatch) {
   }
   if (patch.approvedScopes !== undefined) {
     row.approved_scopes = patch.approvedScopes
+  }
+  if (patch.optionalScopes !== undefined) {
+    row.optional_scopes = patch.optionalScopes
   }
   if (patch.scopeVersion !== undefined) row.scope_version = patch.scopeVersion
   return row
@@ -1376,6 +1424,58 @@ export default function createSupabaseStore(
           .single(),
       )
     },
+    async listEnvironmentReviews(environmentId) {
+      const rows = many(
+        reviewRow,
+        "list environment reviews",
+        await supabase
+          .from("mbx_dev_reviews")
+          .select("*")
+          .eq("environment_id", environmentId)
+          .order("created_at", { ascending: false })
+          .limit(reviewReadLimit),
+      )
+      return rows.sort(compareReviewsNewestFirst)
+    },
+    async listOrganizationReviews(input) {
+      let query = supabase
+        .from("mbx_dev_reviews")
+        .select(organizationReviewSelect)
+        .eq("environment.app.organization_id", input.organizationId)
+      if (input.state !== undefined) query = query.eq("state", input.state)
+      const rows = many(
+        organizationReviewRow,
+        "list organization reviews",
+        await query
+          .order("created_at", { ascending: false })
+          .limit(reviewReadLimit),
+      )
+      return rows
+        .sort((left, right) =>
+          compareReviewsNewestFirst(left.review, right.review),
+        )
+        .slice(0, input.limit)
+    },
+    async listReviewsForStats(input) {
+      const select =
+        "id, state, reviewer_id, created_at, decided_at, environment:mbx_dev_environments!inner(app:mbx_dev_apps!inner(name))"
+      const [open, decided] = await Promise.all([
+        supabase
+          .from("mbx_dev_reviews")
+          .select(select)
+          .eq("state", "open")
+          .limit(1000),
+        supabase
+          .from("mbx_dev_reviews")
+          .select(select)
+          .gte("decided_at", input.decidedSince)
+          .limit(1000),
+      ])
+      return [
+        ...many(reviewStatsRow, "list open reviews for stats", open),
+        ...many(reviewStatsRow, "list decided reviews for stats", decided),
+      ]
+    },
     async getAdminReview(id) {
       return maybe(
         adminReviewRow,
@@ -1388,13 +1488,17 @@ export default function createSupabaseStore(
       )
     },
     async listAdminReviews(input) {
+      let query = supabase
+        .from("mbx_dev_reviews")
+        .select(adminReviewSelect)
+        .eq("state", input.state)
+      if (input.scope !== undefined) {
+        query = query.contains("requested_scopes", [input.scope])
+      }
       const rows = many(
         adminReviewRow,
         "list admin reviews",
-        await supabase
-          .from("mbx_dev_reviews")
-          .select(adminReviewSelect)
-          .eq("state", input.state)
+        await query
           .order("created_at")
           .order("id")
           .range(input.offset, input.offset + input.limit),
@@ -1581,7 +1685,7 @@ export default function createSupabaseStore(
           .eq("environment_id", input.environmentId)
       const reasons = grantRevokedReasonSchema.options
       const scopes = oidcScopeSchema.options
-      const [active, created, revoked, byScope] = await Promise.all([
+      const [active, created, revoked, byScope, stale] = await Promise.all([
         grants().is("revoked_at", null),
         grants().gte("created_at", input.from).lt("created_at", input.to),
         Promise.all(
@@ -1597,7 +1701,18 @@ export default function createSupabaseStore(
             grants().is("revoked_at", null).contains("scopes", [scope]),
           ),
         ),
+        supabase
+          .from("mbx_id_grants")
+          .select("scope_version", { count: "exact" })
+          .eq("environment_id", input.environmentId)
+          .is("revoked_at", null)
+          .lt("scope_version", input.scopeVersion)
+          .order("scope_version")
+          .limit(1),
       ])
+      const oldest = z
+        .array(z.object({ scope_version: z.number().int() }))
+        .safeParse(stale.data)
       const stats: OAuthStatsRecord = {
         activeGrants: countOf("active grants", active),
         grantsCreated: countOf("created grants", created),
@@ -1613,6 +1728,12 @@ export default function createSupabaseStore(
           wallet: 0,
           "discord:id": 0,
           "discord:profile": 0,
+        },
+        awaitingReconsent: {
+          count: countOf("awaiting re-consent", stale),
+          oldestScopeVersion: oldest.success
+            ? (oldest.data[0]?.scope_version ?? null)
+            : null,
         },
       }
       reasons.forEach((reason, index) => {

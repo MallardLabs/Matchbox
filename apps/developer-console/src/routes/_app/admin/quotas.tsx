@@ -127,7 +127,7 @@ function Overrides({ environmentId }: { environmentId: string }): ReactElement {
   return (
     <section aria-label="Quota overrides" className="flex flex-col gap-4">
       <header className="flex items-center justify-between gap-3">
-        <h2 className="text-[14px] font-600 text-ink">Overrides</h2>
+        <h2 className="text-body font-600 text-ink">Overrides</h2>
         {operator ? (
           <Button.Root onClick={() => setEditing({ mode: "create" })}>
             <Plus aria-hidden="true" size={13} strokeWidth={2} />

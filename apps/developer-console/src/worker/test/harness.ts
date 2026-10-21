@@ -6,10 +6,12 @@ import {
   createMemoryRateLimitClient,
   generateClientId,
   generateOpaqueToken,
+  localPlatformHealth,
 } from "@repo/platform-server"
 import type { z } from "zod"
 import createApp from "../app"
 import { sessionTokenHash } from "../auth/session"
+import type { ConsoleDeps } from "../context"
 import {
   type MemoryEmailSender,
   createMemoryEmailSender,
@@ -46,17 +48,23 @@ export function createHarness(
     devSignIn?: boolean
     production?: boolean
     analytics?: UsageAnalytics
+    health?: ConsoleDeps["health"]
   } = {},
 ) {
   let current = new Date("2026-09-30T12:00:00.000Z")
   const now = () => new Date(current.getTime())
   const store: MemoryConsoleStore = createMemoryStore(now)
   const email: MemoryEmailSender = createMemoryEmailSender()
+  const apiLimiter = createMemoryRateLimitClient(() => current.getTime())
   const app = createApp({
     store,
     rateLimits: createMemoryRateLimitClient(() => current.getTime()),
     email,
     analytics: options.analytics ?? createSyntheticUsage(),
+    health: options.health ?? {
+      read: async (at: Date) => localPlatformHealth(at),
+    },
+    apiLimiter,
     webauthn: {
       rpId: "developer.matchbox.markets",
       rpName: "Matchbox Developers",
@@ -200,6 +208,7 @@ export function createHarness(
     app,
     store,
     email,
+    apiLimiter,
     request,
     json,
     account,

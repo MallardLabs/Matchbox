@@ -1,9 +1,13 @@
 import { logger } from "@repo/logger"
 import { buildErrorBody } from "@repo/platform-contracts/errors"
 import {
+  type RateLimitReader,
   createDurableRateLimitClient,
+  createMemoryRateLimitClient,
+  createPlatformHealthReader,
   createSupabaseAdmin,
   generateRequestId,
+  localPlatformHealth,
 } from "@repo/platform-server"
 import type { Hono } from "hono"
 import createApp from "./app"
@@ -43,7 +47,26 @@ const unavailableAnalytics: UsageAnalytics = {
       "CF_ACCOUNT_ID/CF_ANALYTICS_TOKEN unset",
     )
   },
+  async orgUsage() {
+    throw new AnalyticsUnavailableError(
+      "CF_ACCOUNT_ID/CF_ANALYTICS_TOKEN unset",
+    )
+  },
+  async rateLimited() {
+    throw new AnalyticsUnavailableError(
+      "CF_ACCOUNT_ID/CF_ANALYTICS_TOKEN unset",
+    )
+  },
 }
+
+const unreadableLimiter: RateLimitReader = {
+  async peek() {
+    throw new Error("API_RATE_LIMITER binding missing")
+  },
+}
+
+/** One memory limiter per isolate (memory mode without the binding). */
+let memoryLimiter: RateLimitReader | null = null
 
 /** One memory store per isolate so demo data survives across requests. */
 let memoryStore: Promise<MemoryConsoleStore> | null = null
@@ -79,14 +102,40 @@ async function buildApp(
             SUPABASE_SERVICE_ROLE_KEY: config.store.serviceRoleKey,
           }),
         )
+  const analyticsClient =
+    config.analytics === null
+      ? null
+      : createAnalyticsEngineClient(config.analytics)
   const analytics =
-    config.analytics !== null
-      ? createAnalyticsEngineUsage(
-          createAnalyticsEngineClient(config.analytics),
-        )
+    analyticsClient !== null
+      ? createAnalyticsEngineUsage(analyticsClient)
       : config.store.kind === "memory"
         ? createSyntheticUsage()
         : unavailableAnalytics
+  const health =
+    analyticsClient !== null
+      ? createPlatformHealthReader({
+          client: analyticsClient,
+          deployment: config.environment,
+        })
+      : config.store.kind === "memory"
+        ? { read: async (now: Date) => localPlatformHealth(now) }
+        : {
+            read: async () => {
+              throw new AnalyticsUnavailableError(
+                "CF_ACCOUNT_ID/CF_ANALYTICS_TOKEN unset",
+              )
+            },
+          }
+  memoryLimiter ??= createMemoryRateLimitClient()
+  // Memory mode never reaches a real developer-api (its cross-script
+  // binding has no local target), so it reads an in-memory limiter.
+  const apiLimiter =
+    config.store.kind === "memory"
+      ? memoryLimiter
+      : env.API_RATE_LIMITER !== undefined
+        ? createDurableRateLimitClient(env.API_RATE_LIMITER)
+        : unreadableLimiter
   if (env.EMAIL === undefined && config.production) {
     logger.error({ message: "EMAIL binding missing in production" })
   }
@@ -98,6 +147,8 @@ async function buildApp(
         ? createBindingEmailSender(env.EMAIL)
         : createLogEmailSender(logger),
     analytics,
+    health,
+    apiLimiter,
     webauthn: config.webauthn,
     now: () => new Date(),
     flags: {

@@ -3,6 +3,7 @@ import type {
   AuditEventInput,
 } from "@repo/platform-contracts/audit"
 import { auditEventInputSchema } from "@repo/platform-contracts/audit"
+import { compareReviewsNewestFirst } from "@repo/platform-contracts/console"
 import { grantRevokedReasonSchema } from "@repo/platform-contracts/identity"
 import { oidcScopeSchema } from "@repo/platform-contracts/scopes"
 import type { OidcScope } from "@repo/platform-contracts/scopes"
@@ -19,6 +20,7 @@ import {
   type MembershipRecord,
   type OAuthStatsRecord,
   type OrganizationRecord,
+  type OrganizationReviewRecord,
   type PasskeyRecord,
   type QuotaOverrideRow,
   type ReviewRecord,
@@ -35,6 +37,8 @@ export type MemoryGrant = {
   createdAt: string
   revokedAt: string | null
   revokedReason: string | null
+  /** Environment scope version the user consented at. */
+  scopeVersion: number
 }
 
 /** A Matchbox ID refresh or access token row (for revocation tests). */
@@ -51,7 +55,9 @@ export type MemoryConsoleStore = ConsoleStore & {
   /** Test/seed helpers that have no production equivalent. */
   seedStaff(accountId: string, role: "reviewer" | "operator"): void
   /** Returns the new grant id. */
-  seedGrant(grant: Omit<MemoryGrant, "id">): string
+  seedGrant(
+    grant: Omit<MemoryGrant, "id" | "scopeVersion"> & { scopeVersion?: number },
+  ): string
   seedOAuthToken(token: Omit<MemoryOAuthToken, "id" | "revokedAt">): string
   oauthTokens(): MemoryOAuthToken[]
   auditEvents(): AuditEvent[]
@@ -585,6 +591,7 @@ export default function createMemoryStore(
         reviewState: "development",
         requestedScopes: [],
         approvedScopes: [],
+        optionalScopes: [],
         scopeVersion: 1,
         sectorId: id,
         createdAt: at,
@@ -693,13 +700,70 @@ export default function createMemoryStore(
       Object.assign(review, patch)
       return copy(review)
     },
+    async listEnvironmentReviews(environmentId) {
+      return copy(
+        [...reviews.values()]
+          .filter((review) => review.environmentId === environmentId)
+          .sort(compareReviewsNewestFirst),
+      )
+    },
+    async listOrganizationReviews(input) {
+      const records: OrganizationReviewRecord[] = []
+      for (const review of reviews.values()) {
+        if (input.state !== undefined && review.state !== input.state) continue
+        const environment = environments.get(review.environmentId)
+        const app =
+          environment === undefined ? undefined : apps.get(environment.appId)
+        if (
+          environment === undefined ||
+          app === undefined ||
+          app.organizationId !== input.organizationId
+        ) {
+          continue
+        }
+        records.push(copy({ review, app, environment }))
+      }
+      return records
+        .sort((left, right) =>
+          compareReviewsNewestFirst(left.review, right.review),
+        )
+        .slice(0, input.limit)
+    },
+    async listReviewsForStats(input) {
+      const since = Date.parse(input.decidedSince)
+      return [...reviews.values()]
+        .filter(
+          (review) =>
+            review.state === "open" ||
+            (review.decidedAt !== null &&
+              Date.parse(review.decidedAt) >= since),
+        )
+        .map((review) => {
+          const environment = environments.get(review.environmentId)
+          const app =
+            environment === undefined ? undefined : apps.get(environment.appId)
+          return {
+            id: review.id,
+            state: review.state,
+            reviewerId: review.reviewerId,
+            createdAt: review.createdAt,
+            decidedAt: review.decidedAt,
+            appName: app?.name ?? "",
+          }
+        })
+    },
     async getAdminReview(id) {
       const review = reviews.get(id)
       return review === undefined ? null : adminReview(review)
     },
     async listAdminReviews(input) {
       const matching = [...reviews.values()]
-        .filter((review) => review.state === input.state)
+        .filter(
+          (review) =>
+            review.state === input.state &&
+            (input.scope === undefined ||
+              review.requestedScopes.includes(input.scope)),
+        )
         .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
       const page = matching.slice(input.offset, input.offset + input.limit)
       return {
@@ -824,6 +888,15 @@ export default function createMemoryStore(
           "discord:id": 0,
           "discord:profile": 0,
         },
+        awaitingReconsent: { count: 0, oldestScopeVersion: null },
+      }
+      const stale = active.filter(
+        (grant) => grant.scopeVersion < input.scopeVersion,
+      )
+      stale.sort((a, b) => a.scopeVersion - b.scopeVersion)
+      stats.awaitingReconsent = {
+        count: stale.length,
+        oldestScopeVersion: stale[0]?.scopeVersion ?? null,
       }
       for (const grant of environmentGrants) {
         if (grant.revokedAt === null || !inRange(grant.revokedAt)) continue
@@ -881,7 +954,7 @@ export default function createMemoryStore(
     },
     seedGrant(grant) {
       const id = crypto.randomUUID()
-      grants.push({ ...grant, id })
+      grants.push({ ...grant, scopeVersion: grant.scopeVersion ?? 1, id })
       return id
     },
     seedOAuthToken(token) {

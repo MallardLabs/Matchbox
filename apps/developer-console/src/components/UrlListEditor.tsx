@@ -11,7 +11,7 @@ import * as Button from "@repo/ui/button"
 import * as Field from "@repo/ui/field"
 import * as Fieldset from "@repo/ui/fieldset"
 import * as Input from "@repo/ui/input"
-import { Plus, X } from "lucide-react"
+import { Lock, X } from "lucide-react"
 import { type FormEvent, type ReactElement, useState } from "react"
 import { errorMessage } from "../lib/api-client"
 import { isStepUpCancelled } from "../lib/step-up"
@@ -22,6 +22,10 @@ const modeCopy = {
   "redirect-uri": {
     legend: "Redirect URIs",
     input: "New redirect URI",
+    hint: {
+      test: "Exact match · https or localhost",
+      live: "Exact match · https",
+    },
     placeholder: {
       test: "http://localhost:3000/callback",
       live: "https://app.example.com/callback",
@@ -31,6 +35,10 @@ const modeCopy = {
   origin: {
     legend: "Allowed origins",
     input: "New origin",
+    hint: {
+      test: "Scheme + host · https or localhost",
+      live: "Scheme + host · https",
+    },
     placeholder: {
       test: "http://localhost:3000",
       live: "https://app.example.com",
@@ -129,18 +137,27 @@ export default function UrlListEditor({
   const showProblem = problem !== null && (touched || trimmed.length > 7)
 
   return (
-    <Fieldset.Root disabled={disabled || saving}>
-      <Fieldset.Legend>{copy.legend}</Fieldset.Legend>
+    <Fieldset.Root disabled={disabled || saving} className="gap-0">
+      <Fieldset.Legend className="float-none flex w-full items-center gap-2.5 pb-3">
+        <span>{copy.legend}</span>
+        <span className="font-mono text-label font-400 text-muted">
+          {list.length}
+        </span>
+        <span className="flex-1" />
+        <span className="text-caption font-400 text-muted">
+          {copy.hint[kind]}
+        </span>
+      </Fieldset.Legend>
       {list.length === 0 ? (
-        <p className="text-[12px] text-secondary">None</p>
+        <p className="pb-2 text-label text-secondary">None</p>
       ) : (
-        <ol className="m-0 flex list-none flex-col p-0">
+        <ol className="m-0 flex list-none flex-col gap-2 p-0 pb-2">
           {list.map((value) => (
             <li
               key={value}
-              className="flex min-w-0 items-center gap-2 border-t border-line py-1.5 last:border-b"
+              className="flex h-10 min-w-0 items-center gap-2 rounded-md bg-inset pl-3 pr-1"
             >
-              <code className="min-w-0 flex-1 truncate font-mono text-[12px] text-ink">
+              <code className="min-w-0 flex-1 truncate font-mono text-label text-ink">
                 {value}
               </code>
               <Button.Root
@@ -155,20 +172,22 @@ export default function UrlListEditor({
           ))}
         </ol>
       )}
-      <form onSubmit={add} className="flex flex-col gap-1.5" noValidate>
+      <form onSubmit={add} className="flex flex-col" noValidate>
         <Fieldset.Fields>
-          <Field.Root invalid={showProblem}>
-            <Field.Label>{copy.input}</Field.Label>
+          <Field.Root invalid={showProblem} className="gap-1">
+            <Field.Label className="sr-only">{copy.input}</Field.Label>
             <span className="flex gap-2">
               <Field.Control>
                 <Input.Root
                   mono
+                  size="lg"
                   inputMode="url"
                   autoComplete="off"
                   spellCheck={false}
                   placeholder={copy.placeholder[kind]}
                   value={candidate}
                   disabled={full}
+                  className="bg-surface text-label"
                   onChange={(event) => setCandidate(event.target.value)}
                   onBlur={() => setTouched(trimmed !== "")}
                 />
@@ -176,13 +195,13 @@ export default function UrlListEditor({
               <Button.Root
                 type="submit"
                 variant="secondary"
+                size="lg"
                 disabled={full || trimmed === ""}
               >
-                <Plus aria-hidden="true" size={13} strokeWidth={2} />
                 Add
               </Button.Root>
             </span>
-            <Field.Error>
+            <Field.Error className="text-caption">
               {showProblem && problem !== null ? (
                 <>
                   {problem.message}
@@ -204,18 +223,15 @@ export default function UrlListEditor({
               ) : null}
             </Field.Error>
             {full ? (
-              <Field.Description>{`${copy.max} max`}</Field.Description>
+              <Field.Description className="text-caption">{`${copy.max} max`}</Field.Description>
             ) : null}
           </Field.Root>
         </Fieldset.Fields>
       </form>
       {dirty ? (
-        <p className="flex flex-wrap items-center justify-end gap-2">
+        <p className="flex flex-wrap items-center justify-end gap-2 pt-3">
           {saveError === null ? null : (
-            <span
-              role="alert"
-              className="mr-auto text-[12px] font-500 text-neg"
-            >
+            <span role="alert" className="mr-auto text-label font-500 text-neg">
               {saveError}
             </span>
           )}
@@ -229,6 +245,7 @@ export default function UrlListEditor({
             Reset
           </Button.Root>
           <Button.Root loading={saving} onClick={() => void save()}>
+            <Lock aria-hidden="true" size={13} strokeWidth={2} />
             Save
           </Button.Root>
         </p>

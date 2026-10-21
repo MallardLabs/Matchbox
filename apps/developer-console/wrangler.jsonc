@@ -17,8 +17,17 @@
     "not_found_handling": "single-page-application",
     "run_worker_first": ["/*", "!/assets/*"],
   },
+  // API_RATE_LIMITER reads the developer-api's buckets (quota status);
+  // the console never consumes from it.
   "durable_objects": {
-    "bindings": [{ "name": "RATE_LIMITER", "class_name": "RateLimiter" }],
+    "bindings": [
+      { "name": "RATE_LIMITER", "class_name": "RateLimiter" },
+      {
+        "name": "API_RATE_LIMITER",
+        "class_name": "RateLimiter",
+        "script_name": "matchbox-developer-api",
+      },
+    ],
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["RateLimiter"] }],
   // Cloudflare Email Service (sign-up/recovery codes, invitations, reviews).
@@ -47,7 +56,14 @@
       "workers_dev": true,
       "routes": [],
       "durable_objects": {
-        "bindings": [{ "name": "RATE_LIMITER", "class_name": "RateLimiter" }],
+        "bindings": [
+          { "name": "RATE_LIMITER", "class_name": "RateLimiter" },
+          {
+            "name": "API_RATE_LIMITER",
+            "class_name": "RateLimiter",
+            "script_name": "matchbox-developer-api-staging",
+          },
+        ],
       },
       "migrations": [{ "tag": "v1", "new_sqlite_classes": ["RateLimiter"] }],
       "send_email": [{ "name": "EMAIL" }],

@@ -58,7 +58,7 @@ export default function SchemaTree({
             key={typeLabel(variant, document)}
             className="flex flex-col gap-2"
           >
-            <p className="text-[11px] font-650 uppercase tracking-[0.04em] text-secondary">
+            <p className="text-caption font-650 uppercase tracking-[0.04em] text-secondary">
               {index === 0 ? "One of" : "Or"}{" "}
               <span className="font-mono normal-case tracking-normal text-ink">
                 {typeLabel(variant, document)}
@@ -79,7 +79,7 @@ export default function SchemaTree({
   const properties = objectProperties(resolved)
   if (properties.length === 0) {
     return (
-      <p className="font-mono text-[12px] text-secondary">
+      <p className="font-mono text-label text-secondary">
         {typeLabel(schema, document)}
       </p>
     )
@@ -103,16 +103,16 @@ export default function SchemaTree({
             className="border-t border-line py-2 first:border-t-0"
           >
             <p className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-              <code className="font-mono text-[12px] font-500 text-ink">
+              <code className="font-mono text-label font-500 text-ink">
                 {property.name}
               </code>
-              <span className="font-mono text-[11px] text-secondary">
+              <span className="font-mono text-caption text-secondary">
                 {typeLabel(property.schema, document)}
               </span>
               {property.required ? null : <Badge.Root>optional</Badge.Root>}
             </p>
             {description === null ? null : (
-              <p className="mt-0.5 text-[12px] text-secondary">{description}</p>
+              <p className="mt-0.5 text-label text-secondary">{description}</p>
             )}
             {child === null ? null : (
               <div className="mt-2 border-l border-line pl-3">

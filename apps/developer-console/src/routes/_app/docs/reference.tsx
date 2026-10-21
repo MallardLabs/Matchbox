@@ -2,6 +2,7 @@ import { networkForEnvironmentKind } from "@repo/platform-contracts/network"
 import openapi from "@repo/platform-contracts/openapi.json"
 import { createFileRoute } from "@tanstack/react-router"
 import type { ReactElement } from "react"
+import DocsHeader from "../../../components/docs/DocsHeader"
 import OpenApiReference from "../../../components/docs/OpenApiReference"
 import { useDocsCredentials } from "../../../lib/docs-context"
 import { parseOpenApi } from "../../../lib/openapi"
@@ -18,12 +19,11 @@ function ReferencePage(): ReactElement {
   const { kind } = useDocsCredentials()
   return (
     <div className="flex flex-col gap-6">
-      <header className="flex flex-col gap-1">
-        <h1 className="text-[24px] font-600 text-ink">API reference</h1>
-        <p className="font-mono text-[12px] text-secondary">
+      <DocsHeader title="API reference">
+        <p className="border-y border-line py-3 font-mono text-label text-secondary">
           {`${document.info.title} ${document.info.version} · ${document.servers[0]?.url ?? ""}`}
         </p>
-      </header>
+      </DocsHeader>
       <OpenApiReference
         document={document}
         network={networkForEnvironmentKind(kind)}

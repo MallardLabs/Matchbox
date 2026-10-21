@@ -6,6 +6,8 @@ import { z } from "zod"
 export type WorkerBindings = {
   ASSETS: Fetcher
   RATE_LIMITER: RateLimiterNamespace
+  /** developer-api `RateLimiter` (cross-script); read-only quota peeks. */
+  API_RATE_LIMITER?: RateLimiterNamespace
   /** Cloudflare Email Service; absent in local dev. */
   EMAIL?: SendEmail
   ENVIRONMENT?: string

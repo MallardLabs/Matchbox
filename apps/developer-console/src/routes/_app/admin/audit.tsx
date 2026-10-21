@@ -245,34 +245,34 @@ function AuditPage(): ReactElement {
                     {formatDateTime(event.occurredAt)}
                   </time>
                 </Table.Cell>
-                <Table.Cell mono className="text-[11px]">
+                <Table.Cell mono className="text-caption">
                   {event.action}
                 </Table.Cell>
                 <Table.Cell>
-                  <span className="block text-[12px]">
+                  <span className="block text-label">
                     {humanize(event.actorType)}
                   </span>
-                  <span className="block max-w-[160px] truncate font-mono text-[10px] text-secondary">
+                  <span className="block max-w-[160px] truncate font-mono text-micro text-secondary">
                     {event.actorId ?? "—"}
                   </span>
                 </Table.Cell>
                 <Table.Cell className="hidden lg:table-cell">
-                  <span className="block text-[12px]">
+                  <span className="block text-label">
                     {event.targetType ?? "—"}
                   </span>
-                  <span className="block max-w-[160px] truncate font-mono text-[10px] text-secondary">
+                  <span className="block max-w-[160px] truncate font-mono text-micro text-secondary">
                     {event.targetId ?? ""}
                   </span>
                 </Table.Cell>
                 <Table.Cell
                   mono
-                  className="hidden max-w-[160px] truncate text-[10px] text-secondary xl:table-cell"
+                  className="hidden max-w-[160px] truncate text-micro text-secondary xl:table-cell"
                 >
                   {event.appId ?? "—"}
                 </Table.Cell>
                 <Table.Cell
                   mono
-                  className="hidden max-w-[140px] truncate text-[10px] text-secondary md:table-cell"
+                  className="hidden max-w-[140px] truncate text-micro text-secondary md:table-cell"
                 >
                   {event.requestId ?? "—"}
                 </Table.Cell>

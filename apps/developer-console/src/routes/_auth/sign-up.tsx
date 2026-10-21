@@ -5,9 +5,14 @@ import * as Fieldset from "@repo/ui/fieldset"
 import * as Input from "@repo/ui/input"
 import { useMutation } from "@tanstack/react-query"
 import { Link, createFileRoute } from "@tanstack/react-router"
-import { Fingerprint } from "lucide-react"
+import { KeyRound } from "lucide-react"
 import { type FormEvent, type ReactElement, useState } from "react"
 import AuthHeading from "../../components/auth/AuthHeading"
+import {
+  AuthStep,
+  type AuthStepState,
+  AuthSteps,
+} from "../../components/auth/AuthSteps"
 import EmailCodeForm from "../../components/auth/EmailCodeForm"
 import useCompleteSignIn from "../../components/auth/use-complete-sign-in"
 import * as api from "../../lib/api"
@@ -31,8 +36,16 @@ export const Route = createFileRoute("/_auth/sign-up")({
 
 type Step =
   | { kind: "details" }
-  | { kind: "code"; challengeId: string }
+  | { kind: "code"; challengeId: string; sentAt: number }
   | { kind: "passkey"; registration: PasskeyRegistrationOptionsResponse }
+
+const order: Record<Step["kind"], number> = { details: 1, code: 2, passkey: 3 }
+
+function stateOf(step: Step, index: number): AuthStepState {
+  const current = order[step.kind]
+  if (index < current) return "done"
+  return index === current ? "active" : "upcoming"
+}
 
 function SignUpPage(): ReactElement {
   useTitle("Create account")
@@ -55,7 +68,11 @@ function SignUpPage(): ReactElement {
         ...(invitation === undefined ? {} : { invitationToken: invitation }),
       }),
     onSuccess: (challenge) =>
-      setStep({ kind: "code", challengeId: challenge.challengeId }),
+      setStep({
+        kind: "code",
+        challengeId: challenge.challengeId,
+        sentAt: Date.now(),
+      }),
   })
   const verify = useMutation({
     mutationFn: (input: { challengeId: string; code: string }) =>
@@ -94,124 +111,143 @@ function SignUpPage(): ReactElement {
     register.error instanceof PasskeyError &&
     register.error.reason === "cancelled"
 
+  const passkeyActive = step.kind === "passkey"
+
   return (
     <>
-      {step.kind === "details" ? (
-        <>
-          <AuthHeading title="Create account" step={{ current: 1, total: 3 }} />
-          <form
-            onSubmit={submitDetails}
-            className="flex flex-col gap-4"
-            noValidate
-          >
-            <Fieldset.Root disabled={start.isPending}>
-              <Fieldset.Legend hidden>Account</Fieldset.Legend>
-              <Fieldset.Fields>
-                <Field.Root required>
-                  <Field.Label>Email</Field.Label>
-                  <Field.Control>
-                    <Input.Root
-                      type="email"
-                      size="lg"
-                      autoComplete="email"
-                      value={email}
-                      onChange={(event) => setEmail(event.target.value)}
-                    />
-                  </Field.Control>
-                  <Field.Error>{fieldError("email")}</Field.Error>
-                </Field.Root>
-                <Field.Root required>
-                  <Field.Label>Name</Field.Label>
-                  <Field.Control>
-                    <Input.Root
-                      size="lg"
-                      autoComplete="name"
-                      maxLength={80}
-                      value={displayName}
-                      onChange={(event) => setDisplayName(event.target.value)}
-                    />
-                  </Field.Control>
-                  <Field.Error>{fieldError("displayName")}</Field.Error>
-                </Field.Root>
-              </Fieldset.Fields>
-            </Fieldset.Root>
-            {start.isError &&
-            start.error instanceof ApiError &&
-            start.error.issues.length > 0 ? null : start.isError ? (
-              <p role="alert" className="text-[12px] font-500 text-neg">
-                {errorMessage(start.error)}
-              </p>
-            ) : null}
-            <Button.Root
-              type="submit"
-              size="lg"
-              loading={start.isPending}
-              disabled={email.trim() === "" || displayName.trim() === ""}
+      <AuthHeading title="Create account" back />
+      <AuthSteps label="Sign-up steps">
+        <AuthStep index={1} title="Details" state={stateOf(step, 1)}>
+          {step.kind === "details" ? (
+            <form
+              onSubmit={submitDetails}
+              className="flex flex-col gap-4"
+              noValidate
             >
-              Send code
-            </Button.Root>
-          </form>
-        </>
-      ) : null}
-      {step.kind === "code" ? (
-        <>
-          <AuthHeading
-            title="Check your email"
-            step={{ current: 2, total: 3 }}
-          />
-          <EmailCodeForm
-            email={email.trim()}
-            pending={verify.isPending}
-            error={verify.error}
-            onVerify={(code) =>
-              verify.mutate({ challengeId: step.challengeId, code })
-            }
-            resending={start.isPending}
-            onResend={() => start.mutate()}
-            onBack={() => {
-              verify.reset()
-              setStep({ kind: "details" })
-            }}
-          />
-        </>
-      ) : null}
-      {step.kind === "passkey" ? (
-        <>
-          <AuthHeading title="Create passkey" step={{ current: 3, total: 3 }} />
-          <form
-            onSubmit={submitPasskey}
-            className="flex flex-col gap-4"
-            noValidate
-          >
-            {invitation === undefined ? (
-              <Fieldset.Root disabled={register.isPending}>
-                <Fieldset.Legend hidden>Organization</Fieldset.Legend>
+              <Fieldset.Root disabled={start.isPending}>
+                <Fieldset.Legend hidden>Account</Fieldset.Legend>
                 <Fieldset.Fields>
-                  <Field.Root>
-                    <Field.Label>Organization</Field.Label>
+                  <Field.Root required>
+                    <Field.Label>Email</Field.Label>
+                    <Field.Control>
+                      <Input.Root
+                        type="email"
+                        size="lg"
+                        autoComplete="email"
+                        value={email}
+                        className="h-11 bg-surface"
+                        onChange={(event) => setEmail(event.target.value)}
+                      />
+                    </Field.Control>
+                    <Field.Error>{fieldError("email")}</Field.Error>
+                  </Field.Root>
+                  <Field.Root required>
+                    <Field.Label>Name</Field.Label>
                     <Field.Control>
                       <Input.Root
                         size="lg"
-                        autoComplete="organization"
+                        autoComplete="name"
                         maxLength={80}
-                        placeholder={displayName.trim()}
-                        value={organizationName}
-                        onChange={(event) =>
-                          setOrganizationName(event.target.value)
-                        }
+                        value={displayName}
+                        className="h-11 bg-surface"
+                        onChange={(event) => setDisplayName(event.target.value)}
                       />
                     </Field.Control>
+                    <Field.Error>{fieldError("displayName")}</Field.Error>
                   </Field.Root>
                 </Fieldset.Fields>
               </Fieldset.Root>
+              {start.isError &&
+              start.error instanceof ApiError &&
+              start.error.issues.length > 0 ? null : start.isError ? (
+                <p role="alert" className="text-label font-500 text-neg">
+                  {errorMessage(start.error)}
+                </p>
+              ) : null}
+              <Button.Root
+                type="submit"
+                size="lg"
+                loading={start.isPending}
+                disabled={email.trim() === "" || displayName.trim() === ""}
+                className="h-11"
+              >
+                Send code
+              </Button.Root>
+            </form>
+          ) : (
+            <p className="flex items-center gap-2 text-body-sm text-ink">
+              <span className="min-w-0 flex-1 truncate">
+                {`${displayName.trim()} · ${email.trim()}`}
+              </span>
+              <Button.Root
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  verify.reset()
+                  register.reset()
+                  setStep({ kind: "details" })
+                }}
+              >
+                Change
+              </Button.Root>
+            </p>
+          )}
+        </AuthStep>
+        <AuthStep index={2} title="Code" state={stateOf(step, 2)}>
+          {step.kind === "code" ? (
+            <EmailCodeForm
+              key={step.challengeId}
+              pending={verify.isPending}
+              error={verify.error}
+              onVerify={(code) =>
+                verify.mutate({ challengeId: step.challengeId, code })
+              }
+              resending={start.isPending}
+              onResend={() => {
+                verify.reset()
+                start.mutate()
+              }}
+              sentAt={step.sentAt}
+            />
+          ) : step.kind === "passkey" ? (
+            <p className="text-body-sm text-secondary">Verified</p>
+          ) : undefined}
+        </AuthStep>
+        <AuthStep index={3} title="Passkey" state={stateOf(step, 3)}>
+          <form
+            onSubmit={submitPasskey}
+            className="flex flex-col gap-3"
+            noValidate
+          >
+            {invitation === undefined ? (
+              <Field.Root>
+                <Field.Label>Organization</Field.Label>
+                <Field.Control>
+                  <Input.Root
+                    size="lg"
+                    autoComplete="organization"
+                    maxLength={80}
+                    placeholder={displayName.trim()}
+                    disabled={!passkeyActive || register.isPending}
+                    value={organizationName}
+                    className="h-11 bg-surface"
+                    onChange={(event) =>
+                      setOrganizationName(event.target.value)
+                    }
+                  />
+                </Field.Control>
+              </Field.Root>
             ) : null}
             <Button.Root
               type="submit"
               size="lg"
               loading={register.isPending}
-              disabled={!passkeysSupported()}
+              disabled={!passkeyActive || !passkeysSupported()}
+              className="h-11"
             >
-              <Fingerprint aria-hidden="true" size={15} strokeWidth={1.75} />
+              {register.isPending ? null : (
+                <KeyRound aria-hidden="true" size={15} strokeWidth={1.75} />
+              )}
               Create passkey
             </Button.Root>
             {register.isError ? (
@@ -219,19 +255,22 @@ function SignUpPage(): ReactElement {
                 role={registerCancelled ? "status" : "alert"}
                 className={
                   registerCancelled
-                    ? "text-[12px] text-secondary"
-                    : "text-[12px] font-500 text-neg"
+                    ? "text-label text-secondary"
+                    : "text-label font-500 text-neg"
                 }
               >
                 {errorMessage(register.error)}
               </p>
             ) : null}
           </form>
-        </>
-      ) : null}
-      <p className="mt-6 border-t border-line pt-4 text-[13px] text-secondary">
+        </AuthStep>
+      </AuthSteps>
+      <p className="mt-6 text-body-sm text-secondary">
         Have an account?{" "}
-        <Link to="/sign-in" className="font-600 text-accent-ink">
+        <Link
+          to="/sign-in"
+          className="font-600 text-accent-ink hover:underline"
+        >
           Sign in
         </Link>
       </p>

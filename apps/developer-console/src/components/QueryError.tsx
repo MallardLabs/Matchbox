@@ -21,7 +21,7 @@ export default function QueryError({
     <div
       role="alert"
       className={cn(
-        "flex flex-wrap items-center gap-3 border-t border-line py-4 text-[13px]",
+        "flex flex-wrap items-center gap-3 border-t border-line py-4 text-body-sm",
         className,
       )}
     >
@@ -34,7 +34,7 @@ export default function QueryError({
       <p className="min-w-0 flex-1 text-ink">
         {errorMessage(error)}
         {requestId === null ? null : (
-          <span className="ml-2 font-mono text-[11px] text-secondary">
+          <span className="ml-2 font-mono text-caption text-secondary">
             {requestId}
           </span>
         )}

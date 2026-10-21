@@ -8,7 +8,7 @@ export default function Unavailable(): ReactElement {
   return (
     <main className="flex min-h-dvh flex-col items-center justify-center gap-4 bg-canvas px-4 text-center">
       <Logo.Root />
-      <h1 className="text-[18px] font-600 text-ink">
+      <h1 className="text-title-sm font-600 text-ink">
         Developer console unavailable
       </h1>
     </main>

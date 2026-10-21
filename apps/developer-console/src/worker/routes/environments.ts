@@ -1,5 +1,6 @@
 import {
   consolePaths,
+  environmentReviewListResponseSchema,
   environmentSchema,
   oauthStatsQuerySchema,
   oauthStatsResponseSchema,
@@ -28,6 +29,8 @@ import {
   oidcScopeSchema,
   oidcScopesOf,
   scopeDefinitions,
+  scopeRequirement,
+  validateOptionalScopes,
 } from "@repo/platform-contracts/scopes"
 import {
   PlatformError,
@@ -45,7 +48,12 @@ import {
   nowIso,
   requireStepUp,
 } from "../context"
-import { loadEnvironment, respond, toReview } from "../mappers"
+import {
+  loadEnvironment,
+  respond,
+  toDeveloperReviews,
+  toReview,
+} from "../mappers"
 import {
   approvalOutcome,
   environmentReviewState,
@@ -131,6 +139,8 @@ function consentPreview(
       available,
       unavailableReason: available ? null : ("not-approved" as const),
       previouslyGranted: false,
+      requirement: scopeRequirement(scope, environment.optionalScopes),
+      previouslyDeclined: false,
     }
   })
   return {
@@ -305,9 +315,35 @@ export default function registerEnvironmentRoutes(app: ConsoleApp): void {
     const approvedScopes = access.environment.approvedScopes.filter((scope) =>
       requestedScopes.includes(scope),
     )
+    const optionalProblems = validateOptionalScopes({
+      requested: requestedScopes,
+      optional: body.optionalScopes ?? [],
+    })
+    if (optionalProblems.length > 0) {
+      throw new PlatformError("invalid_request", {
+        issues: optionalProblems.map((problem) => ({
+          path: "optionalScopes",
+          message:
+            problem.reason === "always-required"
+              ? `${problem.scope} is always required`
+              : `${problem.scope} is not requested`,
+        })),
+      })
+    }
+    // Removing a requested scope drops it from the optional set too (the
+    // DB keeps optional ⊆ requested); unchanged sets are not written.
+    const optionalScopes = normalizeScopes(
+      (body.optionalScopes ?? access.environment.optionalScopes).filter(
+        (scope) => requestedScopes.includes(scope),
+      ),
+    )
+    const optionalChanged =
+      optionalScopes.join(" ") !==
+      normalizeScopes(access.environment.optionalScopes).join(" ")
     const environment = await store.updateEnvironment(environmentId, {
       requestedScopes,
       approvedScopes,
+      ...(optionalChanged ? { optionalScopes } : {}),
       reviewState: environmentReviewState(approvedScopes, "development"),
     })
     await audit(c, {
@@ -318,6 +354,7 @@ export default function registerEnvironmentRoutes(app: ConsoleApp): void {
       metadata: {
         requestedScopes,
         previous: access.environment.requestedScopes,
+        ...(optionalChanged ? { optionalScopes } : {}),
       },
     })
     return respond(
@@ -462,7 +499,7 @@ export default function registerEnvironmentRoutes(app: ConsoleApp): void {
 
   app.get("/api/environments/:environmentId/oauth", async (c) => {
     const { environmentId } = pathParams(c, consolePaths.environmentId)
-    await environmentAccess(c, environmentId, "developer")
+    const access = await environmentAccess(c, environmentId, "developer")
     const query = queryParams(c, oauthStatsQuerySchema)
     if (Date.parse(query.from) >= Date.parse(query.to)) {
       throw new PlatformError("invalid_request", {
@@ -473,6 +510,7 @@ export default function registerEnvironmentRoutes(app: ConsoleApp): void {
       environmentId,
       from: new Date(query.from).toISOString(),
       to: new Date(query.to).toISOString(),
+      scopeVersion: access.environment.scopeVersion,
     })
     const revocationTotal = Object.values(stats.revocationsByReason).reduce(
       (sum, count) => sum + count,
@@ -489,6 +527,20 @@ export default function registerEnvironmentRoutes(app: ConsoleApp): void {
         scope,
         activeGrants: stats.activeGrantsByScope[scope],
       })),
+      awaitingReconsent: {
+        count: stats.awaitingReconsent.count,
+        currentScopeVersion: access.environment.scopeVersion,
+        oldestScopeVersion: stats.awaitingReconsent.oldestScopeVersion,
+      },
+    })
+  })
+
+  app.get("/api/environments/:environmentId/reviews", async (c) => {
+    const { environmentId } = pathParams(c, consolePaths.environmentId)
+    await environmentAccess(c, environmentId, "developer")
+    const reviews = await deps(c).store.listEnvironmentReviews(environmentId)
+    return respond(c, environmentReviewListResponseSchema, {
+      data: await toDeveloperReviews(c, reviews),
     })
   })
 

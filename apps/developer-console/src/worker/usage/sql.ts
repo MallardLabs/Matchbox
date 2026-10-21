@@ -35,6 +35,7 @@ const column = {
   country: API_REQUEST_LOG_LAYOUT.country,
   latencyMs: API_REQUEST_LOG_LAYOUT.latencyMs,
   statusCode: API_REQUEST_LOG_LAYOUT.statusCode,
+  errorCode: API_REQUEST_LOG_LAYOUT.errorCode,
 } as const
 
 const uuidPattern =
@@ -89,9 +90,33 @@ export type RangeFilter = {
   apiKeyId: string | null
 }
 
-function whereClause(filter: RangeFilter, extra: string[] = []): string {
+/** Several environments at once (organization usage). */
+export type MultiRangeFilter = Omit<RangeFilter, "environmentId"> & {
+  environmentIds: readonly string[]
+}
+
+/** Most environments one organization query may name. */
+export const maxEnvironmentsPerQuery = 200
+
+function environmentPredicate(ids: readonly string[]): string {
+  if (ids.length === 0 || ids.length > maxEnvironmentsPerQuery) {
+    throw new UnsafeSqlInputError("environmentIds")
+  }
+  if (ids.length === 1) {
+    return `${column.environmentId} = ${uuidLiteral("environmentId", ids[0] ?? "")}`
+  }
+  const literals = ids.map((id) => uuidLiteral("environmentId", id))
+  return `${column.environmentId} IN (${literals.join(", ")})`
+}
+
+function whereClause(
+  filter: RangeFilter | MultiRangeFilter,
+  extra: string[] = [],
+): string {
+  const ids =
+    "environmentIds" in filter ? filter.environmentIds : [filter.environmentId]
   const clauses = [
-    `${column.environmentId} = ${uuidLiteral("environmentId", filter.environmentId)}`,
+    environmentPredicate(ids),
     `timestamp >= toDateTime(${unixSeconds("from", filter.from)})`,
     `timestamp < toDateTime(${unixSeconds("to", filter.to)})`,
   ]
@@ -109,13 +134,20 @@ function whereClause(filter: RangeFilter, extra: string[] = []): string {
 const requests = "SUM(_sample_interval)"
 const errors = `sumIf(_sample_interval, ${column.statusCode} >= 400)`
 
+/** 4xx excluding 429, 429, 5xx (errors = their sum). */
+const split = [
+  `sumIf(_sample_interval, ${column.statusCode} >= 400 AND ${column.statusCode} < 500 AND ${column.statusCode} != 429) AS client_errors`,
+  `sumIf(_sample_interval, ${column.statusCode} = 429) AS rate_limited`,
+  `sumIf(_sample_interval, ${column.statusCode} >= 500) AS server_errors`,
+].join(", ")
+
 function quantile(q: "0.5" | "0.95"): string {
   return `quantileExactWeighted(${q})(${column.latencyMs}, _sample_interval)`
 }
 
-export function buildTotalsSql(filter: RangeFilter): string {
+export function buildTotalsSql(filter: RangeFilter | MultiRangeFilter): string {
   return [
-    `SELECT ${requests} AS requests, ${errors} AS errors,`,
+    `SELECT ${requests} AS requests, ${errors} AS errors, ${split},`,
     `${quantile("0.5")} AS p50, ${quantile("0.95")} AS p95`,
     `FROM ${apiRequestLogDataset}`,
     whereClause(filter),
@@ -124,13 +156,13 @@ export function buildTotalsSql(filter: RangeFilter): string {
 }
 
 export function buildSeriesSql(
-  filter: RangeFilter & { bucket: UsageBucket },
+  filter: (RangeFilter | MultiRangeFilter) & { bucket: UsageBucket },
 ): string {
   const bucket = usageBucketSchema.safeParse(filter.bucket)
   if (!bucket.success) throw new UnsafeSqlInputError("bucket")
   return [
     `SELECT toUnixTimestamp(toStartOfInterval(timestamp, ${intervalByBucket[bucket.data]})) AS bucket,`,
-    `${requests} AS requests, ${errors} AS errors,`,
+    `${requests} AS requests, ${errors} AS errors, ${split},`,
     `${quantile("0.5")} AS p50, ${quantile("0.95")} AS p95`,
     `FROM ${apiRequestLogDataset}`,
     whereClause(filter),
@@ -138,7 +170,10 @@ export function buildSeriesSql(
   ].join(" ")
 }
 
-export function buildTopRoutesSql(filter: RangeFilter, limit = 10): string {
+export function buildTopRoutesSql(
+  filter: RangeFilter | MultiRangeFilter,
+  limit = 10,
+): string {
   return [
     `SELECT ${column.route} AS route, ${column.method} AS method,`,
     `${requests} AS requests, ${errors} AS errors, ${quantile("0.95")} AS p95`,
@@ -149,7 +184,10 @@ export function buildTopRoutesSql(filter: RangeFilter, limit = 10): string {
   ].join(" ")
 }
 
-export function buildByKeySql(filter: RangeFilter, limit = 20): string {
+export function buildByKeySql(
+  filter: RangeFilter | MultiRangeFilter,
+  limit = 20,
+): string {
   return [
     `SELECT ${column.keyId} AS key_id, ${requests} AS requests, ${errors} AS errors`,
     `FROM ${apiRequestLogDataset}`,
@@ -170,6 +208,7 @@ const requestColumns = [
   `${column.colo} AS colo`,
   `${column.country} AS country`,
   `${column.latencyMs} AS latency_ms`,
+  `${column.errorCode} AS error_code`,
 ].join(", ")
 
 export function buildRequestLogSql(
@@ -190,6 +229,41 @@ export function buildRequestLogSql(
     whereClause(filter, extra),
     `ORDER BY timestamp DESC LIMIT ${integer("limit", filter.limit, 1, 200)}`,
     "FORMAT JSON",
+  ].join(" ")
+}
+
+/** Per-environment totals with the error split (organization usage). */
+export function buildEnvironmentTotalsSql(filter: MultiRangeFilter): string {
+  return [
+    `SELECT ${column.environmentId} AS environment_id,`,
+    `${requests} AS requests, ${errors} AS errors, ${split},`,
+    `${quantile("0.5")} AS p50, ${quantile("0.95")} AS p95`,
+    `FROM ${apiRequestLogDataset}`,
+    whereClause(filter),
+    "GROUP BY environment_id FORMAT JSON",
+  ].join(" ")
+}
+
+/** Requests per environment per UTC day (the "7 d" sparklines). */
+export function buildEnvironmentDailySql(filter: MultiRangeFilter): string {
+  return [
+    `SELECT ${column.environmentId} AS environment_id,`,
+    `toUnixTimestamp(toStartOfInterval(timestamp, ${intervalByBucket.day})) AS bucket,`,
+    `${requests} AS requests`,
+    `FROM ${apiRequestLogDataset}`,
+    whereClause(filter),
+    "GROUP BY environment_id, bucket ORDER BY bucket ASC FORMAT JSON",
+  ].join(" ")
+}
+
+/** 429 responses per environment since `from` ("rate-limited today"). */
+export function buildRateLimitedSql(filter: MultiRangeFilter): string {
+  return [
+    `SELECT ${column.environmentId} AS environment_id,`,
+    `sumIf(_sample_interval, ${column.statusCode} = 429) AS rate_limited`,
+    `FROM ${apiRequestLogDataset}`,
+    whereClause(filter),
+    "GROUP BY environment_id FORMAT JSON",
   ].join(" ")
 }
 

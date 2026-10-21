@@ -5,6 +5,7 @@ import {
   type CreateApiKeyRequest,
   type CreateAppRequest,
   type EmailCodeVerifyRequest,
+  type EnvironmentKindFilter,
   type MembershipRole,
   type PasskeyAuthenticateRequest,
   type PasskeyRegisterRequest,
@@ -14,8 +15,10 @@ import {
   type UsageBucket,
   adminAppListResponseSchema,
   adminAppSchema,
+  adminReviewContextResponseSchema,
   adminReviewListResponseSchema,
   adminReviewSchema,
+  adminReviewStatsResponseSchema,
   apiKeyListResponseSchema,
   apiKeyRecordSchema,
   appListResponseSchema,
@@ -27,6 +30,7 @@ import {
   createdApiKeyResponseSchema,
   createdClientSecretResponseSchema,
   emailChallengeResponseSchema,
+  environmentReviewListResponseSchema,
   environmentSchema,
   invitationListResponseSchema,
   invitationSchema,
@@ -34,6 +38,8 @@ import {
   memberListResponseSchema,
   memberSchema,
   oauthStatsResponseSchema,
+  orgReviewListResponseSchema,
+  orgUsageResponseSchema,
   organizationListResponseSchema,
   organizationSchema,
   passkeyAuthenticationOptionsResponseSchema,
@@ -43,6 +49,8 @@ import {
   quotaOverrideListResponseSchema,
   quotaOverrideRecordSchema,
   requestLogEntrySchema,
+  requestLogResponseSchema,
+  type requestStatusClassSchema,
   revokeOtherSessionsResponseSchema,
   rotatedApiKeyResponseSchema,
   stepUpResponseSchema,
@@ -51,8 +59,14 @@ import {
 } from "@repo/platform-contracts/console"
 import { authorizationRequestDetailSchema } from "@repo/platform-contracts/identity"
 import type { EnvironmentKind } from "@repo/platform-contracts/network"
-import type { EndpointClass } from "@repo/platform-contracts/rate-limits"
-import type { PlatformScope } from "@repo/platform-contracts/scopes"
+import { platformHealthResponseSchema } from "@repo/platform-contracts/platform-health"
+import {
+  type EndpointClass,
+  environmentQuotaListResponseSchema,
+  environmentQuotaStatusSchema,
+} from "@repo/platform-contracts/rate-limits"
+import type { OidcScope, PlatformScope } from "@repo/platform-contracts/scopes"
+import type { z } from "zod"
 import { type QueryValue, apiRequest, buildUrl } from "./api-client"
 
 /** Typed client for every console `/api/*` route in the contract. */
@@ -78,6 +92,36 @@ function usageQuery(params: UsageParams): Record<string, QueryValue> {
     bucket: params.bucket,
     apiKeyId: params.apiKeyId,
   }
+}
+
+export type OrgUsageParams = {
+  orgId: string
+  from: string
+  to: string
+  bucket: UsageBucket
+  environmentKind: EnvironmentKindFilter
+  appId?: string | undefined
+  apiKeyId?: string | undefined
+}
+
+function orgUsageQuery(params: OrgUsageParams): Record<string, QueryValue> {
+  return {
+    from: params.from,
+    to: params.to,
+    bucket: params.bucket,
+    environmentKind: params.environmentKind,
+    appId: params.appId,
+    apiKeyId: params.apiKeyId,
+  }
+}
+
+export type RequestLogParams = {
+  environmentId: string
+  from: string
+  to: string
+  statusClass?: z.infer<typeof requestStatusClassSchema> | undefined
+  apiKeyId?: string | undefined
+  limit?: number
 }
 
 type AuditFilters = Partial<Omit<AuditSearchQuery, "limit">> & {
@@ -293,6 +337,36 @@ export const orgs = {
   apps(orgId: string) {
     return apiRequest(appListResponseSchema, `/api/orgs/${enc(orgId)}/apps`)
   },
+  usage(params: OrgUsageParams) {
+    return apiRequest(
+      orgUsageResponseSchema,
+      `/api/orgs/${enc(params.orgId)}/usage`,
+      { query: orgUsageQuery(params) },
+    )
+  },
+  usageCsvUrl(params: OrgUsageParams): string {
+    return buildUrl(
+      `/api/orgs/${enc(params.orgId)}/usage.csv`,
+      orgUsageQuery(params),
+    )
+  },
+  quotas(orgId: string, environmentKind: EnvironmentKindFilter = "both") {
+    return apiRequest(
+      environmentQuotaListResponseSchema,
+      `/api/orgs/${enc(orgId)}/quotas`,
+      { query: { environmentKind } },
+    )
+  },
+  reviews(
+    orgId: string,
+    query: { state?: ReviewRecordState | undefined; limit?: number } = {},
+  ) {
+    return apiRequest(
+      orgReviewListResponseSchema,
+      `/api/orgs/${enc(orgId)}/reviews`,
+      { query: { state: query.state, limit: query.limit } },
+    )
+  },
   createApp(orgId: string, body: CreateAppRequest) {
     return apiRequest(appSchema, `/api/orgs/${enc(orgId)}/apps`, {
       method: post,
@@ -373,11 +447,30 @@ export const environments = {
       body: { origins },
     })
   },
-  updateScopes(environmentId: string, requestedScopes: PlatformScope[]) {
+  updateScopes(
+    environmentId: string,
+    requestedScopes: PlatformScope[],
+    optionalScopes?: OidcScope[],
+  ) {
     return apiRequest(environmentSchema, envPath(environmentId, "/scopes"), {
       method: "PUT",
-      body: { requestedScopes },
+      body:
+        optionalScopes === undefined
+          ? { requestedScopes }
+          : { requestedScopes, optionalScopes },
     })
+  },
+  reviews(environmentId: string) {
+    return apiRequest(
+      environmentReviewListResponseSchema,
+      envPath(environmentId, "/reviews"),
+    )
+  },
+  quota(environmentId: string) {
+    return apiRequest(
+      environmentQuotaStatusSchema,
+      envPath(environmentId, "/quota"),
+    )
   },
   submitReview(environmentId: string, note: string) {
     return apiRequest(
@@ -432,6 +525,21 @@ export const environments = {
     return buildUrl(
       envPath(params.environmentId, "/usage.csv"),
       usageQuery(params),
+    )
+  },
+  requests(params: RequestLogParams) {
+    return apiRequest(
+      requestLogResponseSchema,
+      envPath(params.environmentId, "/requests"),
+      {
+        query: {
+          from: params.from,
+          to: params.to,
+          statusClass: params.statusClass,
+          apiKeyId: params.apiKeyId,
+          limit: params.limit,
+        },
+      },
     )
   },
   request(environmentId: string, requestId: string) {
@@ -502,14 +610,36 @@ export const clientSecrets = {
   },
 }
 
+export const platform = {
+  health() {
+    return apiRequest(platformHealthResponseSchema, "/api/platform/health")
+  },
+}
+
 export const admin = {
-  reviews(query: { state: ReviewRecordState; cursor?: string | undefined }) {
+  reviews(query: {
+    state: ReviewRecordState
+    scope?: PlatformScope | undefined
+    cursor?: string | undefined
+  }) {
     return apiRequest(adminReviewListResponseSchema, "/api/admin/reviews", {
       query: { ...query, limit: 50 },
     })
   },
+  reviewStats() {
+    return apiRequest(
+      adminReviewStatsResponseSchema,
+      "/api/admin/reviews/stats",
+    )
+  },
   review(reviewId: string) {
     return apiRequest(adminReviewSchema, `/api/admin/reviews/${enc(reviewId)}`)
+  },
+  reviewContext(reviewId: string) {
+    return apiRequest(
+      adminReviewContextResponseSchema,
+      `/api/admin/reviews/${enc(reviewId)}/context`,
+    )
   },
   decide(reviewId: string, body: ReviewDecisionRequest) {
     return apiRequest(

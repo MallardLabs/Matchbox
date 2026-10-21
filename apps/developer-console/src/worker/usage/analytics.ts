@@ -6,6 +6,9 @@ import {
   aeNumberSchema,
   aeResponseSchema,
   buildByKeySql,
+  buildEnvironmentDailySql,
+  buildEnvironmentTotalsSql,
+  buildRateLimitedSql,
   buildRequestLogSql,
   buildRequestLookupSql,
   buildSeriesSql,
@@ -15,7 +18,14 @@ import {
 
 /** Usage data as routes consume it; the AE and synthetic sources produce it. */
 
-export type UsagePoint = {
+/** errors = clientErrors (4xx excl. 429) + rateLimited (429) + serverErrors. */
+export type ErrorSplit = {
+  clientErrors: number
+  rateLimited: number
+  serverErrors: number
+}
+
+export type UsagePoint = ErrorSplit & {
   /** Unix seconds at the start of the bucket. */
   start: number
   requests: number
@@ -24,13 +34,15 @@ export type UsagePoint = {
   p95LatencyMs: number | null
 }
 
+export type UsageTotalsData = ErrorSplit & {
+  requests: number
+  errors: number
+  p50LatencyMs: number | null
+  p95LatencyMs: number | null
+}
+
 export type UsageData = {
-  totals: {
-    requests: number
-    errors: number
-    p50LatencyMs: number | null
-    p95LatencyMs: number | null
-  }
+  totals: UsageTotalsData
   series: UsagePoint[]
   topRoutes: {
     route: string
@@ -53,6 +65,8 @@ export type RequestLogRow = {
   colo: string | null
   country: string | null
   latencyMs: number
+  /** Platform error code; null for successes and older rows. */
+  errorCode: string | null
 }
 
 export type UsageInput = {
@@ -75,8 +89,30 @@ export type RequestLogInput = {
   knownKeyIds: string[]
 }
 
+export type OrgUsageInput = Omit<UsageInput, "environmentId"> & {
+  environmentIds: string[]
+}
+
+export type EnvironmentUsageData = {
+  totals: UsageTotalsData
+  /** Requests per UTC day (unix seconds), sparse. */
+  daily: { start: number; requests: number }[]
+}
+
+export type OrgUsageData = UsageData & {
+  byEnvironment: Map<string, EnvironmentUsageData>
+}
+
 export type UsageAnalytics = {
   usage(input: UsageInput): Promise<UsageData>
+  /** Several environments at once, plus a per-environment breakdown. */
+  orgUsage(input: OrgUsageInput): Promise<OrgUsageData>
+  /** 429 counts per environment in [from, to). */
+  rateLimited(input: {
+    environmentIds: string[]
+    from: Date
+    to: Date
+  }): Promise<Map<string, number>>
   requests(input: RequestLogInput): Promise<RequestLogRow[]>
   request(input: {
     environmentId: string
@@ -146,9 +182,16 @@ const optionalBlob = z
   .nullable()
   .transform((value) => (value === null || value.length === 0 ? null : value))
 
+const splitFields = {
+  client_errors: countSchema.optional(),
+  rate_limited: countSchema.optional(),
+  server_errors: countSchema.optional(),
+}
+
 const totalsRow = z.object({
   requests: countSchema,
   errors: countSchema,
+  ...splitFields,
   p50: latencySchema,
   p95: latencySchema,
 })
@@ -157,9 +200,47 @@ const seriesRow = z.object({
   bucket: countSchema,
   requests: countSchema,
   errors: countSchema,
+  ...splitFields,
   p50: latencySchema,
   p95: latencySchema,
 })
+
+const environmentTotalsRow = totalsRow.extend({ environment_id: z.string() })
+
+const environmentDailyRow = z.object({
+  environment_id: z.string(),
+  bucket: countSchema,
+  requests: countSchema,
+})
+
+const rateLimitedRow = z.object({
+  environment_id: z.string(),
+  rate_limited: countSchema,
+})
+
+function splitOf(row: {
+  client_errors?: number | undefined
+  rate_limited?: number | undefined
+  server_errors?: number | undefined
+}): ErrorSplit {
+  return {
+    clientErrors: row.client_errors ?? 0,
+    rateLimited: row.rate_limited ?? 0,
+    serverErrors: row.server_errors ?? 0,
+  }
+}
+
+function toTotals(
+  row: z.output<typeof totalsRow> | undefined,
+): UsageTotalsData {
+  return {
+    requests: row?.requests ?? 0,
+    errors: row?.errors ?? 0,
+    ...splitOf(row ?? {}),
+    p50LatencyMs: row?.p50 ?? null,
+    p95LatencyMs: row?.p95 ?? null,
+  }
+}
 
 const routeRow = z.object({
   route: z.string(),
@@ -187,6 +268,7 @@ const requestRow = z
     colo: optionalBlob,
     country: optionalBlob,
     latency_ms: latencySchema,
+    error_code: optionalBlob.optional(),
   })
   .transform(
     (row): RequestLogRow => ({
@@ -200,6 +282,7 @@ const requestRow = z
       colo: row.colo,
       country: row.country,
       latencyMs: row.latency_ms ?? 0,
+      errorCode: row.error_code ?? null,
     }),
   )
 
@@ -233,18 +316,13 @@ export function createAnalyticsEngineUsage(
         client.query(buildTopRoutesSql(filter)),
         client.query(buildByKeySql(filter)),
       ])
-      const total = parseRows(totalsRow, totals)[0]
       return {
-        totals: {
-          requests: total?.requests ?? 0,
-          errors: total?.errors ?? 0,
-          p50LatencyMs: total?.p50 ?? null,
-          p95LatencyMs: total?.p95 ?? null,
-        },
+        totals: toTotals(parseRows(totalsRow, totals)[0]),
         series: parseRows(seriesRow, series).map((row) => ({
           start: row.bucket,
           requests: row.requests,
           errors: row.errors,
+          ...splitOf(row),
           p50LatencyMs: row.p50,
           p95LatencyMs: row.p95,
         })),
@@ -261,6 +339,71 @@ export function createAnalyticsEngineUsage(
           errors: row.errors,
         })),
       }
+    },
+    async orgUsage(input) {
+      const filter = {
+        environmentIds: input.environmentIds,
+        from: input.from,
+        to: input.to,
+        apiKeyId: input.apiKeyId,
+      }
+      const [totals, series, routes, keys, environments, daily] =
+        await Promise.all([
+          client.query(buildTotalsSql(filter)),
+          client.query(buildSeriesSql({ ...filter, bucket: input.bucket })),
+          client.query(buildTopRoutesSql(filter)),
+          client.query(buildByKeySql(filter)),
+          client.query(buildEnvironmentTotalsSql(filter)),
+          client.query(buildEnvironmentDailySql(filter)),
+        ])
+      const byEnvironment = new Map<string, EnvironmentUsageData>()
+      for (const row of parseRows(environmentTotalsRow, environments)) {
+        byEnvironment.set(row.environment_id, {
+          totals: toTotals(row),
+          daily: [],
+        })
+      }
+      for (const row of parseRows(environmentDailyRow, daily)) {
+        byEnvironment
+          .get(row.environment_id)
+          ?.daily.push({ start: row.bucket, requests: row.requests })
+      }
+      return {
+        totals: toTotals(parseRows(totalsRow, totals)[0]),
+        series: parseRows(seriesRow, series).map((row) => ({
+          start: row.bucket,
+          requests: row.requests,
+          errors: row.errors,
+          ...splitOf(row),
+          p50LatencyMs: row.p50,
+          p95LatencyMs: row.p95,
+        })),
+        topRoutes: parseRows(routeRow, routes).map((row) => ({
+          route: row.route,
+          method: row.method,
+          requests: row.requests,
+          errors: row.errors,
+          p95LatencyMs: row.p95,
+        })),
+        byKey: parseRows(keyRow, keys).map((row) => ({
+          keyId: row.key_id,
+          requests: row.requests,
+          errors: row.errors,
+        })),
+        byEnvironment,
+      }
+    },
+    async rateLimited(input) {
+      if (input.environmentIds.length === 0) return new Map()
+      const rows = await client.query(
+        buildRateLimitedSql({ ...input, apiKeyId: null }),
+      )
+      return new Map(
+        parseRows(rateLimitedRow, rows).map((row) => [
+          row.environment_id,
+          row.rate_limited,
+        ]),
+      )
     },
     async requests(input) {
       const rows = await client.query(
@@ -328,11 +471,16 @@ function syntheticPoint(
   const perMinute = 4 + 20 * diurnal * random(seed)
   const requests = Math.round((perMinute * bucketSeconds) / 60)
   const errors = Math.round(requests * 0.015 * random(seed + 1))
+  const rateLimited = Math.round(errors * 0.3 * random(seed + 4))
+  const serverErrors = Math.round((errors - rateLimited) * 0.25)
   const p50 = Math.round((18 + 12 * random(seed + 2)) * 100) / 100
   return {
     start,
     requests,
     errors,
+    clientErrors: errors - rateLimited - serverErrors,
+    rateLimited,
+    serverErrors,
     p50LatencyMs: requests === 0 ? null : p50,
     p95LatencyMs:
       requests === 0
@@ -341,69 +489,171 @@ function syntheticPoint(
   }
 }
 
-function syntheticSeries(input: UsageInput): UsagePoint[] {
+function halve(point: UsagePoint): UsagePoint {
+  const clientErrors = Math.round(point.clientErrors / 2)
+  const rateLimited = Math.round(point.rateLimited / 2)
+  const serverErrors = Math.round(point.serverErrors / 2)
+  return {
+    ...point,
+    requests: Math.round(point.requests / 2),
+    errors: clientErrors + rateLimited + serverErrors,
+    clientErrors,
+    rateLimited,
+    serverErrors,
+  }
+}
+
+function syntheticSeries(
+  environmentId: string,
+  input: Pick<UsageInput, "from" | "to" | "bucket" | "apiKeyId">,
+): UsagePoint[] {
   const size = usageBucketSeconds[input.bucket]
   const first = Math.floor(input.from.getTime() / 1000 / size) * size
   const end = Math.ceil(input.to.getTime() / 1000)
   const points: UsagePoint[] = []
   for (let start = first; start < end; start += size) {
-    const point = syntheticPoint(input.environmentId, start, size)
-    points.push(
-      input.apiKeyId === null
-        ? point
-        : {
-            ...point,
-            requests: Math.round(point.requests / 2),
-            errors: Math.round(point.errors / 2),
-          },
-    )
+    const point = syntheticPoint(environmentId, start, size)
+    points.push(input.apiKeyId === null ? point : halve(point))
   }
   return points
+}
+
+function median(values: number[]): number | null {
+  const sorted = [...values].sort((a, b) => a - b)
+  return sorted[Math.floor(sorted.length / 2)] ?? null
+}
+
+function summarize(series: UsagePoint[]): UsageTotalsData {
+  const sum = (pick: (point: UsagePoint) => number) =>
+    series.reduce((total, point) => total + pick(point), 0)
+  return {
+    requests: sum((point) => point.requests),
+    errors: sum((point) => point.errors),
+    clientErrors: sum((point) => point.clientErrors),
+    rateLimited: sum((point) => point.rateLimited),
+    serverErrors: sum((point) => point.serverErrors),
+    p50LatencyMs: median(
+      series.flatMap((point) =>
+        point.p50LatencyMs === null ? [] : [point.p50LatencyMs],
+      ),
+    ),
+    p95LatencyMs: median(
+      series.flatMap((point) =>
+        point.p95LatencyMs === null ? [] : [point.p95LatencyMs],
+      ),
+    ),
+  }
+}
+
+/** Adds bucket by bucket; latency keeps the worse environment's value. */
+function mergeSeries(all: UsagePoint[][]): UsagePoint[] {
+  const merged = new Map<number, UsagePoint>()
+  for (const series of all) {
+    for (const point of series) {
+      const current = merged.get(point.start)
+      if (current === undefined) {
+        merged.set(point.start, { ...point })
+        continue
+      }
+      current.requests += point.requests
+      current.errors += point.errors
+      current.clientErrors += point.clientErrors
+      current.rateLimited += point.rateLimited
+      current.serverErrors += point.serverErrors
+      current.p50LatencyMs = maxLatency(
+        current.p50LatencyMs,
+        point.p50LatencyMs,
+      )
+      current.p95LatencyMs = maxLatency(
+        current.p95LatencyMs,
+        point.p95LatencyMs,
+      )
+    }
+  }
+  return [...merged.values()].sort((a, b) => a.start - b.start)
+}
+
+function maxLatency(left: number | null, right: number | null): number | null {
+  if (left === null) return right
+  if (right === null) return left
+  return Math.max(left, right)
+}
+
+function syntheticUsage(
+  series: UsagePoint[],
+  keyIds: readonly string[],
+): UsageData {
+  const totals = summarize(series)
+  return {
+    totals,
+    series,
+    topRoutes: syntheticRoutes.map((route) => ({
+      route: route.route,
+      method: route.method,
+      requests: Math.round(totals.requests * route.weight),
+      errors: Math.round(totals.errors * route.weight),
+      p95LatencyMs: totals.p95LatencyMs,
+    })),
+    byKey: keyIds.map((keyId, index) => {
+      const share = 1 / 2 ** (index + 1)
+      return {
+        keyId,
+        requests: Math.round(totals.requests * share),
+        errors: Math.round(totals.errors * share),
+      }
+    }),
+  }
 }
 
 /** Stable fake traffic so the console renders without Analytics Engine. */
 export function createSyntheticUsage(): UsageAnalytics {
   const synthetic: UsageAnalytics = {
     async usage(input) {
-      const series = syntheticSeries(input)
-      const requests = series.reduce((sum, point) => sum + point.requests, 0)
-      const errors = series.reduce((sum, point) => sum + point.errors, 0)
-      const latencies = series.flatMap((point) =>
-        point.p50LatencyMs === null ? [] : [point.p50LatencyMs],
+      return syntheticUsage(
+        syntheticSeries(input.environmentId, input),
+        input.apiKeyId !== null ? [input.apiKeyId] : input.knownKeyIds,
       )
-      const p95s = series.flatMap((point) =>
-        point.p95LatencyMs === null ? [] : [point.p95LatencyMs],
+    },
+    async orgUsage(input) {
+      const perEnvironment = input.environmentIds.map((environmentId) => ({
+        environmentId,
+        series: syntheticSeries(environmentId, input),
+        daily: syntheticSeries(environmentId, { ...input, bucket: "day" }),
+      }))
+      const usage = syntheticUsage(
+        mergeSeries(perEnvironment.map((entry) => entry.series)),
+        input.apiKeyId !== null ? [input.apiKeyId] : input.knownKeyIds,
       )
-      const median = (values: number[]) => {
-        const sorted = [...values].sort((a, b) => a - b)
-        return sorted[Math.floor(sorted.length / 2)] ?? null
-      }
-      const keys =
-        input.apiKeyId !== null ? [input.apiKeyId] : input.knownKeyIds
       return {
-        totals: {
-          requests,
-          errors,
-          p50LatencyMs: median(latencies),
-          p95LatencyMs: median(p95s),
-        },
-        series,
-        topRoutes: syntheticRoutes.map((route) => ({
-          route: route.route,
-          method: route.method,
-          requests: Math.round(requests * route.weight),
-          errors: Math.round(errors * route.weight),
-          p95LatencyMs: median(p95s),
-        })),
-        byKey: keys.map((keyId, index) => {
-          const share = 1 / 2 ** (index + 1)
-          return {
-            keyId,
-            requests: Math.round(requests * share),
-            errors: Math.round(errors * share),
-          }
-        }),
+        ...usage,
+        byEnvironment: new Map(
+          perEnvironment.map((entry) => [
+            entry.environmentId,
+            {
+              totals: summarize(entry.series),
+              daily: entry.daily.map((point) => ({
+                start: point.start,
+                requests: point.requests,
+              })),
+            },
+          ]),
+        ),
       }
+    },
+    async rateLimited(input) {
+      return new Map(
+        input.environmentIds.map((environmentId) => [
+          environmentId,
+          summarize(
+            syntheticSeries(environmentId, {
+              from: input.from,
+              to: input.to,
+              bucket: "hour",
+              apiKeyId: null,
+            }),
+          ).rateLimited,
+        ]),
+      )
     },
     async requests(input) {
       const rows: RequestLogRow[] = []
@@ -414,7 +664,8 @@ export function createSyntheticUsage(): UsageAnalytics {
           syntheticRoutes[Math.floor(random(seed) * syntheticRoutes.length)] ??
           syntheticRoutes[0]
         const roll = random(seed + 1)
-        const status = roll < 0.02 ? 500 : roll < 0.06 ? 404 : 200
+        const status =
+          roll < 0.02 ? 500 : roll < 0.05 ? 404 : roll < 0.08 ? 429 : 200
         const statusClass =
           status >= 500
             ? "server-error"
@@ -441,6 +692,7 @@ export function createSyntheticUsage(): UsageAnalytics {
           colo: "AMS",
           country: "NL",
           latencyMs: Math.round((12 + 40 * random(seed + 2)) * 100) / 100,
+          errorCode: syntheticErrorCodes[status] ?? null,
         })
       }
       return rows
@@ -459,6 +711,12 @@ export function createSyntheticUsage(): UsageAnalytics {
     },
   }
   return synthetic
+}
+
+const syntheticErrorCodes: Partial<Record<number, string>> = {
+  404: "not_found",
+  429: "rate_limited",
+  500: "internal_error",
 }
 
 const base62 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"

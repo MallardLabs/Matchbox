@@ -5,9 +5,13 @@ import {
   adminAppListResponseSchema,
   adminAppQuerySchema,
   adminAppSchema,
+  adminReviewContextResponseSchema,
   adminReviewListResponseSchema,
   adminReviewQuerySchema,
   adminReviewSchema,
+  adminReviewStats,
+  adminReviewStatsResponseSchema,
+  adminReviewStatsWindowSeconds,
   appStatusChangeRequestSchema,
   auditSearchQuerySchema,
   consolePaths,
@@ -15,6 +19,7 @@ import {
   quotaOverrideListResponseSchema,
   quotaOverrideRecordSchema,
   reviewDecisionRequestSchema,
+  usageErrorRate,
 } from "@repo/platform-contracts/console"
 import { createCursorCodec } from "@repo/platform-contracts/cursor"
 import {
@@ -72,6 +77,9 @@ function toAdminReview(record: AdminReviewRecord): AdminReview {
       name: record.app.name,
       websiteUrl: record.app.websiteUrl,
       status: record.app.status,
+      privacyUrl: record.app.privacyUrl,
+      termsUrl: record.app.termsUrl,
+      supportEmail: record.app.supportEmail,
     },
     environment: {
       id: record.environment.id,
@@ -118,6 +126,7 @@ export default function registerAdminRoutes(app: ConsoleApp): void {
     const offset = decodeOffset(query.cursor)
     const page = await deps(c).store.listAdminReviews({
       state: query.state,
+      scope: query.scope,
       offset,
       limit: query.limit,
     })
@@ -126,6 +135,87 @@ export default function registerAdminRoutes(app: ConsoleApp): void {
       nextCursor: page.hasMore
         ? offsetCursor.encode({ offset: offset + query.limit })
         : null,
+    })
+  })
+
+  app.get("/api/admin/reviews/stats", async (c) => {
+    await requireStaff(c, "reviewer")
+    const { store, now } = deps(c)
+    const at = now()
+    const reviews = await store.listReviewsForStats({
+      decidedSince: new Date(
+        at.getTime() - adminReviewStatsWindowSeconds * 1000,
+      ).toISOString(),
+    })
+    return respond(
+      c,
+      adminReviewStatsResponseSchema,
+      adminReviewStats(reviews, at),
+    )
+  })
+
+  app.get("/api/admin/reviews/:reviewId/context", async (c) => {
+    await requireStaff(c, "reviewer")
+    const { reviewId } = pathParams(c, consolePaths.reviewId)
+    const { store, analytics, now } = deps(c)
+    const record = await store.getAdminReview(reviewId)
+    if (record === null) throw new PlatformError("not_found")
+    const { review, environment } = record
+    const at = now()
+    const test = await store.getEnvironmentByKind(record.app.id, "test")
+    const [usage, grants, history] = await Promise.all([
+      test === null
+        ? null
+        : analytics
+            .usage({
+              environmentId: test.id,
+              from: new Date(at.getTime() - 7 * 86_400_000),
+              to: at,
+              bucket: "day",
+              apiKeyId: null,
+              knownKeyIds: [],
+            })
+            .catch((error: unknown) => {
+              logger(c).warn({ message: "Review context usage", error })
+              return null
+            }),
+      test === null
+        ? null
+        : store
+            .oauthStats({
+              environmentId: test.id,
+              from: new Date(at.getTime() - 86_400_000).toISOString(),
+              to: at.toISOString(),
+              scopeVersion: test.scopeVersion,
+            })
+            .catch((error: unknown) => {
+              logger(c).warn({ message: "Review context grants", error })
+              return null
+            }),
+      store.listEnvironmentReviews(environment.id),
+    ])
+    const outcome = approvalOutcome({
+      environment,
+      approve: review.requestedScopes,
+    })
+    return respond(c, adminReviewContextResponseSchema, {
+      testUsage7d:
+        usage === null
+          ? null
+          : {
+              requests: usage.totals.requests,
+              errors: usage.totals.errors,
+              errorRate: usageErrorRate(usage.totals),
+            },
+      testActiveGrants: grants?.activeGrants ?? null,
+      priorReviews: history.filter(
+        (item) =>
+          item.id !== review.id &&
+          item.state !== "open" &&
+          Date.parse(item.createdAt) < Date.parse(review.createdAt),
+      ).length,
+      scopeVersion: environment.scopeVersion,
+      nextScopeVersion: outcome.added.length > 0 ? outcome.scopeVersion : null,
     })
   })
 

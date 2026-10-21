@@ -50,16 +50,16 @@ function EndpointSection({
           <Badge.Root tone="accent" mono className="uppercase">
             {endpoint.method}
           </Badge.Root>
-          <code className="break-all font-mono text-[13px] text-ink">
+          <code className="break-all font-mono text-body-sm text-ink">
             {endpoint.path}
           </code>
           {endpoint.authenticated ? null : <Badge.Root>No auth</Badge.Root>}
         </p>
-        <h3 id={headingId} className="text-[18px] font-600 text-ink">
+        <h3 id={headingId} className="text-title-sm font-600 text-ink">
           {endpoint.summary}
         </h3>
         {endpoint.description === null ? null : (
-          <p className="max-w-2xl text-[13px] text-secondary">
+          <p className="max-w-2xl text-body-sm text-secondary">
             {endpoint.description}
           </p>
         )}
@@ -69,7 +69,7 @@ function EndpointSection({
         <div className="flex min-w-0 flex-col gap-6">
           {endpoint.parameters.length === 0 ? null : (
             <Table.Root density="compact">
-              <Table.Caption className="text-[13px]">Parameters</Table.Caption>
+              <Table.Caption className="text-body-sm">Parameters</Table.Caption>
               <Table.Header>
                 <Table.Row>
                   <Table.Head>Name</Table.Head>
@@ -94,7 +94,7 @@ function EndpointSection({
                     <Table.Cell className="text-secondary">
                       {parameter.in}
                     </Table.Cell>
-                    <Table.Cell mono className="text-[11px] text-secondary">
+                    <Table.Cell mono className="text-caption text-secondary">
                       {typeLabel(parameter.schema ?? {}, document)}
                     </Table.Cell>
                     <Table.Cell className="hidden text-secondary md:table-cell">
@@ -108,12 +108,12 @@ function EndpointSection({
 
           {successSchema === undefined || success === undefined ? null : (
             <div className="flex flex-col gap-2">
-              <h4 className="flex items-center gap-2 text-[13px] font-600 text-ink">
+              <h4 className="flex items-center gap-2 text-body-sm font-600 text-ink">
                 Response
                 <Badge.Root tone="pos" mono>
                   {success.status}
                 </Badge.Root>
-                <span className="font-mono text-[11px] font-400 text-secondary">
+                <span className="font-mono text-caption font-400 text-secondary">
                   {typeLabel(successSchema, document)}
                 </span>
               </h4>
@@ -122,12 +122,12 @@ function EndpointSection({
           )}
 
           <div className="flex flex-col gap-2">
-            <h4 className="text-[13px] font-600 text-ink">Status codes</h4>
+            <h4 className="text-body-sm font-600 text-ink">Status codes</h4>
             <ul className="m-0 flex list-none flex-col p-0">
               {endpoint.responses.map((item) => (
                 <li
                   key={item.status}
-                  className="flex items-baseline gap-3 border-t border-line py-2 text-[12px] first:border-t-0"
+                  className="flex items-baseline gap-3 border-t border-line py-2 text-label first:border-t-0"
                 >
                   <Badge.Root tone={statusTone(item.status)} mono>
                     {item.status}
@@ -139,7 +139,7 @@ function EndpointSection({
               ))}
             </ul>
             {errors.length === 0 ? null : (
-              <p className="text-[12px] text-secondary">
+              <p className="text-label text-secondary">
                 Errors use <code className="font-mono text-ink">ErrorBody</code>
                 .
               </p>
@@ -181,7 +181,7 @@ export default function OpenApiReference({
         <ol className="m-0 grid grid-cols-1 list-none gap-6 p-0 sm:grid-cols-3">
           {groups.map((group) => (
             <li key={group.tag} className="flex flex-col gap-2">
-              <p className="text-[11px] font-650 uppercase tracking-[0.04em] text-secondary">
+              <p className="text-caption font-650 uppercase tracking-[0.04em] text-secondary">
                 {group.tag}
               </p>
               <ul className="m-0 flex list-none flex-col gap-1 p-0">
@@ -189,9 +189,9 @@ export default function OpenApiReference({
                   <li key={endpoint.id}>
                     <a
                       href={`#${endpoint.id}`}
-                      className="flex items-baseline gap-2 text-[12px] text-ink hover:text-accent-ink"
+                      className="flex items-baseline gap-2 text-label text-ink hover:text-accent-ink"
                     >
-                      <span className="w-9 shrink-0 font-mono text-[10px] uppercase text-secondary">
+                      <span className="w-9 shrink-0 font-mono text-micro uppercase text-secondary">
                         {endpoint.method}
                       </span>
                       <span className="break-all font-mono">

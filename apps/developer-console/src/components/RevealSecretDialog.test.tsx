@@ -13,13 +13,18 @@ describe("RevealSecretDialog", () => {
       <RevealSecretDialog
         secret={key}
         title="API key"
-        label="API key"
-        noun="key"
+        label="Secret key"
+        envVar="MATCHBOX_API_KEY"
+        facts={[{ term: "Type", value: "Secret" }]}
         onDone={onDone}
       />,
     )
     const dialog = screen.getByRole("dialog", { name: "API key" })
     expect(dialog).toHaveTextContent(key)
+    expect(dialog).toHaveTextContent("Shown once")
+    expect(
+      screen.getByRole("button", { name: "Copy as .env" }),
+    ).toBeInTheDocument()
     expect(screen.queryByRole("button", { name: "Close" })).toBeNull()
 
     const done = screen.getByRole("button", { name: "Done" })
@@ -28,9 +33,7 @@ describe("RevealSecretDialog", () => {
     expect(screen.getByRole("dialog")).toBeInTheDocument()
     expect(onDone).not.toHaveBeenCalled()
 
-    await user.click(
-      screen.getByRole("checkbox", { name: "I've stored this key" }),
-    )
+    await user.click(screen.getByRole("checkbox", { name: "Stored securely" }))
     expect(done).toBeEnabled()
     await user.click(done)
     expect(onDone).toHaveBeenCalledTimes(1)
@@ -41,8 +44,7 @@ describe("RevealSecretDialog", () => {
       <RevealSecretDialog
         secret={null}
         title="API key"
-        label="API key"
-        noun="key"
+        label="Secret key"
         onDone={() => {}}
       />,
     )

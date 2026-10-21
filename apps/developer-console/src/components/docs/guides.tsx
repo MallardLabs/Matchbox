@@ -31,27 +31,26 @@ import { useDocsCredentials } from "../../lib/docs-context"
 import type { DocPageSlug } from "../../lib/docs-pages"
 import { apiOrigin, idIssuer } from "../../lib/docs-snippets"
 import { formatDate, formatInteger } from "../../lib/format"
+import DocsHeader from "./DocsHeader"
 
 function H2({
   id,
   children,
 }: { id?: string; children: ReactNode }): ReactElement {
   return (
-    <h2 id={id} className="scroll-mt-24 pt-4 text-[16px] font-600 text-ink">
+    <h2 id={id} className="scroll-mt-24 pt-4 text-lead font-600 text-ink">
       {children}
     </h2>
   )
 }
 
 function P({ children }: { children: ReactNode }): ReactElement {
-  return (
-    <p className="max-w-2xl text-[14px] leading-6 text-ink-2">{children}</p>
-  )
+  return <p className="max-w-2xl text-body leading-6 text-ink-2">{children}</p>
 }
 
 function C({ children }: { children: ReactNode }): ReactElement {
   return (
-    <code className="rounded bg-inset px-1 py-0.5 font-mono text-[12px] text-ink">
+    <code className="rounded bg-inset px-1 py-0.5 font-mono text-label text-ink">
       {children}
     </code>
   )
@@ -63,7 +62,7 @@ function Guide({
 }: { title: string; children: ReactNode }): ReactElement {
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-[24px] font-600 text-ink">{title}</h1>
+      <DocsHeader title={title} />
       {children}
     </div>
   )
@@ -135,7 +134,7 @@ function OidcGuide(): ReactElement {
       <H2>Discovery</H2>
       <CopyField.Root value={discovery} label="discovery URL" />
       <H2>Flow</H2>
-      <ol className="m-0 flex max-w-2xl list-decimal flex-col gap-1.5 pl-5 text-[14px] leading-6 text-ink-2">
+      <ol className="m-0 flex max-w-2xl list-decimal flex-col gap-1.5 pl-5 text-body leading-6 text-ink-2">
         <li>
           Create a PKCE pair, <C>state</C> and <C>nonce</C>; store them in the
           session.
@@ -230,7 +229,7 @@ function OidcGuide(): ReactElement {
                 <Table.Row key={scope}>
                   <Table.Cell mono>{scope}</Table.Cell>
                   <Table.Cell>{definition.consentDescription}</Table.Cell>
-                  <Table.Cell mono className="text-[11px]">
+                  <Table.Cell mono className="text-caption">
                     {definition.claims.join(" ")}
                   </Table.Cell>
                   <Table.Cell>
@@ -479,18 +478,13 @@ function ChangelogGuide(): ReactElement {
             className="flex flex-col gap-2 border-t border-line pt-4"
           >
             <p className="flex flex-wrap items-baseline gap-3">
-              <span className="text-[15px] font-600 text-ink">
-                {entry.title}
-              </span>
+              <span className="text-nav font-600 text-ink">{entry.title}</span>
               <Badge.Root mono>{entry.version}</Badge.Root>
-              <time
-                dateTime={entry.date}
-                className="text-[12px] text-secondary"
-              >
+              <time dateTime={entry.date} className="text-label text-secondary">
                 {formatDate(entry.date)}
               </time>
             </p>
-            <ul className="m-0 flex list-disc flex-col gap-1 pl-5 text-[13px] text-ink-2">
+            <ul className="m-0 flex list-disc flex-col gap-1 pl-5 text-body-sm text-ink-2">
               {entry.items.map((item) => (
                 <li key={item}>{item}</li>
               ))}

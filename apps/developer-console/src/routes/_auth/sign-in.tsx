@@ -4,7 +4,7 @@ import * as Fieldset from "@repo/ui/fieldset"
 import * as Input from "@repo/ui/input"
 import { useMutation } from "@tanstack/react-query"
 import { Link, createFileRoute } from "@tanstack/react-router"
-import { Fingerprint } from "lucide-react"
+import { KeyRound, Mail } from "lucide-react"
 import { type FormEvent, type ReactElement, useEffect, useState } from "react"
 import AuthHeading from "../../components/auth/AuthHeading"
 import useCompleteSignIn from "../../components/auth/use-complete-sign-in"
@@ -79,22 +79,26 @@ function SignInPage(): ReactElement {
   return (
     <>
       <AuthHeading title="Sign in" />
-      <form onSubmit={submit} className="flex flex-col gap-4" noValidate>
+      <form onSubmit={submit} className="flex flex-col gap-3.5" noValidate>
         <Fieldset.Root>
           <Fieldset.Legend hidden>Passkey sign-in</Fieldset.Legend>
           <Fieldset.Fields>
             <Field.Root>
               <Field.Label>Email</Field.Label>
-              <Field.Control>
-                <Input.Root
-                  type="email"
-                  size="lg"
-                  autoComplete="username webauthn"
-                  placeholder="you@example.com"
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                />
-              </Field.Control>
+              <Input.Group size="lg" className="h-11 bg-surface">
+                <Field.Control>
+                  <Input.Root
+                    type="email"
+                    autoComplete="username webauthn"
+                    placeholder="you@example.com"
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
+                  />
+                </Field.Control>
+                <Input.Adornment>
+                  <KeyRound aria-hidden="true" size={15} strokeWidth={1.75} />
+                </Input.Adornment>
+              </Input.Group>
             </Field.Root>
           </Fieldset.Fields>
         </Fieldset.Root>
@@ -103,29 +107,39 @@ function SignInPage(): ReactElement {
           size="lg"
           loading={signIn.isPending}
           disabled={!supported}
+          className="h-11 text-body"
         >
-          <Fingerprint aria-hidden="true" size={15} strokeWidth={1.75} />
+          {signIn.isPending ? null : (
+            <KeyRound aria-hidden="true" size={15} strokeWidth={1.75} />
+          )}
           Sign in with passkey
         </Button.Root>
         {supported ? null : (
-          <p role="alert" className="text-[12px] font-500 text-neg">
+          <p role="alert" className="text-label font-500 text-neg">
             Passkeys are not supported in this browser.
           </p>
         )}
         {error === null ? null : (
-          <p role="alert" className="text-[12px] font-500 text-neg">
+          <p role="alert" className="text-label font-500 text-neg">
             {error}
           </p>
         )}
       </form>
       <nav
         aria-label="Account"
-        className="mt-6 flex items-center justify-between border-t border-line pt-4 text-[13px]"
+        className="mt-8 flex items-center justify-between border-t border-line pt-5 text-body-sm"
       >
-        <Link to="/recover" className="font-550 text-secondary hover:text-ink">
+        <Link
+          to="/recover"
+          className="inline-flex items-center gap-2 font-500 text-secondary hover:text-ink"
+        >
+          <Mail aria-hidden="true" size={14} strokeWidth={1.75} />
           Lost passkey
         </Link>
-        <Link to="/sign-up" className="font-600 text-accent-ink">
+        <Link
+          to="/sign-up"
+          className="font-600 text-accent-ink hover:underline"
+        >
           Create account
         </Link>
       </nav>
@@ -139,7 +153,7 @@ function SignInPage(): ReactElement {
             Dev sign-in
           </Button.Root>
           {devSignIn.isError ? (
-            <p role="alert" className="text-[12px] font-500 text-neg">
+            <p role="alert" className="text-label font-500 text-neg">
               {errorMessage(devSignIn.error)}
             </p>
           ) : null}

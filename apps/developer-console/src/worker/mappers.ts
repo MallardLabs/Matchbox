@@ -3,6 +3,7 @@ import {
   type App,
   type ClientSecretRecord,
   type DeveloperAccount,
+  type DeveloperReview,
   type Environment,
   type EnvironmentSummary,
   type Invitation,
@@ -12,6 +13,7 @@ import {
   type QuotaOverrideRecord,
   type Review,
   credentialStatus,
+  reviewDecidedBy,
 } from "@repo/platform-contracts/console"
 import {
   apiKeyDisplayPrefix,
@@ -128,6 +130,7 @@ export function toEnvironmentSummary(
     clientId: environment.clientId,
     reviewState: environment.reviewState,
     approvedScopes: environment.approvedScopes,
+    requestedScopes: environment.requestedScopes,
   }
 }
 
@@ -168,6 +171,35 @@ export function toReview(review: ReviewRecord): Review {
   }
 }
 
+/** Reviews as developers see them, with submitter display names. */
+export async function toDeveloperReviews(
+  c: ConsoleContext,
+  reviews: ReviewRecord[],
+): Promise<DeveloperReview[]> {
+  const { store } = deps(c)
+  const ids = [
+    ...new Set(
+      reviews.flatMap((review) =>
+        review.submitterId === null ? [] : [review.submitterId],
+      ),
+    ),
+  ]
+  const accounts = await Promise.all(ids.map((id) => store.getAccount(id)))
+  const names = new Map(
+    accounts.flatMap((account) =>
+      account === null ? [] : [[account.id, account.displayName] as const],
+    ),
+  )
+  return reviews.map((review) => ({
+    ...toReview(review),
+    decidedBy: reviewDecidedBy(review),
+    submitterName:
+      review.submitterId === null
+        ? null
+        : (names.get(review.submitterId) ?? null),
+  }))
+}
+
 /** Loads redirect URIs, origins and the open review for the response. */
 export async function loadEnvironment(
   c: ConsoleContext,
@@ -189,6 +221,7 @@ export async function loadEnvironment(
     reviewState: environment.reviewState,
     requestedScopes: environment.requestedScopes,
     approvedScopes: environment.approvedScopes,
+    optionalScopes: environment.optionalScopes,
     scopeVersion: environment.scopeVersion,
     redirectUris,
     origins,

@@ -1,47 +1,230 @@
-import type { AuditEvent } from "@repo/platform-contracts/audit"
-import type { ClientType, Environment } from "@repo/platform-contracts/console"
-import { networkNames } from "@repo/platform-contracts/network"
+import type { Environment } from "@repo/platform-contracts/console"
 import {
+  type EnvironmentKind,
+  chainIdForNetwork,
+} from "@repo/platform-contracts/network"
+import {
+  type OidcScope,
   type PlatformScope,
   normalizeScopes,
+  oidcScopeSchema,
   platformScopeSchema,
   scopeDefinitions,
+  scopeMayBeOptional,
 } from "@repo/platform-contracts/scopes"
-import * as Badge from "@repo/ui/badge"
 import * as Button from "@repo/ui/button"
-import * as Card from "@repo/ui/card"
 import * as Checkbox from "@repo/ui/checkbox"
+import { cn } from "@repo/ui/cn"
 import * as CopyField from "@repo/ui/copy-field"
 import * as Field from "@repo/ui/field"
-import * as Fieldset from "@repo/ui/fieldset"
-import * as KeyValue from "@repo/ui/key-value"
-import * as Select from "@repo/ui/select"
+import * as Skeleton from "@repo/ui/skeleton"
+import * as Switch from "@repo/ui/switch"
+import * as Table from "@repo/ui/table"
 import * as Textarea from "@repo/ui/textarea"
 import * as Toast from "@repo/ui/toast"
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { createFileRoute } from "@tanstack/react-router"
+import {
+  type UseQueryResult,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query"
+import { Link, createFileRoute } from "@tanstack/react-router"
+import { Info } from "lucide-react"
 import { type FormEvent, type ReactElement, useId, useState } from "react"
-import { EnvBadge, ReviewBadge } from "../../../../components/Badges"
-import ConfirmDialog from "../../../../components/ConfirmDialog"
 import EnvironmentGate from "../../../../components/EnvironmentGate"
-import UrlListEditor from "../../../../components/UrlListEditor"
+import { Pill, ScopeChip } from "../../../../components/ui/Pill"
+import SectionHead from "../../../../components/ui/SectionHead"
+import {
+  ReviewStatus,
+  StatusDot,
+  StatusLabel,
+  type StatusTone,
+} from "../../../../components/ui/Status"
 import * as api from "../../../../lib/api"
 import { errorMessage, isApiError } from "../../../../lib/api-client"
 import { useAppRoute } from "../../../../lib/app-route"
-import { formatDateTime, humanize } from "../../../../lib/format"
-import { keys } from "../../../../lib/queries"
-import { isStepUpCancelled, useStepUp } from "../../../../lib/step-up"
+import { dash, formatMonthDay, shortName } from "../../../../lib/format"
+import {
+  apiKeysQuery,
+  environmentQuery,
+  environmentReviewsQuery,
+  keys,
+} from "../../../../lib/queries"
+import {
+  reviewHistory,
+  scopeSummary,
+  visibleReviewerNote,
+} from "../../../../lib/reviews"
 
 export const Route = createFileRoute("/_app/apps/$appId/environments")({
   component: EnvironmentsTab,
 })
 
+const kindLabels: Record<EnvironmentKind, string> = {
+  test: "Test",
+  live: "Live",
+}
+
 function EnvironmentsTab(): ReactElement {
   const { appId, kind } = useAppRoute()
+  const test = useQuery(environmentQuery(appId, "test"))
+  const live = useQuery(environmentQuery(appId, "live"))
   return (
-    <EnvironmentGate key={kind} appId={appId} kind={kind}>
-      {(environment) => <EnvironmentDetail environment={environment} />}
-    </EnvironmentGate>
+    <div className="flex flex-col gap-7">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+        <EnvironmentCard kind="test" query={test} selected={kind === "test"} />
+        <EnvironmentCard kind="live" query={live} selected={kind === "live"} />
+      </div>
+      <EnvironmentGate key={kind} appId={appId} kind={kind}>
+        {(environment) => (
+          <div className="grid grid-cols-1 gap-7 xl:grid-cols-[minmax(0,1fr)_380px]">
+            <ScopesForm
+              key={`scopes-${environment.id}-${environment.updatedAt}`}
+              environment={environment}
+            />
+            <ReviewPanel
+              key={`review-${environment.id}`}
+              environment={environment}
+            />
+          </div>
+        )}
+      </EnvironmentGate>
+    </div>
+  )
+}
+
+function EnvironmentCard({
+  kind,
+  query,
+  selected,
+}: {
+  kind: EnvironmentKind
+  query: UseQueryResult<Environment>
+  selected: boolean
+}): ReactElement {
+  const environment = query.data
+  return (
+    <article
+      aria-label={`${kindLabels[kind]} environment`}
+      className={cn(
+        "relative flex min-w-0 flex-col rounded-lg border bg-surface px-[18px] pb-1.5 pt-4 transition-colors",
+        selected
+          ? "border-accent shadow-[0_0_0_0.5px_var(--accent)]"
+          : "border-line hover:border-line-2",
+      )}
+    >
+      <header className="flex min-w-0 items-center gap-2.5 pb-3">
+        <StatusDot
+          tone={kind === "live" ? "pos" : "neutral"}
+          className="size-2"
+        />
+        <h2 className="text-lead font-600 text-ink">
+          <Link
+            to="."
+            search={kind === "live" ? { env: "live" } : {}}
+            replace
+            aria-current={selected ? "true" : undefined}
+            className="outline-none after:absolute after:inset-0 after:rounded-lg focus-visible:after:outline focus-visible:after:outline-2 focus-visible:after:outline-offset-2 focus-visible:after:outline-accent-ink"
+          >
+            {kindLabels[kind]}
+          </Link>
+        </h2>
+        {environment === undefined ? null : (
+          <span className="truncate font-mono text-caption text-muted">
+            {`${environment.network} · ${chainIdForNetwork(environment.network)}`}
+          </span>
+        )}
+        <span className="flex-1" />
+        {environment === undefined ? null : (
+          <ReviewStatus state={environment.reviewState} />
+        )}
+      </header>
+      {query.isPending ? (
+        <div aria-busy="true" className="flex flex-col gap-3 pb-3">
+          <Skeleton.Root shape="block" />
+          <Skeleton.Root className="h-4 w-2/3" />
+          <Skeleton.Root className="h-4 w-1/2" />
+        </div>
+      ) : environment === undefined ? (
+        <p className="pb-3 text-body-sm text-secondary">
+          {isApiError(query.error, "not_found")
+            ? "Not created"
+            : errorMessage(query.error)}
+        </p>
+      ) : (
+        <EnvironmentSummary environment={environment} />
+      )}
+    </article>
+  )
+}
+
+function EnvironmentSummary({
+  environment,
+}: {
+  environment: Environment
+}): ReactElement {
+  const apiKeys = useQuery(apiKeysQuery(environment.id))
+  const activeKeys = apiKeys.data?.data.filter((key) => key.status === "active")
+  return (
+    <>
+      <CopyField.Root
+        value={environment.clientId}
+        label={`${environment.kind} client ID`}
+        className="relative z-10"
+      />
+      <dl className="m-0 mt-1 flex flex-col">
+        <div className="flex items-center gap-3 border-b border-line py-2.5">
+          <dt className="text-body-sm text-secondary">Client type</dt>
+          <span className="flex-1" />
+          <dd className="m-0 text-body-sm text-ink">
+            {environment.clientType === "public"
+              ? "Public · PKCE"
+              : "Confidential"}
+          </dd>
+        </div>
+        <div className="flex min-h-[41px] items-center gap-3 border-b border-line py-2.5">
+          <dt className="shrink-0 text-body-sm text-secondary">
+            Approved scopes
+          </dt>
+          <span className="flex-1" />
+          <dd className="m-0 flex flex-wrap justify-end gap-1">
+            {environment.approvedScopes.length === 0 ? (
+              <span className="text-body-sm text-muted">{dash}</span>
+            ) : (
+              environment.approvedScopes.map((scope) => (
+                <ScopeChip key={scope} scope={scope} />
+              ))
+            )}
+          </dd>
+        </div>
+      </dl>
+      <dl className="m-0 grid grid-cols-3 py-2.5">
+        <Count
+          label="Keys"
+          value={activeKeys === undefined ? dash : String(activeKeys.length)}
+        />
+        <Count label="Origins" value={String(environment.origins.length)} />
+        <Count
+          label="Redirects"
+          value={String(environment.redirectUris.length)}
+        />
+      </dl>
+    </>
+  )
+}
+
+function Count({
+  label,
+  value,
+}: {
+  label: string
+  value: string
+}): ReactElement {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <dt className="text-caption text-muted">{label}</dt>
+      <dd className="m-0 font-mono text-body-sm text-ink">{value}</dd>
+    </div>
   )
 }
 
@@ -58,159 +241,76 @@ function useEnvironmentUpdate(environment: Environment) {
   }
 }
 
-function EnvironmentDetail({
-  environment,
-}: {
-  environment: Environment
-}): ReactElement {
-  const apply = useEnvironmentUpdate(environment)
-  const stepUp = useStepUp()
-  const { toast } = Toast.useToast()
-  return (
-    <div className="grid grid-cols-1 gap-12 xl:grid-cols-[minmax(0,1fr)_360px]">
-      <div className="flex min-w-0 flex-col gap-12">
-        <Credentials environment={environment} />
-        <UrlListEditor
-          key={`redirects-${environment.updatedAt}`}
-          mode="redirect-uri"
-          kind={environment.kind}
-          values={environment.redirectUris}
-          onSave={async (uris) => {
-            await apply(
-              await stepUp.run(() =>
-                api.environments.replaceRedirectUris(environment.id, uris),
-              ),
-            )
-            toast({ title: "Redirect URIs saved" })
-          }}
-        />
-        <UrlListEditor
-          key={`origins-${environment.updatedAt}`}
-          mode="origin"
-          kind={environment.kind}
-          values={environment.origins}
-          onSave={async (origins) => {
-            await apply(
-              await stepUp.run(() =>
-                api.environments.replaceOrigins(environment.id, origins),
-              ),
-            )
-            toast({ title: "Origins saved" })
-          }}
-        />
-        <ScopesForm
-          key={`scopes-${environment.updatedAt}`}
-          environment={environment}
-        />
-      </div>
-      <aside className="flex min-w-0 flex-col gap-10">
-        <ReviewPanel environment={environment} />
-        <ReviewHistory environment={environment} />
-      </aside>
-    </div>
-  )
+/** Scope state for the saved environment (design C04a "State"). */
+function scopeState(
+  scope: PlatformScope,
+  environment: Environment,
+): { tone: StatusTone; label: string } | "review" | null {
+  const approved = environment.approvedScopes.includes(scope)
+  const requested = environment.requestedScopes.includes(scope)
+  if (approved) return { tone: "pos", label: "Approved" }
+  if (requested) {
+    switch (environment.reviewState) {
+      case "submitted":
+        return { tone: "warn", label: "In review" }
+      case "changes-requested":
+        return { tone: "warn", label: "Changes requested" }
+      case "rejected":
+        return { tone: "neg", label: "Rejected" }
+      default:
+        return { tone: "neutral", label: "Not submitted" }
+    }
+  }
+  return scopeDefinitions[scope].requiresReview ? "review" : null
 }
 
-function Credentials({
-  environment,
-}: { environment: Environment }): ReactElement {
-  const apply = useEnvironmentUpdate(environment)
-  const stepUp = useStepUp()
-  const { toast } = Toast.useToast()
-  const [confirmPublic, setConfirmPublic] = useState(false)
-  const update = useMutation({
-    mutationFn: (clientType: ClientType) =>
-      stepUp.run(() => api.environments.update(environment.id, { clientType })),
-    async onSuccess(updated) {
-      await apply(updated)
-      toast({ title: "Client type saved" })
-    },
-  })
-  return (
-    <section aria-labelledby="env-credentials" className="flex flex-col gap-4">
-      <h2
-        id="env-credentials"
-        className="flex items-center gap-2 text-[14px] font-600 text-ink"
-      >
-        Credentials
-        <EnvBadge kind={environment.kind} />
-      </h2>
-      <KeyValue.Root>
-        <KeyValue.Item>
-          <KeyValue.Term>Network</KeyValue.Term>
-          <KeyValue.Value>{networkNames[environment.network]}</KeyValue.Value>
-        </KeyValue.Item>
-        <KeyValue.Item>
-          <KeyValue.Term>Scope version</KeyValue.Term>
-          <KeyValue.Value mono>{environment.scopeVersion}</KeyValue.Value>
-        </KeyValue.Item>
-      </KeyValue.Root>
-      <Fieldset.Root disabled={update.isPending}>
-        <Fieldset.Legend hidden>Client</Fieldset.Legend>
-        <Fieldset.Fields>
-          <Field.Root>
-            <Field.Label>Client ID</Field.Label>
-            <CopyField.Root value={environment.clientId} label="client ID" />
-          </Field.Root>
-          <Field.Root>
-            <Field.Label>Client type</Field.Label>
-            <Select.Root
-              value={environment.clientType}
-              onValueChange={(value) => {
-                if (value === "public") setConfirmPublic(true)
-                if (value === "confidential") update.mutate(value)
-              }}
-            >
-              <Field.Control>
-                <Select.Trigger className="max-w-[240px]">
-                  <Select.Value />
-                </Select.Trigger>
-              </Field.Control>
-              <Select.Content>
-                <Select.Item value="confidential">Confidential</Select.Item>
-                <Select.Item value="public">Public (PKCE only)</Select.Item>
-              </Select.Content>
-            </Select.Root>
-            <Field.Error>
-              {update.isError && !isStepUpCancelled(update.error)
-                ? errorMessage(update.error)
-                : null}
-            </Field.Error>
-          </Field.Root>
-        </Fieldset.Fields>
-      </Fieldset.Root>
-      <ConfirmDialog
-        open={confirmPublic}
-        onOpenChange={setConfirmPublic}
-        title="Switch to public client?"
-        description="Client secrets stop working, issued tokens are revoked and every user must consent again."
-        confirmLabel="Switch to public"
-        onConfirm={() => update.mutateAsync("public")}
-      />
-    </section>
-  )
+function claimsText(scope: PlatformScope): string {
+  const claims = scopeDefinitions[scope].claims
+  return claims.length === 0 ? "API keys" : claims.join("  ")
+}
+
+function isOidcScope(scope: PlatformScope): scope is OidcScope {
+  return oidcScopeSchema.safeParse(scope).success
 }
 
 function ScopesForm({
   environment,
-}: { environment: Environment }): ReactElement {
+}: {
+  environment: Environment
+}): ReactElement {
   const [selected, setSelected] = useState<PlatformScope[]>(
     environment.requestedScopes,
+  )
+  const supportsOptional = environment.optionalScopes !== undefined
+  const [optional, setOptional] = useState<OidcScope[]>(
+    environment.optionalScopes ?? [],
   )
   const apply = useEnvironmentUpdate(environment)
   const { toast } = Toast.useToast()
   const baseId = useId()
+  const locked = environment.openReview !== null
+  const requested = normalizeScopes(selected)
+  const optionalChosen = optional.filter(
+    (scope) => requested.includes(scope) && scopeMayBeOptional(scope),
+  )
   const save = useMutation({
     mutationFn: () =>
-      api.environments.updateScopes(environment.id, normalizeScopes(selected)),
+      api.environments.updateScopes(
+        environment.id,
+        requested,
+        supportsOptional ? optionalChosen : undefined,
+      ),
     async onSuccess(updated) {
       await apply(updated)
       toast({ title: "Scopes saved" })
     },
   })
   const dirty =
-    normalizeScopes(selected).join(" ") !==
-    normalizeScopes(environment.requestedScopes).join(" ")
+    requested.join(" ") !==
+      normalizeScopes(environment.requestedScopes).join(" ") ||
+    (supportsOptional &&
+      [...optionalChosen].sort().join(" ") !==
+        [...(environment.optionalScopes ?? [])].sort().join(" "))
 
   function toggle(scope: PlatformScope, on: boolean): void {
     setSelected((current) =>
@@ -220,93 +320,171 @@ function ScopesForm({
 
   function submit(event: FormEvent): void {
     event.preventDefault()
-    save.mutate()
+    if (dirty) save.mutate()
   }
 
   return (
-    <form onSubmit={submit} noValidate>
-      <Fieldset.Root disabled={save.isPending}>
-        <Fieldset.Legend>Scopes</Fieldset.Legend>
-        <ol className="m-0 flex list-none flex-col p-0">
+    <form
+      onSubmit={submit}
+      aria-labelledby={`${baseId}-title`}
+      className="flex min-w-0 flex-col"
+      noValidate
+    >
+      <SectionHead
+        id={`${baseId}-title`}
+        title={`${kindLabels[environment.kind]} scopes`}
+        className="pb-2"
+      >
+        <span className="font-mono text-caption text-muted">
+          {`scope v${environment.scopeVersion}`}
+        </span>
+      </SectionHead>
+      <Table.Root>
+        <Table.Header>
+          <Table.Row>
+            <Table.Head className="w-7">
+              <span className="sr-only">Requested</span>
+            </Table.Head>
+            <Table.Head className="w-[200px]">Scope</Table.Head>
+            <Table.Head className="hidden sm:table-cell">Claims</Table.Head>
+            {supportsOptional ? (
+              <Table.Head className="w-[84px]">Optional</Table.Head>
+            ) : null}
+            <Table.Head className="w-[140px]">State</Table.Head>
+          </Table.Row>
+        </Table.Header>
+        <Table.Body>
           {platformScopeSchema.options.map((scope) => {
             const definition = scopeDefinitions[scope]
             const id = `${baseId}-${scope}`
-            const approved = environment.approvedScopes.includes(scope)
+            const state = scopeState(scope, environment)
+            const checked = selected.includes(scope)
             return (
-              <li
-                key={scope}
-                className="flex items-center gap-3 border-t border-line py-2.5 last:border-b"
-              >
-                <Checkbox.Root
-                  id={id}
-                  checked={selected.includes(scope)}
-                  onCheckedChange={(checked) => toggle(scope, checked === true)}
-                />
-                <label htmlFor={id} className="flex min-w-0 flex-1 flex-col">
-                  <span className="font-mono text-[12px] text-ink">
-                    {scope}
-                  </span>
-                  <span className="text-[12px] text-secondary">
-                    {definition.label}
-                  </span>
-                </label>
-                <span className="flex shrink-0 gap-1.5">
-                  {definition.requiresReview ? (
-                    <Badge.Root tone="warn">Review</Badge.Root>
-                  ) : null}
-                  {approved ? (
-                    <Badge.Root tone="pos">Approved</Badge.Root>
-                  ) : null}
-                </span>
-              </li>
+              <Table.Row key={scope}>
+                <Table.Cell className="py-2.5">
+                  <Checkbox.Root
+                    id={id}
+                    checked={checked}
+                    disabled={locked || save.isPending}
+                    onCheckedChange={(value) => toggle(scope, value === true)}
+                  />
+                </Table.Cell>
+                <Table.Cell>
+                  <label htmlFor={id} className="flex flex-col gap-0.5">
+                    <span className="font-mono text-body-sm text-ink">
+                      {scope}
+                    </span>
+                    <span className="text-caption text-muted">
+                      {definition.label}
+                    </span>
+                  </label>
+                </Table.Cell>
+                <Table.Cell className="hidden font-mono text-label text-ink-2 sm:table-cell">
+                  {claimsText(scope)}
+                </Table.Cell>
+                {supportsOptional ? (
+                  <Table.Cell>
+                    {isOidcScope(scope) && scopeMayBeOptional(scope) ? (
+                      <Switch.Root
+                        aria-label={`${scope} optional at consent`}
+                        checked={optional.includes(scope)}
+                        disabled={!checked || locked || save.isPending}
+                        onCheckedChange={(on) =>
+                          setOptional((current) =>
+                            on
+                              ? [...current, scope]
+                              : current.filter((item) => item !== scope),
+                          )
+                        }
+                      />
+                    ) : (
+                      <span className="text-caption text-muted">Required</span>
+                    )}
+                  </Table.Cell>
+                ) : null}
+                <Table.Cell>
+                  {state === "review" ? (
+                    <Pill className="border border-line bg-surface">
+                      Review
+                    </Pill>
+                  ) : state === null ? (
+                    <span className="text-muted">{dash}</span>
+                  ) : (
+                    <StatusLabel tone={state.tone}>{state.label}</StatusLabel>
+                  )}
+                </Table.Cell>
+              </Table.Row>
             )
           })}
-        </ol>
-        {dirty || save.isError ? (
-          <p className="flex flex-wrap items-center justify-end gap-2">
-            {save.isError ? (
-              <span
-                role="alert"
-                className="mr-auto text-[12px] font-500 text-neg"
-              >
-                {errorMessage(save.error)}
-              </span>
-            ) : null}
-            <Button.Root
-              variant="ghost"
-              onClick={() => setSelected(environment.requestedScopes)}
-            >
-              Reset
-            </Button.Root>
-            <Button.Root
-              type="submit"
-              loading={save.isPending}
-              disabled={!dirty}
-            >
-              Save scopes
-            </Button.Root>
-          </p>
-        ) : null}
-      </Fieldset.Root>
+        </Table.Body>
+      </Table.Root>
+      <div className="flex flex-wrap items-center gap-2 pt-3.5">
+        <Info
+          aria-hidden="true"
+          size={14}
+          strokeWidth={1.75}
+          className="shrink-0 text-muted"
+        />
+        <p className="min-w-0 flex-1 text-label text-secondary">
+          {locked
+            ? "Review open · withdraw to edit scopes"
+            : "Approval bumps scope version · users re-consent"}
+        </p>
+        <Button.Root
+          variant="ghost"
+          size="sm"
+          disabled={!dirty || save.isPending}
+          onClick={() => {
+            setSelected(environment.requestedScopes)
+            setOptional(environment.optionalScopes ?? [])
+          }}
+        >
+          Reset
+        </Button.Root>
+        <Button.Root
+          type="submit"
+          variant="secondary"
+          size="sm"
+          loading={save.isPending}
+          disabled={!dirty || locked}
+        >
+          Save scopes
+        </Button.Root>
+      </div>
+      {save.isError ? (
+        <p role="alert" className="pt-2 text-label font-500 text-neg">
+          {errorMessage(save.error)}
+        </p>
+      ) : null}
     </form>
   )
 }
 
 function ReviewPanel({
   environment,
-}: { environment: Environment }): ReactElement {
+}: {
+  environment: Environment
+}): ReactElement {
   const [note, setNote] = useState("")
   const apply = useEnvironmentUpdate(environment)
   const queryClient = useQueryClient()
   const { toast } = Toast.useToast()
+  const noteId = useId()
+  const reviews = useQuery(environmentReviewsQuery(environment.id))
+  const refresh = async (): Promise<void> => {
+    await queryClient.invalidateQueries({
+      queryKey: keys.environmentReviews(environment.id),
+    })
+    await queryClient.invalidateQueries({
+      queryKey: keys.appAudit(environment.appId),
+    })
+  }
   const submit = useMutation({
     mutationFn: () =>
       api.environments.submitReview(environment.id, note.trim()),
     async onSuccess(result) {
       await apply(result.environment)
-      await queryClient.invalidateQueries({
-        queryKey: keys.appAudit(environment.appId),
-      })
+      await refresh()
       setNote("")
       toast({
         title: result.autoApproved ? "Approved" : "Submitted for review",
@@ -317,16 +495,21 @@ function ReviewPanel({
     mutationFn: () => api.environments.withdrawReview(environment.id),
     async onSuccess(updated) {
       await apply(updated)
-      await queryClient.invalidateQueries({
-        queryKey: keys.appAudit(environment.appId),
-      })
+      await refresh()
       toast({ title: "Review withdrawn" })
     },
   })
-  const review = environment.openReview
-  const pendingScopes = environment.requestedScopes.filter(
+
+  const open = environment.openReview
+  const latest = reviews.data?.data[0]
+  const reviewerNote = latest === undefined ? null : visibleReviewerNote(latest)
+  const pending = environment.requestedScopes.filter(
     (scope) => !environment.approvedScopes.includes(scope),
   )
+  const resubmit =
+    latest !== undefined &&
+    (latest.state === "changes-requested" || latest.state === "rejected")
+  const history = reviewHistory(reviews.data?.data ?? []).slice(0, 6)
 
   function onSubmit(event: FormEvent): void {
     event.preventDefault()
@@ -334,154 +517,140 @@ function ReviewPanel({
   }
 
   return (
-    <Card.Root variant="panel">
-      <Card.Header>
-        <Card.Title>Review</Card.Title>
-        <Card.Actions>
-          <ReviewBadge state={environment.reviewState} />
-        </Card.Actions>
-      </Card.Header>
-      <Card.Body>
-        {review === null ? null : (
-          <KeyValue.Root>
-            <KeyValue.Item>
-              <KeyValue.Term>Submitted</KeyValue.Term>
-              <KeyValue.Value>
-                {formatDateTime(review.createdAt)}
-              </KeyValue.Value>
-            </KeyValue.Item>
-            <KeyValue.Item>
-              <KeyValue.Term>Scopes</KeyValue.Term>
-              <KeyValue.Value mono className="text-[12px]">
-                {review.requestedScopes.join(" ")}
-              </KeyValue.Value>
-            </KeyValue.Item>
-            {review.submitterNote === null ? null : (
-              <KeyValue.Item>
-                <KeyValue.Term>Note</KeyValue.Term>
-                <KeyValue.Value>{review.submitterNote}</KeyValue.Value>
-              </KeyValue.Item>
-            )}
-          </KeyValue.Root>
-        )}
-        {review === null ? (
-          <form onSubmit={onSubmit} className="flex flex-col gap-3" noValidate>
-            <Fieldset.Root disabled={submit.isPending}>
-              <Fieldset.Legend hidden>Submit for review</Fieldset.Legend>
-              <Fieldset.Fields>
-                <Field.Root>
-                  <Field.Label>Note to reviewer</Field.Label>
-                  <Field.Control>
-                    <Textarea.Root
-                      rows={3}
-                      maxLength={2000}
-                      value={note}
-                      onChange={(event) => setNote(event.target.value)}
-                    />
-                  </Field.Control>
-                  <Field.Error>
-                    {submit.isError ? errorMessage(submit.error) : null}
-                  </Field.Error>
-                </Field.Root>
-              </Fieldset.Fields>
-            </Fieldset.Root>
+    <section
+      aria-labelledby={`${noteId}-title`}
+      className="flex min-w-0 flex-col gap-3.5 self-start rounded-lg border border-line bg-surface px-5 py-[18px]"
+    >
+      <div className="flex min-w-0 items-center gap-2">
+        <h2 id={`${noteId}-title`} className="text-body font-600 text-ink">
+          Review
+        </h2>
+        <span className="truncate font-mono text-caption text-muted">
+          {scopeSummary(open?.requestedScopes ?? pending)}
+        </span>
+        <span className="flex-1" />
+        <ReviewStatus state={environment.reviewState} />
+      </div>
+      {reviewerNote === null || latest === undefined ? null : (
+        <div className="flex flex-col gap-1.5 rounded-r-md border-l-2 border-accent bg-accent-soft px-3.5 py-3">
+          <p className="flex items-center gap-1.5 text-caption text-accent-ink">
+            Reviewer
+            <span className="flex-1" />
+            <span className="font-mono text-caption">
+              {formatMonthDay(latest.decidedAt)}
+            </span>
+          </p>
+          <p className="whitespace-pre-wrap text-body-sm leading-[19px] text-ink">
+            {reviewerNote}
+          </p>
+        </div>
+      )}
+      {latest === undefined ? null : (
+        <dl className="m-0 flex flex-col">
+          <div className="flex items-center gap-3 border-b border-line py-2.5">
+            <dt className="text-body-sm text-secondary">Submitted</dt>
+            <span className="flex-1" />
+            <dd className="m-0 truncate text-body-sm text-ink">
+              {`${formatMonthDay(latest.createdAt)} · ${shortName(latest.submitterName)}`}
+            </dd>
+          </div>
+          {latest.submitterNote === null ? null : (
+            <div className="flex items-start gap-3 border-b border-line py-2.5">
+              <dt className="shrink-0 text-body-sm text-secondary">
+                Your note
+              </dt>
+              <span className="flex-1" />
+              <dd className="m-0 min-w-0 whitespace-pre-wrap text-right text-body-sm text-ink">
+                {latest.submitterNote}
+              </dd>
+            </div>
+          )}
+        </dl>
+      )}
+      {open === null ? (
+        <form onSubmit={onSubmit} className="flex flex-col gap-3.5" noValidate>
+          <Field.Root>
+            <Field.Label>Note to reviewer</Field.Label>
+            <Field.Control>
+              <Textarea.Root
+                rows={3}
+                maxLength={2000}
+                value={note}
+                disabled={submit.isPending}
+                onChange={(event) => setNote(event.target.value)}
+              />
+            </Field.Control>
+            <Field.Error>
+              {submit.isError ? errorMessage(submit.error) : null}
+            </Field.Error>
+          </Field.Root>
+          <div className="flex items-center justify-end gap-2">
             <Button.Root
               type="submit"
               loading={submit.isPending}
-              disabled={pendingScopes.length === 0}
+              disabled={pending.length === 0}
             >
-              Submit for review
+              {resubmit ? "Resubmit" : "Submit for review"}
             </Button.Root>
-          </form>
-        ) : (
-          <>
-            <Button.Root
-              variant="secondary"
-              loading={withdraw.isPending}
-              onClick={() => withdraw.mutate()}
-            >
-              Withdraw
-            </Button.Root>
-            {withdraw.isError ? (
-              <p role="alert" className="text-[12px] font-500 text-neg">
-                {errorMessage(withdraw.error)}
-              </p>
-            ) : null}
-          </>
-        )}
-      </Card.Body>
-    </Card.Root>
-  )
-}
-
-function metadataScopes(value: unknown): string | null {
-  if (!Array.isArray(value)) return null
-  const scopes = value.filter(
-    (item): item is string => typeof item === "string",
-  )
-  return scopes.length === 0 ? null : scopes.join(" ")
-}
-
-function ReviewHistory({
-  environment,
-}: { environment: Environment }): ReactElement | null {
-  const history = useQuery({
-    queryKey: [...keys.appAudit(environment.appId), environment.id],
-    queryFn: () =>
-      api.apps.audit(environment.appId, {
-        environmentId: environment.id,
-        limit: 50,
-      }),
-  })
-  if (history.isError && isApiError(history.error, "forbidden")) return null
-  const events: AuditEvent[] = (history.data?.data ?? []).filter((event) =>
-    event.action.startsWith("review-"),
-  )
-  return (
-    <section aria-labelledby="review-history" className="flex flex-col gap-3">
-      <h2 id="review-history" className="text-[14px] font-600 text-ink">
-        History
-      </h2>
-      {history.isPending ? (
-        <p aria-busy="true" className="text-[12px] text-secondary">
-          Loading
-        </p>
-      ) : events.length === 0 ? (
-        <p className="border-t border-line py-3 text-[12px] text-secondary">
-          No reviews
-        </p>
+          </div>
+        </form>
       ) : (
-        <ol className="m-0 flex list-none flex-col p-0">
-          {events.map((event) => {
-            const scopes = metadataScopes(
-              event.metadata.approvedScopes ?? event.metadata.requestedScopes,
-            )
-            return (
-              <li
-                key={event.id}
-                className="flex flex-col gap-1 border-t border-line py-2.5"
-              >
-                <span className="flex items-baseline justify-between gap-3 text-[13px]">
-                  <span className="text-ink">
-                    {humanize(event.action.replace("review-", ""))}
-                  </span>
-                  <time
-                    dateTime={event.occurredAt}
-                    className="text-[12px] text-secondary"
-                  >
-                    {formatDateTime(event.occurredAt)}
-                  </time>
-                </span>
-                {scopes === null ? null : (
-                  <span className="font-mono text-[11px] text-secondary">
-                    {scopes}
-                  </span>
-                )}
-              </li>
-            )
-          })}
-        </ol>
+        <div className="flex items-center gap-2">
+          <Button.Root
+            variant="ghost"
+            loading={withdraw.isPending}
+            onClick={() => withdraw.mutate()}
+          >
+            Withdraw
+          </Button.Root>
+          <span className="flex-1" />
+          <span className="text-label text-secondary">
+            {`Open since ${formatMonthDay(open.createdAt)}`}
+          </span>
+        </div>
       )}
+      {withdraw.isError ? (
+        <p role="alert" className="text-label font-500 text-neg">
+          {errorMessage(withdraw.error)}
+        </p>
+      ) : null}
+      <div className="flex flex-col pt-1.5">
+        <h3 className="pb-1.5 text-caption font-400 text-muted">History</h3>
+        {reviews.isPending ? (
+          <Skeleton.Root shape="block" className="h-16" />
+        ) : reviews.isError ? (
+          <p className="border-t border-line py-2 text-label text-secondary">
+            Unavailable
+          </p>
+        ) : history.length === 0 ? (
+          <p className="border-t border-line py-2 text-label text-secondary">
+            No reviews
+          </p>
+        ) : (
+          <ol className="m-0 flex list-none flex-col p-0">
+            {history.map((event) => (
+              <li
+                key={event.key}
+                className="flex min-w-0 items-center gap-2.5 border-t border-line py-2"
+              >
+                <time
+                  dateTime={event.at}
+                  className="shrink-0 font-mono text-caption text-muted"
+                >
+                  {formatMonthDay(event.at)}
+                </time>
+                <span className="min-w-0 truncate text-label text-ink-2">
+                  {event.scopes}
+                </span>
+                <span className="flex-1" />
+                <StatusLabel tone={event.tone} size="xs">
+                  {event.label}
+                </StatusLabel>
+              </li>
+            ))}
+          </ol>
+        )}
+      </div>
     </section>
   )
 }

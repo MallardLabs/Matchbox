@@ -1,23 +1,32 @@
+import { Link } from "@tanstack/react-router"
+import { ArrowLeft } from "lucide-react"
 import type { ReactElement, ReactNode } from "react"
 
-/** Page title for auth screens, with an optional step counter. */
+/** Auth page title with an optional back link to sign-in. */
 export default function AuthHeading({
   title,
-  step,
+  back = false,
   children,
 }: {
   title: string
-  step?: { current: number; total: number }
+  /** Show the "Sign in" back link above the title. */
+  back?: boolean
   children?: ReactNode
 }): ReactElement {
   return (
-    <header className="mb-6 flex flex-col gap-1">
-      {step === undefined ? null : (
-        <p className="font-mono text-[11px] text-secondary">
-          {`${step.current} / ${step.total}`}
-        </p>
-      )}
-      <h1 className="text-[24px] font-600 text-ink">{title}</h1>
+    <header className="mb-7 flex flex-col gap-3">
+      {back ? (
+        <Link
+          to="/sign-in"
+          className="inline-flex items-center gap-2 self-start text-body-sm font-500 text-secondary hover:text-ink"
+        >
+          <ArrowLeft aria-hidden="true" size={14} strokeWidth={1.75} />
+          Sign in
+        </Link>
+      ) : null}
+      <h1 className="text-title font-600 tracking-[-0.01em] text-ink md:text-[30px] md:leading-9">
+        {title}
+      </h1>
       {children}
     </header>
   )

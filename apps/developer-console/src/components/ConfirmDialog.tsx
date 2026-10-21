@@ -62,7 +62,7 @@ export default function ConfirmDialog({
         </AlertDialog.Header>
         {children}
         {error === null ? null : (
-          <p role="alert" className="text-[12px] font-500 text-neg">
+          <p role="alert" className="text-label font-500 text-neg">
             {error}
           </p>
         )}

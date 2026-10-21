@@ -91,3 +91,67 @@ export function humanize(value: string): string {
   const text = words.join(" ")
   return text.charAt(0).toUpperCase() + text.slice(1)
 }
+
+const monthDay = new Intl.DateTimeFormat("en", {
+  month: "short",
+  day: "numeric",
+})
+
+/** "Oct 18" (local calendar day). */
+export function formatMonthDay(value: string | null): string {
+  if (value === null) return dash
+  return monthDay.format(new Date(value))
+}
+
+/** Compact age: "now", "45s ago", "4m ago", "3h ago", "2d ago". */
+export function formatAgo(seconds: number | null): string {
+  if (seconds === null) return dash
+  if (seconds < 5) return "now"
+  if (seconds < 60) return `${Math.floor(seconds)}s ago`
+  if (seconds < 3_600) return `${Math.floor(seconds / 60)}m ago`
+  if (seconds < 86_400) return `${Math.floor(seconds / 3_600)}h ago`
+  return `${Math.floor(seconds / 86_400)}d ago`
+}
+
+/** "6h 12m", "12m", "45s" for a positive span. */
+export function formatSpan(seconds: number): string {
+  const total = Math.max(0, Math.floor(seconds))
+  const days = Math.floor(total / 86_400)
+  const hours = Math.floor((total % 86_400) / 3_600)
+  const minutes = Math.floor((total % 3_600) / 60)
+  if (days > 0) return hours > 0 ? `${days}d ${hours}h` : `${days}d`
+  if (hours > 0) return `${hours}h ${minutes}m`
+  if (minutes > 0) return `${minutes}m`
+  return `${total}s`
+}
+
+/** Share of `total` as a bare percentage ("0.31"); dash without traffic. */
+export function formatShare(part: number, total: number): string {
+  if (total <= 0) return dash
+  const percent = (part / total) * 100
+  return percent < 10 ? percent.toFixed(2) : percent.toFixed(1)
+}
+
+/** Decimal strings (block numbers) with grouping: "4,128,440". */
+export function formatDecimalString(value: string | null): string {
+  if (value === null || !/^\d+$/.test(value)) return dash
+  return value.replace(/\B(?=(\d{3})+(?!\d))/g, ",")
+}
+
+/** "https://www.example.com/path" → "example.com"; dash when absent. */
+export function formatHost(url: string | null): string {
+  if (url === null) return dash
+  try {
+    return new URL(url).hostname.replace(/^www\./, "")
+  } catch {
+    return url
+  }
+}
+
+/** "Alex Kim" → "Alex K."; single names stay whole. */
+export function shortName(name: string | null): string {
+  if (name === null || name.trim() === "") return dash
+  const [first, ...rest] = name.trim().split(/\s+/)
+  const last = rest.at(-1)
+  return last === undefined ? (first ?? dash) : `${first} ${last[0]}.`
+}

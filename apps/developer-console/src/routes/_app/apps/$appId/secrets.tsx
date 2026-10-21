@@ -1,70 +1,185 @@
 import {
   type ClientSecretRecord,
+  type ClientType,
   type Environment,
   maxActiveClientSecrets,
 } from "@repo/platform-contracts/console"
+import type { EnvironmentKind } from "@repo/platform-contracts/network"
 import * as Button from "@repo/ui/button"
-import * as EmptyState from "@repo/ui/empty-state"
+import { cn } from "@repo/ui/cn"
+import * as CopyField from "@repo/ui/copy-field"
+import * as Field from "@repo/ui/field"
+import * as SegmentedControl from "@repo/ui/segmented-control"
 import * as Skeleton from "@repo/ui/skeleton"
 import * as Table from "@repo/ui/table"
 import * as Toast from "@repo/ui/toast"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Link, createFileRoute } from "@tanstack/react-router"
-import { Plus, RotateCw } from "lucide-react"
+import { Lock, RotateCw } from "lucide-react"
 import { type ReactElement, useState } from "react"
-import { CredentialBadge } from "../../../../components/Badges"
 import ConfirmDialog from "../../../../components/ConfirmDialog"
 import EnvironmentGate from "../../../../components/EnvironmentGate"
 import QueryError from "../../../../components/QueryError"
 import RevealSecretDialog from "../../../../components/RevealSecretDialog"
+import LockHint from "../../../../components/ui/LockHint"
+import { Pill } from "../../../../components/ui/Pill"
+import SectionHead from "../../../../components/ui/SectionHead"
+import {
+  CredentialStatusLabel,
+  StatusDot,
+} from "../../../../components/ui/Status"
 import * as api from "../../../../lib/api"
-import { errorMessage } from "../../../../lib/api-client"
+import { errorMessage, isApiError } from "../../../../lib/api-client"
+import { keyExpiry } from "../../../../lib/api-keys"
 import { useAppRoute } from "../../../../lib/app-route"
-import { formatDate } from "../../../../lib/format"
-import { keys } from "../../../../lib/queries"
+import { idIssuer } from "../../../../lib/docs-snippets"
+import {
+  dash,
+  formatDate,
+  formatMonthDay,
+  shortName,
+} from "../../../../lib/format"
+import { appQuery, environmentQuery, keys } from "../../../../lib/queries"
 import { isStepUpCancelled, useStepUp } from "../../../../lib/step-up"
 
 export const Route = createFileRoute("/_app/apps/$appId/secrets")({
   component: SecretsTab,
 })
 
+const tokenEndpoint = `${idIssuer}/oauth/token`
+
 function SecretsTab(): ReactElement {
   const { appId, kind } = useAppRoute()
   return (
     <EnvironmentGate key={kind} appId={appId} kind={kind}>
-      {(environment) =>
-        environment.clientType === "public" ? (
-          <EmptyState.Root>
-            <EmptyState.Title>Public client · no secrets</EmptyState.Title>
-            <EmptyState.Action>
-              <Button.Root variant="secondary" asChild>
-                <Link
-                  to="/apps/$appId/environments"
-                  params={{ appId }}
-                  search={kind === "live" ? { env: "live" } : {}}
-                >
-                  Client type
-                </Link>
-              </Button.Root>
-            </EmptyState.Action>
-          </EmptyState.Root>
-        ) : (
-          <SecretsPanel environment={environment} />
-        )
-      }
+      {(environment) => (
+        <div className="flex flex-col gap-7">
+          <ClientRow environment={environment} />
+          {environment.clientType === "public" ? (
+            <p className="rounded-lg bg-inset px-5 py-4 text-body-sm text-secondary">
+              Public client · PKCE only · no client secrets
+            </p>
+          ) : (
+            <SecretsTable environment={environment} />
+          )}
+          <OtherEnvironment
+            appId={appId}
+            kind={kind === "live" ? "test" : "live"}
+          />
+        </div>
+      )}
     </EnvironmentGate>
   )
 }
 
-function SecretsPanel({
+const clientTypeLabels: Record<ClientType, string> = {
+  confidential: "Confidential",
+  public: "Public · PKCE",
+}
+
+function ClientRow({
   environment,
-}: { environment: Environment }): ReactElement {
+}: {
+  environment: Environment
+}): ReactElement {
+  const queryClient = useQueryClient()
+  const stepUp = useStepUp()
+  const { toast } = Toast.useToast()
+  const [confirmPublic, setConfirmPublic] = useState(false)
+  const update = useMutation({
+    mutationFn: (clientType: ClientType) =>
+      stepUp.run(() => api.environments.update(environment.id, { clientType })),
+    async onSuccess(updated) {
+      queryClient.setQueryData(
+        keys.environment(environment.appId, environment.kind),
+        updated,
+      )
+      await queryClient.invalidateQueries({
+        queryKey: keys.app(environment.appId),
+      })
+      toast({ title: "Client type saved" })
+    },
+  })
+  return (
+    <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_300px_minmax(0,300px)]">
+      <Field.Root>
+        <Field.Label>Client ID</Field.Label>
+        <CopyField.Root
+          value={environment.clientId}
+          label="client ID"
+          className="h-9"
+        />
+      </Field.Root>
+      <Field.Root>
+        <Field.Label>Client type</Field.Label>
+        <Field.Control>
+          <SegmentedControl.Root
+            aria-label="Client type"
+            value={environment.clientType}
+            disabled={update.isPending}
+            onValueChange={(value) => {
+              if (value === "public") setConfirmPublic(true)
+              if (value === "confidential") update.mutate("confidential")
+            }}
+            className="grid w-full grid-cols-2"
+          >
+            {(["confidential", "public"] as const).map((type) => (
+              <SegmentedControl.Item
+                key={type}
+                value={type}
+                className="text-body-sm"
+              >
+                {clientTypeLabels[type]}
+              </SegmentedControl.Item>
+            ))}
+          </SegmentedControl.Root>
+        </Field.Control>
+        <Field.Error>
+          {update.isError && !isStepUpCancelled(update.error)
+            ? errorMessage(update.error)
+            : null}
+        </Field.Error>
+      </Field.Root>
+      <Field.Root>
+        <Field.Label>Token endpoint</Field.Label>
+        <CopyField.Root
+          value={tokenEndpoint}
+          display={tokenEndpoint.replace(/^https:\/\//, "")}
+          label="token endpoint"
+          className="h-9"
+        />
+      </Field.Root>
+      <ConfirmDialog
+        open={confirmPublic}
+        onOpenChange={setConfirmPublic}
+        title="Switch to public client?"
+        description="Client secrets stop working, issued tokens are revoked and every user must consent again."
+        confirmLabel="Switch to public"
+        onConfirm={() => update.mutateAsync("public")}
+      />
+    </div>
+  )
+}
+
+function SecretsTable({
+  environment,
+}: {
+  environment: Environment
+}): ReactElement {
   const queryKey = keys.clientSecrets(environment.id)
   const list = useQuery({
     queryKey,
     queryFn: () => api.environments.clientSecrets(environment.id),
   })
-  const [revealed, setRevealed] = useState<string | null>(null)
+  const app = useQuery(appQuery(environment.appId))
+  const orgId = app.data?.organizationId
+  const members = useQuery({
+    queryKey: keys.members(orgId ?? ""),
+    queryFn: () => api.orgs.members(orgId ?? ""),
+    enabled: orgId !== undefined,
+  })
+  const [revealed, setRevealed] = useState<ClientSecretRecord | null>(null)
+  const [secret, setSecret] = useState<string | null>(null)
   const [revoking, setRevoking] = useState<ClientSecretRecord | null>(null)
   const queryClient = useQueryClient()
   const stepUp = useStepUp()
@@ -75,110 +190,145 @@ function SecretsPanel({
         api.environments.createClientSecret(environment.id, null),
       ),
     async onSuccess(result) {
-      setRevealed(result.secret)
+      setRevealed(result.clientSecret)
+      setSecret(result.secret)
       await queryClient.invalidateQueries({ queryKey })
     },
   })
-
-  const active = (list.data?.data ?? []).filter(
-    (secret) => secret.status === "active",
-  )
+  const now = Date.now()
+  const records = list.data?.data ?? []
+  const active = records.filter((record) => record.status === "active")
   const atLimit = active.length >= maxActiveClientSecrets
-  const createLabel = active.length === 0 ? "New secret" : "Rotate"
+  const byName = (accountId: string | null): string =>
+    shortName(
+      members.data?.data.find((member) => member.accountId === accountId)
+        ?.displayName ?? null,
+    )
 
   return (
-    <section aria-label="Client secrets" className="flex flex-col gap-4">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-[14px] font-600 text-ink">
-          Client secrets
-          <span className="ml-2 font-mono text-[12px] font-400 text-secondary">
-            {`${active.length}/${maxActiveClientSecrets} active`}
-          </span>
-        </h2>
+    <section aria-labelledby="client-secrets" className="flex min-w-0 flex-col">
+      <SectionHead
+        id="client-secrets"
+        title="Secrets"
+        count={list.data === undefined ? undefined : records.length}
+        className="pb-3"
+      >
+        <span className="hidden text-label text-muted sm:inline">
+          {`${maxActiveClientSecrets} active max`}
+        </span>
         <Button.Root
           loading={create.isPending}
           disabled={atLimit || list.isPending}
           onClick={() => create.mutate()}
         >
-          {active.length === 0 ? (
-            <Plus aria-hidden="true" size={13} strokeWidth={2} />
-          ) : (
-            <RotateCw aria-hidden="true" size={13} strokeWidth={2} />
+          {create.isPending ? null : (
+            <Lock aria-hidden="true" size={13} strokeWidth={2} />
           )}
-          {createLabel}
+          New secret
         </Button.Root>
-      </header>
+      </SectionHead>
       {create.isError && !isStepUpCancelled(create.error) ? (
-        <p role="alert" className="text-[12px] font-500 text-neg">
+        <p role="alert" className="pb-2 text-label font-500 text-neg">
           {errorMessage(create.error)}
         </p>
       ) : null}
       {list.isPending ? (
         <div aria-busy="true" className="flex flex-col gap-3">
-          <Skeleton.Root shape="block" />
-          <Skeleton.Root shape="block" />
+          <Skeleton.Root shape="block" className="h-11" />
+          <Skeleton.Root shape="block" className="h-11" />
         </div>
       ) : list.isError ? (
         <QueryError error={list.error} onRetry={() => void list.refetch()} />
-      ) : list.data.data.length === 0 ? (
-        <EmptyState.Root>
-          <EmptyState.Title>No client secrets</EmptyState.Title>
-          <EmptyState.Action>
-            <Button.Root
-              loading={create.isPending}
-              onClick={() => create.mutate()}
-            >
-              Create secret
-            </Button.Root>
-          </EmptyState.Action>
-        </EmptyState.Root>
+      ) : records.length === 0 ? (
+        <p className="border-y border-line py-4 text-body-sm text-secondary">
+          No client secrets
+        </p>
       ) : (
-        <Table.Root density="compact">
+        <Table.Root>
           <Table.Header>
             <Table.Row>
               <Table.Head>Prefix</Table.Head>
-              <Table.Head>Created</Table.Head>
-              <Table.Head className="hidden sm:table-cell">Expires</Table.Head>
-              <Table.Head>Status</Table.Head>
-              <Table.Head>
+              <Table.Head className="hidden w-[120px] sm:table-cell">
+                Created
+              </Table.Head>
+              <Table.Head className="hidden w-[120px] md:table-cell">
+                By
+              </Table.Head>
+              <Table.Head className="hidden w-[120px] sm:table-cell">
+                Expires
+              </Table.Head>
+              <Table.Head className="w-[90px]">Status</Table.Head>
+              <Table.Head className="w-[80px]">
                 <span className="sr-only">Actions</span>
               </Table.Head>
             </Table.Row>
           </Table.Header>
           <Table.Body>
-            {list.data.data.map((secret) => (
-              <Table.Row key={secret.id}>
-                <Table.Cell mono className="text-[11px]">
-                  {secret.displayPrefix}
-                </Table.Cell>
-                <Table.Cell className="text-secondary">
-                  {formatDate(secret.createdAt)}
-                </Table.Cell>
-                <Table.Cell className="hidden text-secondary sm:table-cell">
-                  {secret.expiresAt === null
-                    ? "Never"
-                    : formatDate(secret.expiresAt)}
-                </Table.Cell>
-                <Table.Cell>
-                  <CredentialBadge status={secret.status} />
-                </Table.Cell>
-                <Table.Cell className="text-right">
-                  {secret.status === "active" ? (
-                    <Button.Root
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setRevoking(secret)}
-                      aria-label={`Revoke ${secret.displayPrefix}`}
-                    >
-                      Revoke
-                    </Button.Root>
-                  ) : null}
-                </Table.Cell>
-              </Table.Row>
-            ))}
+            {records.map((record) => {
+              const expiry = keyExpiry(record.expiresAt, now)
+              const isActive = record.status === "active"
+              return (
+                <Table.Row key={record.id}>
+                  <Table.Cell
+                    mono
+                    className={cn(
+                      "py-3 text-body-sm",
+                      isActive ? "text-ink" : "text-muted",
+                    )}
+                  >
+                    {record.displayPrefix}
+                  </Table.Cell>
+                  <Table.Cell className="hidden text-body-sm text-ink-2 sm:table-cell">
+                    {formatMonthDay(record.createdAt)}
+                  </Table.Cell>
+                  <Table.Cell className="hidden text-body-sm text-ink-2 md:table-cell">
+                    {byName(record.createdBy)}
+                  </Table.Cell>
+                  <Table.Cell
+                    className={cn(
+                      "hidden text-body-sm sm:table-cell",
+                      !isActive
+                        ? "text-muted"
+                        : expiry.soon
+                          ? "font-600 text-accent-ink"
+                          : "text-ink-2",
+                    )}
+                  >
+                    {isActive ? expiry.label : dash}
+                  </Table.Cell>
+                  <Table.Cell>
+                    <CredentialStatusLabel status={record.status} />
+                  </Table.Cell>
+                  <Table.Cell className="text-right">
+                    {isActive ? (
+                      <Button.Root
+                        variant="secondary"
+                        size="sm"
+                        className="border-neg/30 text-neg hover:border-neg/50"
+                        aria-label={`Revoke ${record.displayPrefix}`}
+                        onClick={() => setRevoking(record)}
+                      >
+                        Revoke
+                      </Button.Root>
+                    ) : null}
+                  </Table.Cell>
+                </Table.Row>
+              )
+            })}
           </Table.Body>
         </Table.Root>
       )}
+      <p className="flex items-center gap-2 pt-3.5 text-label text-secondary">
+        <RotateCw
+          aria-hidden="true"
+          size={13}
+          strokeWidth={1.75}
+          className="text-muted"
+        />
+        Rotation · new secret, then expire the old one
+        <span className="flex-1" />
+        <LockHint />
+      </p>
       <ConfirmDialog
         open={revoking !== null}
         onOpenChange={(open) => {
@@ -202,15 +352,100 @@ function SecretsPanel({
         }}
       />
       <RevealSecretDialog
-        noun="secret"
-        secret={revealed}
-        title="Client secret"
+        secret={secret}
+        title="Secret created"
         label="Client secret"
+        copyLabel="Copy secret"
+        envVar="MATCHBOX_CLIENT_SECRET"
+        environmentKind={environment.kind}
+        facts={
+          revealed === null
+            ? []
+            : [
+                { term: "Prefix", value: revealed.displayPrefix },
+                {
+                  term: "Expires",
+                  value:
+                    revealed.expiresAt === null
+                      ? "Never"
+                      : formatDate(revealed.expiresAt),
+                },
+              ]
+        }
         onDone={() => {
+          setSecret(null)
           setRevealed(null)
           toast({ title: "Secret ready" })
         }}
       />
+    </section>
+  )
+}
+
+/** Summary of the other environment's secrets, with a switch link. */
+function OtherEnvironment({
+  appId,
+  kind,
+}: {
+  appId: string
+  kind: EnvironmentKind
+}): ReactElement | null {
+  const environment = useQuery(environmentQuery(appId, kind))
+  const secrets = useQuery({
+    queryKey: keys.clientSecrets(environment.data?.id ?? ""),
+    queryFn: () => api.environments.clientSecrets(environment.data?.id ?? ""),
+    enabled:
+      environment.data !== undefined &&
+      environment.data.clientType === "confidential",
+  })
+  if (environment.isError && isApiError(environment.error, "not_found")) {
+    return null
+  }
+  const data = environment.data
+  const active = (secrets.data?.data ?? []).filter(
+    (record) => record.status === "active",
+  ).length
+  return (
+    <section
+      aria-label={`${kind === "live" ? "Live" : "Test"} environment secrets`}
+      className="flex flex-col gap-2.5 rounded-lg bg-inset px-5 py-4"
+    >
+      <p className="flex min-w-0 items-center gap-2.5">
+        <StatusDot
+          tone={kind === "live" ? "pos" : "neutral"}
+          className="size-2"
+        />
+        <Link
+          to="."
+          search={kind === "live" ? { env: "live" } : {}}
+          replace
+          className="text-body font-600 text-ink hover:underline"
+        >
+          {kind === "live" ? "Live" : "Test"}
+        </Link>
+        {data === undefined ? null : (
+          <span className="font-mono text-caption text-muted">
+            {data.network}
+          </span>
+        )}
+        <span className="flex-1" />
+        {data === undefined ? null : (
+          <Pill className="bg-surface">
+            {clientTypeLabels[data.clientType]}
+          </Pill>
+        )}
+      </p>
+      <p className="text-body-sm text-secondary">
+        {data === undefined
+          ? dash
+          : data.clientType === "public"
+            ? "No client secrets"
+            : secrets.data === undefined
+              ? dash
+              : active === 0
+                ? "No client secrets"
+                : `${active} active ${active === 1 ? "secret" : "secrets"}`}
+      </p>
     </section>
   )
 }

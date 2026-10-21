@@ -1,26 +1,37 @@
-import type { App } from "@repo/platform-contracts/console"
+import type { App, OrganizationSummary } from "@repo/platform-contracts/console"
 import * as Button from "@repo/ui/button"
+import { cn } from "@repo/ui/cn"
 import * as Dialog from "@repo/ui/dialog"
 import * as EmptyState from "@repo/ui/empty-state"
 import * as Field from "@repo/ui/field"
 import * as Fieldset from "@repo/ui/fieldset"
 import * as Input from "@repo/ui/input"
-import * as PageHeader from "@repo/ui/page-header"
 import * as Skeleton from "@repo/ui/skeleton"
 import * as Table from "@repo/ui/table"
 import * as Toast from "@repo/ui/toast"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router"
-import { Plus } from "lucide-react"
-import { type FormEvent, type ReactElement, useState } from "react"
-import { AppStatusBadge, ReviewBadge } from "../../../components/Badges"
+import { Plus, Search } from "lucide-react"
+import { type FormEvent, type ReactElement, useMemo, useState } from "react"
 import QueryError from "../../../components/QueryError"
 import RequireOrg from "../../../components/RequireOrg"
+import { Crumb, Crumbs } from "../../../components/shell/Breadcrumbs"
+import AppMark, { appMarkTone } from "../../../components/ui/AppMark"
+import ChipGroup from "../../../components/ui/ChipGroup"
+import PageTitle from "../../../components/ui/PageTitle"
+import { Pill, ScopeChip } from "../../../components/ui/Pill"
+import { ReviewStatus } from "../../../components/ui/Status"
 import * as api from "../../../lib/api"
 import { ApiError, errorMessage } from "../../../lib/api-client"
-import { dash, formatDate } from "../../../lib/format"
-import { appsQuery, keys } from "../../../lib/queries"
+import {
+  dash,
+  formatHost,
+  formatInteger,
+  formatMonthDay,
+} from "../../../lib/format"
+import { appsQuery, keys, orgUsageQuery } from "../../../lib/queries"
 import { useTitle } from "../../../lib/title"
+import { rangeWindow } from "../../../lib/usage-range"
 
 type AppsSearch = { create?: boolean }
 
@@ -44,20 +55,24 @@ function AppsPage(): ReactElement {
   return (
     <RequireOrg>
       {(org) => (
-        <div className="flex flex-col gap-8">
-          <PageHeader.Root>
-            <PageHeader.Heading>
-              <PageHeader.Eyebrow>{org.name}</PageHeader.Eyebrow>
-              <PageHeader.Title>Apps</PageHeader.Title>
-            </PageHeader.Heading>
-            <PageHeader.Actions>
+        <div className="flex flex-col gap-7">
+          <Crumbs>
+            <Crumb>
+              <Link to="/">{org.name}</Link>
+            </Crumb>
+            <Crumb current>Apps</Crumb>
+          </Crumbs>
+          <PageTitle
+            eyebrow={org.name}
+            title="Apps"
+            actions={
               <Button.Root onClick={() => setCreating(true)}>
-                <Plus aria-hidden="true" size={13} strokeWidth={2} />
+                <Plus aria-hidden="true" size={14} strokeWidth={2} />
                 New app
               </Button.Root>
-            </PageHeader.Actions>
-          </PageHeader.Root>
-          <AppsTable orgId={org.id} onCreate={() => setCreating(true)} />
+            }
+          />
+          <AppsTable org={org} onCreate={() => setCreating(true)} />
           <CreateAppDialog
             orgId={org.id}
             open={create === true}
@@ -69,20 +84,53 @@ function AppsPage(): ReactElement {
   )
 }
 
+type StatusFilter = "all" | "active" | "retired"
+
+function isStatusFilter(value: string): value is StatusFilter {
+  return value === "all" || value === "active" || value === "retired"
+}
+
+/** Case-insensitive name/slug/website match. */
+export function matchesAppFilter(app: App, query: string): boolean {
+  const needle = query.trim().toLowerCase()
+  if (needle === "") return true
+  return [app.name, app.slug, app.websiteUrl ?? ""].some((value) =>
+    value.toLowerCase().includes(needle),
+  )
+}
+
 function AppsTable({
-  orgId,
+  org,
   onCreate,
 }: {
-  orgId: string
+  org: OrganizationSummary
   onCreate: () => void
 }): ReactElement {
-  const apps = useQuery(appsQuery(orgId))
+  const apps = useQuery(appsQuery(org.id))
+  const week = useMemo(() => rangeWindow("7d"), [])
+  const usage = useQuery(
+    orgUsageQuery({ orgId: org.id, ...week, environmentKind: "both" }),
+  )
+  const [status, setStatus] = useState<StatusFilter>("all")
+  const [query, setQuery] = useState("")
   const navigate = useNavigate()
+
+  const requestsByApp = useMemo(() => {
+    const totals = new Map<string, number>()
+    for (const row of usage.data?.byEnvironment ?? []) {
+      totals.set(
+        row.app.id,
+        (totals.get(row.app.id) ?? 0) + row.summary.requests,
+      )
+    }
+    return totals
+  }, [usage.data])
+
   if (apps.isPending) {
     return (
       <div aria-busy="true" className="flex flex-col gap-3">
         {["a", "b", "c", "d"].map((key) => (
-          <Skeleton.Root key={key} shape="block" />
+          <Skeleton.Root key={key} shape="block" className="h-12" />
         ))}
       </div>
     )
@@ -90,7 +138,8 @@ function AppsTable({
   if (apps.isError) {
     return <QueryError error={apps.error} onRetry={() => void apps.refetch()} />
   }
-  if (apps.data.data.length === 0) {
+  const all = apps.data.data
+  if (all.length === 0) {
     return (
       <EmptyState.Root>
         <EmptyState.Title>No apps</EmptyState.Title>
@@ -100,68 +149,224 @@ function AppsTable({
       </EmptyState.Root>
     )
   }
+  const retiredCount = all.filter((app) => app.status === "retired").length
+  const rows = all.filter(
+    (app) =>
+      (status === "all" ||
+        (status === "retired"
+          ? app.status === "retired"
+          : app.status !== "retired")) &&
+      matchesAppFilter(app, query),
+  )
+
   return (
-    <Table.Root>
-      <Table.Header>
-        <Table.Row>
-          <Table.Head>Name</Table.Head>
-          <Table.Head className="hidden sm:table-cell">Website</Table.Head>
-          <Table.Head>Test</Table.Head>
-          <Table.Head>Live</Table.Head>
-          <Table.Head>Status</Table.Head>
-          <Table.Head className="hidden md:table-cell">Created</Table.Head>
-        </Table.Row>
-      </Table.Header>
-      <Table.Body>
-        {apps.data.data.map((app: App) => {
-          const test = app.environments.find((env) => env.kind === "test")
-          const live = app.environments.find((env) => env.kind === "live")
-          return (
-            <Table.Row
-              key={app.id}
-              interactive
-              onClick={() =>
-                void navigate({ to: "/apps/$appId", params: { appId: app.id } })
-              }
+    <section aria-label="Apps" className="flex min-w-0 flex-col">
+      <div className="flex flex-wrap items-center gap-2 pb-4">
+        <ChipGroup
+          label="Status"
+          value={status}
+          onChange={(value) => {
+            if (isStatusFilter(value)) setStatus(value)
+          }}
+          options={[
+            { value: "all", label: `All · ${all.length}` },
+            { value: "active", label: `Active · ${all.length - retiredCount}` },
+            { value: "retired", label: `Retired · ${retiredCount}` },
+          ]}
+        />
+        <span className="flex-1" />
+        <Input.Group size="sm" className="w-full bg-surface sm:w-[240px]">
+          <Input.Adornment>
+            <Search aria-hidden="true" size={14} strokeWidth={1.75} />
+          </Input.Adornment>
+          <Input.Root
+            type="search"
+            aria-label="Filter apps"
+            placeholder="Filter apps"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+        </Input.Group>
+      </div>
+      {rows.length === 0 ? (
+        <EmptyState.Root>
+          <EmptyState.Title>No matching apps</EmptyState.Title>
+          <EmptyState.Action>
+            <Button.Root
+              variant="secondary"
+              onClick={() => {
+                setQuery("")
+                setStatus("all")
+              }}
             >
-              <Table.Cell>
-                <Link
-                  to="/apps/$appId"
-                  params={{ appId: app.id }}
-                  className="font-600 text-ink hover:underline"
-                  onClick={(event) => event.stopPropagation()}
-                >
-                  {app.name}
-                </Link>
-              </Table.Cell>
-              <Table.Cell className="hidden max-w-[220px] truncate text-secondary sm:table-cell">
-                {app.websiteUrl ?? dash}
-              </Table.Cell>
-              <Table.Cell>
-                {test === undefined ? (
-                  dash
-                ) : (
-                  <ReviewBadge state={test.reviewState} />
-                )}
-              </Table.Cell>
-              <Table.Cell>
-                {live === undefined ? (
-                  dash
-                ) : (
-                  <ReviewBadge state={live.reviewState} />
-                )}
-              </Table.Cell>
-              <Table.Cell>
-                <AppStatusBadge status={app.status} />
-              </Table.Cell>
-              <Table.Cell className="hidden text-secondary md:table-cell">
-                {formatDate(app.createdAt)}
-              </Table.Cell>
+              Clear filters
+            </Button.Root>
+          </EmptyState.Action>
+        </EmptyState.Root>
+      ) : (
+        <Table.Root>
+          <Table.Header>
+            <Table.Row>
+              <Table.Head>App</Table.Head>
+              <Table.Head className="hidden w-[130px] xl:table-cell">
+                Website
+              </Table.Head>
+              <Table.Head className="hidden w-[110px] md:table-cell">
+                Test
+              </Table.Head>
+              <Table.Head className="w-[140px]">Live</Table.Head>
+              <Table.Head className="hidden w-[290px] lg:table-cell">
+                Live scopes
+              </Table.Head>
+              <Table.Head numeric className="hidden w-[100px] sm:table-cell">
+                Requests · 7 d
+              </Table.Head>
+              <Table.Head
+                numeric
+                className="hidden w-[64px] min-[1100px]:table-cell"
+              >
+                Created
+              </Table.Head>
             </Table.Row>
-          )
-        })}
-      </Table.Body>
-    </Table.Root>
+          </Table.Header>
+          <Table.Body>
+            {rows.map((app) => (
+              <AppRow
+                key={app.id}
+                app={app}
+                requests={requestsByApp.get(app.id)}
+                onOpen={() =>
+                  void navigate({
+                    to: "/apps/$appId",
+                    params: { appId: app.id },
+                  })
+                }
+              />
+            ))}
+          </Table.Body>
+        </Table.Root>
+      )}
+      <ul
+        aria-label="Scope legend"
+        className="m-0 flex list-none flex-wrap items-center gap-4 p-0 pt-3.5 text-label text-secondary"
+      >
+        <li className="flex items-center gap-1.5">
+          <ScopeChip scope="scope" />
+          Approved
+        </li>
+        <li className="flex items-center gap-1.5">
+          <ScopeChip scope="scope" pending />
+          Pending review
+        </li>
+      </ul>
+    </section>
+  )
+}
+
+function AppRow({
+  app,
+  requests,
+  onOpen,
+}: {
+  app: App
+  requests: number | undefined
+  onOpen: () => void
+}): ReactElement {
+  const retired = app.status === "retired"
+  const test = app.environments.find((env) => env.kind === "test")
+  const live = app.environments.find((env) => env.kind === "live")
+  const liveScopes =
+    live === undefined
+      ? []
+      : [
+          ...live.approvedScopes.map((scope) => ({ scope, pending: false })),
+          ...pendingLiveScopes(app).map((scope) => ({
+            scope,
+            pending: true,
+          })),
+        ]
+  const muted = <span className="text-body-sm text-muted">{dash}</span>
+  return (
+    <Table.Row interactive onClick={onOpen}>
+      <Table.Cell className="py-3.5">
+        <span className="flex min-w-0 items-center gap-3">
+          <AppMark
+            name={app.name}
+            logoUrl={app.logoUrl}
+            tone={appMarkTone(app)}
+          />
+          <span className="flex min-w-0 flex-col gap-0.5">
+            <span className="flex min-w-0 items-center gap-2">
+              <Link
+                to="/apps/$appId"
+                params={{ appId: app.id }}
+                onClick={(event) => event.stopPropagation()}
+                className={cn(
+                  "truncate text-body font-600 hover:underline",
+                  retired ? "text-secondary" : "text-ink",
+                )}
+              >
+                {app.name}
+              </Link>
+              {retired ? <Pill>Retired</Pill> : null}
+            </span>
+            <span className="truncate font-mono text-caption text-muted">
+              {app.slug}
+            </span>
+          </span>
+        </span>
+      </Table.Cell>
+      <Table.Cell className="hidden max-w-[130px] truncate text-body-sm text-secondary xl:table-cell">
+        {app.websiteUrl === null ? muted : formatHost(app.websiteUrl)}
+      </Table.Cell>
+      <Table.Cell className="hidden md:table-cell">
+        {retired || test === undefined ? (
+          muted
+        ) : (
+          <ReviewStatus state={test.reviewState} />
+        )}
+      </Table.Cell>
+      <Table.Cell>
+        {retired || live === undefined ? (
+          muted
+        ) : (
+          <ReviewStatus state={live.reviewState} />
+        )}
+      </Table.Cell>
+      <Table.Cell className="hidden lg:table-cell">
+        {retired || liveScopes.length === 0 ? (
+          muted
+        ) : (
+          <span className="flex flex-wrap gap-1">
+            {liveScopes.map((item) => (
+              <ScopeChip
+                key={item.scope}
+                scope={item.scope}
+                pending={item.pending}
+              />
+            ))}
+          </span>
+        )}
+      </Table.Cell>
+      <Table.Cell numeric className="hidden sm:table-cell">
+        {retired || requests === undefined ? muted : formatInteger(requests)}
+      </Table.Cell>
+      <Table.Cell
+        numeric
+        className="hidden font-sans text-label text-secondary min-[1100px]:table-cell"
+      >
+        {formatMonthDay(app.createdAt)}
+      </Table.Cell>
+    </Table.Row>
+  )
+}
+
+/** Live scopes requested but not yet approved (outlined chips). */
+function pendingLiveScopes(app: App): string[] {
+  const live = app.environments.find((env) => env.kind === "live")
+  if (live === undefined) return []
+  return (live.requestedScopes ?? live.approvedScopes).filter(
+    (scope) => !live.approvedScopes.includes(scope),
   )
 }
 
@@ -253,7 +458,7 @@ function CreateAppDialog({
             </Fieldset.Fields>
           </Fieldset.Root>
           {generalError === null ? null : (
-            <p role="alert" className="text-[12px] font-500 text-neg">
+            <p role="alert" className="text-label font-500 text-neg">
               {generalError}
             </p>
           )}

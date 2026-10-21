@@ -28,6 +28,9 @@ describe("Analytics Engine SQL builder", () => {
     expect(buildTotalsSql({ environmentId, from, to, apiKeyId: null })).toBe(
       [
         "SELECT SUM(_sample_interval) AS requests, sumIf(_sample_interval, double2 >= 400) AS errors,",
+        "sumIf(_sample_interval, double2 >= 400 AND double2 < 500 AND double2 != 429) AS client_errors,",
+        "sumIf(_sample_interval, double2 = 429) AS rate_limited,",
+        "sumIf(_sample_interval, double2 >= 500) AS server_errors,",
         "quantileExactWeighted(0.5)(double1, _sample_interval) AS p50,",
         "quantileExactWeighted(0.95)(double1, _sample_interval) AS p95",
         "FROM mbx_api_requests",
@@ -138,7 +141,17 @@ describe("Analytics Engine client", () => {
             ]
           : sql.includes("AS key_id")
             ? [{ key_id: "", requests: 10, errors: 1 }]
-            : [{ requests: 10, errors: 1, p50: "nan", p95: 40 }]
+            : [
+                {
+                  requests: 10,
+                  errors: 1,
+                  client_errors: "0",
+                  rate_limited: 1,
+                  server_errors: 0,
+                  p50: "nan",
+                  p95: 40,
+                },
+              ]
       return new Response(JSON.stringify({ meta: [], data, rows: data.length }))
     }
     const usage = createAnalyticsEngineUsage(
@@ -166,6 +179,9 @@ describe("Analytics Engine client", () => {
     expect(result.totals).toEqual({
       requests: 10,
       errors: 1,
+      clientErrors: 0,
+      rateLimited: 1,
+      serverErrors: 0,
       p50LatencyMs: null,
       p95LatencyMs: 40,
     })
@@ -252,7 +268,9 @@ describe("usage routes (synthetic data)", () => {
     expect(response.status).toBe(200)
     expect(response.headers.get("Content-Type")).toContain("text/csv")
     const lines = (await response.text()).trim().split("\n")
-    expect(lines[0]).toBe("start,requests,errors,p50_latency_ms,p95_latency_ms")
+    expect(lines[0]).toBe(
+      "start,requests,errors,p50_latency_ms,p95_latency_ms,client_errors,rate_limited,server_errors",
+    )
     expect(lines).toHaveLength(7)
   })
 

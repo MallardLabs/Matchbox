@@ -123,12 +123,12 @@ export function StepUpProvider({
             <Dialog.Title>Confirm with passkey</Dialog.Title>
           </Dialog.Header>
           <Dialog.Body>
-            <p className="flex items-center gap-2 text-[13px] text-secondary">
+            <p className="flex items-center gap-2 text-body-sm text-secondary">
               <KeyRound aria-hidden="true" size={16} strokeWidth={1.75} />
               Valid 10 min
             </p>
             {error === null ? null : (
-              <p role="alert" className="text-[12px] font-500 text-neg">
+              <p role="alert" className="text-label font-500 text-neg">
                 {error}
               </p>
             )}

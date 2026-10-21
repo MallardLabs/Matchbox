@@ -32,7 +32,8 @@ pnpm dev
 `WEBAUTHN_ORIGIN=http://localhost:5175`. Memory mode is refused when
 `ENVIRONMENT=production`. Seed (`src/worker/store/seed.ts`): account
 `dev@matchbox.local` (staff `reviewer`), org "Mallard Labs", an approved live
-gauge-profile app and an app with an open `discord:profile` review. Use the
+gauge-profile app, an app with an open `discord:profile` review and one
+whose `discord:id` request came back with a reviewer note. Use the
 dev sign-in button (`POST /api/auth/dev-sign-in`, memory mode outside
 production only). Usage data is synthetic unless `CF_ACCOUNT_ID` and
 `CF_ANALYTICS_TOKEN` are set.
@@ -50,9 +51,18 @@ Secrets (`wrangler secret put`): `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`,
 usage endpoints return 503). Invalid config returns 500 `internal_error` on
 `/api/*` even while disabled.
 
-Bindings: Durable Object `RATE_LIMITER` (`RateLimiter`), `ASSETS`,
-`send_email` `EMAIL` (from `no-reply@matchbox.markets`; the domain must be
-onboarded to Cloudflare Email Sending).
+Bindings: Durable Object `RATE_LIMITER` (`RateLimiter`), cross-script
+`API_RATE_LIMITER` (the developer-api's `RateLimiter`, read-only quota
+peeks for "Quota · today"; `script_name` `matchbox-developer-api`, staging
+`matchbox-developer-api-staging`), `ASSETS`, `send_email` `EMAIL` (from
+`no-reply@matchbox.markets`; the domain must be onboarded to Cloudflare
+Email Sending).
+
+Platform health (`GET /api/platform/health`, public) reads the
+`mbx_platform_health` dataset with the same `CF_ACCOUNT_ID` /
+`CF_ANALYTICS_TOKEN`; memory mode serves a fixed local fixture
+(`source: "local"`). Without `API_RATE_LIMITER`, memory mode reads an empty
+in-memory limiter (quota shows real zeros) and deployed consoles show "—".
 
 Staff: insert into `mbx_dev_staff` (`account_id`, `role` = `reviewer` |
 `operator`) by SQL; see the runbook.

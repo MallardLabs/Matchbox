@@ -1,7 +1,9 @@
 import type { AuditEventInput } from "@repo/platform-contracts/audit"
+import type { PlatformHealthResponse } from "@repo/platform-contracts/platform-health"
 import {
   PlatformError,
   type RateLimitClient,
+  type RateLimitReader,
   currentRequestId,
   ipPrefix,
   requestLogger,
@@ -24,6 +26,10 @@ export type ConsoleDeps = {
   rateLimits: RateLimitClient
   email: EmailSender
   analytics: UsageAnalytics
+  /** Platform health from the probes dataset (or the local fixture). */
+  health: { read(now: Date): Promise<PlatformHealthResponse> }
+  /** Reads the developer-api limiter's buckets (quota status). */
+  apiLimiter: RateLimitReader
   webauthn: WebauthnConfig
   now: () => Date
   flags: {

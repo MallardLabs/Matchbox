@@ -17,6 +17,8 @@ import registerCredentialRoutes from "./routes/credentials"
 import registerEnvironmentRoutes from "./routes/environments"
 import registerMeRoutes from "./routes/me"
 import registerOrganizationRoutes from "./routes/organizations"
+import registerQuotaRoutes from "./routes/quotas"
+import registerReviewRoutes from "./routes/reviews"
 import registerUsageRoutes from "./routes/usage"
 import { StoreConflictError } from "./store/console-store"
 
@@ -60,6 +62,8 @@ export default function createApp(deps: ConsoleDeps): Hono<ConsoleEnv> {
   registerEnvironmentRoutes(app)
   registerCredentialRoutes(app)
   registerUsageRoutes(app)
+  registerQuotaRoutes(app)
+  registerReviewRoutes(app)
   registerAdminRoutes(app)
 
   return app

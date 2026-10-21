@@ -21,8 +21,9 @@ import {
 import { Link, createFileRoute } from "@tanstack/react-router"
 import { Search } from "lucide-react"
 import { type FormEvent, type ReactElement, useState } from "react"
-import { AppStatusBadge, EnvBadge } from "../../../components/Badges"
 import QueryError from "../../../components/QueryError"
+import { EnvPill } from "../../../components/ui/Pill"
+import { AppStatusLabel } from "../../../components/ui/Status"
 import * as api from "../../../lib/api"
 import { errorMessage } from "../../../lib/api-client"
 import { formatDate, humanize } from "../../../lib/format"
@@ -158,7 +159,7 @@ function AdminAppsPage(): ReactElement {
               <Table.Row key={app.id}>
                 <Table.Cell>
                   <span className="block font-600">{app.name}</span>
-                  <span className="block font-mono text-[11px] text-secondary">
+                  <span className="block font-mono text-caption text-secondary">
                     {app.slug}
                   </span>
                 </Table.Cell>
@@ -174,13 +175,13 @@ function AdminAppsPage(): ReactElement {
                         search={{ environment: env.id }}
                         aria-label={`Quotas for ${app.name} ${env.kind}`}
                       >
-                        <EnvBadge kind={env.kind} />
+                        <EnvPill kind={env.kind} />
                       </Link>
                     ))}
                   </span>
                 </Table.Cell>
                 <Table.Cell>
-                  <AppStatusBadge status={app.status} />
+                  <AppStatusLabel status={app.status} />
                 </Table.Cell>
                 <Table.Cell className="hidden text-secondary lg:table-cell">
                   {formatDate(app.createdAt)}

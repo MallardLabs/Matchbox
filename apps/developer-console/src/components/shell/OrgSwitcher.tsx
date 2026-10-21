@@ -15,51 +15,63 @@ import { errorMessage } from "../../lib/api-client"
 import { humanize } from "../../lib/format"
 import { keys } from "../../lib/queries"
 import { useSession } from "../../lib/session"
+import AppMark from "../ui/AppMark"
 
-/** Organization picker at the top of the sidebar (and mobile top bar). */
+/**
+ * Organization picker. `sidebar`: the card in the sidebar footer.
+ * `compact`: the monogram alone (icon rail, phone top bar).
+ */
 export default function OrgSwitcher({
+  variant = "sidebar",
   className,
 }: {
-  className?: string
+  variant?: "sidebar" | "compact"
+  className?: string | undefined
 }): ReactElement {
   const { me, org, selectOrg } = useSession()
   const [creating, setCreating] = useState(false)
+  const name = org?.name ?? "No organization"
   return (
     <>
       <DropdownMenu.Root>
         <DropdownMenu.Trigger
           className={cn(
-            "flex h-11 w-full min-w-0 items-center gap-2.5 rounded-lg border border-line bg-surface px-2.5 text-left transition-colors hover:border-line-2",
+            variant === "sidebar"
+              ? "flex w-full min-w-0 items-center gap-2.5 rounded-lg border border-line bg-surface p-2.5 text-left transition-colors hover:border-line-2"
+              : "flex size-9 shrink-0 items-center justify-center rounded-lg transition-colors hover:bg-inset",
             className,
           )}
           aria-label={
             org === null ? "Select organization" : `Organization: ${org.name}`
           }
         >
-          <span
-            aria-hidden="true"
-            className="flex size-6 shrink-0 items-center justify-center rounded-md bg-inset-2 text-[11px] font-650 text-accent-ink"
-          >
-            {(org?.name ?? "?").slice(0, 1).toUpperCase()}
-          </span>
-          <span className="flex min-w-0 flex-1 flex-col">
-            <span className="truncate text-[13px] font-600 text-ink">
-              {org?.name ?? "No organization"}
-            </span>
-            {org === null ? null : (
-              <span className="text-[11px] text-secondary">
-                {humanize(org.role)}
+          <AppMark name={name} tone="ink" size="sm" />
+          {variant === "sidebar" ? (
+            <>
+              <span className="flex min-w-0 flex-1 flex-col gap-px">
+                <span className="truncate text-body-sm font-600 text-ink">
+                  {name}
+                </span>
+                {org === null ? null : (
+                  <span className="text-caption text-muted">
+                    {humanize(org.role)}
+                  </span>
+                )}
               </span>
-            )}
-          </span>
-          <ChevronsUpDown
-            aria-hidden="true"
-            size={14}
-            strokeWidth={1.75}
-            className="shrink-0 text-muted"
-          />
+              <ChevronsUpDown
+                aria-hidden="true"
+                size={14}
+                strokeWidth={1.75}
+                className="shrink-0 text-muted"
+              />
+            </>
+          ) : null}
         </DropdownMenu.Trigger>
-        <DropdownMenu.Content align="start" className="w-[244px]">
+        <DropdownMenu.Content
+          align="start"
+          side={variant === "sidebar" ? "top" : "bottom"}
+          className="w-[244px]"
+        >
           <DropdownMenu.Label>Organizations</DropdownMenu.Label>
           {me.organizations.map((item) => (
             <DropdownMenu.Item

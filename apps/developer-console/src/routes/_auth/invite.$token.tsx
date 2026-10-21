@@ -62,7 +62,7 @@ function InvitePage(): ReactElement {
         </div>
       ) : (
         <div className="flex flex-col gap-3">
-          <p className="text-[13px] text-secondary">{me.data.account.email}</p>
+          <p className="text-body-sm text-secondary">{me.data.account.email}</p>
           <Button.Root
             size="lg"
             loading={accept.isPending}
@@ -71,7 +71,7 @@ function InvitePage(): ReactElement {
             Accept invitation
           </Button.Root>
           {accept.isError ? (
-            <p role="alert" className="text-[12px] font-500 text-neg">
+            <p role="alert" className="text-label font-500 text-neg">
               {errorMessage(accept.error)}
             </p>
           ) : null}

@@ -1,28 +1,36 @@
 import {
   type UsageQuery,
   consolePaths,
+  orgUsageQuerySchema,
+  orgUsageResponseSchema,
   requestLogEntrySchema,
   requestLogQuerySchema,
   requestLogResponseSchema,
   usageBucketSeconds,
+  usageErrorRate,
   usageQuerySchema,
   usageResponseSchema,
 } from "@repo/platform-contracts/console"
 import { apiKeyDisplayPrefix } from "@repo/platform-contracts/credentials"
 import { PlatformError, pathParams, queryParams } from "@repo/platform-server"
-import { environmentAccess } from "../access"
+import { environmentAccess, organizationAccess } from "../access"
 import { type ConsoleApp, type ConsoleContext, deps } from "../context"
 import { respond } from "../mappers"
-import type { ApiKeyRow, EnvironmentRecord } from "../store/console-store"
+import type {
+  ApiKeyRow,
+  AppRecord,
+  EnvironmentRecord,
+} from "../store/console-store"
 import {
   AnalyticsUnavailableError,
   type UsageData,
   type UsagePoint,
+  type UsageTotalsData,
 } from "../usage/analytics"
 import { UnsafeSqlInputError, isRequestId } from "../usage/sql"
 
 /** Runs an analytics call; upstream failures become a generic 503. */
-async function analyticsCall<Result>(
+export async function analyticsCall<Result>(
   call: () => Promise<Result>,
 ): Promise<Result> {
   try {
@@ -42,6 +50,19 @@ async function analyticsCall<Result>(
   }
 }
 
+function emptyPoint(start: number): UsagePoint {
+  return {
+    start,
+    requests: 0,
+    errors: 0,
+    clientErrors: 0,
+    rateLimited: 0,
+    serverErrors: 0,
+    p50LatencyMs: null,
+    p95LatencyMs: null,
+  }
+}
+
 /** Fills empty buckets so charts get a continuous series. */
 export function fillSeries(
   points: UsagePoint[],
@@ -55,17 +76,23 @@ export function fillSeries(
   const end = to.getTime() / 1000
   const filled: UsagePoint[] = []
   for (let start = first; start < end; start += bucketSeconds) {
-    filled.push(
-      byStart.get(start) ?? {
-        start,
-        requests: 0,
-        errors: 0,
-        p50LatencyMs: null,
-        p95LatencyMs: null,
-      },
-    )
+    filled.push(byStart.get(start) ?? emptyPoint(start))
   }
   return filled
+}
+
+/** One point per UTC day of the range; missing days are real zeros. */
+export function fillDaily(
+  points: { start: number; requests: number }[],
+  from: Date,
+  to: Date,
+): { start: number; requests: number }[] {
+  return fillSeries(
+    points.map((point) => ({ ...emptyPoint(point.start), ...point })),
+    from,
+    to,
+    usageBucketSeconds.day,
+  ).map((point) => ({ start: point.start, requests: point.requests }))
 }
 
 function keyPrefixes(environment: EnvironmentRecord, keys: ApiKeyRow[]) {
@@ -79,6 +106,36 @@ function keyPrefixes(environment: EnvironmentRecord, keys: ApiKeyRow[]) {
       }),
     ]),
   )
+}
+
+function iso(seconds: number): string {
+  return new Date(seconds * 1000).toISOString()
+}
+
+function seriesPoint(point: UsagePoint) {
+  return {
+    start: iso(point.start),
+    requests: point.requests,
+    errors: point.errors,
+    clientErrors: point.clientErrors,
+    rateLimited: point.rateLimited,
+    serverErrors: point.serverErrors,
+    p50LatencyMs: point.p50LatencyMs,
+    p95LatencyMs: point.p95LatencyMs,
+  }
+}
+
+function summary(totals: UsageTotalsData) {
+  return {
+    requests: totals.requests,
+    errors: totals.errors,
+    clientErrors: totals.clientErrors,
+    rateLimited: totals.rateLimited,
+    serverErrors: totals.serverErrors,
+    errorRate: usageErrorRate(totals),
+    p50LatencyMs: totals.p50LatencyMs,
+    p95LatencyMs: totals.p95LatencyMs,
+  }
 }
 
 async function loadUsage(
@@ -134,28 +191,133 @@ function csvField(value: string | number | null): string {
   return /[",\n\r]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text
 }
 
+/** New columns are appended so older parsers keep working. */
+const csvHeader =
+  "start,requests,errors,p50_latency_ms,p95_latency_ms,client_errors,rate_limited,server_errors"
+
+function csvLines(series: UsagePoint[]): string[] {
+  return [
+    csvHeader,
+    ...series.map((point) =>
+      [
+        iso(point.start),
+        point.requests,
+        point.errors,
+        point.p50LatencyMs,
+        point.p95LatencyMs,
+        point.clientErrors,
+        point.rateLimited,
+        point.serverErrors,
+      ]
+        .map(csvField)
+        .join(","),
+    ),
+  ]
+}
+
+function csvResponse(
+  c: ConsoleContext,
+  lines: string[],
+  filename: string,
+): Response {
+  return c.body(`${lines.join("\n")}\n`, 200, {
+    "Content-Type": "text/csv; charset=utf-8",
+    "Content-Disposition": `attachment; filename="${filename}"`,
+    "Cache-Control": "no-store",
+  })
+}
+
+type ScopedEnvironment = {
+  environment: EnvironmentRecord
+  app: AppRecord
+  keys: ApiKeyRow[]
+}
+
+/** Org usage across the environments the filters select (C06). */
+async function loadOrgUsage(c: ConsoleContext, orgId: string) {
+  await organizationAccess(c, orgId, "developer")
+  const query = queryParams(c, orgUsageQuerySchema)
+  const { store, analytics } = deps(c)
+  const apps = await store.listApps(orgId)
+  if (
+    query.appId !== undefined &&
+    !apps.some((app) => app.id === query.appId)
+  ) {
+    throw new PlatformError("not_found")
+  }
+  const appsById = new Map(apps.map((app) => [app.id, app]))
+  const environments = (
+    await store.listEnvironmentsForApps(apps.map((app) => app.id))
+  ).filter(
+    (environment) =>
+      (query.environmentKind === "both" ||
+        environment.kind === query.environmentKind) &&
+      (query.appId === undefined || environment.appId === query.appId),
+  )
+  const scoped: ScopedEnvironment[] = await Promise.all(
+    environments.flatMap((environment) => {
+      const app = appsById.get(environment.appId)
+      return app === undefined
+        ? []
+        : [
+            store
+              .listApiKeys(environment.id)
+              .then((keys) => ({ environment, app, keys })),
+          ]
+    }),
+  )
+  const allKeys = scoped.flatMap((entry) => entry.keys)
+  if (
+    query.apiKeyId !== undefined &&
+    !allKeys.some((key) => key.id === query.apiKeyId)
+  ) {
+    throw new PlatformError("not_found")
+  }
+  const from = new Date(query.from)
+  const to = new Date(query.to)
+  const data =
+    scoped.length === 0
+      ? null
+      : await analyticsCall(() =>
+          analytics.orgUsage({
+            environmentIds: scoped.map((entry) => entry.environment.id),
+            from,
+            to,
+            bucket: query.bucket,
+            apiKeyId: query.apiKeyId ?? null,
+            knownKeyIds: allKeys.map((key) => key.id),
+          }),
+        )
+  const series = fillSeries(
+    data?.series ?? [],
+    from,
+    to,
+    usageBucketSeconds[query.bucket],
+  )
+  return { query, from, to, scoped, data, series }
+}
+
+const emptyTotals: UsageTotalsData = {
+  requests: 0,
+  errors: 0,
+  clientErrors: 0,
+  rateLimited: 0,
+  serverErrors: 0,
+  p50LatencyMs: null,
+  p95LatencyMs: null,
+}
+
 export default function registerUsageRoutes(app: ConsoleApp): void {
   app.get("/api/environments/:environmentId/usage", async (c) => {
     const { environmentId } = pathParams(c, consolePaths.environmentId)
     const { query, data, environment, keys } = await loadUsage(c, environmentId)
     const prefixes = keyPrefixes(environment, keys)
-    const { requests, errors } = data.totals
     return respond(c, usageResponseSchema, {
       from: new Date(query.from).toISOString(),
       to: new Date(query.to).toISOString(),
       bucket: query.bucket,
-      totals: {
-        ...data.totals,
-        errorRate:
-          requests === 0 ? null : Math.min(Math.max(errors / requests, 0), 1),
-      },
-      series: data.series.map((point) => ({
-        start: new Date(point.start * 1000).toISOString(),
-        requests: point.requests,
-        errors: point.errors,
-        p50LatencyMs: point.p50LatencyMs,
-        p95LatencyMs: point.p95LatencyMs,
-      })),
+      totals: summary(data.totals),
+      series: data.series.map(seriesPoint),
       topRoutes: data.topRoutes,
       byKey: data.byKey.map((row) => ({
         apiKeyId:
@@ -171,26 +333,85 @@ export default function registerUsageRoutes(app: ConsoleApp): void {
   app.get("/api/environments/:environmentId/usage.csv", async (c) => {
     const { environmentId } = pathParams(c, consolePaths.environmentId)
     const { query, data } = await loadUsage(c, environmentId)
-    const lines = [
-      "start,requests,errors,p50_latency_ms,p95_latency_ms",
-      ...data.series.map((point) =>
-        [
-          new Date(point.start * 1000).toISOString(),
-          point.requests,
-          point.errors,
-          point.p50LatencyMs,
-          point.p95LatencyMs,
-        ]
-          .map(csvField)
-          .join(","),
-      ),
-    ]
-    const filename = `usage-${environmentId}-${query.bucket}.csv`
-    return c.body(`${lines.join("\n")}\n`, 200, {
-      "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": `attachment; filename="${filename}"`,
-      "Cache-Control": "no-store",
+    return csvResponse(
+      c,
+      csvLines(data.series),
+      `usage-${environmentId}-${query.bucket}.csv`,
+    )
+  })
+
+  app.get("/api/orgs/:orgId/usage", async (c) => {
+    const { orgId } = pathParams(c, consolePaths.orgId)
+    const { query, from, to, scoped, data, series } = await loadOrgUsage(
+      c,
+      orgId,
+    )
+    const keyOwners = new Map(
+      scoped.flatMap((entry) => {
+        const prefixes = keyPrefixes(entry.environment, entry.keys)
+        return entry.keys.map(
+          (key) =>
+            [
+              key.id,
+              {
+                entry,
+                displayPrefix: prefixes.get(key.id) ?? null,
+              },
+            ] as const,
+        )
+      }),
+    )
+    return respond(c, orgUsageResponseSchema, {
+      from: from.toISOString(),
+      to: to.toISOString(),
+      bucket: query.bucket,
+      environmentKind: query.environmentKind,
+      totals: summary(data?.totals ?? emptyTotals),
+      series: series.map(seriesPoint),
+      byEnvironment: scoped.map((entry) => {
+        const usage = data?.byEnvironment.get(entry.environment.id)
+        return {
+          app: {
+            id: entry.app.id,
+            name: entry.app.name,
+            status: entry.app.status,
+          },
+          environmentId: entry.environment.id,
+          environmentKind: entry.environment.kind,
+          network: entry.environment.network,
+          summary: summary(usage?.totals ?? emptyTotals),
+          daily: fillDaily(usage?.daily ?? [], from, to).map((point) => ({
+            start: iso(point.start),
+            requests: point.requests,
+          })),
+        }
+      }),
+      topRoutes: data?.topRoutes ?? [],
+      byKey: (data?.byKey ?? []).map((row) => {
+        const owner = row.keyId === null ? undefined : keyOwners.get(row.keyId)
+        return {
+          apiKeyId: owner === undefined ? null : row.keyId,
+          displayPrefix: owner?.displayPrefix ?? null,
+          app:
+            owner === undefined
+              ? null
+              : { id: owner.entry.app.id, name: owner.entry.app.name },
+          environmentKind: owner?.entry.environment.kind ?? null,
+          requests: row.requests,
+          errors: row.errors,
+        }
+      }),
     })
+  })
+
+  app.get("/api/orgs/:orgId/usage.csv", async (c) => {
+    const { orgId } = pathParams(c, consolePaths.orgId)
+    const { query, series } = await loadOrgUsage(c, orgId)
+    return csvResponse(
+      c,
+      csvLines(series),
+      `usage-${orgId}-${query.environmentKind}-${query.bucket}.csv`,
+    )
   })
 
   app.get("/api/environments/:environmentId/requests", async (c) => {

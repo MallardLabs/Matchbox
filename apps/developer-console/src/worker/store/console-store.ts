@@ -188,6 +188,8 @@ export type EnvironmentRecord = {
   reviewState: ReviewState
   requestedScopes: PlatformScope[]
   approvedScopes: PlatformScope[]
+  /** Requested OIDC scopes users may decline at consent. */
+  optionalScopes: OidcScope[]
   scopeVersion: number
   sectorId: string
   createdAt: string
@@ -199,6 +201,8 @@ export type EnvironmentPatch = {
   reviewState?: ReviewState
   requestedScopes?: PlatformScope[]
   approvedScopes?: PlatformScope[]
+  /** Written in the same update as `requestedScopes` (DB subset CHECK). */
+  optionalScopes?: OidcScope[]
   scopeVersion?: number
 }
 
@@ -291,7 +295,22 @@ export type OAuthStatsRecord = {
   grantsCreated: number
   revocationsByReason: Record<GrantRevokedReason, number>
   activeGrantsByScope: Record<OidcScope, number>
+  /** Active grants consented below the environment's scope version. */
+  awaitingReconsent: { count: number; oldestScopeVersion: number | null }
 }
+
+/** A review with the app and environment it belongs to. */
+export type OrganizationReviewRecord = {
+  review: ReviewRecord
+  app: AppRecord
+  environment: EnvironmentRecord
+}
+
+/** Review fields `adminReviewStats` needs, plus the app name. */
+export type ReviewStatsRecord = Pick<
+  ReviewRecord,
+  "id" | "state" | "reviewerId" | "createdAt" | "decidedAt"
+> & { appName: string }
 
 export type AdminAppRecord = {
   app: AppRecord
@@ -494,9 +513,23 @@ export type ConsoleStore = {
       decidedAt: string
     },
   ): Promise<ReviewRecord>
+  /** Every review of an environment, newest activity first. */
+  listEnvironmentReviews(environmentId: string): Promise<ReviewRecord[]>
+  /** Reviews across an organization's apps, newest activity first. */
+  listOrganizationReviews(input: {
+    organizationId: string
+    state?: ReviewRecordState | undefined
+    limit: number
+  }): Promise<OrganizationReviewRecord[]>
+  /** Open reviews plus those decided at or after `decidedSince`. */
+  listReviewsForStats(input: {
+    decidedSince: string
+  }): Promise<ReviewStatsRecord[]>
   getAdminReview(id: string): Promise<AdminReviewRecord | null>
   listAdminReviews(input: {
     state: ReviewRecordState
+    /** Only reviews requesting this scope. */
+    scope?: PlatformScope | undefined
     offset: number
     limit: number
   }): Promise<Page<AdminReviewRecord>>
@@ -536,6 +569,8 @@ export type ConsoleStore = {
     environmentId: string
     from: string
     to: string
+    /** The environment's current scope version (re-consent count). */
+    scopeVersion: number
   }): Promise<OAuthStatsRecord>
 
   // Audit ------------------------------------------------------------------
