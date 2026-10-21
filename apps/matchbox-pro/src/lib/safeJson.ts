@@ -95,21 +95,3 @@ export function createSafeTransactionBuilderFile({
   batch.meta.checksum = calculateSafeBatchChecksum(batch)
   return batch
 }
-
-export function buildVoteSafeJson(input: {
-  chainId: number
-  safeAddress: Address
-  calls: SafeBatchCall[]
-}): string {
-  return JSON.stringify(
-    createSafeTransactionBuilderFile({
-      chainId: input.chainId,
-      safeAddress: input.safeAddress,
-      name: `Matchbox vote ${input.calls.length} locks`,
-      description: "Matchbox Pro veMEZO vote batch",
-      calls: input.calls,
-    }),
-    null,
-    2,
-  )
-}
