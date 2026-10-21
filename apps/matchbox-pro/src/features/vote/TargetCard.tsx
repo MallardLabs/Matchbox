@@ -53,7 +53,8 @@ export default function TargetCard({
     >
       <header className="flex items-center gap-2.5 px-3.5">
         <TargetAvatar mark={target.mark} size={40} />
-        <div className="flex min-w-0 flex-1 flex-col gap-[3px]">
+        {/* mr-2: long names and descriptions end clear of the + and star. */}
+        <div className="mr-2 flex min-w-0 flex-1 flex-col gap-[3px]">
           <h3 className="flex min-w-0 items-center gap-1.5">
             <TargetName target={target} />
             {target.chip ? (
