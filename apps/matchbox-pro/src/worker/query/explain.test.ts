@@ -90,6 +90,47 @@ describe("explain_gauge", () => {
     })
   })
 
+  it("routes free-form gauge questions to explain_gauge without Claude", () => {
+    const cases: Array<[string, string, string]> = [
+      ["Why did SNF APY change?", "SNF", "apy_change"],
+      ["why has Stackbridge's yield dropped", "Stackbridge", "apy_change"],
+      ["why does Lombard pay less", "Lombard", "apy_change"],
+      ["what happened to SNF APY", "SNF", "apy_change"],
+      ["what happened to Stackbridge incentives?", "Stackbridge", "overview"],
+      ["what happened to the Lombard bribes", "Lombard", "overview"],
+      ["why is SNF boost so low", "SNF", "overview"],
+      ["explain SNF", "SNF", "overview"],
+      ["what's happening with tBTC / WBTC?", "tBTC / WBTC", "overview"],
+    ]
+    for (const [query, gauge, question] of cases) {
+      expect(routeQuery(query), query).toMatchObject({
+        kind: "tool",
+        tool: "explain_gauge",
+        input: { gauge, question },
+      })
+    }
+    // Loans and claims keep their own routes.
+    expect(routeQuery("explain my trove")).toMatchObject({
+      tool: "get_loan_position",
+    })
+    expect(routeQuery("show my claimable rewards")).toMatchObject({
+      tool: "list_claimable_rewards",
+    })
+  })
+
+  it("answers 'Why did X APY change?' deterministically end to end", async () => {
+    const response = await ask("Why did Stackbridge APY change?", voted)
+    expect(response.service.runtime).toBe("deterministic")
+    expect(response.intent).toBe("explain_gauge")
+    expect(response.answer.text).toMatch(
+      /^Stackbridge APY went from 260% to 156%/,
+    )
+    const explained = await ask("what happened to Lombard incentives", voted)
+    expect(explained.answer.text).toMatch(
+      /^Lombard: \$200\.00 incentives this epoch/,
+    )
+  })
+
   it("summarises one gauge from sourced facts", async () => {
     const response = await ask("explain the Stackbridge gauge", voted)
     expect(response.intent).toBe("explain_gauge")

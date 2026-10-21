@@ -162,5 +162,18 @@ describe("every deterministic tool answer is sourced", () => {
       status: "closed_by_redemption",
       actions: ["claim_collateral_surplus"],
     })
+    // The claimCollateral() proposal rides along with the position.
+    expect(response.uiBlocks[1]).toMatchObject({
+      type: "claim_review",
+      rows: [expect.objectContaining({ source: "collateral_surplus" })],
+    })
+    expect(response.proposedActions).toEqual([
+      expect.objectContaining({
+        kind: "claim_surplus",
+        canSign: true,
+        approvals: [],
+        calls: [expect.objectContaining({ data: "0x6f0b0c1c" })],
+      }),
+    ])
   })
 })

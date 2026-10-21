@@ -167,28 +167,77 @@ export function zapDecision(slots: QuerySlots): RouterDecision {
   }
 }
 
+const METRIC = String.raw`(?:apy|apr|yield|returns?)`
+const OTHER_METRIC = String.raw`(?:boost|incentives?|bribes?|votes?|weight)`
+const NAME = String.raw`(?:the\s+)?(.+?)(?:'s)?`
+
+function explainPattern(source: string): RegExp {
+  return new RegExp(source, "i")
+}
+
+// Gauge explanations ("Why is Stackbridge APY down?", "what happened to SNF
+// incentives", "explain Lombard"). The name is resolved by explain_gauge
+// against live targets; an unknown name gets an honest "no match".
 const EXPLAIN_PATTERNS: Array<{
   pattern: RegExp
   question: "overview" | "apy_change" | "not_selected"
 }> = [
   {
-    pattern:
-      /\bwhy (?:is|did|has) (.+?)(?:'s)? (?:apy|apr|yield|return)s? (?:down|up|lower|higher|drop(?:ping|ped)?|fall(?:ing|en)?|fell|chang(?:e|ed|ing)|move[ds]?)\b/i,
+    pattern: explainPattern(
+      String.raw`\bwhy (?:is|did|has|does|was) ${NAME}\s+${METRIC}\s+(?:been\s+)?(?:down|up|lower|higher|drop(?:ping|ped)?|fall(?:ing|en)?|fell|ris(?:e|en|ing)|rose|chang(?:e|ed|ing)|move[ds]?|so\s+\w+)\b`,
+    ),
     question: "apy_change",
   },
   {
-    pattern:
-      /\bwhy (?:isn't|is not|wasn't|was not|didn't|did not) (.+?) (?:in my (?:ballot|votes?|allocation)|(?:get )?(?:selected|picked|chosen))\b/i,
+    pattern: explainPattern(
+      String.raw`\bwhy (?:does|do|did|is) ${NAME}\s+(?:have|get|pay|earn)s?\s+(?:a\s+|so\s+)?(?:lower|higher|less|more|little|much|low|high)\b`,
+    ),
+    question: "apy_change",
+  },
+  {
+    pattern: explainPattern(
+      String.raw`\bwhy (?:isn't|is not|wasn't|was not|didn't|did not) ${NAME}\s+(?:in my (?:ballot|votes?|allocation)|(?:get\s+)?(?:selected|picked|chosen))\b`,
+    ),
     question: "not_selected",
   },
   {
-    pattern:
-      /^(?:explain|tell me about|show me|how is|what about)\s+(?:the\s+)?(.+?)\s+(?:gauge|validator|pool|vault)\b/i,
+    pattern: explainPattern(
+      String.raw`^what(?:'s| has| is)?\s+happen(?:ed|ing)\s+(?:to|with)\s+${NAME}\s+${METRIC}\b`,
+    ),
+    question: "apy_change",
+  },
+  {
+    pattern: explainPattern(
+      String.raw`^what(?:'s| has| is)?\s+happen(?:ed|ing)\s+(?:to|with)\s+${NAME}\s+${OTHER_METRIC}\b`,
+    ),
     question: "overview",
   },
   {
-    pattern:
-      /^(?:explain|tell me about)\s+(?:the\s+)?(?:gauge|validator|pool)\s+(.+?)\??$/i,
+    pattern: explainPattern(
+      String.raw`\bwhy (?:is|did|has|does|was) ${NAME}\s+${OTHER_METRIC}\b`,
+    ),
+    question: "overview",
+  },
+  {
+    pattern: explainPattern(
+      String.raw`^(?:explain|tell me about|show me|how is|what about)\s+${NAME}\s+(?:gauge|validator|pool|vault)\b`,
+    ),
+    question: "overview",
+  },
+  {
+    pattern: explainPattern(
+      String.raw`^(?:explain|tell me about)\s+(?:the\s+)?(?:gauge|validator|pool)\s+(.+?)\??$`,
+    ),
+    question: "overview",
+  },
+  {
+    pattern: explainPattern(
+      String.raw`^what(?:'s| has| is)?\s+happen(?:ed|ing)\s+(?:to|with)\s+${NAME}\??$`,
+    ),
+    question: "overview",
+  },
+  {
+    pattern: explainPattern(String.raw`^explain\s+${NAME}\??$`),
     question: "overview",
   },
 ]
@@ -307,6 +356,9 @@ export function routeQuery(query: string): RouterDecision {
     }
   }
 
+  const explain = explainDecision(query)
+  if (explain) return explain
+
   if (/\b(claim|claimable|rewards?|bribes?|earned|earnings)\b/.test(text)) {
     const prepare = /\bclaim\b/.test(text) && !/\bclaimable\b/.test(text)
     return {
@@ -316,9 +368,6 @@ export function routeQuery(query: string): RouterDecision {
       input: { sources: null, lockIds: null },
     }
   }
-
-  const explain = explainDecision(query)
-  if (explain) return explain
 
   if (/\b(zap|vaults?|savings|smusd|deposit)\b/.test(text)) {
     return zapDecision(slots)

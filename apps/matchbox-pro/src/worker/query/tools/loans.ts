@@ -1,6 +1,7 @@
 import { encodeFunctionData } from "viem"
 import { z } from "zod"
 import type {
+  ClaimReviewBlock,
   Evidence,
   Fact,
   LiquidationScenarioBlock,
@@ -221,6 +222,79 @@ function troveModelRow(trove: TroveSnapshot, figures: TroveFigures): ModelRow {
   }
 }
 
+export function surplusClaimBlock(
+  scope: IdScope,
+  trove: TroveSnapshot,
+  proposal: Proposal,
+  refs: string[],
+): ClaimReviewBlock {
+  return {
+    type: "claim_review",
+    version: 1,
+    id: scope.id("b.claim"),
+    evidenceRefs: refs,
+    proposalId: proposal.proposalId,
+    rows: [
+      {
+        rowKey: "collateral_surplus:wallet",
+        source: "collateral_surplus",
+        contract: MAINNET.collSurplusPool,
+        tokenId: null,
+        rewards: [
+          {
+            token: MAINNET.collSurplusPool,
+            amount: BTC(trove.surplusCollateral),
+            usd:
+              trove.price === null
+                ? null
+                : usd6(
+                    wadToMicro(
+                      (trove.surplusCollateral * trove.price) / 10n ** 18n,
+                    ),
+                  ),
+          },
+        ],
+        usd: null,
+        unpricedCount: 0,
+      },
+    ],
+    totalUsd: null,
+    unpricedCount: 0,
+    signatures: { count: 1, atomic: true },
+    irreversibilityNote: "claim_final",
+  }
+}
+
+/**
+ * Whenever CollSurplusPool holds BTC for the wallet, the loan answer carries
+ * the claimCollateral() proposal and its review block next to the position,
+ * so "Claim BTC surplus" is one click from any trove answer.
+ */
+export async function attachSurplusClaim(
+  context: ToolContext,
+  trove: TroveSnapshot,
+  outcome: ToolOutcome,
+): Promise<ToolOutcome> {
+  if (trove.surplusCollateral <= 0n) return outcome
+  const proposal = await buildSurplusProposal(context, trove)
+  const refs = outcome.evidence.map((item) => item.id)
+  const loanIndex = outcome.blocks.findIndex(
+    (block) => block.type === "loan_position",
+  )
+  const blocks = [...outcome.blocks]
+  blocks.splice(
+    loanIndex + 1,
+    0,
+    surplusClaimBlock(context.scope, trove, proposal, refs),
+  )
+  return {
+    ...outcome,
+    blocks,
+    proposals: [...outcome.proposals, proposal],
+    surface: "canvas",
+  }
+}
+
 function noTrove(
   context: ToolContext,
   tool: string,
@@ -340,7 +414,11 @@ export const getLoanPositionTool = defineTool({
       const trove = await readTrove(context)
       const figures = troveFigures(trove)
       if (trove.status !== "active") {
-        return inactiveOutcome(context, tool, "loan_position", trove, figures)
+        return attachSurplusClaim(
+          context,
+          trove,
+          inactiveOutcome(context, tool, "loan_position", trove, figures),
+        )
       }
       const { scope } = context
       const evidence = troveEvidence(scope, trove)
@@ -397,7 +475,7 @@ export const getLoanPositionTool = defineTool({
               : "Liquidatable"
         text = `${healthText} at ${ratio.display} collateral ratio (min ${facts[1]?.display}). Liquidation below ${liq.display} per BTC.`
       }
-      return {
+      return attachSurplusClaim(context, trove, {
         tool,
         intent: "loan_position",
         status: "ok",
@@ -453,7 +531,7 @@ export const getLoanPositionTool = defineTool({
         ],
         model: { rows: [troveModelRow(trove, figures)], notes: [] },
         surface: "canvas",
-      }
+      })
     } catch {
       return errorOutcome({
         scope: context.scope,
@@ -495,12 +573,16 @@ export const scenarioLiquidationTool = defineTool({
       const trove = await readTrove(context)
       const figures = troveFigures(trove)
       if (trove.status !== "active") {
-        return inactiveOutcome(
+        return attachSurplusClaim(
           context,
-          tool,
-          "liquidation_scenario",
           trove,
-          figures,
+          inactiveOutcome(
+            context,
+            tool,
+            "liquidation_scenario",
+            trove,
+            figures,
+          ),
         )
       }
       const { scope } = context
@@ -849,7 +931,11 @@ export const prepareRepayTool = defineTool({
       const trove = await readTrove(context)
       const figures = troveFigures(trove)
       if (trove.status !== "active") {
-        return inactiveOutcome(context, tool, "repay", trove, figures)
+        return attachSurplusClaim(
+          context,
+          trove,
+          inactiveOutcome(context, tool, "repay", trove, figures),
+        )
       }
       const parsed = parseRepayAmount(input.amount, figures.maxRepay)
       if (!parsed) {
@@ -1207,42 +1293,7 @@ export const claimSurplusTool = defineTool({
         evidence,
         blocks: [
           loanPositionBlock(scope, trove, figures, refs),
-          {
-            type: "claim_review",
-            version: 1,
-            id: scope.id("b.claim"),
-            evidenceRefs: refs,
-            proposalId: proposal.proposalId,
-            rows: [
-              {
-                rowKey: "collateral_surplus:wallet",
-                source: "collateral_surplus",
-                contract: MAINNET.collSurplusPool,
-                tokenId: null,
-                rewards: [
-                  {
-                    token: MAINNET.collSurplusPool,
-                    amount: BTC(trove.surplusCollateral),
-                    usd:
-                      trove.price === null
-                        ? null
-                        : usd6(
-                            wadToMicro(
-                              (trove.surplusCollateral * trove.price) /
-                                10n ** 18n,
-                            ),
-                          ),
-                  },
-                ],
-                usd: null,
-                unpricedCount: 0,
-              },
-            ],
-            totalUsd: null,
-            unpricedCount: 0,
-            signatures: { count: 1, atomic: true },
-            irreversibilityNote: "claim_final",
-          },
+          surplusClaimBlock(scope, trove, proposal, refs),
           sourceCluster(scope, evidence),
         ],
         proposals: [proposal],
