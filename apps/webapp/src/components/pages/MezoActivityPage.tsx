@@ -131,9 +131,10 @@ function formatRelativeTime(timestamp: number): string {
   return `${Math.floor(diff / 86_400)}d ago`
 }
 
-// The indexer projects every minute; flag the feed once it falls this far
-// behind.
-const STALE_INDEX_SECONDS = 10 * 60
+// The indexer projects every 15 minutes and warehouse reads are cached for 5
+// (lib/warehouse.ts); flag the feed once it falls further behind than one
+// missed tick.
+const STALE_INDEX_SECONDS = 45 * 60
 
 function staleIndexLabel(updatedAt: string | undefined): string | undefined {
   if (!updatedAt) return undefined
