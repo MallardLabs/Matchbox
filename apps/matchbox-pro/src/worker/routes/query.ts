@@ -33,7 +33,7 @@ import {
 } from "../query/rateLimit"
 import { refreshProposal } from "../query/refresh"
 import { submitSupportReport } from "../query/supportReport"
-import type { ApiContext, ApiRoute, WorkerEnv } from "../router"
+import type { ApiContext, ApiRoute, WaitUntil, WorkerEnv } from "../router"
 
 // Stuart / Query runtime: answers, proposals, pre-sign refresh and support
 // reports. The POST routes are same-origin only and never send ACAO.
@@ -47,13 +47,18 @@ function log(event: Record<string, unknown>): void {
   console.log(JSON.stringify(event))
 }
 
-function runtimeFor(env: WorkerEnv, config: StuartConfig): StuartRuntime {
+function runtimeFor(
+  env: WorkerEnv,
+  config: StuartConfig,
+  waitUntil: WaitUntil,
+): StuartRuntime {
   return {
     providers: createLiveProviders({
       ...(env.BASE_RPC_URL ? { baseRpcUrl: env.BASE_RPC_URL } : {}),
       supabaseUrl: config.supabaseUrl,
       supabaseAnonKey: config.supabaseAnonKey,
       nowSeconds: () => BigInt(Math.floor(Date.now() / 1000)),
+      waitUntil,
     }),
     secret: proposalSecret(config.proposalSecret),
     now: () => new Date(),
@@ -145,7 +150,7 @@ export const queryRoutes: ApiRoute[] = [
     method: "POST",
     path: "/api/query",
     sameOrigin: true,
-    handler: guarded("query", async ({ request, env }, config) => {
+    handler: guarded("query", async ({ request, env, waitUntil }, config) => {
       const ip = clientIp(request)
       await limit(QUERY_LIMIT, config.limiters.query, [`ip:${ip}`])
       const body = stuartRequestSchema.parse(
@@ -154,20 +159,24 @@ export const queryRoutes: ApiRoute[] = [
       await limit(QUERY_LIMIT, config.limiters.query, [
         `session:${body.sessionId}`,
       ])
-      return stuartJson(await runStuartQuery(body, runtimeFor(env, config)))
+      return stuartJson(
+        await runStuartQuery(body, runtimeFor(env, config, waitUntil)),
+      )
     }),
   },
   {
     method: "POST",
     path: "/api/proposal/refresh",
     sameOrigin: true,
-    handler: guarded("refresh", async ({ request, env }, config) => {
+    handler: guarded("refresh", async ({ request, env, waitUntil }, config) => {
       const ip = clientIp(request)
       await limit(REFRESH_LIMIT, config.limiters.refresh, [`ip:${ip}`])
       const body = proposalRefreshRequestSchema.parse(
         await readJsonBody(request, REFRESH_BODY_LIMIT),
       )
-      return stuartJson(await refreshProposal(body, runtimeFor(env, config)))
+      return stuartJson(
+        await refreshProposal(body, runtimeFor(env, config, waitUntil)),
+      )
     }),
   },
   {
@@ -199,7 +208,7 @@ export const queryRoutes: ApiRoute[] = [
     // the strict per-IP limiter is the guard. Deterministic tools only.
     method: "POST",
     path: "/api/mcp",
-    handler: async ({ request, env }) => {
+    handler: async ({ request, env, waitUntil }) => {
       const config = readStuartConfig(env)
       if (!config.mcpEnabled) {
         return stuartError(
@@ -212,7 +221,7 @@ export const queryRoutes: ApiRoute[] = [
         const result = await handleMcpRequest({
           body,
           headers: request.headers,
-          runtime: { ...runtimeFor(env, config), claude: null },
+          runtime: { ...runtimeFor(env, config, waitUntil), claude: null },
         })
         return new Response(JSON.stringify(result.body), {
           status: result.status,

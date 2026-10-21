@@ -85,7 +85,7 @@ const CASES: Array<{ query: string; intent: string; text: RegExp }> = [
   {
     query: "show my locks",
     intent: "navigate",
-    text: /^Connected: 2 veMEZO locks/,
+    text: /^2 veMEZO locks \(12,888\.00 veMEZO\) and 0 veBTC locks\.$/,
   },
 ]
 

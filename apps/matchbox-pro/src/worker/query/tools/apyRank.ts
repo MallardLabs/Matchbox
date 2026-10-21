@@ -18,9 +18,11 @@ import { assetFor } from "../providers/voting"
 import { OPTIMIZER_CALC_VERSION, epochNumberFor } from "../versions"
 import { compareDensity, priceTarget, targetApyBps } from "../voteMath"
 import {
+  FUNDED_WINDOW,
   calcEvidence,
   domainEvidence,
   errorOutcome,
+  fundedForRows,
   plainOutcome,
   priceEvidence,
   queryFollowup,
@@ -56,6 +58,11 @@ export async function rankByApy(
     const voted = priced.filter((entry) => entry.target.weight > 0n)
     const unvoted = priced.length - voted.length
     const ordered = voted.sort(compareDensity).slice(0, 10)
+    const funded = await fundedForRows(
+      context,
+      domain,
+      ordered.map((entry) => entry.target),
+    )
     const evidence = [
       domainEvidence(scope, domain),
       priceEvidence(scope, prices, branch === "boost" ? "mezo" : "both"),
@@ -192,8 +199,10 @@ export async function rankByApy(
           projectedNative: null,
           depositedUsd: usd6(entry.incentiveMicroUsd),
           pricingStatus: entry.pricingStatus,
-          fundedEpochs: null,
-          observedEpochs: null,
+          fundedEpochs: funded
+            ? (funded.get(entry.target.targetAddress.toLowerCase()) ?? 0)
+            : null,
+          observedEpochs: funded ? FUNDED_WINDOW : null,
           competingWeight: entry.target.weight.toString(),
           apyBps: apyOf(entry),
         })),

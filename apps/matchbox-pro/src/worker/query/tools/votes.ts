@@ -56,11 +56,13 @@ import {
 } from "../voteMath"
 import { rankByApy } from "./apyRank"
 import {
+  FUNDED_WINDOW,
   ZERO_WALLET,
   calcEvidence,
   chainEvidence,
   domainEvidence,
   errorOutcome,
+  fundedForRows,
   navigateFollowup,
   plainOutcome,
   priceEvidence,
@@ -511,6 +513,11 @@ export async function presentVotePlan(
 
   // --- blocks ---------------------------------------------------------------
   const epochStart = plan.domain.epochStart
+  const rowFunded = await fundedForRows(
+    context,
+    plan.domain,
+    rows.slice(0, 50).flatMap((row) => (row.priced ? [row.priced.target] : [])),
+  )
   const ranking: GaugeRankingBlock = {
     type: "gauge_ranking",
     version: 1,
@@ -546,8 +553,8 @@ export async function presentVotePlan(
           : null,
         depositedUsd: usd6(row.priced?.incentiveMicroUsd ?? 0n),
         pricingStatus: row.priced?.pricingStatus ?? "unpriced",
-        fundedEpochs: null,
-        observedEpochs: null,
+        fundedEpochs: rowFunded ? (rowFunded.get(row.id) ?? 0) : null,
+        observedEpochs: rowFunded ? FUNDED_WINDOW : null,
         competingWeight: row.competing.toString(),
         apyBps: targetApyBps({
           incentiveMicroUsd: row.priced?.incentiveMicroUsd ?? 0n,
@@ -1131,6 +1138,14 @@ export const rankGaugesTool = defineTool({
           return left.incentiveMicroUsd > right.incentiveMicroUsd ? -1 : 1
         })
         .slice(0, 10)
+      const shownFunded =
+        funded ??
+        (await fundedForRows(
+          context,
+          domain,
+          ordered.map((entry) => entry.target),
+        ))
+      const shownWindow = funded ? window : FUNDED_WINDOW
       const evidence = [
         domainEvidence(scope, domain),
         priceEvidence(scope, prices, branch === "boost" ? "mezo" : "both"),
@@ -1240,10 +1255,10 @@ export const rankGaugesTool = defineTool({
             projectedNative: null,
             depositedUsd: usd6(entry.incentiveMicroUsd),
             pricingStatus: entry.pricingStatus,
-            fundedEpochs: funded
-              ? (funded.get(entry.target.targetAddress.toLowerCase()) ?? 0)
+            fundedEpochs: shownFunded
+              ? (shownFunded.get(entry.target.targetAddress.toLowerCase()) ?? 0)
               : null,
-            observedEpochs: funded ? window : null,
+            observedEpochs: shownFunded ? shownWindow : null,
             competingWeight: entry.existingWeight.toString(),
             apyBps: targetApyBps({
               incentiveMicroUsd: entry.incentiveMicroUsd,

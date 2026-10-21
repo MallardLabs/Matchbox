@@ -6,9 +6,11 @@ import type {
 import type { VoteBranch, WalletMode } from "../../features/query/contract"
 import { gaugeEpochs } from "../history/gauges"
 import { walletEarnings } from "../history/wallet"
+import type { WaitUntil } from "../router"
 import { type BoostState, loadBoostState } from "./providers/boost"
 import { type BridgeSearch, searchBridgeOperations } from "./providers/bridge"
 import { type ClaimableLock, loadClaimable } from "./providers/claims"
+import { settledEarnings } from "./providers/earnings"
 import { type TroveSnapshot, loadTrove } from "./providers/loans"
 import { type PriceSnapshot, loadPrices } from "./providers/prices"
 import {
@@ -133,6 +135,8 @@ export function createLiveProviders(input: {
   supabaseUrl: string | null
   supabaseAnonKey: string | null
   nowSeconds: () => bigint
+  // Keeps background price reads alive after the response is sent.
+  waitUntil: WaitUntil
 }): StuartProviders {
   const client = mezoMainnet()
   const domains = new RequestMemo<VotingDomain>()
@@ -190,15 +194,16 @@ export function createLiveProviders(input: {
         env: { BASE_RPC_URL: input.baseRpcUrl },
       }),
     walletEarnings: (owner) =>
-      walletEarnings(
-        owner,
-        [],
-        8,
-        { BASE_RPC_URL: input.baseRpcUrl },
-        (promise) => {
-          // No ExecutionContext here; the memo refresh just runs to completion.
-          promise.catch(() => undefined)
-        },
+      settledEarnings(
+        (waitUntil) =>
+          walletEarnings(
+            owner,
+            [],
+            8,
+            { BASE_RPC_URL: input.baseRpcUrl },
+            waitUntil,
+          ),
+        input.waitUntil,
       ),
   }
 }

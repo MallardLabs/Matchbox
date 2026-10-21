@@ -164,6 +164,87 @@ describe("ranking answers", () => {
   })
 })
 
+describe("QA fixes", () => {
+  it("fills the Funded column on every ranking table", async () => {
+    for (const query of [
+      "which gauge pays the most this epoch",
+      "top incentives this epoch",
+    ]) {
+      const response = await ask(query)
+      const ranking = response.uiBlocks.find(
+        (block) => block.type === "gauge_ranking",
+      )
+      if (ranking?.type !== "gauge_ranking")
+        throw new Error(`no ranking for ${query}`)
+      expect(ranking.rows.length).toBeGreaterThan(0)
+      for (const row of ranking.rows) {
+        expect(row.observedEpochs, query).toBe(8)
+        expect(row.fundedEpochs, query).not.toBeNull()
+      }
+    }
+    const optimized = await ask("optimize my votes", {
+      wallet: { address: WALLET, mode: "connected" },
+    })
+    const table = optimized.uiBlocks.find(
+      (block) => block.type === "gauge_ranking",
+    )
+    if (table?.type !== "gauge_ranking") throw new Error("no optimizer table")
+    expect(table.rows.every((row) => row.observedEpochs === 8)).toBe(true)
+  })
+
+  it("leaves Funded as unknown, not zero, when history can't be read", async () => {
+    const response = await ask("which gauge pays the most this epoch", {
+      providers: {
+        fundedEpochs: async () => {
+          throw new Error("rpc down")
+        },
+      },
+    })
+    const ranking = response.uiBlocks.find(
+      (block) => block.type === "gauge_ranking",
+    )
+    if (ranking?.type !== "gauge_ranking") throw new Error("no ranking")
+    expect(ranking.rows.every((row) => row.fundedEpochs === null)).toBe(true)
+  })
+
+  it("pluralises lock counts and states the wallet mode once", async () => {
+    const response = await ask("show my locks", {
+      providers: {
+        walletLocks: async (_owner, asset) => [
+          {
+            asset,
+            tokenId: asset === "veMEZO" ? 4821n : 221n,
+            amount: 10n * E18,
+            end: 0n,
+            isPermanent: true,
+            votingPower: 10n * E18,
+          },
+        ],
+      },
+    })
+    expect(response.answer.text).toBe(
+      "1 veMEZO lock (10.00 veMEZO) and 1 veBTC lock.",
+    )
+    expect(response.snapshot.label).toBe("Watched (read only)")
+    expect(response.answer.text).not.toContain("read only")
+  })
+
+  it("marks earnings live after a settled retry and stale only when still partial", async () => {
+    const live = await ask("what is my APY")
+    expect(
+      live.evidence.find((item) => item.label.startsWith("Earnings"))?.status,
+    ).toBe("live")
+    const base = await fakeProviders().walletEarnings(WALLET)
+    const stale = await ask("what is my APY", {
+      providers: { walletEarnings: async () => ({ ...base, partial: true }) },
+    })
+    expect(
+      stale.evidence.find((item) => item.label.startsWith("Earnings"))?.status,
+    ).toBe("stale")
+    expect(stale.why?.items[0]?.text).toMatch(/lower bounds/)
+  })
+})
+
 describe("wallet earnings", () => {
   it("answers 'what is my APY' from the wallet's earnings", async () => {
     const response = await ask("what is my APY")

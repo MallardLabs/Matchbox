@@ -145,6 +145,14 @@ export const resolveEntityTool = defineTool({
   },
 })
 
+function lockCount(
+  display: string | undefined,
+  count: number,
+  asset: "veMEZO" | "veBTC",
+): string {
+  return `${display ?? count} ${asset} ${count === 1 ? "lock" : "locks"}`
+}
+
 export const walletContextTool = defineTool({
   name: "get_wallet_context",
   family: "entity",
@@ -233,7 +241,8 @@ export const walletContextTool = defineTool({
         answer: {
           kind: "result",
           templateId: "get_wallet_context.lead.v1",
-          text: `${modeText}: ${mezoCount?.display} veMEZO locks (${mezoPower?.display}) and ${btcCount?.display} veBTC locks.`,
+          // The mode (connected / read only) is in the snapshot label once.
+          text: `${lockCount(mezoCount?.display, mezoLocks.length, "veMEZO")} (${mezoPower?.display}) and ${lockCount(btcCount?.display, btcLocks.length, "veBTC")}.`,
           factRefs: facts.map((fact) => fact.id),
         },
         why: null,

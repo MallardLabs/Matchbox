@@ -14,10 +14,31 @@ import {
 } from "../outcome"
 import type { PriceSnapshot } from "../providers/prices"
 import { priceSourceLabel } from "../providers/prices"
-import type { VotingDomain } from "../providers/voting"
+import type { VoteTarget, VotingDomain } from "../providers/voting"
 import { calcChip, epochNumberFor } from "../versions"
+import type { ToolContext } from "./tool"
 
 export const ZERO_WALLET = "0x0000000000000000000000000000000000000000"
+
+// The ranking table's "Funded" column: completed epochs, of the last 8, in
+// which the target had incentives.
+export const FUNDED_WINDOW = 8
+
+/**
+ * Funded epochs for just the targets a table shows (a few reads per row, not
+ * the whole voter). Null when history can't be read; the column then reads
+ * "—" rather than a guess.
+ */
+export async function fundedForRows(
+  context: Pick<ToolContext, "providers">,
+  domain: VotingDomain,
+  targets: readonly VoteTarget[],
+): Promise<Map<string, number> | null> {
+  if (targets.length === 0) return new Map()
+  return context.providers
+    .fundedEpochs({ ...domain, targets: [...targets] }, FUNDED_WINDOW)
+    .catch(() => null)
+}
 
 export function domainLabel(domain: VotingDomain): string {
   if (domain.branch === "boost") return "Boost gauges"
