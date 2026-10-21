@@ -19,7 +19,7 @@ import {
   useState,
 } from "react"
 import type { Address, Hex } from "viem"
-import { usePublicClient } from "wagmi"
+import { useBalance, usePublicClient } from "wagmi"
 import { amountInputValue, checkAmount, formatNative } from "./model"
 import {
   type IncentiveStep,
@@ -76,6 +76,13 @@ function SheetContent({
   const { data: mezoPrice = null } = useMezoPrice()
   const signer = viewer.mode === "connected" ? viewer.address : undefined
   const tokenReads = useIncentiveTokens(signer)
+  const gas = useBalance({
+    address: signer,
+    chainId,
+    query: { enabled: Boolean(signer) },
+  })
+  // Both prompts pay gas in BTC; an empty wallet can't send either.
+  const noGas = gas.data?.value === 0n
   const flow = useAddIncentives()
 
   const allowlisted = tokenReads.tokens.filter(
@@ -124,7 +131,8 @@ function SheetContent({
   const ready =
     check.kind === "ok" &&
     selected?.allowlisted === true &&
-    selected.balance !== undefined
+    selected.balance !== undefined &&
+    !noGas
 
   const { refetchWallet } = tokenReads
   useEffect(() => {
@@ -349,6 +357,14 @@ function SheetContent({
                   className="w-full rounded-lg text-body"
                 >
                   Switch to Mezo
+                </Button.Root>
+              ) : noGas ? (
+                <Button.Root
+                  size="lg"
+                  disabled
+                  className="w-full rounded-lg text-body"
+                >
+                  No BTC for gas
                 </Button.Root>
               ) : (
                 <Button.Root

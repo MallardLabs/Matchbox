@@ -1,5 +1,5 @@
 import { useConnectDialog } from "@/app/ConnectDialog"
-import { useGaugeEpochs } from "@/features/history/useHistory"
+import { useGaugeEpochHistory } from "@/features/history/useHistory"
 import { useBoostGauges } from "@/hooks/useBoostGauges"
 import { useGaugeWatchlist } from "@/hooks/useGaugeWatchlist"
 import { useBtcPrice, useMezoPrice } from "@/hooks/usePrices"
@@ -18,18 +18,20 @@ import {
   EpochIncentivesCard,
   type GaugeStat,
   GaugeStats,
-  type LiveEpochRow,
   OptimalCard,
   RecentEpochsCard,
   STAT_GRID,
   statTileClass,
-  usdLabel,
 } from "./GaugeSections"
 import {
+  type EpochTableRow,
+  epochDateLabel,
   epochIncentives,
   formatNative,
   gaugeApyBps,
   optimalFraction,
+  recentEpochRows,
+  usdLabel,
 } from "./model"
 
 function BackLink(): ReactElement {
@@ -42,16 +44,6 @@ function BackLink(): ReactElement {
       Vote
     </Link>
   )
-}
-
-function epochDateLabel(epochStart: string | undefined): string {
-  const seconds = Number(epochStart)
-  if (!epochStart || !Number.isFinite(seconds) || seconds <= 0) return "Current"
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    timeZone: "UTC",
-  }).format(new Date(seconds * 1000))
 }
 
 export default function GaugeDetailPage({
@@ -70,7 +62,7 @@ function GaugeDetail({ address }: { address: Address }): ReactElement {
   const topology = useTopology()
   const { data: btcPrice = null } = useBtcPrice()
   const { data: mezoPrice = null, isLoading: mezoPriceLoading } = useMezoPrice()
-  const history = useGaugeEpochs(address)
+  const history = useGaugeEpochHistory(address, 8)
   const { viewer } = useViewer()
   const { open: openConnect } = useConnectDialog()
   const { isWatching, toggleWatching } = useGaugeWatchlist()
@@ -147,14 +139,20 @@ function GaugeDetail({ address }: { address: Address }): ReactElement {
     { label: "Incentives", value: incentivesText, loading: incentivesLoading },
   ]
 
-  const live: LiveEpochRow | undefined = incentivesLoading
+  const epochStart = Number(topology.data?.epochStart)
+  const live: EpochTableRow | undefined = incentivesLoading
     ? undefined
     : {
-        label: epochDateLabel(topology.data?.epochStart),
+        key: "live",
+        label: epochDateLabel(
+          Number.isFinite(epochStart) ? epochStart : undefined,
+        ),
+        current: true,
         veMezo,
         boost,
         incentives: incentivesText,
         apy: apyText,
+        apyKnown: apy !== null,
       }
 
   function addIncentives(): void {
@@ -192,7 +190,14 @@ function GaugeDetail({ address }: { address: Address }): ReactElement {
         failed={topology.isError}
         onRetry={() => void topology.refetch()}
       />
-      <RecentEpochsCard history={history} live={live} />
+      <RecentEpochsCard
+        rows={recentEpochRows(
+          history.status === "ready" ? history.data : undefined,
+          live,
+        )}
+        status={history.status}
+        stale={history.freshness?.state === "stale"}
+      />
       <AddIncentivesSheet
         open={sheetOpen}
         onOpenChange={setSheetOpen}

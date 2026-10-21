@@ -1,11 +1,16 @@
 import { describe, expect, it } from "vitest"
 import {
+  type EpochTableRow,
   amountInputValue,
   checkAmount,
+  epochDateLabel,
   epochIncentives,
+  formatBoostWad,
   formatNative,
   gaugeApyBps,
   optimalFraction,
+  recentEpochRows,
+  usdLabel,
 } from "./model"
 import {
   applyStepEvent,
@@ -228,5 +233,97 @@ describe("incentive signing steps", () => {
       phase: "wallet",
       hash: undefined,
     })
+  })
+})
+
+describe("recent epochs", () => {
+  const sealed = {
+    epochEnd: 1_791_417_600 + 604_800,
+    status: "sealed" as const,
+    veMezo: 7110n * E18,
+    boostWad: 36n * 10n ** 17n,
+    incentives: [
+      {
+        token: MEZO,
+        symbol: "MEZO",
+        decimals: 18,
+        amount: E18,
+        usdAtEarnMicro: 14_880_000_000n,
+        usdNowMicro: null,
+      },
+    ],
+    incentivesUsdMicro: 14_880_000_000n,
+    apyBps: 1210n,
+  }
+  const live: EpochTableRow = {
+    key: "live",
+    label: "Oct 15",
+    current: true,
+    veMezo: "8,420",
+    boost: "4.2×",
+    incentives: "$18,204.00",
+    apy: "14.80%",
+    apyKnown: true,
+  }
+
+  it("labels epochs by UTC start date", () => {
+    expect(epochDateLabel(1_792_022_400)).toBe("Oct 15")
+    expect(epochDateLabel(undefined)).toBe("Current")
+  })
+
+  it("formats boost wads like the live multiplier", () => {
+    expect(formatBoostWad(42n * 10n ** 17n)).toBe("4.2×")
+    expect(formatBoostWad(10n ** 18n)).toBe("1.0×")
+    expect(formatBoostWad(5n * 10n ** 18n)).toBe("5×")
+  })
+
+  it("puts the live row first, then sealed history", () => {
+    const rows = recentEpochRows(
+      [
+        { ...sealed, epochStart: 1_792_022_400, status: "current" as const },
+        { ...sealed, epochStart: 1_791_417_600 },
+      ],
+      live,
+    )
+    expect(rows.map((row) => row.key)).toEqual(["live", "1791417600"])
+    expect(rows[1]).toMatchObject({
+      label: "Oct 8",
+      current: false,
+      veMezo: "7,110",
+      boost: "3.6×",
+      incentives: "$14,880.00",
+      apy: "12.10%",
+    })
+  })
+
+  it("falls back to the history's current row, and marks unpriced lines", () => {
+    const rows = recentEpochRows(
+      [
+        {
+          ...sealed,
+          epochStart: 1_792_022_400,
+          status: "current" as const,
+          boostWad: null,
+          incentives: [
+            ...sealed.incentives,
+            {
+              token: "0x0000000000000000000000000000000000000abc",
+              symbol: "SATS",
+              decimals: 18,
+              amount: E18,
+              usdAtEarnMicro: null,
+              usdNowMicro: null,
+            },
+          ],
+        },
+      ],
+      undefined,
+    )
+    expect(rows[0]).toMatchObject({
+      current: true,
+      boost: "—",
+      incentives: "$14,880.00+",
+    })
+    expect(usdLabel(null)).toBe("Unpriced")
   })
 })

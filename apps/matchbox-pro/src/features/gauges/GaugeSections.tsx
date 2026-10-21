@@ -1,19 +1,19 @@
-import type { GaugeEpoch, HistoryResult } from "@/features/history/useHistory"
-import { formatApyBasisPoints, formatBoost, formatMicroUsd } from "@/lib/money"
+import type { HistoryStatus } from "@/features/history/useHistory"
+import { formatBoost, formatMicroUsd } from "@/lib/money"
 import * as Badge from "@repo/ui/badge"
 import * as Button from "@repo/ui/button"
 import { cn } from "@repo/ui/cn"
 import * as Meter from "@repo/ui/meter"
 import * as Skeleton from "@repo/ui/skeleton"
 import type { ReactElement, ReactNode } from "react"
-import { type EpochIncentives, formatNative } from "./model"
+import {
+  type EpochIncentives,
+  type EpochTableRow,
+  formatNative,
+  usdLabel,
+} from "./model"
 
 const SECTION = "flex min-w-0 flex-col rounded-[10px] bg-surface p-4"
-
-export function usdLabel(value: bigint | null, unpricedCount = 0): string {
-  if (value === null) return "Unpriced"
-  return unpricedCount > 0 ? `${formatMicroUsd(value)}+` : formatMicroUsd(value)
-}
 
 export type GaugeStat = {
   label: string
@@ -219,44 +219,40 @@ export function EpochIncentivesCard({
   )
 }
 
-export type LiveEpochRow = {
-  label: string
-  veMezo: string
-  boost: string
-  incentives: string
-  apy: string
-}
-
 const HEAD = "pb-1.5 pr-3 text-left text-caption font-400 text-muted last:pr-0"
 const CELL =
   "py-[3px] pr-3 text-body-sm font-400 tabular-nums text-ink last:pr-0"
 
-function historyNote(status: HistoryResult<GaugeEpoch[]>["status"]): string {
-  if (status === "loading") return "Loading history"
+function historyNote(status: HistoryStatus): string {
+  if (status === "loading") return "Loading earlier epochs"
   if (status === "error") return "History unavailable"
   return "Earlier epochs unavailable"
 }
 
 /** Pen "History card": recent epochs, newest first. */
 export function RecentEpochsCard({
-  history,
-  live,
+  rows,
+  status,
+  stale,
 }: {
-  history: HistoryResult<GaugeEpoch[]>
-  live: LiveEpochRow | undefined
+  rows: EpochTableRow[]
+  status: HistoryStatus
+  stale: boolean
 }): ReactElement {
-  const rows = history.status === "ready" ? (history.data ?? []) : []
   return (
     <section
       aria-labelledby="recent-epochs-heading"
       className={cn(SECTION, "gap-2.5")}
     >
-      <h2
-        id="recent-epochs-heading"
-        className="m-0 text-lead font-400 text-ink"
-      >
-        Recent epochs
-      </h2>
+      <div className="flex items-center gap-2">
+        <h2
+          id="recent-epochs-heading"
+          className="m-0 text-lead font-400 text-ink"
+        >
+          Recent epochs
+        </h2>
+        {stale ? <Badge.Root tone="warn">Stale</Badge.Root> : null}
+      </div>
       <div className="min-w-0 overflow-x-auto">
         <table className="w-auto border-collapse">
           <thead>
@@ -279,62 +275,37 @@ export function RecentEpochsCard({
             </tr>
           </thead>
           <tbody>
-            {rows.length > 0 ? (
-              rows.map((row) => (
-                <tr key={row.epoch}>
-                  <th
-                    scope="row"
-                    className={cn(CELL, "text-left text-secondary")}
-                  >
-                    {row.epoch}
-                  </th>
-                  <td className={CELL}>
-                    {row.veMEZO === null ? "—" : formatNative(row.veMEZO, 18)}
-                  </td>
-                  <td className={CELL}>
-                    {row.boostBps === null
-                      ? "—"
-                      : formatBoost(row.boostBps / 10_000)}
-                  </td>
-                  <td className={CELL}>{usdLabel(row.incentivesUsdMicro)}</td>
-                  <td className={cn(CELL, row.apyBps !== null && "text-pos")}>
-                    {formatApyBasisPoints(
-                      row.apyBps === null ? null : BigInt(row.apyBps),
-                    )}
-                  </td>
-                </tr>
-              ))
-            ) : live ? (
-              <tr>
+            {rows.map((row) => (
+              <tr key={row.key}>
                 <th
                   scope="row"
                   className={cn(CELL, "text-left text-secondary")}
                 >
                   <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
-                    {live.label}
-                    <Badge.Root
-                      tone="accent"
-                      className="h-4 px-1 text-micro font-650"
-                    >
-                      Live
-                    </Badge.Root>
+                    {row.label}
+                    {row.current ? (
+                      <Badge.Root
+                        tone="accent"
+                        className="h-4 px-1 text-micro font-650"
+                      >
+                        Live
+                      </Badge.Root>
+                    ) : null}
                   </span>
                 </th>
-                <td className={CELL}>{live.veMezo}</td>
-                <td className={CELL}>{live.boost}</td>
-                <td className={CELL}>{live.incentives}</td>
-                <td className={cn(CELL, live.apy !== "—" && "text-pos")}>
-                  {live.apy}
+                <td className={CELL}>{row.veMezo}</td>
+                <td className={CELL}>{row.boost}</td>
+                <td className={CELL}>{row.incentives}</td>
+                <td className={cn(CELL, row.apyKnown && "text-pos")}>
+                  {row.apy}
                 </td>
               </tr>
-            ) : null}
+            ))}
           </tbody>
         </table>
       </div>
-      {history.status === "ready" ? null : (
-        <p className="m-0 text-label text-muted">
-          {historyNote(history.status)}
-        </p>
+      {status === "ready" ? null : (
+        <p className="m-0 text-label text-muted">{historyNote(status)}</p>
       )}
     </section>
   )

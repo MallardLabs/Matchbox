@@ -1,4 +1,10 @@
-import { decimalToScaledBigInt, tokenUsdMicroValue } from "@/lib/money"
+import type { GaugeEpochRow } from "@/features/history/useHistory"
+import {
+  decimalToScaledBigInt,
+  formatApyBasisPoints,
+  formatMicroUsd,
+  tokenUsdMicroValue,
+} from "@/lib/money"
 import { calculateAnnualizedReturnBasisPoints } from "@/lib/rewardOptimizer"
 import { referencePriceUsd } from "@/lib/tokenUsd"
 import type { GaugeRewardToken } from "@/lib/topology"
@@ -165,4 +171,77 @@ export function amountInputValue(amount: bigint, decimals: number): string {
     .padStart(decimals, "0")
     .replace(/0+$/, "")
   return fraction ? `${whole}.${fraction}` : whole.toString()
+}
+
+/** USD total; "Unpriced" when nothing is priced, "+" when some lines aren't. */
+export function usdLabel(value: bigint | null, unpricedCount = 0): string {
+  if (value === null) return "Unpriced"
+  return unpricedCount > 0 ? `${formatMicroUsd(value)}+` : formatMicroUsd(value)
+}
+
+/** Boost from a 1e18-scaled wad, to one decimal, capped display at 5×. */
+export function formatBoostWad(wad: bigint): string {
+  const tenths = (wad + 5n * 10n ** 16n) / 10n ** 17n
+  if (tenths >= 50n) return "5×"
+  return `${tenths / 10n}.${tenths % 10n}×`
+}
+
+/** Epoch label by its UTC start date ("Oct 15"); there is no epoch number. */
+export function epochDateLabel(epochStart: number | undefined): string {
+  if (
+    epochStart === undefined ||
+    !Number.isFinite(epochStart) ||
+    epochStart <= 0
+  )
+    return "Current"
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(epochStart * 1000))
+}
+
+export type EpochTableRow = {
+  key: string
+  label: string
+  /** The live epoch, still moving. */
+  current: boolean
+  veMezo: string
+  boost: string
+  incentives: string
+  apy: string
+  apyKnown: boolean
+}
+
+function historyRow(row: GaugeEpochRow): EpochTableRow {
+  const unpriced = row.incentives.filter(
+    (token) => token.amount > 0n && token.usdAtEarnMicro === null,
+  ).length
+  return {
+    key: String(row.epochStart),
+    label: epochDateLabel(row.epochStart),
+    current: row.status === "current",
+    veMezo: formatNative(row.veMezo, 18),
+    boost: row.boostWad === null ? "—" : formatBoostWad(row.boostWad),
+    incentives: usdLabel(row.incentivesUsdMicro, unpriced),
+    apy: formatApyBasisPoints(row.apyBps),
+    apyKnown: row.apyBps !== null,
+  }
+}
+
+/**
+ * Recent epochs, newest first. Sealed rows come from history; the current
+ * epoch uses the page's live figures so it matches the stats above it.
+ */
+export function recentEpochRows(
+  history: readonly GaugeEpochRow[] | undefined,
+  live: EpochTableRow | undefined,
+): EpochTableRow[] {
+  const sealed = (history ?? [])
+    .filter((row) => row.status === "sealed")
+    .map(historyRow)
+  const current =
+    live ??
+    (history ?? []).filter((row) => row.status === "current").map(historyRow)[0]
+  return current ? [current, ...sealed] : sealed
 }
