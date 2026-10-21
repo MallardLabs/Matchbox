@@ -50,7 +50,12 @@ function readInitialWatch(): Address | undefined {
     const fromUrl = parseAddress(
       new URLSearchParams(window.location.search).get(WATCH_PARAM),
     )
-    if (fromUrl) return fromUrl
+    if (fromUrl) {
+      // Keep watching after navigation drops the query string or the page
+      // reloads.
+      persistWatch(fromUrl)
+      return fromUrl
+    }
     return parseAddress(window.sessionStorage.getItem(WATCH_STORAGE_KEY))
   } catch {
     return undefined
