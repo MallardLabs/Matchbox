@@ -1,5 +1,10 @@
-import type { ActivityItem, ActivityKind } from "@/features/history/useHistory"
+import type {
+  ActivityItem,
+  ActivityKind,
+  Freshness,
+} from "@/features/history/useHistory"
 import { formatNative } from "@/features/rewards/claimSources"
+import { epochNumberFor } from "@/lib/epoch"
 
 // Normalized activity rows → the explorer's events. One event per
 // transaction and action family: a multi-gauge vote is one "Voted" row with
@@ -131,6 +136,12 @@ function gaugeLabel(names: Names, address: string | null): string | null {
   return names.gauge(address) ?? short(address)
 }
 
+/** A row's own subject: unnamed gauges read "gauge 0xf053…446a". */
+function gaugeSubject(names: Names, address: string | null): string | null {
+  if (!address) return null
+  return names.gauge(address) ?? `gauge ${short(address)}`
+}
+
 export type AllocationLine = { gauge: string; label: string; bps: bigint }
 
 /** Vote weights in a tx → share of the ballot, largest first. */
@@ -193,7 +204,7 @@ export function eventTitle(event: ActivityEvent, names: Names): string {
         ? "Claimed · pool fees"
         : "Claimed · bribes"
     case "incentive_deposited":
-      return ["Incentive deposited", gaugeLabel(names, item.gauge)]
+      return ["Incentive deposited", gaugeSubject(names, item.gauge)]
         .filter(Boolean)
         .join(" · ")
     case "boost_refreshed":
@@ -222,11 +233,11 @@ export function eventTitle(event: ActivityEvent, names: Names): string {
     case "lock_transferred":
       return ["Lock transferred", lock].filter(Boolean).join(" · ")
     case "profile_published":
-      return ["Profile published", gaugeLabel(names, item.gauge)]
+      return ["Profile published", gaugeSubject(names, item.gauge)]
         .filter(Boolean)
         .join(" · ")
     case "protocol":
-      return [humanize(item.actionType), gaugeLabel(names, item.gauge)]
+      return [humanize(item.actionType), gaugeSubject(names, item.gauge)]
         .filter(Boolean)
         .join(" · ")
   }
@@ -309,31 +320,44 @@ export function powerUsed(event: ActivityEvent): bigint | null {
   return total > 0n ? total : null
 }
 
-const MONTHS = [
-  "Jan",
-  "Feb",
-  "Mar",
-  "Apr",
-  "May",
-  "Jun",
-  "Jul",
-  "Aug",
-  "Sep",
-  "Oct",
-  "Nov",
-  "Dec",
-]
-
-function pad(value: number): string {
-  return String(value).padStart(2, "0")
-}
+const WHEN = new Intl.DateTimeFormat("en-US", {
+  timeZone: "UTC",
+  month: "short",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+})
 
 /** "Aug 27 14:02" in UTC; `dateOnly` drops the time. */
 export function formatWhen(seconds: number, dateOnly = false): string {
-  const date = new Date(seconds * 1000)
-  const day = `${MONTHS[date.getUTCMonth()]} ${pad(date.getUTCDate())}`
-  if (dateOnly) return day
-  return `${day} ${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())}`
+  const parts = Object.fromEntries(
+    WHEN.formatToParts(new Date(seconds * 1000)).map((part) => [
+      part.type,
+      part.value,
+    ]),
+  )
+  const day = `${parts.month} ${parts.day}`
+  return dateOnly ? day : `${day} ${parts.hour}:${parts.minute}`
+}
+
+/**
+ * Stale only when the index behind the feed is lagging and the row came from
+ * it (at or before its indexed-through point). Rows newer than that, such as
+ * live vote rows merged into the frozen explorer, are current: Final.
+ */
+export function eventStale(
+  event: Pick<ActivityEvent, "blockNumber" | "timestamp">,
+  freshness: Freshness | undefined,
+): boolean {
+  if (freshness?.state !== "stale") return false
+  if (event.blockNumber > 0n && freshness.indexedThroughBlock !== null) {
+    return event.blockNumber <= freshness.indexedThroughBlock
+  }
+  if (freshness.indexedAt) {
+    return event.timestamp * 1000 <= Date.parse(freshness.indexedAt)
+  }
+  return true
 }
 
 export function permalinkPath(address: string, txHash: string): string {
@@ -352,6 +376,7 @@ export const ACTIVITY_CSV_HEADERS = [
   "status",
   "lock",
   "gauges",
+  "epoch",
 ]
 
 export function activityCsvRows(
@@ -374,6 +399,7 @@ export function activityCsvRows(
       Array.from(
         new Set(event.items.map((row) => row.gauge).filter(Boolean)),
       ).join(" "),
+      epochNumberFor(BigInt(event.epochStart)),
     ]
   })
 }

@@ -14,7 +14,8 @@ type EventTableProps = {
   events: ActivityEvent[]
   loading: boolean
   names: Names
-  stale: boolean
+  /** Per row: true when the row comes from a lagging index. */
+  stale: (event: ActivityEvent) => boolean
   selectedId: string | null
   onSelect: (event: ActivityEvent) => void
 }
@@ -121,7 +122,7 @@ export default function EventTable({
                       <span className="text-muted tabular-nums">
                         {formatWhen(event.timestamp, true)}
                       </span>
-                      <StatusText event={event} stale={stale} />
+                      <StatusText event={event} stale={stale(event)} />
                     </span>
                     <button
                       type="button"
@@ -141,7 +142,7 @@ export default function EventTable({
                     {amount ?? "—"}
                   </td>
                   <td className="hidden whitespace-nowrap py-2.5 pl-3 pr-2 md:table-cell">
-                    <StatusText event={event} stale={stale} />
+                    <StatusText event={event} stale={stale(event)} />
                   </td>
                 </tr>
               )

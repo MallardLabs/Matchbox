@@ -29,8 +29,8 @@ import {
   PERIODS,
   type PeriodId,
   emptyBars,
+  epochShort,
   epochStartOf,
-  formatEpochDate,
   ledgerCsvRows,
   periodFrom,
   realizedBars,
@@ -151,21 +151,29 @@ function RewardsWallet({
     earningsReady && earnings.data
       ? realizedBars(earnings.data.epochs, projectedMicro)
       : emptyBars(now)
+  const pricesPending = !!earnings.data?.partial || !!ledger.partial
   const chartState =
     earnings.status === "loading"
-      ? "Loading"
+      ? "Loading…"
       : earnings.status === "ready"
         ? earnings.freshness?.state === "stale"
           ? "Stale"
-          : null
+          : pricesPending
+            ? "Pricing…"
+            : null
         : "Unavailable"
 
+  // Tokens left out of any USD figure on the page: no live price (claim
+  // panel, ledger "USD now") or no price at earn in lifetime realized.
   const unpricedTokens = new Set<string>()
   for (const token of claim.tokens) {
     if (token.usdMicro === null) unpricedTokens.add(token.token.toLowerCase())
   }
   for (const row of ledger.data ?? []) {
     if (row.usdNowMicro === null) unpricedTokens.add(row.token.toLowerCase())
+  }
+  for (const token of earnings.data?.totals.realized.tokens ?? []) {
+    if ((token.unpriced ?? 0) > 0) unpricedTokens.add(token.token.toLowerCase())
   }
 
   const totals = earnings.data?.totals
@@ -183,12 +191,12 @@ function RewardsWallet({
     {
       label: "Pending / projected",
       value: projectedMicro === null ? "—" : formatMicroUsd(projectedMicro),
-      qualifier: `not realized · ${formatEpochDate(currentStart)}`,
+      qualifier: `not realized · epoch ${epochShort(currentStart)}`,
     },
     {
       label: "Unpriced tokens",
       value: unpricedTokens.size === 0 ? "None" : String(unpricedTokens.size),
-      qualifier: "not in USD totals",
+      qualifier: pricesPending ? "prices still loading" : "not in USD totals",
     },
   ]
   const summary = [
@@ -315,7 +323,7 @@ function RewardsWallet({
         </div>
       </PageTitle>
 
-      <div className="flex flex-col gap-10 xl:min-h-[340px] xl:flex-row">
+      <div className="flex flex-col gap-10 xl:flex-row xl:pb-12">
         <div className="min-w-0 flex-1">
           <ClaimPanel
             status={claim.status}
@@ -352,9 +360,10 @@ function RewardsWallet({
 
       <EpochLedger
         status={ledger.status}
+        pricesPending={pricesPending}
         rows={ledger.data ?? []}
         gaugeName={gaugeName}
-        epochLabel={formatEpochDate}
+        epochLabel={epochShort}
         hasMore={ledger.hasNextPage}
         loadingMore={ledger.isFetchingNextPage}
         onLoadMore={ledger.fetchNextPage}

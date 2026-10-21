@@ -83,7 +83,7 @@ export default function ClaimSheet({
                   <span className="shrink-0 text-ink tabular-nums">
                     {source.unpriced === source.tokens.length
                       ? "Unpriced"
-                      : formatMicroUsd(source.usdMicro)}
+                      : `${source.unpriced > 0 ? "≥ " : ""}${formatMicroUsd(source.usdMicro)}`}
                   </span>
                 </li>
               ))}

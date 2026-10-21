@@ -1,4 +1,4 @@
-import { formatEpochDate } from "@/features/rewards/ledgerModel"
+import { epochShort, formatEpochDate } from "@/features/rewards/ledgerModel"
 import { formatVeAmount } from "@/lib/money"
 import { cn } from "@repo/ui/cn"
 import { useCopy } from "@repo/ui/use-copy"
@@ -52,6 +52,13 @@ function shortHash(hash: string): string {
   return `${hash.slice(0, 6)}…${hash.slice(-4)}`
 }
 
+/** "6 · Oct 15": the epoch number with its start date; the date alone before launch. */
+function epochValue(epochStart: number): string {
+  const name = epochShort(epochStart)
+  const date = formatEpochDate(epochStart)
+  return name === date ? date : `${name} · ${date}`
+}
+
 function groupThousands(value: bigint): string {
   return value.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",")
 }
@@ -76,7 +83,7 @@ export default function EventDetail({
 
   const rows: Array<{ label: string; value: ReactNode; mono?: boolean }> = [
     { label: "When", value: `${formatWhen(event.timestamp)} UTC` },
-    { label: "Epoch", value: formatEpochDate(event.epochStart) },
+    { label: "Epoch", value: epochValue(event.epochStart) },
   ]
   if (event.blockNumber > 0n) {
     rows.push({

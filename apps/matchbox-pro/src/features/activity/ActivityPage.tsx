@@ -9,9 +9,10 @@ import {
 import ToggleChip from "@/features/rewards/ToggleChip"
 import { csvFilename, downloadCsv, toCsv } from "@/features/rewards/csv"
 import {
-  EPOCH_SECONDS,
   epochStartOf,
+  epochTitle,
   formatEpochDate,
+  periodFrom,
 } from "@/features/rewards/ledgerModel"
 import { DESKTOP_QUERY, useMediaQuery } from "@/hooks/useMediaQuery"
 import { useNetwork } from "@/lib/network"
@@ -33,6 +34,7 @@ import {
   KIND_FILTERS,
   type KindFilter,
   activityCsvRows,
+  eventStale,
   filterKinds,
   groupEvents,
   permalinkPath,
@@ -50,11 +52,9 @@ const RANGES: ReadonlyArray<{ id: Range; label: string }> = [
 
 const PAGE_SIZES = [25, 50, 100] as const
 
+/** Same windows as Rewards: this epoch, or eight sealed plus current. */
 function rangeFrom(range: Range, now: number): number | undefined {
-  const current = epochStartOf(now)
-  if (range === "epoch") return current
-  if (range === "last-8") return current - 7 * EPOCH_SECONDS
-  return undefined
+  return periodFrom(range === "all" ? "lifetime" : range, now)
 }
 
 function formatLag(seconds: number): string {
@@ -261,7 +261,7 @@ export default function ActivityPage({
         </fieldset>
         <span className="hidden shrink-0 items-center gap-1.5 whitespace-nowrap text-label text-muted md:flex">
           <span aria-hidden="true">·</span>
-          <span>Epoch {formatEpochDate(epochStartOf(now))}</span>
+          <span>{epochTitle(epochStartOf(now))}</span>
           <span aria-hidden="true">·</span>
           <TextSelect
             id="activity-range"
@@ -334,7 +334,7 @@ export default function ActivityPage({
               events={events}
               loading={loading}
               names={names}
-              stale={stale}
+              stale={(event) => eventStale(event, freshness)}
               selectedId={
                 desktop || picked !== null || pinnedEvent
                   ? (selected?.id ?? null)
@@ -397,7 +397,7 @@ export default function ActivityPage({
                 event={selected}
                 names={names}
                 address={permalinkAddress}
-                stale={stale}
+                stale={eventStale(selected, freshness)}
                 explorer={explorer}
               />
             </aside>
@@ -419,7 +419,7 @@ export default function ActivityPage({
               event={selected}
               names={names}
               address={permalinkAddress}
-              stale={stale}
+              stale={eventStale(selected, freshness)}
               explorer={explorer}
               framed={false}
               renderTitle={(title) => (

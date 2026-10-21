@@ -7,6 +7,7 @@ import {
   allocationText,
   eventAmount,
   eventLine,
+  eventStale,
   eventTitle,
   filterKinds,
   formatWhen,
@@ -191,5 +192,65 @@ describe("event labels", () => {
     expect(rows).toHaveLength(1)
     expect(rows[0]?.[5]).toBe("voted")
     expect(rows[0]?.[6]).toBe("Voted · veMEZO #1 → Stackbridge 100%")
+  })
+})
+
+describe("per-row staleness", () => {
+  const frozen = {
+    source: "frozen-explorer" as const,
+    indexedThroughBlock: 12_075_331n,
+    indexedAt: "2026-09-24T21:14:08.000Z",
+    headBlock: 12_657_000n,
+    lagBlocks: 581_669n,
+    lagSeconds: 2_280_000,
+    state: "stale" as const,
+  }
+  const at = (iso: string): number => Date.parse(iso) / 1000
+
+  it("marks rows from the lagging index Stale", () => {
+    expect(
+      eventStale(
+        { blockNumber: 12_000_000n, timestamp: at("2026-09-20T00:00:00Z") },
+        frozen,
+      ),
+    ).toBe(true)
+  })
+
+  it("keeps live vote rows newer than the freeze Final", () => {
+    // earn-votes rows carry no block; they're judged by time.
+    expect(
+      eventStale(
+        { blockNumber: 0n, timestamp: at("2026-10-20T18:01:00Z") },
+        frozen,
+      ),
+    ).toBe(false)
+    expect(
+      eventStale(
+        { blockNumber: 0n, timestamp: at("2026-09-01T00:00:00Z") },
+        frozen,
+      ),
+    ).toBe(true)
+  })
+
+  it("is never stale when the index is fresh", () => {
+    expect(
+      eventStale(
+        { blockNumber: 1n, timestamp: 1 },
+        { ...frozen, state: "fresh" },
+      ),
+    ).toBe(false)
+    expect(eventStale({ blockNumber: 1n, timestamp: 1 }, undefined)).toBe(false)
+  })
+})
+
+describe("unnamed gauges", () => {
+  it("say what the address is on protocol rows", () => {
+    const killed = groupEvents([
+      item({ kind: "protocol", actionType: "GAUGE_KILLED", gauge: G1 }),
+    ])[0]
+    if (!killed) throw new Error("expected an event")
+    expect(eventTitle(killed, { gauge: () => null })).toBe(
+      "Gauge killed · gauge 0x0000…00a1",
+    )
   })
 })

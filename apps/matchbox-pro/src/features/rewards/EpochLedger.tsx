@@ -15,6 +15,8 @@ import {
 
 type EpochLedgerProps = {
   status: "loading" | "ready" | "unavailable" | "error"
+  /** A price read is still retrying: a missing USD shows "—", not "Unpriced". */
+  pricesPending: boolean
   rows: LedgerRow[]
   gaugeName: (gauge: string) => string | null
   epochLabel: (epochStart: number) => string
@@ -35,6 +37,7 @@ const numericHead = cn(headClass, "text-right")
  */
 export default function EpochLedger({
   status,
+  pricesPending,
   rows,
   gaugeName,
   epochLabel,
@@ -140,6 +143,7 @@ export default function EpochLedger({
                     <LedgerLine
                       key={row.id}
                       row={row}
+                      pricesPending={pricesPending}
                       gaugeName={gaugeName(row.gauge)}
                       epochLabel={epochLabel(row.epochStart)}
                     />
@@ -163,16 +167,31 @@ export default function EpochLedger({
   )
 }
 
+/**
+ * USD at earn: pending rows haven't been earned yet ("—"); a missing price
+ * is "Unpriced" once prices have settled, "—" while a read is retrying.
+ */
+export function atEarnLabel(row: LedgerRow, pricesPending: boolean): string {
+  if (row.status === "pending") return "—"
+  if (row.usdAtEarnMicro !== null) return formatMicroUsd(row.usdAtEarnMicro)
+  return pricesPending ? "—" : "Unpriced"
+}
+
 function LedgerLine({
   row,
+  pricesPending,
   gaugeName,
   epochLabel,
 }: {
   row: LedgerRow
+  pricesPending: boolean
   gaugeName: string | null
   epochLabel: string
 }): ReactElement {
-  const unpriced = row.usdAtEarnMicro === null && row.usdNowMicro === null
+  const unpriced =
+    !pricesPending &&
+    row.usdNowMicro === null &&
+    (row.status === "pending" || row.usdAtEarnMicro === null)
   return (
     <tr className="border-b border-line text-label">
       <td className="whitespace-nowrap py-2 pr-3 font-mono text-secondary tabular-nums xl:py-2.5 xl:text-ink">
@@ -191,14 +210,14 @@ function LedgerLine({
         {ledgerNative(row)}
       </td>
       <td className="hidden py-2.5 pr-3 text-right font-mono text-ink tabular-nums xl:table-cell">
-        {row.usdAtEarnMicro === null
-          ? "Unpriced"
-          : formatMicroUsd(row.usdAtEarnMicro)}
+        {atEarnLabel(row, pricesPending)}
       </td>
       <td className="hidden py-2.5 pr-3 text-right font-mono text-secondary tabular-nums xl:table-cell">
-        {row.usdNowMicro === null
-          ? "Unpriced"
-          : formatMicroUsd(row.usdNowMicro)}
+        {row.usdNowMicro !== null
+          ? formatMicroUsd(row.usdNowMicro)
+          : pricesPending
+            ? "—"
+            : "Unpriced"}
       </td>
       <td
         className={cn(

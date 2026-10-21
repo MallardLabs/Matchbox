@@ -50,7 +50,7 @@ export default function ClaimPanel({
     <section
       aria-labelledby="claimable-heading"
       aria-busy={status === "loading" || undefined}
-      className="flex min-w-0 flex-col gap-3 md:max-w-[680px] xl:max-w-[635px] xl:gap-2.5"
+      className="flex min-w-0 flex-col gap-3 xl:max-w-[635px] xl:gap-2.5"
     >
       <h2
         id="claimable-heading"

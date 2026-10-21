@@ -26,10 +26,16 @@ export default function TextSelect({
         id={id}
         value={value}
         onChange={(change) => onChange(change.target.value)}
-        className="cursor-pointer appearance-none rounded bg-transparent pr-4 text-label text-muted [field-sizing:content] hover:text-ink"
+        className="cursor-pointer appearance-none rounded bg-transparent pr-4 text-label text-muted [field-sizing:content] hover:text-ink focus-visible:text-ink"
       >
         {options.map((option) => (
-          <option key={option.value} value={option.value}>
+          // Explicit colors: the native list ignores the page theme on
+          // Windows dark mode otherwise.
+          <option
+            key={option.value}
+            value={option.value}
+            className="bg-surface text-ink"
+          >
             {option.label}
           </option>
         ))}

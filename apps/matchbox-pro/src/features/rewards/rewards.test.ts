@@ -1,6 +1,7 @@
 import type { LedgerRow, SealedEpochEarnings } from "@/features/history/parse"
 import type { ClaimableRow } from "@/hooks/useClaimable"
 import { describe, expect, it } from "vitest"
+import { atEarnLabel } from "./EpochLedger"
 import {
   retryFrom,
   runPhase,
@@ -276,9 +277,9 @@ describe("ledger model", () => {
   const now = 1_792_100_000
   const current = epochStartOf(now)
 
-  it("bounds periods by sealed epochs", () => {
+  it("bounds periods: this epoch only, or eight sealed plus current", () => {
     expect(current % EPOCH_SECONDS).toBe(0)
-    expect(periodFrom("epoch", now)).toBe(current - EPOCH_SECONDS)
+    expect(periodFrom("epoch", now)).toBe(current)
     expect(periodFrom("last-8", now)).toBe(current - 8 * EPOCH_SECONDS)
     expect(periodFrom("lifetime", now)).toBeUndefined()
   })
@@ -314,6 +315,16 @@ describe("ledger model", () => {
     expect(bars[1]?.display).toBe("—")
     expect(bars[8]?.label).toBe("Next")
     expect(realizedBars([], null)[0]?.tone).toBe("unavailable")
+  })
+
+  it("marks a partly priced epoch as a lower bound", () => {
+    const epoch = {
+      ...sealed(current - EPOCH_SECONDS, 760_000n),
+      unpriced: 1,
+    }
+    const [bar] = realizedBars([epoch], null)
+    expect(bar?.display).toBe("≥$0.76")
+    expect(bar?.tone).toBe("current")
   })
 
   const row: LedgerRow = {
@@ -356,5 +367,48 @@ describe("ledger model", () => {
     expect(line?.[14]).toBe("241.2")
     expect(line?.[15]).toBe("298.110000")
     expect(line?.[16]).toBeNull()
+  })
+})
+
+describe("ledger USD at earn", () => {
+  const base = {
+    id: "1",
+    epochStart: 0,
+    epochEnd: 604_800,
+    date: "",
+    tokenId: 1n,
+    escrow: "veMEZO" as const,
+    voter: "boost" as const,
+    gauge: "0x0000000000000000000000000000000000000b01",
+    rewardContract: "0x0000000000000000000000000000000000000c01",
+    rewardType: "Bribe" as const,
+    token: "0x7b7c000000000000000000000000000000000001",
+    symbol: "MEZO",
+    decimals: 18,
+    amount: 1n,
+    balance: 1n,
+    supply: 1n,
+    deposited: 1n,
+    usdAtEarnMicro: null,
+    usdNowMicro: 440_000n,
+    claim: null,
+    method: "rpc-checkpoints-v1" as const,
+  }
+
+  it("shows a dash for pending rows, never Unpriced", () => {
+    expect(atEarnLabel({ ...base, status: "pending" }, false)).toBe("—")
+  })
+
+  it("says Unpriced only once prices have settled", () => {
+    expect(atEarnLabel({ ...base, status: "claimable" }, false)).toBe(
+      "Unpriced",
+    )
+    expect(atEarnLabel({ ...base, status: "claimable" }, true)).toBe("—")
+    expect(
+      atEarnLabel(
+        { ...base, status: "claimed", usdAtEarnMicro: 480_000n },
+        false,
+      ),
+    ).toBe("$0.48")
   })
 })

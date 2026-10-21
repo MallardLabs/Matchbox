@@ -3,6 +3,7 @@ import type {
   LedgerStatus,
   SealedEpochEarnings,
 } from "@/features/history/parse"
+import { epochNumberFor } from "@/lib/epoch"
 import { formatMicroUsd, microUsdToDecimalString } from "@/lib/money"
 import type { Bar } from "@repo/ui/bar-chart"
 import { formatNative } from "./claimSources"
@@ -23,42 +24,46 @@ export function epochStartOf(nowSeconds: number): number {
 }
 
 /**
- * Oldest epochStart a period's ledger includes: the latest sealed epoch for
- * "This epoch", eight sealed epochs for "Last 8"; the in-progress epoch's
- * pending rows are always included. Undefined = no lower bound.
+ * Oldest epochStart a period includes. "This epoch" is the in-progress epoch
+ * only; "Last 8" is the eight sealed epochs the chart draws plus the current
+ * one. Activity uses the same windows. Undefined = no lower bound.
  */
 export function periodFrom(
   period: PeriodId,
   nowSeconds: number,
 ): number | undefined {
   const current = epochStartOf(nowSeconds)
-  if (period === "epoch") return current - EPOCH_SECONDS
-  if (period === "last-8") return current - 8 * EPOCH_SECONDS
+  if (period === "epoch") return current
+  if (period === "last-8") return current - CHART_EPOCHS * EPOCH_SECONDS
   return undefined
 }
 
 /** Sealed epochs the chart draws before the projected "Next" bar. */
 export const CHART_EPOCHS = 8
 
-const MONTHS = [
-  "Jan",
-  "Feb",
-  "Mar",
-  "Apr",
-  "May",
-  "Jun",
-  "Jul",
-  "Aug",
-  "Sep",
-  "Oct",
-  "Nov",
-  "Dec",
-]
+const EPOCH_DATE = new Intl.DateTimeFormat("en-US", {
+  timeZone: "UTC",
+  month: "short",
+  day: "2-digit",
+})
 
-/** "Oct 15" (UTC). */
+/** "Oct 15" (UTC; epochs turn over at 00:00 UTC Thursday). */
 export function formatEpochDate(seconds: number): string {
-  const date = new Date(seconds * 1000)
-  return `${MONTHS[date.getUTCMonth()]} ${String(date.getUTCDate()).padStart(2, "0")}`
+  return EPOCH_DATE.format(new Date(seconds * 1000))
+}
+
+/**
+ * The app-wide epoch name: the Classic number ("6", Epoch 0 = 3 Sep 2026),
+ * or the start date for epochs before launch.
+ */
+export function epochShort(epochStart: number): string {
+  const number = epochNumberFor(BigInt(epochStart))
+  return number === null ? formatEpochDate(epochStart) : String(number)
+}
+
+/** "Epoch 6", or "Epoch Aug 20" before launch. */
+export function epochTitle(epochStart: number): string {
+  return `Epoch ${epochShort(epochStart)}`
 }
 
 function groupThousands(value: bigint): string {
@@ -90,7 +95,9 @@ function microToNumber(micro: bigint): number {
 
 /**
  * Realized USD at earn for the last sealed epochs (newest highlighted), then
- * the in-progress epoch as a projected "Next" bar.
+ * the in-progress epoch as a projected "Next" bar. An epoch with unpriced
+ * lines shows its priced part as a lower bound ("≥$0.76"), never as if it
+ * were the whole epoch.
  */
 export function realizedBars(
   epochs: SealedEpochEarnings[],
@@ -101,11 +108,12 @@ export function realizedBars(
     ...recent.map((epoch, index): Bar => {
       const value = epoch.usdAtEarnMicro
       const latest = index === recent.length - 1
+      const bound = epoch.unpriced > 0 ? "≥" : ""
       return {
         key: String(epoch.epochStart),
-        label: formatEpochDate(epoch.epochStart),
+        label: epochShort(epoch.epochStart),
         value: value === null ? null : microToNumber(value),
-        display: value === null ? "—" : formatUsdShort(value),
+        display: value === null ? "—" : `${bound}${formatUsdShort(value)}`,
         tone: value === null ? "unavailable" : latest ? "current" : "past",
       }
     }),
@@ -127,7 +135,7 @@ export function emptyBars(nowSeconds: number): Bar[] {
       const start = current - (CHART_EPOCHS - index) * EPOCH_SECONDS
       return {
         key: String(start),
-        label: formatEpochDate(start),
+        label: epochShort(start),
         value: null,
         display: "—",
         tone: "unavailable",
@@ -208,6 +216,7 @@ export const LEDGER_CSV_HEADERS = [
   "status",
   "claim_tx",
   "method",
+  "epoch",
 ]
 
 function decimalAmount(amount: bigint, decimals: number): string {
@@ -244,5 +253,6 @@ export function ledgerCsvRows(
     row.status,
     row.claim?.txHash ?? null,
     row.method,
+    epochNumberFor(BigInt(row.epochStart)),
   ])
 }
