@@ -81,7 +81,7 @@ export default function TransferSheet({
             <Input.Root
               size="lg"
               name="recipient"
-              placeholder="0x"
+              placeholder="0x…"
               autoComplete="off"
               spellCheck={false}
               value={recipient}

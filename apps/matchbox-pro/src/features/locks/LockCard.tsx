@@ -8,6 +8,7 @@ import { useLockFlows } from "./LockFlows"
 import {
   type LockView,
   boostLabel,
+  exactLockAmount,
   formatLockAmount,
   formatVotingPower,
   lockStatus,
@@ -15,6 +16,10 @@ import {
 
 // React 18 types have no `inert`; the empty string sets the attribute.
 const inert = { inert: "" }
+
+// 24px on the tile, with a 44px-tall hit area in the card's bottom padding.
+const footerAction =
+  "relative -mx-1 h-6 rounded-md px-1 transition-colors after:absolute after:-inset-x-1 after:-inset-y-2.5 after:content-[''] hover:bg-ink/5"
 
 /**
  * J01/J02 lock tile. Face-up shows the position; activating it flips to the
@@ -62,6 +67,7 @@ export default function LockCard({
   }
 
   const amount = formatLockAmount(lock.kind, lock.amount)
+  const exact = exactLockAmount(lock.kind, lock.amount)
   const status = lockStatus(lock, nowSeconds)
 
   return (
@@ -89,7 +95,8 @@ export default function LockCard({
           <button
             ref={frontButton}
             type="button"
-            aria-label={`${lock.kind} #${lock.id}, ${amount}, ${status}. Actions`}
+            aria-label={`${lock.kind} #${lock.id}, ${amount.startsWith("<") ? exact : amount}, ${status}. Actions`}
+            title={exact}
             {...(tabletUp
               ? { "aria-expanded": showBack, "aria-controls": backId }
               : { "aria-haspopup": "dialog" as const })}
@@ -131,7 +138,7 @@ export default function LockCard({
                   type="button"
                   onClick={() => flip(false)}
                   aria-label={`Show the front of #${lock.id}`}
-                  className="-mr-1 flex size-6 items-center justify-center rounded-md text-secondary transition-colors hover:bg-ink/5 hover:text-ink"
+                  className="relative -mr-1 flex size-6 items-center justify-center rounded-md text-secondary transition-colors after:absolute after:-inset-2.5 after:content-[''] hover:bg-ink/5 hover:text-ink"
                 >
                   <RotateCcw aria-hidden="true" size={14} strokeWidth={1.75} />
                 </button>
@@ -147,7 +154,7 @@ export default function LockCard({
                 <button
                   type="button"
                   onClick={() => open({ type: "transfer", lock })}
-                  className="-ml-1 rounded-md px-1 transition-colors hover:bg-ink/5"
+                  className={footerAction}
                 >
                   Transfer
                 </button>
@@ -155,7 +162,7 @@ export default function LockCard({
                   <button
                     type="button"
                     onClick={() => open({ type: "merge", lock })}
-                    className="-mr-1 rounded-md px-1 transition-colors hover:bg-ink/5"
+                    className={footerAction}
                   >
                     Merge
                   </button>

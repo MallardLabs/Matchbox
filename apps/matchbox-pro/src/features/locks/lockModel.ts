@@ -1,4 +1,4 @@
-import { formatTokenAmountDigits } from "@/lib/money"
+import { formatFixedPoint, formatTokenAmountDigits } from "@/lib/money"
 import type { GaugeProfile } from "@/lib/supabase"
 import {
   type Address,
@@ -49,6 +49,23 @@ function lockDigits(
   return style === "long" && amount < WHOLE_FROM ? 2 : 0
 }
 
+// Below the tile's usual precision a non-empty lock must not read as zero:
+// show two significant digits, up to 8 decimals (1 sat for BTC).
+const SMALL_DIGITS = 8
+
+/** "0.1243", or "0.00005" / "<0.00000001" when the usual digits round to 0. */
+function formatAmount(amount: bigint, digits: number): string {
+  const text = formatTokenAmountDigits(amount, 18, digits)
+  if (amount <= 0n || /[1-9]/.test(text)) return text
+  if (amount < 10n ** BigInt(18 - SMALL_DIGITS)) {
+    return `<0.${"0".repeat(SMALL_DIGITS - 1)}1`
+  }
+  const fraction = amount.toString().padStart(18, "0")
+  const first = fraction.search(/[1-9]/)
+  const shown = Math.min(SMALL_DIGITS, first + 2)
+  return formatTokenAmountDigits(amount, 18, shown).replace(/0+$/, "")
+}
+
 /** Locked principal: "0.1243 BTC", "12,400.00 MEZO" (short: "12,400 MEZO"). */
 export function formatLockAmount(
   kind: LockKind,
@@ -56,7 +73,7 @@ export function formatLockAmount(
   style: AmountStyle = "long",
 ): string {
   const unit = kind === "veBTC" ? "BTC" : "MEZO"
-  return `${formatTokenAmountDigits(amount, 18, lockDigits(kind, amount, style))} ${unit}`
+  return `${formatAmount(amount, lockDigits(kind, amount, style))} ${unit}`
 }
 
 export function formatVotingPower(
@@ -64,7 +81,12 @@ export function formatVotingPower(
   votingPower: bigint,
   style: AmountStyle = "long",
 ): string {
-  return `${formatTokenAmountDigits(votingPower, 18, lockDigits(kind, votingPower, style))} ${kind}`
+  return `${formatAmount(votingPower, lockDigits(kind, votingPower, style))} ${kind}`
+}
+
+/** Full-precision amount for accessible labels and tooltips. */
+export function exactLockAmount(kind: LockKind, amount: bigint): string {
+  return `${formatFixedPoint(amount, 18)} ${kind === "veBTC" ? "BTC" : "MEZO"}`
 }
 
 export function isExpired(

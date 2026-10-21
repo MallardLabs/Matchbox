@@ -20,6 +20,7 @@ import {
   VE_MEZO_MAX_LOCK,
   WEEK_SECONDS,
   boostLabel,
+  exactLockAmount,
   formatLockAmount,
   formatRemaining,
   formatVotingPower,
@@ -184,6 +185,19 @@ describe("lock formatting", () => {
       "12,400 MEZO",
     )
     expect(formatVotingPower("veBTC", 6_215n * 10n ** 14n)).toBe("0.6215 veBTC")
+  })
+
+  it("never shows a non-empty lock as zero", () => {
+    // 0.00005 BTC: four decimals would read "0.0000".
+    expect(formatLockAmount("veBTC", 5n * 10n ** 13n)).toBe("0.00005 BTC")
+    expect(formatVotingPower("veBTC", 5n * 10n ** 13n)).toBe("0.00005 veBTC")
+    expect(formatLockAmount("veBTC", 123_456n * 10n ** 10n)).toBe("0.0012 BTC")
+    expect(formatLockAmount("veBTC", 1n)).toBe("<0.00000001 BTC")
+    expect(formatLockAmount("veBTC", 0n)).toBe("0.0000 BTC")
+    expect(formatLockAmount("veMEZO", 5n * 10n ** 17n, "short")).toBe(
+      "0.5 MEZO",
+    )
+    expect(exactLockAmount("veBTC", 5n * 10n ** 13n)).toBe("0.00005 BTC")
   })
 })
 
