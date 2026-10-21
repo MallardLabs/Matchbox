@@ -1,6 +1,7 @@
 import { CHAIN_ID, CONTRACTS, VOTING_ESCROW_ABI } from "@repo/shared/contracts"
 import { type Address, formatUnits, getAddress } from "viem"
 import { z } from "zod"
+import { optimizeRewardAllocations } from "@repo/shared/rewards"
 import {
   type GaugeAdapterOptions,
   type GaugeSnapshot,
@@ -9,7 +10,10 @@ import {
 import { proportionalUsd, usd, usdDecimal, zeroUsd } from "./money"
 
 const MAX_LOCKS_PER_ASSET = 256n
-const ALLOCATION_POINTS = 100
+// Every Mezo voter rejects ballots over maxVotingNum (30) targets.
+const MAX_TARGETS_PER_BALLOT = 30
+
+export const REWARD_OPTIMIZER_VERSION = "reward-optimizer-1.0.0"
 
 export const votingPositionSchema = z.object({
   governanceAsset: z.enum(["veMEZO", "veBTC"]),
@@ -25,8 +29,9 @@ export const optimizedAllocationSchema = z.object({
   gaugeType: z.enum(["boost", "pool", "vault", "validator"]),
   tokenPair: z.array(z.string()),
   pricingStatus: z.enum(["complete", "partial"]),
-  percentage: z.number().int().min(1).max(100),
-  basisPoints: z.number().int().min(100).max(10_000),
+  // Display only; basisPoints is what the ballot signs.
+  percentage: z.number().min(0.01).max(100),
+  basisPoints: z.number().int().min(1).max(10_000),
   depositedUsd: z.string(),
   projectedReturnUsd: z.string(),
   consistencyBps: z.number().int().min(0).max(10_000),
@@ -43,7 +48,7 @@ export const optimizedBallotSchema = z.object({
 
 export const voteOptimizationSchema = z.object({
   objective: z.literal("Best personal return"),
-  calculationVersion: z.literal("optimizer-live-v1"),
+  calculationVersion: z.literal(REWARD_OPTIMIZER_VERSION),
   chainId: z.literal(CHAIN_ID.mainnet),
   snapshotBlock: z.string(),
   generatedAt: z.string(),
@@ -222,13 +227,32 @@ export function repriceBallots(input: {
   })
 }
 
+function usdMicro(decimal: string): bigint {
+  const match = /^(\d+)(?:\.(\d+))?$/.exec(decimal.trim())
+  if (!match) return 0n
+  return (
+    BigInt(match[1] ?? "0") * 1_000_000n +
+    BigInt((match[2] ?? "").slice(0, 6).padEnd(6, "0"))
+  )
+}
+
+function usdCents(micro: bigint): string {
+  const cents = (micro + 5_000n) / 10_000n
+  return `${cents / 100n}.${(cents % 100n).toString().padStart(2, "0")}`
+}
+
+/**
+ * Adapter over Matchbox Pro's closed-form reward optimizer — the only
+ * optimizer. Each voting domain is solved once, jointly across every
+ * eligible lock, and each lock gets an independent ballot with the same
+ * basis-point vector (non-atomic, one signature per lock).
+ */
 export function optimizeGaugeSnapshot(input: {
   snapshot: GaugeSnapshot
   positions: VotingPosition[]
 }): VoteOptimization {
   const groups = new Map<string, GaugeSnapshot["gauges"]>()
   for (const gauge of input.snapshot.gauges) {
-    if (gauge.depositedUsd === "0") continue
     const key = `${gauge.votingContract.toLowerCase()}:${gauge.votingBucket}`
     const group = groups.get(key) ?? []
     group.push(gauge)
@@ -236,48 +260,59 @@ export function optimizeGaugeSnapshot(input: {
   }
 
   const ballots: z.infer<typeof optimizedBallotSchema>[] = []
+  let projectedTotal = 0n
   for (const gauges of groups.values()) {
     const firstGauge = gauges[0]
     if (!firstGauge) continue
     const eligiblePositions = input.positions.filter(
-      (position) => position.governanceAsset === firstGauge.governanceAsset,
+      (position) =>
+        position.governanceAsset === firstGauge.governanceAsset &&
+        BigInt(position.votingPower) > 0n,
     )
+    if (eligiblePositions.length === 0) continue
+    const votingPowers = eligiblePositions.map((position) =>
+      BigInt(position.votingPower),
+    )
+    let candidates = gauges.map((gauge) => ({
+      id: gauge.id,
+      existingWeight: BigInt(gauge.currentWeight),
+      incentiveValueMicroUsd: usdMicro(gauge.depositedUsd),
+    }))
+    let result = optimizeRewardAllocations({ gauges: candidates, votingPowers })
+    if (result && result.allocations.length > MAX_TARGETS_PER_BALLOT) {
+      const keep = new Set(
+        result.allocations
+          .slice(0, MAX_TARGETS_PER_BALLOT)
+          .map((allocation) => allocation.id),
+      )
+      candidates = candidates.filter((gauge) => keep.has(gauge.id))
+      result = optimizeRewardAllocations({ gauges: candidates, votingPowers })
+    }
+    if (!result) continue
+    const allocations = result.allocations.flatMap((allocation) => {
+      const gauge = gauges.find((candidate) => candidate.id === allocation.id)
+      return gauge ? [{ allocation, gauge }] : []
+    })
     for (const position of eligiblePositions) {
-      const points = new Map(gauges.map((gauge) => [gauge.id, 0]))
-      const votingPower = BigInt(position.votingPower)
-
-      for (let point = 0; point < ALLOCATION_POINTS; point += 1) {
-        let selected = gauges[0]
-        let selectedMarginal = zeroUsd()
-        for (const gauge of gauges) {
-          const currentPoints = points.get(gauge.id) ?? 0
-          const currentReturn = projectedGaugeReturn({
-            depositedUsd: gauge.depositedUsd,
-            currentWeight: BigInt(gauge.currentWeight),
-            votingPower,
-            allocationBasisPoints: currentPoints * 100,
-          })
-          const nextReturn = projectedGaugeReturn({
-            depositedUsd: gauge.depositedUsd,
-            currentWeight: BigInt(gauge.currentWeight),
-            votingPower,
-            allocationBasisPoints: (currentPoints + 1) * 100,
-          })
-          const marginal = nextReturn.subtract(currentReturn)
-          if (!selected || marginal.compare(selectedMarginal) > 0) {
-            selected = gauge
-            selectedMarginal = marginal
-          }
-        }
-        if (!selected) break
-        points.set(selected.id, (points.get(selected.id) ?? 0) + 1)
-      }
-
-      const allocations = gauges
-        .flatMap((gauge) => {
-          const percentage = points.get(gauge.id) ?? 0
-          if (percentage === 0) return []
-          return [
+      const power = BigInt(position.votingPower)
+      const rows = allocations.map(({ allocation, gauge }) => {
+        const lockWeight = (power * allocation.basisPoints) / 10_000n
+        const share =
+          allocation.voteWeight > 0n
+            ? (allocation.projectedRewardMicroUsd * lockWeight) /
+              allocation.voteWeight
+            : 0n
+        return { allocation, gauge, share }
+      })
+      const ballotProjected = rows.reduce((sum, row) => sum + row.share, 0n)
+      projectedTotal += ballotProjected
+      ballots.push(
+        optimizedBallotSchema.parse({
+          votingContract: firstGauge.votingContract,
+          votingBucket: firstGauge.votingBucket,
+          governanceAsset: firstGauge.governanceAsset,
+          position,
+          allocations: rows.map(({ allocation, gauge, share }) =>
             optimizedAllocationSchema.parse({
               gaugeId: gauge.id,
               gaugeAddress: gauge.address,
@@ -285,61 +320,32 @@ export function optimizeGaugeSnapshot(input: {
               gaugeType: gauge.type,
               tokenPair: gauge.tokenPair,
               pricingStatus: gauge.pricingStatus,
-              percentage,
-              basisPoints: percentage * 100,
+              percentage: Number(allocation.basisPoints) / 100,
+              basisPoints: Number(allocation.basisPoints),
               depositedUsd: gauge.depositedUsd,
-              projectedReturnUsd: usdDecimal(
-                projectedGaugeReturn({
-                  depositedUsd: gauge.depositedUsd,
-                  currentWeight: BigInt(gauge.currentWeight),
-                  votingPower,
-                  allocationBasisPoints: percentage * 100,
-                }),
-              ),
+              projectedReturnUsd: usdCents(share),
               consistencyBps: gauge.consistencyBps,
             }),
-          ]
-        })
-        .sort(
-          (left, right) =>
-            right.percentage - left.percentage ||
-            left.gaugeName.localeCompare(right.gaugeName),
-        )
-      if (allocations.length === 0) continue
-      const projectedTotal = allocations.reduce(
-        (total, allocation) => total.add(usd(allocation.projectedReturnUsd)),
-        zeroUsd(),
-      )
-      ballots.push(
-        optimizedBallotSchema.parse({
-          votingContract: firstGauge.votingContract,
-          votingBucket: firstGauge.votingBucket,
-          governanceAsset: firstGauge.governanceAsset,
-          position,
-          allocations,
-          projectedReturnUsd: usdDecimal(projectedTotal),
+          ),
+          projectedReturnUsd: usdCents(ballotProjected),
         }),
       )
     }
   }
 
-  const projectedTotal = ballots.reduce(
-    (total, ballot) => total.add(usd(ballot.projectedReturnUsd)),
-    zeroUsd(),
-  )
   const missing = (["veMEZO", "veBTC"] as const).filter(
     (asset) =>
       !input.positions.some((position) => position.governanceAsset === asset),
   )
   return voteOptimizationSchema.parse({
     objective: "Best personal return",
-    calculationVersion: "optimizer-live-v1",
+    calculationVersion: REWARD_OPTIMIZER_VERSION,
     chainId: input.snapshot.chainId,
     snapshotBlock: input.snapshot.blockNumber,
     generatedAt: input.snapshot.generatedAt,
     positions: input.positions,
     ballots,
-    projectedTotalUsd: usdDecimal(projectedTotal),
+    projectedTotalUsd: usdCents(projectedTotal),
     notices: missing.map(
       (asset) => `No eligible ${asset} lock was found for this wallet.`,
     ),

@@ -1,7 +1,12 @@
 import { CHAIN_ID, CONTRACTS } from "@repo/shared/contracts"
 import { describe, expect, it } from "vitest"
+import { optimizeRewardAllocations } from "@repo/shared/rewards"
 import { gaugeSnapshotSchema } from "./adapters/matchbox-gauges"
-import { optimizeGaugeSnapshot, votingPositionSchema } from "./optimizer"
+import {
+  REWARD_OPTIMIZER_VERSION,
+  optimizeGaugeSnapshot,
+  votingPositionSchema,
+} from "./optimizer"
 
 const snapshot = gaugeSnapshotSchema.parse({
   chainId: CHAIN_ID.mainnet,
@@ -54,7 +59,7 @@ const snapshot = gaugeSnapshotSchema.parse({
 })
 
 describe("gauge optimizer", () => {
-  it("allocates a full ballot using exact integer percentages", () => {
+  it("allocates a full ballot in exact basis points", () => {
     const position = votingPositionSchema.parse({
       governanceAsset: "veBTC",
       tokenId: "42",
@@ -67,12 +72,12 @@ describe("gauge optimizer", () => {
     expect(ballot).toBeDefined()
     expect(
       ballot?.allocations.reduce(
-        (total, allocation) => total + allocation.percentage,
+        (total, allocation) => total + allocation.basisPoints,
         0,
       ),
-    ).toBe(100)
+    ).toBe(10_000)
     expect(result.projectedTotalUsd).toMatch(/^[1-9]/)
-    expect(result.calculationVersion).toBe("optimizer-live-v1")
+    expect(result.calculationVersion).toBe(REWARD_OPTIMIZER_VERSION)
   })
 
   it("returns rankings without inventing an eligible wallet position", () => {
@@ -85,7 +90,36 @@ describe("gauge optimizer", () => {
     )
   })
 
-  it("emits one complete independent ballot for every eligible lock", () => {
+  it("matches Pro's reward optimizer exactly (one optimizer)", () => {
+    const position = votingPositionSchema.parse({
+      governanceAsset: "veBTC",
+      tokenId: "42",
+      votingPower: "50000000000000000000",
+      votingPowerFormatted: "50",
+    })
+    const result = optimizeGaugeSnapshot({ snapshot, positions: [position] })
+    const direct = optimizeRewardAllocations({
+      gauges: snapshot.gauges.map((gauge) => ({
+        id: gauge.id,
+        existingWeight: BigInt(gauge.currentWeight),
+        incentiveValueMicroUsd: BigInt(gauge.depositedUsd) * 1_000_000n,
+      })),
+      votingPowers: [50n * 10n ** 18n],
+    })
+    expect(
+      result.ballots[0]?.allocations.map((allocation) => [
+        allocation.gaugeId,
+        allocation.basisPoints,
+      ]),
+    ).toEqual(
+      direct?.allocations.map((allocation) => [
+        allocation.id,
+        Number(allocation.basisPoints),
+      ]),
+    )
+  })
+
+  it("optimizes multiple locks jointly, one independent ballot each", () => {
     const positions = ["42", "43"].map((tokenId) =>
       votingPositionSchema.parse({
         governanceAsset: "veBTC",
