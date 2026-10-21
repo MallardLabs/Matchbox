@@ -1,5 +1,8 @@
 import type { Address } from "viem"
+import type { WireGaugeEpochs } from "../../features/history/schema"
 import type { VoteBranch, WalletMode } from "../../features/query/contract"
+import { gaugeEpochs } from "../history/gauges"
+import { type BoostState, loadBoostState } from "./providers/boost"
 import { type BridgeSearch, searchBridgeOperations } from "./providers/bridge"
 import { type ClaimableLock, loadClaimable } from "./providers/claims"
 import { type TroveSnapshot, loadTrove } from "./providers/loans"
@@ -78,6 +81,13 @@ export type StuartProviders = {
     limit: number,
     direction: "in" | "out" | null,
   ) => Promise<BridgeSearch>
+  boostState: (tokenId: bigint | null) => Promise<BoostState>
+  // Boost gauges only: the history worker's per-epoch rows, newest first.
+  gaugeHistory: (
+    gauge: Address,
+    count: number,
+    boostTokenId: bigint | null,
+  ) => Promise<WireGaugeEpochs>
 }
 
 export type StuartWallet = {
@@ -162,5 +172,15 @@ export function createLiveProviders(input: {
     simulateSequence: (from, calls) => simulateSequence(client, from, calls),
     bridge: (address, limit, direction) =>
       searchBridgeOperations({ address, limit, direction }),
+    boostState: (tokenId) => loadBoostState(client, tokenId),
+    gaugeHistory: (gauge, count, boostTokenId) =>
+      gaugeEpochs({
+        // The history worker keys boost gauges by lowercase address.
+        gauge: `0x${gauge.slice(2).toLowerCase()}`,
+        count,
+        boostTokenId: boostTokenId ?? undefined,
+        now: input.nowSeconds(),
+        env: { BASE_RPC_URL: input.baseRpcUrl },
+      }),
   }
 }

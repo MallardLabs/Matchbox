@@ -27,6 +27,13 @@ export const POOLS_VOTER_GAUGE_ABI = parseAbi([
   "function gauges(address) view returns (address)",
 ])
 
+export const BOOST_ABI = parseAbi([
+  "function getBoost(uint256 boostableTokenId) view returns (uint256)",
+  "function unboostedVotingPowerOfNFT(uint256) view returns (uint256)",
+  "function unboostedTotalVotingPower() view returns (uint256)",
+  "function totalVotingPower() view returns (uint256)",
+])
+
 export const REWARD_ABI = parseAbi([
   "function rewardsListLength() view returns (uint256)",
   "function rewards(uint256) view returns (address)",

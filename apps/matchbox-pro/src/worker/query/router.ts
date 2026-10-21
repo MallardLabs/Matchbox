@@ -167,6 +167,47 @@ export function zapDecision(slots: QuerySlots): RouterDecision {
   }
 }
 
+const EXPLAIN_PATTERNS: Array<{
+  pattern: RegExp
+  question: "overview" | "apy_change" | "not_selected"
+}> = [
+  {
+    pattern:
+      /\bwhy (?:is|did|has) (.+?)(?:'s)? (?:apy|apr|yield|return)s? (?:down|up|lower|higher|drop(?:ping|ped)?|fall(?:ing|en)?|fell|chang(?:e|ed|ing)|move[ds]?)\b/i,
+    question: "apy_change",
+  },
+  {
+    pattern:
+      /\bwhy (?:isn't|is not|wasn't|was not|didn't|did not) (.+?) (?:in my (?:ballot|votes?|allocation)|(?:get )?(?:selected|picked|chosen))\b/i,
+    question: "not_selected",
+  },
+  {
+    pattern:
+      /^(?:explain|tell me about|show me|how is|what about)\s+(?:the\s+)?(.+?)\s+(?:gauge|validator|pool|vault)\b/i,
+    question: "overview",
+  },
+  {
+    pattern:
+      /^(?:explain|tell me about)\s+(?:the\s+)?(?:gauge|validator|pool)\s+(.+?)\??$/i,
+    question: "overview",
+  },
+]
+
+function explainDecision(query: string): RouterDecision | null {
+  for (const { pattern, question } of EXPLAIN_PATTERNS) {
+    const name = pattern.exec(query.trim())?.[1]?.trim()
+    if (name && name.length <= 80) {
+      return {
+        kind: "tool",
+        intent: "explain_gauge",
+        tool: "explain_gauge",
+        input: { gauge: name, question, window: null },
+      }
+    }
+  }
+  return null
+}
+
 export function routeQuery(query: string): RouterDecision {
   const text = query.toLowerCase().trim()
   const slots = extractSlots(query)
@@ -275,6 +316,9 @@ export function routeQuery(query: string): RouterDecision {
       input: { sources: null, lockIds: null },
     }
   }
+
+  const explain = explainDecision(query)
+  if (explain) return explain
 
   if (/\b(zap|vaults?|savings|smusd|deposit)\b/.test(text)) {
     return zapDecision(slots)

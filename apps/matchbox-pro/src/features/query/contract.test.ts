@@ -77,7 +77,7 @@ describe("Stuart contract", () => {
       (option) => option.shape.type.value,
     )
     expect([...options].sort()).toEqual([...UI_BLOCK_TYPES].sort())
-    expect(UI_BLOCK_TYPES).toHaveLength(14)
+    expect(UI_BLOCK_TYPES).toHaveLength(15)
   })
 
   it("keeps money as fixed 6-dp strings, never numbers", () => {

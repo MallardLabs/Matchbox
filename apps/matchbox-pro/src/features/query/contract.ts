@@ -783,6 +783,53 @@ export const sourceClusterBlockSchema = z.object({
   type: z.literal("source_cluster"),
 })
 
+// One gauge explained (palette "Why is Stackbridge APY down?"): identity,
+// this epoch's incentives, weight, boost, optimal veMEZO and recent epochs.
+export const gaugeExplainBlockSchema = z.object({
+  ...blockBase,
+  type: z.literal("gauge_explain"),
+  target: z.object({
+    targetAddress: addressSchema,
+    name: z.string().max(80), // untrusted profile text: render escaped
+    nameSource: z.enum(["profile", "derived"]),
+    tokenId: uintStringSchema.nullable(), // veBTC #id behind a boost gauge
+    branch: voteBranchSchema,
+    isAlive: z.boolean(),
+  }),
+  incentivesUsd: usd6Schema.nullable(), // null = unpriced, never $0
+  pricingStatus: z.enum(["complete", "partial", "unpriced"]),
+  incentives: z.array(tokenAmountSchema).max(16), // this epoch
+  weight: tokenAmountSchema, // current votes on the target
+  apyBps: z.number().int().nullable(),
+  boostWad: uintStringSchema.nullable(), // 1e18 = 1×
+  optimalVeMEZO: tokenAmountSchema.nullable(), // weight that reaches 5×
+  additionalVeMEZO: tokenAmountSchema.nullable(),
+  epochs: z
+    .array(
+      z.object({
+        epochStart: uintStringSchema,
+        status: z.enum(["sealed", "current"]),
+        incentivesUsd: usd6Schema.nullable(),
+        apyBps: z.number().int().nullable(),
+        weight: tokenAmountSchema,
+        boostWad: uintStringSchema.nullable(),
+      }),
+    )
+    .max(12),
+  historyStatus: z.enum(["live", "unavailable"]),
+  notSelectedReason: z
+    .enum([
+      "selected",
+      "not_alive",
+      "no_incentives",
+      "unpriced",
+      "below_cutoff",
+      "no_eligible_locks",
+    ])
+    .nullable(),
+  snapshotBlock: uintStringSchema,
+})
+
 export const uiBlockSchema = z.discriminatedUnion("type", [
   metricSummaryBlockSchema,
   gaugeRankingBlockSchema,
@@ -798,6 +845,7 @@ export const uiBlockSchema = z.discriminatedUnion("type", [
   activityTraceBlockSchema,
   bridgeRecordsBlockSchema,
   sourceClusterBlockSchema,
+  gaugeExplainBlockSchema,
 ])
 
 export const UI_BLOCK_TYPES = [
@@ -815,6 +863,7 @@ export const UI_BLOCK_TYPES = [
   "activity_trace",
   "bridge_records",
   "source_cluster",
+  "gauge_explain",
 ] as const
 
 // Frames 44/45 and the success toast: client dispatch state only, never sent
@@ -1114,6 +1163,7 @@ export type ActivityTraceBlock = z.infer<typeof activityTraceBlockSchema>
 export type BridgeRecord = z.infer<typeof bridgeRecordSchema>
 export type BridgeRecordsBlock = z.infer<typeof bridgeRecordsBlockSchema>
 export type SourceClusterBlock = z.infer<typeof sourceClusterBlockSchema>
+export type GaugeExplainBlock = z.infer<typeof gaugeExplainBlockSchema>
 export type UiBlock = z.infer<typeof uiBlockSchema>
 export type UiBlockType = UiBlock["type"]
 export type CallStatus = z.infer<typeof callStatusSchema>

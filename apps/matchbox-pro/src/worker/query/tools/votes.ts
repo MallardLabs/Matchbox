@@ -844,7 +844,7 @@ const allocationInput = z.object({
     .describe('Percent of voting power, up to 2 decimals, e.g. "33.33".'),
 })
 
-type TargetMatch =
+export type TargetMatch =
   | { kind: "match"; address: string }
   | { kind: "ambiguous"; options: PricedTarget[] }
   | { kind: "none" }
@@ -852,9 +852,16 @@ type TargetMatch =
 export function matchTarget(
   text: string,
   priced: ReadonlyMap<string, PricedTarget>,
+  options: { includeDead: boolean } = { includeDead: false },
 ): TargetMatch {
-  const needle = text.trim().toLowerCase()
-  const alive = [...priced.values()].filter((entry) => entry.target.isAlive)
+  const needle = text
+    .trim()
+    .toLowerCase()
+    .replace(/^the\s+/, "")
+    .replace(/\s+(gauge|validator|pool|vault)$/, "")
+  const alive = [...priced.values()].filter(
+    (entry) => options.includeDead || entry.target.isAlive,
+  )
   const byAddress = alive.find(
     (entry) => entry.target.targetAddress.toLowerCase() === needle,
   )

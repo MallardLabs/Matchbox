@@ -46,6 +46,23 @@ describe("Stuart routes", () => {
     expect(response?.headers.get("cache-control")).toBe("no-store")
   })
 
+  it("refuses cross-origin preflight on the Stuart POST routes", async () => {
+    for (const path of [
+      "/api/query",
+      "/api/proposal/refresh",
+      "/api/support-report",
+    ]) {
+      const response = await handleApiRequest(
+        new Request(`http://matchbox-pro.local${path}`, {
+          method: "OPTIONS",
+          headers: { origin: "https://evil.example" },
+        }),
+      )
+      expect(response?.status).toBe(403)
+      expect(response?.headers.get("access-control-allow-origin")).toBeNull()
+    }
+  })
+
   it("rejects cross-site origins and fetch metadata", async () => {
     const foreign = await handleApiRequest(
       post("/api/query", {

@@ -23,6 +23,7 @@ export type StuartConfig = {
     query: RateLimitBinding | null
     refresh: RateLimitBinding | null
     support: RateLimitBinding | null
+    mcp: RateLimitBinding | null
   }
 }
 
@@ -93,6 +94,7 @@ export function readStuartConfig(env: WorkerEnv): StuartConfig {
       query: binding(source, "STUART_QUERY_LIMITER"),
       refresh: binding(source, "STUART_REFRESH_LIMITER"),
       support: binding(source, "STUART_SUPPORT_LIMITER"),
+      mcp: binding(source, "MCP_LIMITER"),
     },
   }
 }

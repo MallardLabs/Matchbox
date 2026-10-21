@@ -295,6 +295,46 @@ export function fakeProviders(
         sourceUrl: "https://api.wormholescan.io/api/v1/operations",
       }
     },
+    boostState: async (tokenId) => {
+      count("boostState")
+      return {
+        boostWad: tokenId === null ? null : (42n * E18) / 10n,
+        unboostedVotingPower: tokenId === null ? null : 2n * E18,
+        veMezoTotal: 1_000_000n * E18,
+        veBtcUnboostedTotal: 1_000n * E18,
+        blockNumber: 12_482_113n,
+      }
+    },
+    gaugeHistory: async (_gauge, epochs) => {
+      count("gaugeHistory")
+      return {
+        rows: Array.from({ length: epochs }, (_, index) => {
+          const epoch = EPOCH_START - BigInt(index) * 604_800n
+          // Incentives fell and votes rose: APY down.
+          const incentives = index === 0 ? "300.000000" : "400.000000"
+          const veMezo = (index === 0 ? 1_000n : 800n) * E18
+          return {
+            epochStart: epoch.toString(),
+            epochEnd: (epoch + 604_800n).toString(),
+            status: index === 0 ? ("current" as const) : ("sealed" as const),
+            veMezo: veMezo.toString(),
+            boostWad: ((42n * E18) / 10n).toString(),
+            incentives: [
+              {
+                token: MEZO,
+                symbol: "MEZO",
+                decimals: 18,
+                amount: (30_000n * E18).toString(),
+                usdAtEarn: null,
+                usdNow: incentives,
+              },
+            ],
+            incentivesUsd: incentives,
+            apyBps: index === 0 ? "15600" : "26000",
+          }
+        }),
+      }
+    },
     ...overrides,
   }
 }

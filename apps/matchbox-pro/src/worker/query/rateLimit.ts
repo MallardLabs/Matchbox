@@ -16,6 +16,11 @@ export const REFRESH_LIMIT: RateLimitPolicy = {
   limit: 30,
   periodSeconds: 60,
 }
+export const MCP_LIMIT: RateLimitPolicy = {
+  name: "mcp",
+  limit: 30,
+  periodSeconds: 60,
+}
 export const SUPPORT_LIMIT: RateLimitPolicy = {
   name: "support",
   limit: 3,
