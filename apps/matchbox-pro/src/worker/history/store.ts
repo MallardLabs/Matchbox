@@ -77,7 +77,12 @@ export async function persistedGet(key: string): Promise<unknown> {
   }
 }
 
-export async function persistedPut(key: string, value: unknown): Promise<void> {
+/** Stores `value` for `maxAgeSeconds` (default: a year, for sealed values). */
+export async function persistedPut(
+  key: string,
+  value: unknown,
+  maxAgeSeconds?: number,
+): Promise<void> {
   const cache = edgeCache()
   if (!cache) return
   try {
@@ -86,7 +91,10 @@ export async function persistedPut(key: string, value: unknown): Promise<void> {
       new Response(JSON.stringify(value), {
         headers: {
           "content-type": "application/json",
-          "cache-control": "public, max-age=31536000, immutable",
+          "cache-control":
+            maxAgeSeconds === undefined
+              ? "public, max-age=31536000, immutable"
+              : `public, max-age=${maxAgeSeconds}`,
         },
       }),
     )

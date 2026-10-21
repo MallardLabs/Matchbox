@@ -22,7 +22,7 @@ import {
   type SqlQuery,
   type SqlRow,
   WarehouseUnavailableError,
-  queryBatch,
+  queryBatchCached,
   sqlParams,
 } from "./neon"
 
@@ -33,7 +33,12 @@ import {
 
 const DEFAULT_EXPLORER_ORIGIN = "https://app.matchbox.markets"
 const NETWORK = "mezo"
-const STALE_SECONDS = 600
+/**
+ * The indexer writes every 15 minutes and warehouse reads are cached 5, so
+ * normal lag reaches ~20 minutes; stale means a missed tick on top of that
+ * (45 minutes, ~700 blocks at 3.84 s).
+ */
+const STALE_SECONDS = 2_700
 const SECONDS_PER_BLOCK = 3.84
 /** Explorer actions that only the frozen subgraph serves (not earn-votes). */
 const EXPLORER_PROBE_ACTIONS =
@@ -242,7 +247,7 @@ async function warehouseActivity(
   let rows: SqlRow[]
   let checkpoint: SqlRow[]
   try {
-    ;[rows = [], checkpoint = []] = await queryBatch(
+    ;[rows = [], checkpoint = []] = await queryBatchCached(
       url,
       [buildWarehouseActivityQuery(query), CHECKPOINT_QUERY],
       fetcher,
@@ -436,7 +441,7 @@ export async function activityFreshness(
     return explorerFreshness(config.explorerOrigin, fetcher)
   }
   try {
-    const [checkpoint = []] = await queryBatch(
+    const [checkpoint = []] = await queryBatchCached(
       config.warehouseUrl,
       [CHECKPOINT_QUERY],
       fetcher,
@@ -516,7 +521,7 @@ export async function queryTx(
     let rows: SqlRow[]
     let checkpoint: SqlRow[]
     try {
-      ;[rows = [], checkpoint = []] = await queryBatch(
+      ;[rows = [], checkpoint = []] = await queryBatchCached(
         config.warehouseUrl,
         [{ text, params }, CHECKPOINT_QUERY],
         fetcher,

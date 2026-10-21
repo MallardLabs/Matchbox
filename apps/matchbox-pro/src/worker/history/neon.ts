@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { persistedGet, persistedPut, timedGet, timedSet } from "./store"
 
 // Minimal Neon serverless-HTTP client (the protocol `@neondatabase/serverless`
 // `neon()` speaks): one POST per read-only batch, every value as text. Kept
@@ -101,4 +102,69 @@ export async function queryBatch(
       ),
     ),
   )
+}
+
+// ------------------------------------------------------------- cache
+
+/**
+ * How long a warehouse answer is reused. The indexer writes every 15 minutes
+ * and Neon (Free plan) stays awake 5 minutes after any query, so a shorter
+ * TTL would keep compute running under steady traffic; 300 s keeps it within
+ * the monthly CU-hours. Callers quantise "now" in params to this boundary so
+ * requests share keys.
+ */
+export const WAREHOUSE_TTL_SECONDS = 300
+
+const cachedRowsSchema = z.object({
+  at: z.number().int().nonnegative(),
+  results: z.array(z.array(z.record(z.string(), z.string().nullable()))),
+})
+
+/** Rounds a Unix time up to the next cache boundary. */
+export function quantiseNow(seconds: number): number {
+  return Math.ceil(seconds / WAREHOUSE_TTL_SECONDS) * WAREHOUSE_TTL_SECONDS
+}
+
+/** SHA-256 of the endpoint, query texts and serialized params. */
+export async function warehouseCacheKey(
+  connectionString: string,
+  queries: readonly SqlQuery[],
+): Promise<string> {
+  const material = JSON.stringify({
+    endpoint: sqlEndpoint(connectionString),
+    queries: queries.map((query) => [query.text, query.params.map(serialize)]),
+  })
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(material),
+  )
+  const hex = Array.from(new Uint8Array(digest), (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("")
+  return `warehouse:${hex}`
+}
+
+/**
+ * `queryBatch` behind a 300 s cache: a per-isolate memo, then the Workers
+ * Cache API (per colo), then Neon. Failures are never cached.
+ */
+export async function queryBatchCached(
+  connectionString: string,
+  queries: readonly SqlQuery[],
+  fetcher: typeof fetch = fetch,
+  nowMs: () => number = Date.now,
+): Promise<SqlRow[][]> {
+  const key = await warehouseCacheKey(connectionString, queries)
+  const ttlMs = WAREHOUSE_TTL_SECONDS * 1000
+  const memo = timedGet<SqlRow[][]>(key)
+  if (memo) return memo
+  const stored = cachedRowsSchema.safeParse(await persistedGet(key))
+  if (stored.success && stored.data.at + ttlMs > nowMs()) {
+    timedSet(key, stored.data.results, stored.data.at + ttlMs - nowMs())
+    return stored.data.results
+  }
+  const results = await queryBatch(connectionString, queries, fetcher)
+  timedSet(key, results, ttlMs)
+  await persistedPut(key, { at: nowMs(), results }, WAREHOUSE_TTL_SECONDS)
+  return results
 }

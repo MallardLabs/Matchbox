@@ -1,6 +1,6 @@
 import { z } from "zod"
 import type { WireLedgerRow } from "../../features/history/schema"
-import { queryBatch, sqlParams } from "./neon"
+import { queryBatchCached, sqlParams } from "./neon"
 import type { SourceConfig } from "./sources"
 
 // Claim transactions for ledger rows, from the warehouse's bribe-claim rows
@@ -38,7 +38,7 @@ export async function warehouseDecoderVersion(
 ): Promise<number | null> {
   if (!config.warehouseUrl) return null
   try {
-    const [rows = []] = await queryBatch(
+    const [rows = []] = await queryBatchCached(
       config.warehouseUrl,
       [
         {
@@ -74,7 +74,7 @@ export async function walletClaims(
       AND reward_contract = ANY(${add(rewardContracts)}::text[])
     ORDER BY timestamp ASC, block_number ASC, log_index ASC`
   try {
-    const [rows = []] = await queryBatch(
+    const [rows = []] = await queryBatchCached(
       config.warehouseUrl,
       [{ text, params }],
       fetcher,

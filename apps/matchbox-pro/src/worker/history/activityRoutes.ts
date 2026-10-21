@@ -17,6 +17,7 @@ import {
   parseUint,
   withHistoryErrors,
 } from "./http"
+import { quantiseNow } from "./neon"
 import {
   type ActivityQuery,
   activityFreshness,
@@ -42,7 +43,9 @@ function timeRange(url: URL): { from: number; to: number } {
   const to = parseUint(url, "to")
   return {
     from: from === undefined ? 0 : Number(from),
-    to: to === undefined ? now : Number(to),
+    // An open-ended window ends at the next cache boundary, so requests in
+    // the same 5 minutes share one warehouse read.
+    to: to === undefined ? quantiseNow(now) : Number(to),
   }
 }
 

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("./chain", () => ({
   mezoHistoryClient: () => ({
@@ -7,13 +7,25 @@ vi.mock("./chain", () => ({
 }))
 
 const { encodeCursor } = await import("./http")
-const { pgArray, queryBatch, sqlEndpoint } = await import("./neon")
+const {
+  pgArray,
+  queryBatch,
+  queryBatchCached,
+  quantiseNow,
+  sqlEndpoint,
+  warehouseCacheKey,
+} = await import("./neon")
+const { clearHistoryMemo } = await import("./store")
 const {
   buildWarehouseActivityQuery,
   freshnessFrom,
   queryActivity,
   sourceConfig,
 } = await import("./sources")
+
+afterEach(() => {
+  clearHistoryMemo()
+})
 
 const WALLET = "0xf36593cd2e5eb2cc8ccbe5ad3b5bb2353cf98bc4"
 const BASE_QUERY = {
@@ -276,5 +288,81 @@ describe("queryActivity", () => {
     expect(result.nextCursor).toBeNull()
     // The explorer still had rows in range: flagged, not silently dropped.
     expect(result.truncated).toBe(true)
+  })
+})
+
+describe("warehouse read cache", () => {
+  const url = "postgres://u:p@ep-x.aws.neon.tech/db"
+  const query = { text: "SELECT 1", params: ["mezo", 1_792_000_200] }
+  const answer = () =>
+    jsonResponse({ results: [{ fields: [{ name: "n" }], rows: [["1"]] }] })
+
+  it("serves repeats from cache for 300 s, then reads again", async () => {
+    let now = 1_000_000
+    const fetcher = vi.fn(async () => answer())
+    const read = () =>
+      queryBatchCached(
+        url,
+        [query],
+        fetcher as unknown as typeof fetch,
+        () => now,
+      )
+    expect(await read()).toEqual([[{ n: "1" }]])
+    now += 299_000
+    await read()
+    expect(fetcher).toHaveBeenCalledTimes(1)
+    clearHistoryMemo()
+    now += 2_000
+    await read()
+    expect(fetcher).toHaveBeenCalledTimes(2)
+  })
+
+  it("never caches a failed read", async () => {
+    const down = vi.fn(async () => new Response("down", { status: 500 }))
+    await expect(
+      queryBatchCached(url, [query], down as unknown as typeof fetch),
+    ).rejects.toThrow()
+    const up = vi.fn(async () => answer())
+    await queryBatchCached(url, [query], up as unknown as typeof fetch)
+    expect(up).toHaveBeenCalledTimes(1)
+  })
+
+  it("keys by query and params, not credentials", async () => {
+    const a = await warehouseCacheKey(url, [query])
+    const b = await warehouseCacheKey(
+      "postgres://other:secret@ep-x.aws.neon.tech/db",
+      [query],
+    )
+    const c = await warehouseCacheKey(url, [{ ...query, params: ["mezo", 2] }])
+    expect(a).toMatch(/^warehouse:[0-9a-f]{64}$/)
+    expect(b).toBe(a)
+    expect(c).not.toBe(a)
+  })
+
+  it("quantises open-ended windows to the next 300 s boundary", () => {
+    expect(quantiseNow(1_792_000_001)).toBe(1_792_000_200)
+    expect(quantiseNow(1_792_000_200)).toBe(1_792_000_200)
+  })
+})
+
+describe("freshness with 15-minute indexer ticks", () => {
+  const now = 1_792_562_000
+  const fresh = (lagSeconds: number, lagBlocks: bigint) =>
+    freshnessFrom({
+      source: "warehouse",
+      indexedBlock: 12_656_982n - lagBlocks,
+      indexedAt: now - lagSeconds,
+      head: 12_656_982n,
+      now,
+      frozen: false,
+    }).state
+
+  it("is fresh through a normal tick plus cache (~20 min)", () => {
+    expect(fresh(1_200, 312n)).toBe("fresh")
+  })
+
+  it("is stale after a missed tick (45 min / ~700 blocks)", () => {
+    expect(fresh(2_800, 300n)).toBe("stale")
+    expect(fresh(600, 710n)).toBe("stale")
   })
 })
