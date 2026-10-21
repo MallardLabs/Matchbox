@@ -1,14 +1,3 @@
-// Deep imports: the passport barrel drags in its whole UI kit (mezo-clay) and
-// API clients, while the app only needs these orangekit re-exports.
-import {
-  mezoMainnet as passportMezoMainnet,
-  mezoTestnet as passportMezoTestnet,
-} from "@mezo-org/passport/dist/src/constants.js"
-import {
-  getOKXWallet,
-  getUnisatWallet,
-  getXverseWallet,
-} from "@mezo-org/passport/dist/src/wallet/index.js"
 import { type WalletList, getDefaultConfig } from "@rainbow-me/rainbowkit"
 import {
   bitgetWallet,
@@ -24,6 +13,11 @@ import {
 } from "@rainbow-me/rainbowkit/wallets"
 import { mainnet } from "viem/chains"
 import { http, type Config } from "wagmi"
+import { lazyBitcoinWallet } from "./bitcoinWallets"
+import {
+  mezoMainnet as passportMezoMainnet,
+  mezoTestnet as passportMezoTestnet,
+} from "./mezoChains"
 import { mezoTransport } from "./rpcWrite"
 
 const WALLET_CONNECT_PROJECT_ID =
@@ -60,16 +54,17 @@ function withHttpRpc(
 export const mezoMainnet = withHttpRpc(passportMezoMainnet, MAINNET_RPC)
 const mezoTestnet = withHttpRpc(passportMezoTestnet, TESTNET_RPC)
 
+// OrangeKit's connector code loads on demand (see ./bitcoinWallets).
 const bitcoinWallets = [
-  getUnisatWallet({
+  lazyBitcoinWallet("unisat", {
     rpcUrl: MAINNET_RPC,
     chainId: mezoMainnet.id,
   }),
-  getOKXWallet({
+  lazyBitcoinWallet("okx", {
     rpcUrl: MAINNET_RPC,
     chainId: mezoMainnet.id,
   }),
-  getXverseWallet({
+  lazyBitcoinWallet("xverse", {
     rpcUrl: MAINNET_RPC,
     chainId: mezoMainnet.id,
   }),
