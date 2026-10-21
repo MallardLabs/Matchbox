@@ -356,6 +356,59 @@ export function routeQuery(query: string): RouterDecision {
     }
   }
 
+  // "My APY" / "what am I earning": the wallet's own voting-incentive
+  // earnings, before the rewards and explain keywords can claim the words.
+  if (
+    /\bmy\s+(?:apy|apr|yield|earnings?|returns?|income)\b/.test(text) ||
+    /\bwhat\s+(?:am|are)\s+(?:i|we)\s+(?:earning|making|getting)\b/.test(
+      text,
+    ) ||
+    /\bhow\s+much\s+(?:am|do|have|did)\s+(?:i|we)\s+(?:earn|earning|earned|make|making|made)\b/.test(
+      text,
+    )
+  ) {
+    return {
+      kind: "tool",
+      intent: "wallet_earnings",
+      tool: "get_wallet_earnings",
+      input: {},
+    }
+  }
+
+  // "Which gauge pays the most", "best paying validators", "highest APY
+  // pools": incentives per vote, the Vote page's APY sort.
+  if (
+    /\bpays?\s+(?:the\s+)?(?:most|best|highest)\b/.test(text) ||
+    /\b(?:best|top|highest)[-\s]paying\b/.test(text) ||
+    /\b(?:highest|top|best|biggest)\s+(?:apy|apr|yield)s?\b/.test(text) ||
+    /\b(?:apy|apr|yield)\s+(?:leaders?|leaderboard|ranking)\b/.test(text)
+  ) {
+    return {
+      kind: "tool",
+      intent: "rank_gauges",
+      tool: "rank_gauges",
+      input: { objective: "highest_apy", branch: slots.branch, window: null },
+    }
+  }
+
+  // "Top incentives this epoch" and friends: gross deposited incentives.
+  if (
+    /\b(?:top|most|highest|largest|biggest)\s+(?:deposited\s+)?(?:incentives?|bribes?)\b/.test(
+      text,
+    )
+  ) {
+    return {
+      kind: "tool",
+      intent: "rank_gauges",
+      tool: "rank_gauges",
+      input: {
+        objective: "most_incentives_deposited",
+        branch: slots.branch,
+        window: null,
+      },
+    }
+  }
+
   const explain = explainDecision(query)
   if (explain) return explain
 

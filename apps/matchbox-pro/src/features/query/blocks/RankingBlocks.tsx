@@ -55,7 +55,10 @@ export function MetricSummary({
         {apy ? (
           <>
             APY {apy} is extrapolated
-            <span className="hidden xl:inline">, not the objective</span>.{" "}
+            {block.objectiveNote ? (
+              <span className="hidden xl:inline">, not the objective</span>
+            ) : null}
+            .{" "}
           </>
         ) : null}
         {block.snapshotBlock
@@ -70,6 +73,7 @@ const OBJECTIVE_TITLES: Record<GaugeRankingBlock["objective"], string> = {
   best_personal_return: "Recommended allocation",
   most_incentives_deposited: "Most incentives deposited",
   most_consistently_funded: "Most consistently funded",
+  highest_apy: "Highest APY",
 }
 
 const head = "pb-2 text-left text-caption font-400 text-muted"
@@ -91,6 +95,12 @@ export function GaugeRanking({
     block.rows.some((row) => row.depositedUsd !== null)
   const titleId = `${block.id}-title`
   const wide = compact ? "hidden" : "hidden xl:table-cell"
+  // APY ranks "highest_apy" (always shown); research rankings show it on
+  // desktop; the frame 32 allocation table keeps its five columns.
+  const hasApy =
+    block.objective !== "best_personal_return" &&
+    block.rows.some((row) => row.apyBps !== undefined)
+  const apyClass = block.objective === "highest_apy" ? "" : wide
 
   return (
     <section aria-labelledby={titleId} className="flex min-w-0 flex-col">
@@ -121,6 +131,11 @@ export function GaugeRanking({
             {hasAlloc ? (
               <th scope="col" className={cn(head, "w-16 pl-3")}>
                 Alloc
+              </th>
+            ) : null}
+            {hasApy ? (
+              <th scope="col" className={cn(head, apyClass, "w-20 pl-3")}>
+                APY
               </th>
             ) : null}
             {hasDeposited ? (
@@ -175,6 +190,22 @@ export function GaugeRanking({
                   {row.allocationBps === null
                     ? "—"
                     : formatBps(row.allocationBps)}
+                </td>
+              ) : null}
+              {hasApy ? (
+                <td
+                  className={cn(
+                    cell,
+                    apyClass,
+                    "w-20 pl-3 text-right font-600 md:text-body xl:text-left xl:text-body-sm",
+                    row.apyBps === null || row.apyBps === undefined
+                      ? "text-muted"
+                      : "text-pos",
+                  )}
+                >
+                  {row.apyBps === null || row.apyBps === undefined
+                    ? "—"
+                    : formatBps(row.apyBps)}
                 </td>
               ) : null}
               {hasDeposited ? (

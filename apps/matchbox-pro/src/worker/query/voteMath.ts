@@ -1,5 +1,6 @@
 import {
   type RewardOptimizerGauge,
+  calculateAnnualizedReturnBasisPoints,
   optimizeRewardAllocations,
 } from "../../lib/rewardOptimizer"
 import { type PriceSnapshot, tokenMicroUsd } from "./providers/prices"
@@ -230,4 +231,42 @@ export function percentToBps(text: string): number | null {
     Number.parseInt(match[1] ?? "0", 10) * 100 +
     Number.parseInt((match[2] ?? "").padEnd(2, "0") || "0", 10)
   return bps > 10_000 ? null : bps
+}
+
+// Above 10,000% an extrapolated APY says nothing useful; show none.
+const MAX_APY_BPS = 1_000_000n
+
+/**
+ * Extrapolated APY for one target at its current votes (the Vote page's APY
+ * column): epoch incentives × 52 over the votes' value in the escrow asset.
+ */
+export function targetApyBps(input: {
+  incentiveMicroUsd: bigint
+  weight: bigint
+  assetPriceMicroUsd: bigint | null
+}): number | null {
+  if (
+    input.assetPriceMicroUsd === null ||
+    input.weight <= 0n ||
+    input.incentiveMicroUsd <= 0n
+  ) {
+    return null
+  }
+  const apy = calculateAnnualizedReturnBasisPoints({
+    epochRewardMicroUsd: input.incentiveMicroUsd,
+    votingPowers: [input.weight],
+    assetPriceMicroUsd: input.assetPriceMicroUsd,
+  })
+  return apy !== null && apy <= MAX_APY_BPS ? Number(apy) : null
+}
+
+/** Descending incentives per vote; ties fall back to address order. */
+export function compareDensity(
+  left: PricedTarget,
+  right: PricedTarget,
+): number {
+  const a = left.incentiveMicroUsd * right.target.weight
+  const b = right.incentiveMicroUsd * left.target.weight
+  if (a !== b) return a > b ? -1 : 1
+  return left.target.targetAddress.localeCompare(right.target.targetAddress)
 }

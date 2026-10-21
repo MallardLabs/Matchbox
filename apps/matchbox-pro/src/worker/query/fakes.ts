@@ -305,6 +305,46 @@ export function fakeProviders(
         blockNumber: 12_482_113n,
       }
     },
+    walletEarnings: async () => {
+      count("walletEarnings")
+      const epoch = (start: bigint) => ({
+        epochStart: start.toString(),
+        epochEnd: (start + 604_800n).toString(),
+      })
+      const totals = (usd: string | null) => ({
+        tokens: [],
+        usdAtEarn: usd,
+        usdNow: usd,
+        unpriced: 0,
+      })
+      return {
+        tokenIds: ["4821", "4966"],
+        current: {
+          ...epoch(EPOCH_START),
+          status: "projected" as const,
+          tokens: [],
+          usdNow: "86.4",
+        },
+        epochs: [
+          {
+            ...epoch(EPOCH_START - 604_800n),
+            status: "sealed" as const,
+            tokens: [],
+            usdAtEarn: "72.105",
+            usdNow: "70",
+            unpriced: 0,
+          },
+        ],
+        totals: {
+          realized: totals("72.105"),
+          claimed: totals("0"),
+          claimable: totals("241.2"),
+          projected: totals("86.4"),
+        },
+        verified: true,
+        partial: false,
+      }
+    },
     gaugeHistory: async (_gauge, epochs) => {
       count("gaugeHistory")
       return {

@@ -52,7 +52,9 @@ import {
   priceTarget,
   projectAllocation,
   singleTokenTotal,
+  targetApyBps,
 } from "../voteMath"
+import { rankByApy } from "./apyRank"
 import {
   ZERO_WALLET,
   calcEvidence,
@@ -547,6 +549,11 @@ export async function presentVotePlan(
         fundedEpochs: null,
         observedEpochs: null,
         competingWeight: row.competing.toString(),
+        apyBps: targetApyBps({
+          incentiveMicroUsd: row.priced?.incentiveMicroUsd ?? 0n,
+          weight: row.priced?.target.weight ?? 0n,
+          assetPriceMicroUsd: price,
+        }),
       }
     }),
     proposalId: proposal?.proposalId ?? null,
@@ -1055,13 +1062,14 @@ const objectiveSchema = z.enum([
   "best_personal_return",
   "most_incentives_deposited",
   "most_consistently_funded",
+  "highest_apy",
 ])
 
 export const rankGaugesTool = defineTool({
   name: "rank_gauges",
   family: "votes",
   description:
-    "Rank voting targets. Objectives: best_personal_return (the optimizer, for the selected wallet), most_incentives_deposited (gross priced incentives this epoch), most_consistently_funded (funded epochs over the last 4/8/12 completed epochs). Never call it for an ambiguous 'best gauges' — ask_clarification gauge-objective instead.",
+    "Rank voting targets. Objectives: best_personal_return (the optimizer, for the selected wallet), most_incentives_deposited (gross priced incentives this epoch), most_consistently_funded (funded epochs over the last 4/8/12 completed epochs), highest_apy (incentives per vote at current votes: 'which gauge pays the most'). Never call it for an ambiguous 'best gauges' — ask_clarification gauge-objective instead.",
   input: z.object({
     objective: objectiveSchema,
     branch: branchSchema.nullable(),
@@ -1083,6 +1091,7 @@ export const rankGaugesTool = defineTool({
             : result,
         )
     }
+    if (input.objective === "highest_apy") return rankByApy(context, branch)
     const { scope } = context
     const asset = assetFor(branch)
     try {
@@ -1090,6 +1099,9 @@ export const rankGaugesTool = defineTool({
         context.providers.votingDomain(branch),
         context.providers.prices(),
       ])
+      const rankAssetPrice = priceMicroUsd(
+        branch === "boost" ? prices.mezo.priceUsd : prices.btc.priceUsd,
+      )
       const window = input.window ?? 8
       const funded =
         input.objective === "most_consistently_funded"
@@ -1233,6 +1245,11 @@ export const rankGaugesTool = defineTool({
               : null,
             observedEpochs: funded ? window : null,
             competingWeight: entry.existingWeight.toString(),
+            apyBps: targetApyBps({
+              incentiveMicroUsd: entry.incentiveMicroUsd,
+              weight: entry.target.weight,
+              assetPriceMicroUsd: rankAssetPrice,
+            }),
           })),
           proposalId: null,
           actions: ["open_vote_page"],

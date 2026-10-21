@@ -56,6 +56,7 @@ export const intentSchema = z.enum([
   "optimize_votes",
   "custom_vote",
   "explain_gauge",
+  "wallet_earnings",
   "claim_rewards",
   "earn_deposit",
   "zap",
@@ -406,6 +407,8 @@ export const gaugeRankingBlockSchema = z.object({
     "best_personal_return",
     "most_incentives_deposited",
     "most_consistently_funded",
+    // Incentives per vote (extrapolated APY), the Vote page's "APY ↓" sort.
+    "highest_apy",
   ]),
   domain: z.object({
     branch: voteBranchSchema,
@@ -438,6 +441,8 @@ export const gaugeRankingBlockSchema = z.object({
         fundedEpochs: z.number().int().min(0).nullable(),
         observedEpochs: z.number().int().min(0).nullable(),
         competingWeight: uintStringSchema,
+        // Extrapolated APY at current votes; absent on older payloads.
+        apyBps: z.number().int().nullable().optional(),
       }),
     )
     .max(50),

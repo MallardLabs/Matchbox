@@ -1,4 +1,5 @@
 import { searchTransactionsTool } from "./activity"
+import { walletEarningsTool } from "./earnings"
 import { resolveEntityTool, walletContextTool } from "./entity"
 import { explainGaugeTool } from "./explain"
 import {
@@ -24,6 +25,7 @@ export const STUART_TOOLS: readonly RegisteredTool[] = [
   prepareVoteTool,
   listClaimableTool,
   prepareClaimTool,
+  walletEarningsTool,
   getLoanPositionTool,
   scenarioLiquidationTool,
   prepareRepayTool,

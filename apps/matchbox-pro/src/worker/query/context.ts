@@ -1,7 +1,11 @@
 import type { Address } from "viem"
-import type { WireGaugeEpochs } from "../../features/history/schema"
+import type {
+  WireEarnings,
+  WireGaugeEpochs,
+} from "../../features/history/schema"
 import type { VoteBranch, WalletMode } from "../../features/query/contract"
 import { gaugeEpochs } from "../history/gauges"
+import { walletEarnings } from "../history/wallet"
 import { type BoostState, loadBoostState } from "./providers/boost"
 import { type BridgeSearch, searchBridgeOperations } from "./providers/bridge"
 import { type ClaimableLock, loadClaimable } from "./providers/claims"
@@ -88,6 +92,9 @@ export type StuartProviders = {
     count: number,
     boostTokenId: bigint | null,
   ) => Promise<WireGaugeEpochs>
+  // veMEZO voting-incentive earnings from the history worker (exact bribe
+  // checkpoint math): this epoch projected, sealed epochs, claimable.
+  walletEarnings: (owner: Address) => Promise<WireEarnings>
 }
 
 export type StuartWallet = {
@@ -182,5 +189,16 @@ export function createLiveProviders(input: {
         now: input.nowSeconds(),
         env: { BASE_RPC_URL: input.baseRpcUrl },
       }),
+    walletEarnings: (owner) =>
+      walletEarnings(
+        owner,
+        [],
+        8,
+        { BASE_RPC_URL: input.baseRpcUrl },
+        (promise) => {
+          // No ExecutionContext here; the memo refresh just runs to completion.
+          promise.catch(() => undefined)
+        },
+      ),
   }
 }
