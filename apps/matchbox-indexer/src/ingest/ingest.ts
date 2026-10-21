@@ -202,8 +202,11 @@ export async function seedStaticContracts(deps: IngestDeps): Promise<void> {
 
 // First block a full backfill must cover: the network start, or earlier for
 // a static contract deployed before it (the mUSD trove contracts). The cron
-// only ever follows head, so this matters to scripts/backfill.ts alone.
-export function historyStartBlock(deps: IngestDeps): bigint {
+// only ever follows head, so this matters to scripts/rebuild.ts and
+// scripts/backfill.ts alone.
+export function historyStartBlock(
+  deps: Pick<IngestDeps, "config" | "staticContracts">,
+): bigint {
   const statics = deps.staticContracts ?? STATIC_CONTRACTS[deps.config.network]
   return statics.reduce(
     (first, contract) =>
