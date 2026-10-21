@@ -34,14 +34,14 @@ function jsonResponse(body: unknown): Response {
 }
 
 describe("source config", () => {
-  it("prefers MATCHBOX_WAREHOUSE_URL and falls back to the explorer", () => {
+  it("switches to the warehouse when MATCHBOX_WAREHOUSE_URL is set", () => {
     expect(sourceConfig({}).warehouseUrl).toBeUndefined()
+    expect(
+      sourceConfig({ MATCHBOX_WAREHOUSE_URL: " " }).warehouseUrl,
+    ).toBeUndefined()
     expect(sourceConfig({}).explorerOrigin).toBe("https://app.matchbox.markets")
     expect(
-      sourceConfig({
-        DATABASE_URL: "postgres://a",
-        MATCHBOX_WAREHOUSE_URL: "postgres://b",
-      }).warehouseUrl,
+      sourceConfig({ MATCHBOX_WAREHOUSE_URL: "postgres://b" }).warehouseUrl,
     ).toBe("postgres://b")
   })
 })

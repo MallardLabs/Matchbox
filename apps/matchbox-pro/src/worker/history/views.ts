@@ -272,6 +272,7 @@ const CSV_COLUMNS = [
   "lock_balance",
   "gauge_supply",
   "epoch_deposit_wei",
+  "claim_tx",
 ] as const
 
 function decimalAmount(wei: string, decimals: number): string {
@@ -308,6 +309,7 @@ export function ledgerCsv(rows: readonly WireLedgerRow[]): string {
       row.balance,
       row.supply,
       row.deposited,
+      row.claim?.txHash ?? "",
     ]
       .map(csvCell)
       .join(","),

@@ -4,7 +4,8 @@ import type {
   WireLedgerRow,
   WirePricingEpochs,
 } from "../../features/history/schema"
-import { cached } from "../router"
+import { type WorkerEnv, cached } from "../router"
+import { linkClaims, walletClaims } from "./claims"
 import {
   BOOST_FIRST_EPOCH,
   MAX_LOCKS,
@@ -15,6 +16,7 @@ import {
 } from "./earnings"
 import { EPOCH, epochStartOf } from "./math"
 import { type PricingEnv, currentPrices, epochClosePrices } from "./pricing"
+import { sourceConfig } from "./sources"
 import { type PriceBook, earningsView, ledgerRows, pricedEpochs } from "./views"
 
 // Composes a wallet's earnings model with its prices. One 30s memo serves the
@@ -99,13 +101,37 @@ export type LedgerQuery = {
   tokenId: bigint | undefined
 }
 
+/** Claim tx links from the warehouse, when it's configured and reachable. */
+async function withClaimLinks(
+  wallet: Address,
+  rows: WireLedgerRow[],
+  env: WorkerEnv,
+): Promise<WireLedgerRow[]> {
+  const config = sourceConfig(env)
+  if (!config.warehouseUrl || !rows.some((row) => row.status === "claimed")) {
+    return rows
+  }
+  const contracts = [...new Set(rows.map((row) => row.rewardContract))].sort()
+  const claims = await cached(
+    `history:claims:${wallet}:${contracts.join(",")}`,
+    30_000,
+    async () => {
+      const found = await walletClaims(config, wallet, contracts)
+      // Don't memo an outage; the next request retries.
+      if (found === null) throw new Error("claims unavailable")
+      return found
+    },
+  ).catch(() => null)
+  return claims ? linkClaims(rows, claims) : rows
+}
+
 export async function walletLedger(
   wallet: Address,
   query: LedgerQuery,
-  env: PricingEnv,
+  env: WorkerEnv,
 ): Promise<WireLedgerRow[]> {
   const { model, book } = await walletHistory(wallet, [], env)
-  return ledgerRows(model, book).filter((row) => {
+  const rows = ledgerRows(model, book).filter((row) => {
     const epoch = BigInt(row.epochStart)
     if (query.from !== undefined && epoch < query.from) return false
     if (query.to !== undefined && epoch > query.to) return false
@@ -118,6 +144,7 @@ export async function walletLedger(
     }
     return true
   })
+  return withClaimLinks(wallet, rows, env)
 }
 
 /** BTC / MEZO at each of the last `count` epoch closes, oldest first. */

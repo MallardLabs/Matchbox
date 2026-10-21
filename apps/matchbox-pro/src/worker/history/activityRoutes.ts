@@ -4,6 +4,7 @@ import {
 } from "../../features/history/schema"
 import type { ApiContext, ApiRoute } from "../router"
 import { PROTOCOL_ACTIONS, actionTypesForKinds, matchesScope } from "./activity"
+import { warehouseDecoderVersion } from "./claims"
 import {
   HistoryError,
   UNAVAILABLE_FRESHNESS,
@@ -127,8 +128,18 @@ async function tx({ url, params, env }: ApiContext): Promise<Response> {
 async function status({ url, env }: ApiContext): Promise<Response> {
   const network = parseNetwork(url)
   const config = sourceConfig(env)
-  const freshness =
-    network === "mezo" ? await activityFreshness(config) : UNAVAILABLE_FRESHNESS
+  const [freshness, decoderVersion] =
+    network === "mezo"
+      ? await Promise.all([
+          activityFreshness(config),
+          warehouseDecoderVersion(config),
+        ])
+      : [UNAVAILABLE_FRESHNESS, null]
+  // Decoder v2 indexes boost / validator / third-party bribe claims.
+  const boostClaims =
+    freshness.source === "warehouse" &&
+    decoderVersion !== null &&
+    decoderVersion >= 2
   const activity: WireHistoryStatus["coverage"]["activity"] =
     freshness.state === "unavailable"
       ? "unavailable"
@@ -138,9 +149,13 @@ async function status({ url, env }: ApiContext): Promise<Response> {
   const data: WireHistoryStatus = {
     coverage: {
       earnings: "rpc",
-      // Boost / validator bribe claims aren't indexed yet (indexer A1).
-      claims: activity === "unavailable" ? "unavailable" : "partial",
-      boostClaims: false,
+      claims:
+        activity === "unavailable"
+          ? "unavailable"
+          : boostClaims
+            ? "indexed"
+            : "partial",
+      boostClaims,
       deposits: "rpc",
       activity,
     },

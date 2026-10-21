@@ -5,7 +5,7 @@ import type {
   WireActivityTx,
   WireFreshness,
 } from "../../features/history/schema"
-import { cached } from "../router"
+import { type WorkerEnv, cached } from "../router"
 import {
   WAREHOUSE_COLUMNS,
   collapseRevotes,
@@ -39,26 +39,23 @@ const SECONDS_PER_BLOCK = 3.84
 const EXPLORER_PROBE_ACTIONS =
   "LOCK_CREATED,LOCK_AMOUNT_INCREASED,BOOST_POKE,INCENTIVE_ADDED,EPOCH_PROCESSED,VOTE_BRIBE_CLAIMED"
 
-const envSchema = z.object({
-  MATCHBOX_WAREHOUSE_URL: z.string().min(1).optional(),
-  DATABASE_URL: z.string().min(1).optional(),
-  MATCHBOX_API_ORIGIN: z.string().url().optional(),
-})
-
 export type SourceConfig = {
   warehouseUrl: string | undefined
   explorerOrigin: string
 }
 
-/** Reads the warehouse URL (MATCHBOX_WAREHOUSE_URL or DATABASE_URL). */
-export function sourceConfig(env: unknown): SourceConfig {
-  const parsed = envSchema.safeParse(env ?? {})
-  const values = parsed.success ? parsed.data : {}
+/** The warehouse is used whenever MATCHBOX_WAREHOUSE_URL is set. */
+export function sourceConfig(
+  env: Pick<WorkerEnv, "MATCHBOX_WAREHOUSE_URL" | "MATCHBOX_API_ORIGIN">,
+): SourceConfig {
+  const url = env.MATCHBOX_WAREHOUSE_URL?.trim()
+  const origin = env.MATCHBOX_API_ORIGIN?.trim()
   return {
-    warehouseUrl: values.MATCHBOX_WAREHOUSE_URL ?? values.DATABASE_URL,
-    explorerOrigin: (
-      values.MATCHBOX_API_ORIGIN ?? DEFAULT_EXPLORER_ORIGIN
-    ).replace(/\/$/, ""),
+    warehouseUrl: url ? url : undefined,
+    explorerOrigin: (origin ? origin : DEFAULT_EXPLORER_ORIGIN).replace(
+      /\/$/,
+      "",
+    ),
   }
 }
 
