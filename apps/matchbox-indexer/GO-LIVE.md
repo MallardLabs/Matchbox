@@ -270,6 +270,10 @@ rows at or below the frozen block it did not compare. `--out` writes into
 
 A non-zero exit is a stop: do not continue to step 6.
 
+Run 2026-10-24 on `matchbox-warehouse` (history loaded 2026-10-21 through
+block 12,669,080): "Parity exact", 147,270 rows, 42 action types, 17,367
+enriched fields.
+
 ## 6. Deploy the indexer Worker [OUTWARD]
 
 From `apps/matchbox-indexer`:
@@ -309,6 +313,9 @@ Data stays valid; ingest resumes from its checkpoint when redeployed. To slow
 to 30 minutes, set `"crons": ["*/30 * * * *"]` and redeploy, and raise the
 webapp's `STALE_INDEX_SECONDS` (MezoActivityPage.tsx) to 75 minutes.
 
+Deployed 2026-10-24 (version `80511aeb`). `DATABASE_URL` holds the
+`matchbox_indexer_worker` URL, with its password set in the same command.
+
 ## 7. Point the webapp at the warehouse [OUTWARD]
 
 The live webapp Worker is `matchbox` (OpenNext, deployed by Workers Builds
@@ -346,6 +353,13 @@ curl -s "https://app.matchbox.markets/api/activity?limit=5" | head -c 600
 The header must be present and within about 300 blocks of head; vote rows
 have a real `blockNumber` (not `"0"`) and no `earn-vote:` ids. Open
 `/activity` and a gauge page; there must be no "as of" chip.
+
+Done 2026-10-24 on `matchbox` version `74a08e0d`, both secrets in one
+`wrangler secret bulk`. `secret put` and `secret bulk` refuse while the
+latest version is an undeployed preview (Workers Builds uploads one per
+push to a non-production branch, alias `feat-developer-platform-v2`). Run
+them right after a production deploy, while that deploy is still the latest
+version. `versions secret put` would copy the preview's code into production.
 
 Rollback (seconds): `printf 'explorer' | ... wrangler secret put
 MEZO_ACTIVITY_SOURCE --name matchbox`. The webapp returns to the frozen
