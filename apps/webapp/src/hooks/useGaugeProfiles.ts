@@ -749,18 +749,64 @@ export type SaveProfileTemplateParams = {
   incentiveStrategy?: string | null
   votingStrategy?: string | null
   tags?: string[] | null
-  source?: "manual" | "expired_gauge"
-  sourceGaugeAddress?: string | null
-  sourceVebtcTokenId?: string | null
+}
+
+type SavedProfileWriteAction = "save-template" | "delete-template"
+
+const savedProfileWriteResponseSchema = z.object({
+  template: z.record(z.string(), z.unknown()).optional(),
+  deleted: z.number().optional(),
+})
+
+async function invokeSavedProfileWrite(body: unknown): Promise<unknown> {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  if (!url || !anonKey) throw new Error("Template service is not configured")
+  const response = await fetch(`${url}/functions/v1/manage-saved-profile`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${anonKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  })
+  const data: unknown = await response.json()
+  if (!response.ok) throw new Error("Template signature was not accepted")
+  return data
+}
+
+/** Asks the template service for a message, then signs it with the owner. */
+async function createSavedProfileProof(args: {
+  action: SavedProfileWriteAction
+  chainId: number
+  ownerAddress: Address
+  signMessage: (message: string) => Promise<string>
+}): Promise<{ message: string; signature: string }> {
+  const rawNonce = await invokeSavedProfileWrite({
+    action: "nonce",
+    operation: args.action,
+    chainId: args.chainId,
+    ownerAddress: args.ownerAddress,
+  })
+  const nonce = nonceResponseSchema.parse(rawNonce)
+  const signature = await args.signMessage(nonce.message)
+  return { message: nonce.message, signature }
+}
+
+/** Templates keep only hosted pictures, not unsaved local previews. */
+function hostedPictureUrl(value: string | null | undefined): string | null {
+  return value?.startsWith("https://") ? value : null
 }
 
 /**
- * Save or update a profile template.
- * Uses upsert on (owner_address, name) unique constraint.
+ * Save or update a profile template (unique per owner and name). The owner's
+ * wallet signs each write; anonymous writes are not allowed.
  */
 export function useSaveProfileTemplate() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<Error | null>(null)
+  const { chainId } = useNetwork()
+  const { signMessageAsync } = useSignMessage()
 
   const saveTemplate = useCallback(
     async ({
@@ -774,47 +820,49 @@ export function useSaveProfileTemplate() {
       incentiveStrategy,
       votingStrategy,
       tags,
-      source = "manual",
-      sourceGaugeAddress,
-      sourceVebtcTokenId,
     }: SaveProfileTemplateParams) => {
       setIsLoading(true)
       setError(null)
-
-      const { data, error: upsertError } = await supabase
-        .from("saved_profiles")
-        .upsert(
-          {
-            owner_address: ownerAddress.toLowerCase(),
-            name,
-            source,
-            source_gauge_address: sourceGaugeAddress ?? null,
-            source_vebtc_token_id: sourceVebtcTokenId ?? null,
-            profile_picture_url: profilePictureUrl ?? null,
-            display_name: displayName ?? null,
-            description: description ?? null,
-            website_url: websiteUrl ?? null,
-            social_links: socialLinks ?? null,
-            incentive_strategy: incentiveStrategy ?? null,
-            voting_strategy: votingStrategy ?? null,
-            tags: tags ?? null,
-          },
-          { onConflict: "owner_address,name" },
+      try {
+        const proof = await createSavedProfileProof({
+          action: "save-template",
+          chainId,
+          ownerAddress,
+          signMessage: async (message) => signMessageAsync({ message }),
+        })
+        const result = savedProfileWriteResponseSchema.parse(
+          await invokeSavedProfileWrite({
+            action: "save-template",
+            chainId,
+            ownerAddress,
+            proof,
+            template: {
+              name,
+              profilePictureUrl: hostedPictureUrl(profilePictureUrl),
+              displayName: displayName ?? null,
+              description: description ?? null,
+              websiteUrl: websiteUrl ?? null,
+              socialLinks: socialLinks ?? null,
+              incentiveStrategy: incentiveStrategy ?? null,
+              votingStrategy: votingStrategy ?? null,
+              tags: tags ?? null,
+            },
+          }),
         )
-        .select()
-        .single()
-
-      if (upsertError) {
-        console.error("Error saving profile template:", upsertError)
-        setError(new Error(upsertError.message))
+        setIsLoading(false)
+        return (result.template ?? null) as unknown as SavedProfile | null
+      } catch (caughtError) {
+        console.error("Error saving profile template:", caughtError)
+        setError(
+          caughtError instanceof Error
+            ? caughtError
+            : new Error("Unable to save template"),
+        )
         setIsLoading(false)
         return null
       }
-
-      setIsLoading(false)
-      return data as unknown as SavedProfile
     },
-    [],
+    [chainId, signMessageAsync],
   )
 
   return {
@@ -825,29 +873,48 @@ export function useSaveProfileTemplate() {
 }
 
 /**
- * Delete a saved profile template by ID.
+ * Delete a saved profile template by ID. The owner's wallet signs the
+ * request.
  */
 export function useDeleteProfileTemplate() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<Error | null>(null)
+  const { chainId } = useNetwork()
+  const { signMessageAsync } = useSignMessage()
 
-  const deleteTemplate = useCallback(async (id: number) => {
-    setIsLoading(true)
-    setError(null)
-
-    const { error: deleteError } = await supabase
-      .from("saved_profiles")
-      .delete()
-      .eq("id", id)
-
-    if (deleteError) {
-      console.error("Error deleting profile template:", deleteError)
-      setError(new Error(deleteError.message))
-    }
-
-    setIsLoading(false)
-    return !deleteError
-  }, [])
+  const deleteTemplate = useCallback(
+    async (id: number, ownerAddress: Address) => {
+      setIsLoading(true)
+      setError(null)
+      try {
+        const proof = await createSavedProfileProof({
+          action: "delete-template",
+          chainId,
+          ownerAddress,
+          signMessage: async (message) => signMessageAsync({ message }),
+        })
+        await invokeSavedProfileWrite({
+          action: "delete-template",
+          chainId,
+          ownerAddress,
+          proof,
+          templateId: id,
+        })
+        setIsLoading(false)
+        return true
+      } catch (caughtError) {
+        console.error("Error deleting profile template:", caughtError)
+        setError(
+          caughtError instanceof Error
+            ? caughtError
+            : new Error("Unable to delete template"),
+        )
+        setIsLoading(false)
+        return false
+      }
+    },
+    [chainId, signMessageAsync],
+  )
 
   return {
     deleteTemplate,

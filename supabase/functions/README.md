@@ -103,6 +103,19 @@ linked members immediately.
    pointed at `.../functions/v1/discord-reconcile-roles`, e.g. hourly `0 * * * *`.
    For one-off manual cleanup, run `/poke-roles` in Discord.
 
+### `manage-saved-profile`
+
+Signed writes for `saved_profiles` (profile templates). The webapp asks for a
+`nonce` message, the owner's wallet signs it, and `save-template` /
+`delete-template` verify the signature (EOA or ERC-1271/6492 contract wallet),
+consume the single-use nonce in `saved_profile_write_nonces` and write with the
+service role. Anonymous writes to `saved_profiles` are revoked; reads stay
+public. Deploy with the default `verify_jwt` (the webapp sends the anon key):
+
+```bash
+supabase functions deploy manage-saved-profile --project-ref <ref> --use-api
+```
+
 ## Setup & Deployment
 
 ### Prerequisites
