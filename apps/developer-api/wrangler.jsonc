@@ -40,7 +40,7 @@
   // API_KEY_PEPPER, MEZO_MAINNET_RPC_URL, MEZO_TESTNET_RPC_URL.
   "vars": {
     "ENVIRONMENT": "production",
-    "GAUGE_PROFILE_API_ENABLED": "false",
+    "GAUGE_PROFILE_API_ENABLED": "true",
     "API_VERSION": "2.0.0",
     // Publishable keys' share of each environment's quota (0, 1].
     "PUBLISHABLE_QUOTA_SHARE": "0.5",
