@@ -1,8 +1,10 @@
-import { type Address, pad } from "viem"
+import { type Address, encodeFunctionData, pad } from "viem"
 import { describe, expect, it } from "vitest"
+import { CLAIM_ABI } from "../../src/decode/calldata"
 import {
   type IngestDeps,
   blockWindows,
+  historyStartBlock,
   ingestRange,
   ingestToHead,
 } from "../../src/ingest/ingest"
@@ -16,6 +18,7 @@ import {
   eventLog,
   poolCreatedLog,
   poolGaugeCreatedLog,
+  voterGaugeCreatedLog,
 } from "./fake-chain"
 
 const address = (n: number): Address => pad(`0x${n.toString(16)}`, { size: 20 })
@@ -317,5 +320,148 @@ describe("ingestToHead", () => {
     expect(await store.getCheckpoint("mezo", "logs")).toBe(30n)
 
     expect(await ingestToHead(deps, 100n)).toBeNull()
+  })
+})
+
+describe("voter bribe rewards", () => {
+  // The real BoostVoter address: only claim calls sent to a voter keep
+  // their calldata.
+  const BOOST: Address = "0x2ba614a598cffa5a19d683cdca97bac3a49313d1"
+  const B1 = address(0xb1)
+  const B2 = address(0xb2)
+  const STRANGER = address(0xb3)
+  const CLAIM = "ClaimRewards(address,address,uint256)"
+  const NOTIFY = "NotifyReward(address,address,uint256,uint256)"
+  const CLAIM_INPUT = encodeFunctionData({
+    abi: CLAIM_ABI,
+    functionName: "claimBribes",
+    args: [[B1], [[B1]], 42n],
+  })
+  const BRIBE_CHAIN: ChainLog[] = [
+    voterGaugeCreatedLog({
+      block: 3,
+      logIndex: 0,
+      voter: BOOST,
+      gauge: GAUGE,
+      bribe: B1,
+    }),
+    {
+      ...eventLog({ block: 4, logIndex: 0, address: B1, signature: CLAIM }),
+      txTo: BOOST,
+      txInput: CLAIM_INPUT,
+    },
+    voterGaugeCreatedLog({
+      block: 6,
+      logIndex: 0,
+      voter: BOOST,
+      gauge: OTHER_GAUGE,
+      bribe: B2,
+    }),
+    eventLog({ block: 15, logIndex: 0, address: B1, signature: CLAIM }),
+    eventLog({ block: 15, logIndex: 1, address: B2, signature: NOTIFY }),
+    eventLog({ block: 15, logIndex: 2, address: STRANGER, signature: CLAIM }),
+    eventLog({
+      block: 16,
+      logIndex: 0,
+      address: B1,
+      signature: "Deposit(address,uint256,uint256)",
+    }),
+  ]
+
+  function bribeSetup() {
+    // One address per filter call, so two bribes already need a topic scan.
+    const config: NetworkConfig = {
+      ...CONFIG,
+      endpoints: [
+        { url: "https://rpc.test", maxAddresses: 1, maxBlockRange: 10 },
+      ],
+    }
+    const chain = new FakeChain({ head: 100, logs: BRIBE_CHAIN })
+    const store = new MemoryIngestStore()
+    const deps: IngestDeps = {
+      config,
+      store,
+      staticContracts: [
+        staticContract({
+          address: BOOST,
+          kind: "boostVoter",
+          template: "BoostVoter",
+        }),
+      ],
+      rpc: new RpcClient({
+        network: "mezo",
+        endpoints: config.endpoints,
+        fetch: chain.fetch,
+        sleep: async () => {},
+      }),
+    }
+    return { chain, store, deps }
+  }
+
+  it("registers bribes from GaugeCreated and scans their reward topics", async () => {
+    const { chain, store, deps } = bribeSetup()
+    await ingestRange(deps, { from: 1n, to: 20n })
+
+    const contracts = new Map(
+      (await store.loadContracts("mezo")).map((c) => [c.address, c]),
+    )
+    expect(contracts.get(B1)).toMatchObject({
+      kind: "voterBribeReward",
+      template: "VoterBribeReward",
+      parent: BOOST,
+      gauge: GAUGE,
+      pool: null,
+      createdBlock: 3n,
+    })
+    expect(contracts.get(B2)?.gauge).toBe(OTHER_GAUGE)
+
+    const stored = [...store.logs.values()].map((log) => [
+      log.address,
+      log.blockNumber,
+    ])
+    expect(stored).toContainEqual([B1, 4n])
+    expect(stored).toContainEqual([B1, 15n])
+    expect(stored).toContainEqual([B2, 15n])
+    // Unregistered emitters and unhandled topics stay out.
+    expect(stored).not.toContainEqual([STRANGER, 15n])
+    expect(stored).not.toContainEqual([B1, 16n])
+
+    const scans = chain
+      .callsTo("eth_getLogs")
+      .filter(
+        (call) =>
+          (call.params[0] as { address?: unknown }).address === undefined,
+      )
+    expect(scans.length).toBeGreaterThan(0)
+  })
+
+  it("keeps the full input of claim calls sent to a voter", async () => {
+    const { store, deps } = bribeSetup()
+    await ingestRange(deps, { from: 1n, to: 20n })
+
+    const inputs = new Set(
+      [...store.transactions.values()].map((tx) => tx.input),
+    )
+    // Everything else keeps the selector of TX_INPUT.
+    expect(inputs).toEqual(new Set([CLAIM_INPUT, "0xd3672ab2"]))
+  })
+})
+
+describe("historyStartBlock", () => {
+  it("reaches back to the earliest static contract", () => {
+    const { deps } = setup([])
+    expect(historyStartBlock(deps)).toBe(1n)
+    expect(
+      historyStartBlock({
+        ...deps,
+        config: { ...CONFIG, startBlock: 50n },
+        staticContracts: [
+          {
+            ...staticContract(STATICS[0] as RegisteredContract),
+            createdBlock: 7n,
+          },
+        ],
+      }),
+    ).toBe(7n)
   })
 })

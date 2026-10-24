@@ -39,7 +39,8 @@ Everything else on `/activity` stays frozen at 2026-09-24 until phase 2.
 ## Phase 2: warehouse
 
 Neon project `fragrant-math-82213579`. Build and verify on the dev branch
-(root `.env.local`). Production gets its own branch at go-live.
+(root `.env.local`). Production gets its own Neon project at go-live (see
+"Free-tier design").
 
 ### Ingest (`apps/matchbox-indexer/src/ingest/`)
 
@@ -135,19 +136,150 @@ Intended differences:
 - The ingest lag is returned in a response header. No UI copy beyond an
   "as of" chip when lag is more than 10 minutes.
 
+## Warehouse extensions for Matchbox Pro (decoder v2, 2026-10-21)
+
+The explorer mirror stays exact; everything below is warehouse-only and
+marked so. Migrations `0007`–`0011`; `DECODER_VERSION` 2 (a v1 database
+halts projection until `project -- --replay`).
+
+| Item | What changed | Where |
+| --- | --- | --- |
+| Parity flag | `activity_events.explorer_parity` is false for rows 3.4.0 would not have produced. `parity` compares only true rows and lists the rest | `0007`, `src/decode/dispatch.ts` (`resolveHandler`), `src/decode/store.ts` (`WarehouseOnlyStore`) |
+| A1 voter bribes | The 3-argument `GaugeCreated` on BoostVoter, ValidatorsVoter and ThirdPartyVoter registers the gauge's bribe (`matchbox.contracts` kind `voterBribeReward`; decoder template `VoterBribeReward`, which remembers voter and gauge). Their `ClaimRewards` become `VOTE_BRIBE_CLAIMED` (source `BRIBE_VOTING_REWARD`, the voter's boost context, `gauge`, no `pool`). Their `NotifyReward` adds no activity row (`BribesAdded` already does) | `src/ingest/discovery.ts`, `src/decode/handlers/rewards.ts` |
+| A1 ingest | The ~750 bribe addresses are not added to the shared filter. Their group is fetched with one address-less `eth_getLogs` on the two reward topics per window and kept to the registered set (`LogFilter.scanByTopic`); a handful of fresh children still go by address | `src/ingest/topics.ts`, `src/ingest/rpc.ts` |
+| A2 deposits | `matchbox.reward_deposits`: every 4-argument `NotifyReward` on a tracked reward contract (pool bribe/fee, `Legacy*`, voter bribes), keyed by the event's own `epoch_start`. Sum by (reward_contract, token, epoch_start) = `tokenRewardsPerEpoch` | `0008` |
+| A2 epoch | `INCENTIVE_ADDED.epoch_start` is set: the event epoch for pool rewards, `epochStart(block time)` for `BribesAdded` (Velodrome `Reward` notifies the current epoch) | handlers |
+| A3 claim lock | Ingest keeps the full input of `claimBribes` (`0x7715ee75`), `claimFees` (`0x666256aa`) and `claimFeesAndBribes` (`0xe494ab8b`) calls sent straight to a voter, and every `VOTE_BRIBE_CLAIMED` / `VOTE_FEE_CLAIMED` in such a transaction gets `token_id`. Claims through a Safe, smart account or wrapper keep `token_id` null. `refetch:claims` restores the input of claims stored before | `src/decode/calldata.ts`, `scripts/refetch-claim-calldata.ts` |
+| A4 votes from 5.0M | The four voters project from the network start instead of 7,739,500 (BoostVoter's first log is 6,248,484), so `votes` and vote replays include ballots never re-cast after March. `PoolsVoter.GaugeCreated` keeps the explorer start: it spawns explorer templates | `src/decode/dispatch.ts` (`voterSource`) |
+| A5 indexes | `activity_events (network, tx_hash)`; `(network, token_id, timestamp desc)` for votes; `(network, tx_from, timestamp desc)` for `BOOST_POKE` | `0010` |
+| mUSD troves | `BorrowerOperations` and `TroveManager` are static contracts from their deployment (block 178,630; the backfill now defaults to it). Ingest stores `TroveUpdated` (both signatures), `TroveCreated`, `BorrowingFeePaid`, `RefinancingFeePaid`, `TroveLiquidated`, `Redemption`. `matchbox.trove_updates` holds each `TroveUpdated` with the previous state, the interest accrued in between (musd `InterestRateMath`) and a signed `debt_change`, classified as `LOAN_OPENED`, `LOAN_REPAID`, `LOAN_BORROWED`, `LOAN_COLL_ADDED`, `LOAN_COLL_WITHDRAWN`, `LOAN_REFINANCED`, `LOAN_CLOSED`, `LOAN_REWARDS_APPLIED`, `LOAN_LIQUIDATED`, `LOAN_REDEEMED`. "Recent repayments" = rows with `debt_change < 0` for a borrower. Not in `activity_events`, so the webapp feed is unchanged | `0009`, `src/decode/handlers/musd.ts` |
+
+Intended differences, in addition to the two listed under the parity result:
+
+- **Enrichments.** `INCENTIVE_ADDED.epoch_start` and `VOTE_*_CLAIMED.token_id`
+  are filled where 3.4.0 left null. `parity` counts them as `enriched`; any
+  other value change is still a difference.
+- **Votes table.** `matchbox.votes` gains the (voter, tokenId, gauge) rows
+  last touched before block 7,739,500, so it no longer matches the explorer's
+  7,870 `Vote` entities.
+- **Classic stays on explorer semantics.** The webapp's warehouse activity
+  query (`apps/webapp/src/lib/mezoActivity/warehouse.ts`) reads only
+  `explorer_parity` rows and returns the two enrichments as null. Its claim
+  drawers would otherwise call veBTC lock ids "veMEZO token". The gauges
+  routes need no filter: no warehouse-only row matches their action types
+  and sources. Matchbox Pro reads every row.
+- **Trove amounts.** `debt_change` is exact to the wei except across an
+  interest checkpoint that emitted no event (`updateSystemAndTroveInterest`
+  is public): each one can shift it by 1 wei. A closed, liquidated or fully
+  redeemed trove reports a zero state, so its accrual runs to the block time.
+  BorrowerOperations emits interest 0 after every borrow (the contract never
+  sets `newInterest` on that branch); `trove_updates.interest` keeps the real
+  figure (previous interest plus accrual) on `LOAN_BORROWED` rows.
+
+### Dev verification (2026-10-21, dev branch)
+
+- **Parity:** after a full v2 replay, `parity` is exact on all 147,270
+  explorer rows across 42 action types through block 12,073,396 (0 missing,
+  0 extra, 0 differing fields), with 17,367 enriched fields (998
+  INCENTIVE_ADDED epochs, 7,430 bribe and 8,939 fee claim token ids). 32,435
+  warehouse-only rows sit at or below that block and are not compared.
+- **Backfill:** 178,630 to 12,663,499 in about 75 minutes at concurrency 4
+  (7-minute factory pre-scan, then about 3.3 s per window). Raw: 325,996
+  logs and 205,761 transactions, about 400 MB. Projection replay: about 16
+  minutes, 195,873 activity rows (163,195 explorer parity, 32,678
+  warehouse-only), 12,767 votes, 6,346 locks, 1,094 reward deposits, 7,421
+  trove updates. With full raw history the branch was 696 MB of its 1,024
+  MB cap (36 MB are the Goldsky spike tables), growing about 50 MB a month;
+  raw retention (below) brings that to about 285 MB and 25 MB a month.
+- **Voter bribes:** registered 719 / 24 / 7, equal to `length()` on
+  BoostVoter, ValidatorsVoter and ThirdPartyVoter. 2,185 bribe claims
+  (2,099 boost, 86 validator; ThirdPartyVoter bribes have none yet).
+- **Deposit epochs:** all 236 `BribesAdded` rows (187 BoostVoter, 49
+  ValidatorsVoter) have a bribe `NotifyReward` in the same transaction with
+  the same epoch. BoostVoter has one deposit (188 against 187) that did not
+  go through `BribesAdded`, so `reward_deposits`, not `INCENTIVE_ADDED`, is
+  the exact per-epoch total.
+- **Claim token ids:** 19,944 of 21,232 claims carry one (94%); 40 of 40
+  sampled were owned by the claimer at the claim block (`ownerOf` on the
+  escrow).
+- **Troves:** 400 `LOAN_REPAID` rows checked against the borrower's MUSD
+  burn in the same receipt: 399 exact, 1 off by 1 wei. Principal and
+  collateral of 60 sampled borrowers equal `TroveManager.Troves()` at head.
+- **Pruned replay:** `rebuild:history -- --replay` on the dev branch
+  re-ingested 178,630 to 12,664,962 from RPC in about 110 minutes, pruning as
+  it went, and parity stayed exact (147,270 rows, 17,367 enriched). Raw ended
+  at the 7-day tail (6,340 logs, 3,923 transactions). Compacted, the
+  database is 320 MB, 37 MB of it the old Goldsky spike tables: a fresh
+  production load is about 285 MB, of which the projection is 265 MB.
+- **Tick cost:** a 15-minute tick (about 235 blocks) took about 5 to 8 s of
+  wall time and 0.3 to 0.5 s of CPU in Node, TLS set-up included.
+
+### A6 (not built): sealed earnings and prices
+
+- At each epoch close plus finality, seal `matchbox.epoch_vote_balances`
+  (voter, gauge, token_id, epoch_start, balance, gauge_supply) by replaying
+  `BOOST_VOTE`/`BOOST_ABSTAIN` rows to `epoch_end - 1`, and
+  `matchbox.epoch_earned` (+ reward_contract, token, deposited, earned) as
+  `balance × Σ reward_deposits / max(supply, 1)` with floor division. Golden
+  test: Σ claimable epochs equals the bribe's `earned()` (tokenId 111 on
+  `0x18bE…1baA`: 702.670804524943038744 MEZO).
+- An hourly `matchbox.price_observations` cron: Skip `latestRoundData` on
+  Mezo for BTC, Aerodrome CL `slot0` on Base for MEZO, $1 for stables, each
+  row with source, block and timestamp, and a backfill for past epoch ends.
+- Both are writes by the indexer Worker into `matchbox`, so they need no new
+  role; the Pro BFF switches its ledger `method` to `warehouse-sealed-v1`.
+
+## Free-tier design (2026-10-21)
+
+Production runs on Neon's Free plan: 100 CU-hours and 1 GB per project, and
+the compute suspends after 5 idle minutes (not configurable). So:
+
+- **Own project.** Production is a new Neon project, `matchbox-warehouse`,
+  not a branch of `fragrant-math-82213579` (its dev branch alone is 696 MB).
+  Compute fixed at 0.25 CU.
+- **15-minute cron.** A per-minute cron keeps 0.25 CU awake around the clock
+  (about 180 CU-h a month). Every 15 minutes, each tick (about 8 s of work)
+  keeps the compute up for about 5 minutes: about 62 CU-h a month, leaving
+  about 38 for reads. Fallback: every 30 minutes (about 31 CU-h).
+- **Raw retention.** After projection, raw logs and transactions more than
+  160,000 blocks (about 7 days) behind ingest are deleted
+  (`src/maintenance.ts`). Nothing outside the indexer reads `matchbox_raw`
+  (the webapp, Pro and `parity` read only `matchbox.*`). A replay re-ingests
+  from RPC with `rebuild:history -- --replay`, which loads, projects and
+  prunes 500,000 blocks at a time; `project -- --replay` refuses on a pruned
+  database. The initial load uses the same path.
+- **Size guard.** Ticks stop writing at 90% of `neon.max_cluster_size`, and
+  `/health` reports the usage.
+- **Read cache.** The webapp and Pro cache every warehouse read for 5
+  minutes per query (Workers Cache API plus a per-isolate memo; Pro's is
+  `queryBatchCached`), and both round open-ended windows to that bucket.
+  Shorter TTLs would keep the compute awake under steady traffic. Both treat
+  up to 45 minutes of lag as fresh (the webapp's "as of" chip, Pro's
+  `STALE_SECONDS`).
+
+`apps/matchbox-indexer/GO-LIVE.md`, "Free-tier budget", has the numbers and
+what to watch.
+
 ## Go-live (needs account access)
 
-1. Neon: create a production branch, apply the migrations and roles, and run
-   the backfill from 5.0M.
-2. Cloudflare (mallard account): deploy `matchbox-indexer` with a 1-minute
-   cron and its `DATABASE_URL` secret. On the `matchbox` Worker, set
-   `MATCHBOX_WAREHOUSE_URL` and `MEZO_ACTIVITY_SOURCE=warehouse`.
+`apps/matchbox-indexer/GO-LIVE.md` is the step-by-step runbook, each
+outward-facing step marked. In short:
+
+1. Neon: create the `matchbox-warehouse` project (Free, 0.25 CU), apply the
+   migrations and roles, create the two logins, load history from block
+   178,630 with `rebuild:history`, and pass `parity`.
+2. Cloudflare (mallard account): deploy `matchbox-indexer` with its 15-minute
+   cron and `DATABASE_URL` secret. On the `matchbox` Worker, set
+   `MATCHBOX_WAREHOUSE_URL` and `MEZO_ACTIVITY_SOURCE=warehouse`. After
+   Pro's first deploy, set `MATCHBOX_WAREHOUSE_URL` on `matchbox-pro` to the
+   same read-only URL.
 3. Watch lag and per-type counts for a day.
 4. Delete `matchbox-explorer/3.4.0`. Matchbox then has no Goldsky subgraph
    storage.
 
 ## Out of scope
 
-- `matchbox-api`, Matchscan and Pro read models.
-- Testnet. Ingest is per network, so testnet is a config row later.
+- `matchbox-api` and Matchscan. Pro reads the warehouse directly.
+- Testnet. Ingest is per network, so testnet is a config row later (the
+  decoder already reads the older 6-argument `TroveUpdated` it emits).
 - Porting academy.

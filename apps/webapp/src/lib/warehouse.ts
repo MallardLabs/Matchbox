@@ -37,6 +37,72 @@ export function isWarehouseSource(chainId: SupportedChainId): boolean {
   )
 }
 
+// When a warehouse read fails or times out, Classic serves the pre-warehouse
+// sources (the frozen explorer, Mezo's earn-votes and earn-locks) and stops
+// asking the warehouse for WAREHOUSE_BREAKER_SECONDS. Neon suspends a Free
+// project for the rest of the month once its compute quota is spent; the
+// breaker keeps Classic up without hammering the dead endpoint (each isolate
+// probes once per window).
+export const WAREHOUSE_TIMEOUT_MS = 6_000
+export const WAREHOUSE_BREAKER_SECONDS = 120
+
+let breakerOpenUntil = 0
+
+/** Whether to try the warehouse now: it is the source and not tripped. */
+export function warehouseReadable(chainId: SupportedChainId): boolean {
+  return isWarehouseSource(chainId) && Date.now() >= breakerOpenUntil
+}
+
+/** Trips the breaker after a failed warehouse read. */
+export function recordWarehouseFailure(context: string, error: unknown): void {
+  breakerOpenUntil = Date.now() + WAREHOUSE_BREAKER_SECONDS * 1000
+  console.error(
+    `Warehouse read failed (${context}); falling back for ${WAREHOUSE_BREAKER_SECONDS}s`,
+    error,
+  )
+}
+
+/** Test hook. */
+export function resetWarehouseBreaker(): void {
+  breakerOpenUntil = 0
+}
+
+/**
+ * The warehouse read while it is readable, else (or when it throws) the
+ * pre-warehouse read.
+ */
+export async function withWarehouseFallback<T>(
+  chainId: SupportedChainId,
+  context: string,
+  warehouse: () => Promise<T>,
+  fallback: () => Promise<T>,
+): Promise<T> {
+  if (warehouseReadable(chainId)) {
+    try {
+      return await warehouse()
+    } catch (error) {
+      recordWarehouseFailure(context, error)
+    }
+  }
+  return fallback()
+}
+
+function withTimeout<T>(read: PromiseLike<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timeout = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(
+      () =>
+        reject(
+          new WarehouseUnavailableError(
+            `Warehouse read timed out after ${ms} ms`,
+          ),
+        ),
+      ms,
+    )
+  })
+  return Promise.race([read, timeout]).finally(() => clearTimeout(timer))
+}
+
 let client: { url: string; sql: NeonQueryFunction<false, false> } | undefined
 
 export function warehouseSql(): NeonQueryFunction<false, false> {
@@ -63,21 +129,151 @@ export function sqlParams(): {
   }
 }
 
-/** Rows are unvalidated; callers parse them with a zod schema. */
-export async function queryWarehouse(
-  query: WarehouseQuery,
-): Promise<Record<string, unknown>[]> {
-  return warehouseSql().query(query.text, query.params)
+// The warehouse runs on Neon's Free plan: the compute suspends after 5 idle
+// minutes and is billed while awake (100 CU-hours a month). The indexer
+// writes every 15 minutes, so reads are cached for 5: per colo in the
+// Workers Cache API (a no-op in Node and on workers.dev) and per isolate in
+// memory. A miss on a sleeping compute costs a 5-minute wake; a hit costs
+// nothing. Shorter TTLs keep the compute awake under steady traffic.
+export const WAREHOUSE_CACHE_SECONDS = 300
+
+const CACHE_ORIGIN = "https://warehouse-cache.matchbox.internal"
+const MEMO_LIMIT = 500
+const memo = new Map<string, { expires: number; value: unknown }>()
+
+type Rows = Record<string, unknown>[]
+
+const rowsSchema = z.array(z.record(z.string(), z.unknown()))
+const batchSchema = z.array(rowsSchema)
+
+function edgeCache(): Cache | undefined {
+  if (typeof caches === "undefined") return undefined
+  const storage: object = caches
+  return "default" in storage && storage.default instanceof Cache
+    ? storage.default
+    : undefined
+}
+
+async function cacheKey(queries: readonly WarehouseQuery[]): Promise<string> {
+  const body = JSON.stringify(
+    queries.map((query) => [query.text, query.params]),
+  )
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(body),
+  )
+  return [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("")
+}
+
+function remember(key: string, value: unknown): void {
+  if (memo.size >= MEMO_LIMIT) {
+    const oldest = memo.keys().next()
+    if (!oldest.done) memo.delete(oldest.value)
+  }
+  memo.set(key, {
+    expires: Date.now() + WAREHOUSE_CACHE_SECONDS * 1000,
+    value,
+  })
+}
+
+/**
+ * Serves `load` from the read cache for WAREHOUSE_CACHE_SECONDS. Values go
+ * through JSON either way, so a hit and a miss return the same shapes
+ * (timestamps as ISO strings). Failures are never cached.
+ */
+export async function cachedWarehouseRead<T>(
+  queries: readonly WarehouseQuery[],
+  schema: z.ZodType<T>,
+  load: () => Promise<unknown>,
+): Promise<T> {
+  const key = await cacheKey(queries)
+  const remembered = memo.get(key)
+  if (remembered && remembered.expires > Date.now()) {
+    const parsed = schema.safeParse(remembered.value)
+    if (parsed.success) return parsed.data
+  }
+  const cache = edgeCache()
+  const url = `${CACHE_ORIGIN}/${key}`
+  if (cache) {
+    try {
+      const hit = await cache.match(url)
+      if (hit) {
+        const parsed = schema.safeParse(await hit.json())
+        if (parsed.success) {
+          remember(key, parsed.data)
+          return parsed.data
+        }
+      }
+    } catch {
+      // Best effort: fall through to the database.
+    }
+  }
+  const json = JSON.stringify(await load())
+  const value = schema.parse(z.unknown().parse(JSON.parse(json)))
+  remember(key, value)
+  if (cache) {
+    try {
+      await cache.put(
+        url,
+        new Response(json, {
+          headers: {
+            "content-type": "application/json",
+            "cache-control": `public, max-age=${WAREHOUSE_CACHE_SECONDS}`,
+          },
+        }),
+      )
+    } catch {
+      // Best effort: the per-isolate memo still holds the value.
+    }
+  }
+  return value
+}
+
+/** Test hook. */
+export function clearWarehouseCache(): void {
+  memo.clear()
+}
+
+/**
+ * Rows are unvalidated; callers parse them with a zod schema. Times out
+ * after WAREHOUSE_TIMEOUT_MS (a cold start plus the reader's 2 s statement
+ * timeout fit well inside it).
+ */
+export async function queryWarehouse(query: WarehouseQuery): Promise<Rows> {
+  return cachedWarehouseRead([query], rowsSchema, () =>
+    withTimeout(
+      warehouseSql().query(query.text, query.params),
+      WAREHOUSE_TIMEOUT_MS,
+    ),
+  )
 }
 
 /** Several reads in one HTTP round trip, in one read-only transaction. */
 export async function queryWarehouseBatch(
   queries: readonly WarehouseQuery[],
-): Promise<Record<string, unknown>[][]> {
-  const sql = warehouseSql()
-  return sql.transaction(
-    queries.map((query) => sql.query(query.text, query.params)),
-    { readOnly: true },
+): Promise<Rows[]> {
+  return cachedWarehouseRead(queries, batchSchema, () => {
+    const sql = warehouseSql()
+    return withTimeout(
+      sql.transaction(
+        queries.map((query) => sql.query(query.text, query.params)),
+        { readOnly: true },
+      ),
+      WAREHOUSE_TIMEOUT_MS,
+    )
+  })
+}
+
+/**
+ * A default "until now" bound rounded up to the cache window, so requests
+ * without an explicit range share a cache key. Rounding up never hides a
+ * row; it only lets the window end slightly in the future.
+ */
+export function cacheableNow(nowSeconds: number): number {
+  return (
+    Math.ceil(nowSeconds / WAREHOUSE_CACHE_SECONDS) * WAREHOUSE_CACHE_SECONDS
   )
 }
 

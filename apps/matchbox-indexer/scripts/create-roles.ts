@@ -48,6 +48,10 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA matchbox_raw GRANT SELECT, INSERT, UPDATE, DE
 ALTER DEFAULT PRIVILEGES IN SCHEMA matchbox GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO matchbox_indexer;
 ALTER DEFAULT PRIVILEGES IN SCHEMA matchbox GRANT USAGE, SELECT ON SEQUENCES TO matchbox_indexer;
 REVOKE ALL ON matchbox.schema_migrations FROM matchbox_indexer;
+-- The raw logs index is on matchbox.topic0(topics), and Postgres evaluates
+-- that expression as the inserting role, so ingest needs EXECUTE on it and
+-- on matchbox.topic, which it calls. PUBLIC lost EXECUTE above.
+GRANT EXECUTE ON FUNCTION matchbox.topic(text, integer), matchbox.topic0(text) TO matchbox_indexer;
 
 ALTER ROLE matchbox_api_ro SET statement_timeout = '2s';
 ALTER ROLE matchbox_indexer SET statement_timeout = '10s';
@@ -62,6 +66,9 @@ BEGIN
   END IF;
   IF NOT has_table_privilege('matchbox_indexer', 'matchbox_raw.logs', 'INSERT') THEN
     RAISE EXCEPTION 'matchbox_indexer must be able to INSERT raw logs';
+  END IF;
+  IF NOT has_function_privilege('matchbox_indexer', 'matchbox.topic0(text)', 'EXECUTE') THEN
+    RAISE EXCEPTION 'matchbox_indexer must be able to EXECUTE matchbox.topic0 (raw logs index)';
   END IF;
   IF to_regclass('matchbox.contracts') IS NOT NULL
     AND NOT has_table_privilege('matchbox_indexer', 'matchbox.contracts', 'INSERT') THEN

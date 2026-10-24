@@ -1,6 +1,7 @@
 import { getExplorerTransactionUrl } from "@/config/explorer"
 import { fetchMezoActivity } from "@/lib/mezoActivity/dataSources"
 import { serializeActivityItem } from "@/lib/mezoActivity/normalize"
+import { cacheableNow } from "@/lib/warehouse"
 import { CHAIN_ID, type SupportedChainId } from "@repo/shared/contracts"
 import { isAddress } from "viem"
 
@@ -36,7 +37,8 @@ async function handler(request: Request): Promise<Response> {
     1000,
   )
   const page = parsePage(url.searchParams.get("page"))
-  const now = Math.floor(Date.now() / 1000)
+  // Defaults share a warehouse read-cache key within its window.
+  const now = cacheableNow(Math.floor(Date.now() / 1000))
   const fromTimestamp = Math.max(
     Number(url.searchParams.get("from") ?? now - 30 * 86_400),
     0,

@@ -28,13 +28,17 @@ export const contractKindSchema = z.enum([
   "gauge",
   "bribeVotingReward",
   "feeVotingReward",
+  // Warehouse-only kinds: the explorer never indexed these.
+  "voterBribeReward",
+  "musdBorrowerOperations",
+  "musdTroveManager",
 ])
 
 export type ContractKind = z.output<typeof contractKindSchema>
 
 // A contract the indexer fetches logs for, as stored in matchbox.contracts.
 // Static entries come from config; discovered entries come from GaugeCreated
-// and PoolCreated.
+// (all four voters) and PoolCreated.
 export type RegisteredContract = {
   network: Network
   address: Address
@@ -90,11 +94,11 @@ export function nextCheckpoint(
   return commit.toBlock > current ? commit.toBlock : current
 }
 
-// No decoder handler reads past the calldata selector (src/decode/calldata.ts
-// proves it per handler), so only the selector is persisted. Full calldata was
-// about 80% of each transaction row.
+// Only reward claims sent straight to a voter read past the calldata selector
+// (src/decode/calldata.ts proves it per handler), so every other transaction
+// persists its selector alone. Full calldata was about 80% of each row.
 export function persistedTx(tx: RawTx): RawTx {
-  return { ...tx, input: storedInput(tx.input) }
+  return { ...tx, input: storedInput(tx) }
 }
 
 export function rawLogId(log: Pick<RawLog, "txHash" | "logIndex">): string {
@@ -250,7 +254,7 @@ async function insertTransactions(
       transactions.map((tx) => tx.txIndex),
       transactions.map((tx) => tx.from),
       transactions.map((tx) => tx.to),
-      transactions.map((tx) => storedInput(tx.input)),
+      transactions.map((tx) => storedInput(tx)),
     ],
   )
 }

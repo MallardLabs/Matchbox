@@ -7,7 +7,12 @@ import {
 import { fetchEarnVoteActivity } from "@/lib/mezoActivity/earnVotes"
 import { sortActivityDesc } from "@/lib/mezoActivity/normalize"
 import { fetchWarehouseActivity } from "@/lib/mezoActivity/warehouse"
-import { type IndexedThrough, isWarehouseSource } from "@/lib/warehouse"
+import {
+  type IndexedThrough,
+  isWarehouseSource,
+  recordWarehouseFailure,
+  warehouseReadable,
+} from "@/lib/warehouse"
 import type { MezoActivityItem } from "@/types/mezoActivity"
 import { CHAIN_ID, type SupportedChainId } from "@repo/shared/contracts"
 
@@ -164,7 +169,9 @@ function explorerActionTypesFor(
   return remaining.length > 0 ? remaining : undefined
 }
 
-export type ActivitySourceName = "explorer" | "votes"
+// "warehouse": the warehouse read failed and the explorer and earn-votes
+// served the page instead.
+export type ActivitySourceName = "explorer" | "votes" | "warehouse"
 
 export type MezoActivityResult = {
   data: MezoActivityItem[]
@@ -210,19 +217,42 @@ export async function fetchExplorerOnlyActivity(
 export async function fetchMezoActivity(
   options: SourceOptions,
 ): Promise<MezoActivityResult> {
+  // A failed or timed-out warehouse read (Neon down, or its Free quota
+  // spent) falls back to the explorer and earn-votes below, marked
+  // "warehouse" in `degraded`; the breaker then skips the warehouse for a
+  // while.
+  const fallback: ActivitySourceName[] = []
   if (isWarehouseSource(options.chainId)) {
-    // The warehouse decodes every action type, votes included, and pages
-    // with a true offset.
-    const result = await fetchWarehouseActivity(options)
-    return {
-      data: result.data,
-      hasMore: result.hasMore,
-      page: options.page,
-      degraded: [],
-      indexedThrough: result.indexedThrough,
+    if (warehouseReadable(options.chainId)) {
+      try {
+        // The warehouse decodes every action type, votes included, and pages
+        // with a true offset.
+        const result = await fetchWarehouseActivity(options)
+        return {
+          data: result.data,
+          hasMore: result.hasMore,
+          page: options.page,
+          degraded: [],
+          indexedThrough: result.indexedThrough,
+        }
+      } catch (error) {
+        recordWarehouseFailure("activity", error)
+      }
     }
+    fallback.push("warehouse")
   }
 
+  const result = await fetchPreWarehouseActivity(options)
+  return fallback.length > 0
+    ? { ...result, degraded: [...fallback, ...result.degraded] }
+    : result
+}
+
+// The explorer subgraph plus Mezo's earn-votes: the source before the
+// warehouse, and its fallback.
+async function fetchPreWarehouseActivity(
+  options: SourceOptions,
+): Promise<MezoActivityResult> {
   if (!includesEarnVotes(options)) return fetchExplorerOnlyActivity(options)
 
   // Two sources can't share a `skip`, so read the first (page + 1) × limit

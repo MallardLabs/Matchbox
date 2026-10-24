@@ -48,6 +48,10 @@ const sourceFiles = [
   "src/lib/mezoGauges/snapshot.test.ts",
   "src/lib/mezoId.ts",
   "src/lib/mezoId.test.ts",
+  // Their imports (the warehouse client, activity sources, earn subgraphs)
+  // compile with them.
+  "src/lib/mezoActivity/earnVotes.test.ts",
+  "src/lib/mezoActivity/warehouse.test.ts",
 ]
 
 const testEntries = [
@@ -66,6 +70,8 @@ const testEntries = [
   "lib/mezoGauges/participation.test.js",
   "lib/mezoGauges/snapshot.test.js",
   "lib/mezoId.test.js",
+  "lib/mezoActivity/earnVotes.test.js",
+  "lib/mezoActivity/warehouse.test.js",
 ]
 
 rmSync(outDir, { recursive: true, force: true })
@@ -86,7 +92,14 @@ writeFileSync(
         skipLibCheck: true,
         types: ["node"],
         baseUrl: appRoot,
-        paths: { "@/*": ["src/*"] },
+        // moduleResolution "node" ignores package exports, so point the
+        // workspace package at its built types (turbo builds it before test).
+        paths: {
+          "@/*": ["src/*"],
+          "@repo/shared/contracts": [
+            "../../packages/shared/dist/contracts/index.d.ts",
+          ],
+        },
       },
       files: sourceFiles.map((rel) => path.join(appRoot, rel)),
     },

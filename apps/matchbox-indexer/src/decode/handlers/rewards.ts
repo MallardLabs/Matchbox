@@ -2,12 +2,18 @@ import { type Address, decodeEventLog } from "viem"
 import type { RawLog, RawTx } from "../../ingest/rpc"
 import bribeVotingRewardAbi from "../abis/bribe-voting-reward"
 import feeVotingRewardAbi from "../abis/fee-voting-reward"
+import { claimTokenId } from "../calldata"
 import { ACTION, BOOST_CONTEXT, SOURCE } from "../constants"
 import { type Handler, baseActivity, eventTopics, lower } from "../helpers"
-import type { BribeToPoolRow } from "../rows"
+import type {
+  BribeToPoolRow,
+  BribeVoterSource,
+  RewardDepositRow,
+} from "../rows"
 import type { Store } from "../store"
 
-// Ports of apps/activity-subgraph/src/{bribes,fee-rewards,legacy-pool-rewards}.ts.
+// Ports of apps/activity-subgraph/src/{bribes,fee-rewards,legacy-pool-rewards}.ts,
+// plus the warehouse-only reward deposits, claim token ids and voter bribes.
 
 // Reward contracts of pool gauges created before the subgraph's start block.
 // The GaugeCreated handler never saw them, so their mapping is seeded on
@@ -154,6 +160,42 @@ function decodeFee(log: RawLog) {
   })
 }
 
+type NotifyRewardArgs = {
+  from: Address
+  reward: Address
+  epoch: bigint
+  amount: bigint
+}
+
+type DepositTarget = Pick<
+  RewardDepositRow,
+  "rewardType" | "voterSource" | "gauge" | "pool"
+>
+
+// Warehouse-only: every 4-argument NotifyReward, keyed by the reward
+// contract's own epoch, so per-epoch deposits need no timestamp bucketing.
+function addRewardDeposit(
+  log: RawLog,
+  tx: RawTx,
+  store: Store,
+  args: NotifyRewardArgs,
+  target: DepositTarget,
+): void {
+  store.addRewardDeposit({
+    txHash: lower(log.txHash),
+    logIndex: BigInt(log.logIndex),
+    blockNumber: log.blockNumber,
+    timestamp: log.blockTimestamp,
+    txFrom: lower(tx.from),
+    rewardContract: lower(log.address),
+    ...target,
+    token: lower(args.reward),
+    epochStart: args.epoch,
+    amount: args.amount,
+    depositor: lower(args.from),
+  })
+}
+
 function handleBribeNotifyReward(log: RawLog, tx: RawTx, store: Store): void {
   const event = decodeBribe(log)
   if (event.eventName !== "NotifyReward") return
@@ -173,7 +215,15 @@ function handleBribeNotifyReward(log: RawLog, tx: RawTx, store: Store): void {
   activity.amount = event.args.amount
   activity.rewardType = "Bribe"
   activity.rewardContract = lower(log.address)
+  // Warehouse enrichment: the explorer left epochStart null here.
+  activity.epochStart = event.args.epoch
   store.addActivity(activity)
+  addRewardDeposit(log, tx, store, event.args, {
+    rewardType: "Bribe",
+    voterSource: SOURCE.POOLS_VOTER,
+    gauge: mapping.gaugeAddress,
+    pool: mapping.poolAddress,
+  })
 }
 
 function handleBribeClaimRewards(log: RawLog, tx: RawTx, store: Store): void {
@@ -192,6 +242,9 @@ function handleBribeClaimRewards(log: RawLog, tx: RawTx, store: Store): void {
   activity.amount = event.args.amount
   activity.rewardType = "Bribe"
   activity.rewardContract = lower(log.address)
+  // Warehouse enrichment: the claimed lock, when the claim went straight to
+  // a voter. The explorer left tokenId null here.
+  activity.tokenId = claimTokenId(tx)
   if (mapping !== null) {
     activity.gauge = mapping.gaugeAddress
     activity.pool = mapping.poolAddress
@@ -218,7 +271,14 @@ function handleFeeNotifyReward(log: RawLog, tx: RawTx, store: Store): void {
   activity.amount = event.args.amount
   activity.rewardType = "Fee"
   activity.rewardContract = lower(log.address)
+  activity.epochStart = event.args.epoch
   store.addActivity(activity)
+  addRewardDeposit(log, tx, store, event.args, {
+    rewardType: "Fee",
+    voterSource: SOURCE.POOLS_VOTER,
+    gauge: mapping.gaugeAddress,
+    pool: mapping.poolAddress,
+  })
 }
 
 function handleFeeClaimRewards(log: RawLog, tx: RawTx, store: Store): void {
@@ -237,6 +297,7 @@ function handleFeeClaimRewards(log: RawLog, tx: RawTx, store: Store): void {
   activity.amount = event.args.amount
   activity.rewardType = "Fee"
   activity.rewardContract = lower(log.address)
+  activity.tokenId = claimTokenId(tx)
   if (mapping !== null) {
     activity.gauge = mapping.gaugeAddress
     activity.pool = mapping.poolAddress
@@ -252,4 +313,70 @@ export const bribeVotingRewardHandlers: Record<string, Handler> = {
 export const feeVotingRewardHandlers: Record<string, Handler> = {
   NotifyReward: handleFeeNotifyReward,
   ClaimRewards: handleFeeClaimRewards,
+}
+
+// Warehouse-only: the bribe rewards of BoostVoter, ValidatorsVoter and
+// ThirdPartyVoter gauges (template VoterBribeReward, created by their
+// GaugeCreated). Their deposits already appear as the voter's BribesAdded
+// INCENTIVE_ADDED row, so NotifyReward only records the reward deposit.
+
+const VOTER_CONTEXT: Record<BribeVoterSource, string> = {
+  BOOST_VOTER: BOOST_CONTEXT.MEZO_VEBTC_PAIR_BOOST,
+  THIRD_PARTY_VOTER: BOOST_CONTEXT.UNKNOWN,
+  VALIDATORS_VOTER: BOOST_CONTEXT.UNKNOWN,
+}
+
+type VoterBribe = { voterSource: BribeVoterSource; gauge: Address }
+
+function voterBribeOf(store: Store, log: RawLog): VoterBribe | null {
+  const source = store.getDataSource(lower(log.address))
+  return source?.template === "VoterBribeReward" ? source : null
+}
+
+function handleVoterBribeNotifyReward(
+  log: RawLog,
+  tx: RawTx,
+  store: Store,
+): void {
+  const event = decodeBribe(log)
+  if (event.eventName !== "NotifyReward") return
+  const bribe = voterBribeOf(store, log)
+  if (bribe === null) return
+  addRewardDeposit(log, tx, store, event.args, {
+    rewardType: "Bribe",
+    voterSource: bribe.voterSource,
+    gauge: bribe.gauge,
+    pool: null,
+  })
+}
+
+function handleVoterBribeClaimRewards(
+  log: RawLog,
+  tx: RawTx,
+  store: Store,
+): void {
+  const event = decodeBribe(log)
+  if (event.eventName !== "ClaimRewards") return
+  const bribe = voterBribeOf(store, log)
+  if (bribe === null) return
+  const activity = baseActivity(
+    log,
+    tx,
+    ACTION.VOTE_BRIBE_CLAIMED,
+    VOTER_CONTEXT[bribe.voterSource],
+    SOURCE.BRIBE_VOTING_REWARD,
+  )
+  activity.actor = lower(event.args.from)
+  activity.token = lower(event.args.reward)
+  activity.amount = event.args.amount
+  activity.rewardType = "Bribe"
+  activity.rewardContract = lower(log.address)
+  activity.gauge = bribe.gauge
+  activity.tokenId = claimTokenId(tx)
+  store.addActivity(activity)
+}
+
+export const voterBribeRewardHandlers: Record<string, Handler> = {
+  NotifyReward: handleVoterBribeNotifyReward,
+  ClaimRewards: handleVoterBribeClaimRewards,
 }

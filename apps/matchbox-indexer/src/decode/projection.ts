@@ -11,18 +11,21 @@ import {
 import { z } from "zod"
 import type { Network } from "../ingest/networks"
 import type { RawLog, RawTx } from "../ingest/rpc"
-import { lockKeysForLog, resolveHandler } from "./dispatch"
+import { lockKeysForLog, resolveHandler, troveKeysForLog } from "./dispatch"
 import { lower } from "./helpers"
 import { PgStore } from "./pg-store"
-import type { Store } from "./store"
+import { type Store, WarehouseOnlyStore } from "./store"
 
-// Projects matchbox_raw into the explorer-compatible tables, strictly in
+// Projects matchbox_raw into the explorer-compatible tables and the
+// warehouse-only ones (reward deposits, trove updates), strictly in
 // (block_number, log_index) order, past the 'projection' checkpoint and no
 // further than the ingest 'logs' checkpoint. Each batch commits its rows and
 // the checkpoint together, so a crash resumes cleanly.
 
 // Bump on any change to handler semantics; the tables must then be replayed.
-export const DECODER_VERSION = 1
+// v2: voters from the network start, voter bribe rewards, reward deposits,
+// claim token ids, INCENTIVE_ADDED epochs, mUSD trove updates.
+export const DECODER_VERSION = 2
 
 const PROJECTION_STREAM = "projection"
 const LOGS_STREAM = "logs"
@@ -33,7 +36,7 @@ const logger = createLogger("matchbox-indexer-projection")
 export class ProjectionReplayRequiredError extends Error {
   constructor(network: Network, built: number) {
     super(
-      `${network} projection was built with decoder v${built}, current is v${DECODER_VERSION}. Run scripts/project.ts --replay.`,
+      `${network} projection was built with decoder v${built}, current is v${DECODER_VERSION}. Run scripts/rebuild.ts --replay.`,
     )
     this.name = "ProjectionReplayRequiredError"
   }
@@ -233,14 +236,16 @@ async function readBatch(
 
 // Runs one block's logs in log order. A template created in this block also
 // covers the block's earlier logs: graph-node runs a new data source over the
-// whole block it was created in.
+// whole block it was created in. Activity from a log the explorer would not
+// have handled is marked warehouse-only.
 export function projectBlock(entries: LogWithTx[], store: Store): number {
   let handled = 0
   const deferred: LogWithTx[] = []
+  const warehouseOnly = new WarehouseOnlyStore(store)
 
   function run(entry: LogWithTx): boolean {
-    const handler = resolveHandler(entry.log, store)
-    if (handler === undefined) return false
+    const resolved = resolveHandler(entry.log, store)
+    if (resolved === undefined) return false
     if (entry.tx === null) {
       throw new Error(
         `Missing transaction ${entry.log.txHash} for handled log ${entry.log.logIndex}`,
@@ -254,7 +259,11 @@ export function projectBlock(entries: LogWithTx[], store: Store): number {
       )
     }
     try {
-      handler(entry.log, entry.tx, store)
+      resolved.handler(
+        entry.log,
+        entry.tx,
+        resolved.explorerParity ? store : warehouseOnly,
+      )
     } catch (error) {
       // graph-node skips a trigger whose log does not decode against the
       // handler's event (same topic0, different indexed layout). Handlers
@@ -359,6 +368,10 @@ export async function runProjection(
       db,
       entries.flatMap((entry) => lockKeysForLog(entry.log)),
     )
+    await store.prefetchTroves(
+      db,
+      entries.flatMap((entry) => troveKeysForLog(entry.log)),
+    )
 
     let blockEntries: LogWithTx[] = []
     for (const entry of entries) {
@@ -397,8 +410,12 @@ export async function runProjection(
   return result
 }
 
+const otherNetworkSchema = z.object({ other: z.boolean() })
+
 // Clears the projection for one network so runProjection rebuilds it from the
-// first raw log under the current decoder version.
+// first raw log under the current decoder version. A table holding only this
+// network is truncated: a DELETE leaves the space to autovacuum, and a
+// replay would briefly need twice the projection under a storage cap.
 export async function resetProjection(
   db: ClientBase,
   network: Network,
@@ -412,8 +429,19 @@ export async function resetProjection(
       "matchbox.bribe_to_pool",
       "matchbox.projection_data_sources",
       "matchbox.projection_state",
+      "matchbox.reward_deposits",
+      "matchbox.trove_updates",
     ]) {
-      await db.query(`DELETE FROM ${table} WHERE network = $1`, [network])
+      const result = await db.query(
+        `SELECT EXISTS (SELECT 1 FROM ${table} WHERE network <> $1) AS other`,
+        [network],
+      )
+      const shared = z.array(otherNetworkSchema).parse(result.rows)[0]?.other
+      if (shared === false) {
+        await db.query(`TRUNCATE ${table}`)
+      } else {
+        await db.query(`DELETE FROM ${table} WHERE network = $1`, [network])
+      }
     }
     await db.query(
       "DELETE FROM matchbox.indexer_checkpoints WHERE network = $1 AND stream = $2",
