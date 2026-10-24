@@ -8,7 +8,11 @@ import {
   stepUpResponseSchema,
 } from "@repo/platform-contracts/console"
 import { PlatformError, jsonBody } from "@repo/platform-server"
-import { type GoogleIdentity, isStaffIdentity } from "../auth/google"
+import {
+  type GoogleIdentity,
+  avatarUrlFrom,
+  isStaffIdentity,
+} from "../auth/google"
 import { issueGoogleNonce, takeGoogleNonce } from "../auth/google-nonce"
 import { limitByIp } from "../auth/limits"
 import { endSessionCookie, startSession } from "../auth/session"
@@ -77,9 +81,22 @@ async function verifiedIdentity(
   }
   return {
     ...identity,
+    picture: avatarUrlFrom(identity.picture),
     email: identity.email.trim().toLowerCase(),
     hostedDomain: identity.hostedDomain?.toLowerCase() ?? null,
   }
+}
+
+/** Keeps the stored Google profile picture in step with the latest token. */
+async function syncAvatar(
+  c: ConsoleContext,
+  account: AccountRecord,
+  identity: GoogleIdentity,
+): Promise<AccountRecord> {
+  if (account.avatarUrl === identity.picture) return account
+  return deps(c).store.updateAccount(account.id, {
+    avatarUrl: identity.picture,
+  })
 }
 
 /**
@@ -136,6 +153,7 @@ async function resolveAccount(
       displayName: (identity.name ?? localPart(identity.email)).slice(0, 80),
       emailVerifiedAt: verifiedAt,
       googleSub: identity.sub,
+      avatarUrl: identity.picture,
     })
   } catch (error) {
     if (!(error instanceof StoreConflictError)) throw error
@@ -200,7 +218,9 @@ export default function registerAuthRoutes(app: ConsoleApp): void {
       purpose: "sign-in",
       sessionId: null,
     })
-    const { account, created } = await resolveAccount(c, identity)
+    const resolved = await resolveAccount(c, identity)
+    const { created } = resolved
+    const account = await syncAvatar(c, resolved.account, identity)
     if (account.disabledAt !== null) {
       throw new PlatformError("forbidden", { message: "Account disabled." })
     }

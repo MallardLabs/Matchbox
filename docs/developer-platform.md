@@ -41,6 +41,9 @@ passkey tables):
    — `mbx_dev_accounts.google_sub`; drops `mbx_dev_passkeys`,
    `mbx_dev_email_challenges`, `mbx_dev_webauthn_challenges`. Apply before
    deploying the Google-sign-in console.
+6. `supabase/migrations/20261024000002_developer_console_account_avatar.sql`
+   — `mbx_dev_accounts.avatar_url` (Google profile picture). Apply before
+   deploying a console that reads it.
 
 Each file has a manual rollback block in its header comment.
 

@@ -140,7 +140,8 @@ grants that contain a `discord:*` scope for the old wallet, reason
 
 - `mbx_dev_accounts` — `id`, `email` unique (lower-cased), `email_verified_at`,
   `google_sub` unique (Google account id; null until the first Google
-  sign-in), `display_name`, `created_at`, `disabled_at`.
+  sign-in), `avatar_url` (Google `picture`, https, refreshed at sign-in),
+  `display_name`, `created_at`, `disabled_at`.
 - Passkeys and email/WebAuthn challenges (`mbx_dev_passkeys`,
   `mbx_dev_email_challenges`, `mbx_dev_webauthn_challenges`) were created by
   20260930000001 and dropped by 20261024000001 when Google sign-in replaced

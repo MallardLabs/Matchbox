@@ -12,9 +12,9 @@ import {
 import type { ReactElement } from "react"
 import * as api from "../../lib/api"
 import { useOptionalSession } from "../../lib/session"
-import { initials } from "../ui/AppMark"
+import Avatar from "../ui/Avatar"
 
-/** Top bar account chip: initials, email (wide screens), menu. */
+/** Top bar account chip: avatar, email (wide screens), menu. */
 export default function AccountMenu(): ReactElement {
   const session = useOptionalSession()
   const queryClient = useQueryClient()
@@ -43,12 +43,7 @@ export default function AccountMenu(): ReactElement {
         aria-label={`Account: ${account.email}`}
         className="flex h-10 min-w-0 shrink-0 items-center gap-2 rounded-lg p-1.5 transition-colors hover:bg-inset md:border md:border-line md:pr-2.5 md:hover:border-line-2 md:hover:bg-surface"
       >
-        <span
-          aria-hidden="true"
-          className="flex size-7 shrink-0 items-center justify-center rounded-full bg-inset text-caption font-700 text-ink-2"
-        >
-          {initials(account.displayName)}
-        </span>
+        <Avatar name={account.displayName} src={account.avatarUrl} />
         <span className="hidden max-w-[220px] truncate text-body-sm text-ink xl:block">
           {account.email}
         </span>

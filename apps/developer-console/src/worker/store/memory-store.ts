@@ -172,6 +172,7 @@ export default function createMemoryStore(
         email: input.email,
         emailVerifiedAt: input.emailVerifiedAt,
         googleSub,
+        avatarUrl: input.avatarUrl ?? null,
         displayName: input.displayName,
         createdAt: timestamp(),
         disabledAt: null,
@@ -195,6 +196,7 @@ export default function createMemoryStore(
         }
         account.email = patch.email
       }
+      if (patch.avatarUrl !== undefined) account.avatarUrl = patch.avatarUrl
       if (patch.googleSub !== undefined) {
         const holder = await store.findAccountByGoogleSub(patch.googleSub)
         if (holder !== null && holder.id !== id) {
@@ -363,6 +365,7 @@ export default function createMemoryStore(
                     ...membership,
                     email: account.email,
                     displayName: account.displayName,
+                    avatarUrl: account.avatarUrl,
                     emailVerifiedAt: account.emailVerifiedAt,
                   },
                 ]

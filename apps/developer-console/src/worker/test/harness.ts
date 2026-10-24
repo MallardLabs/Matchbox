@@ -148,6 +148,7 @@ export function createHarness(
       emailVerified: true,
       hostedDomain: null,
       name: null,
+      picture: null,
       nonce: null,
       ...claims,
     })

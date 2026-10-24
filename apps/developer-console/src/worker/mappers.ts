@@ -56,6 +56,7 @@ export function toAccount(account: AccountRecord): DeveloperAccount {
     email: account.email,
     emailVerifiedAt: account.emailVerifiedAt,
     displayName: account.displayName,
+    avatarUrl: account.avatarUrl,
     createdAt: account.createdAt,
   }
 }
@@ -89,6 +90,7 @@ export function toMember(member: MemberRecord): Member {
     accountId: member.accountId,
     email: member.email,
     displayName: member.displayName,
+    avatarUrl: member.avatarUrl,
     role: member.role,
     createdAt: member.createdAt,
   }

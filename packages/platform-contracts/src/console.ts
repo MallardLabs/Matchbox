@@ -175,6 +175,8 @@ export const developerAccountSchema = z.object({
   email: z.string(),
   emailVerifiedAt: isoDateTimeSchema.nullable(),
   displayName: z.string(),
+  /** Google profile picture (https); null when Google sent none. */
+  avatarUrl: z.string().nullable(),
   createdAt: isoDateTimeSchema,
 })
 
@@ -271,6 +273,7 @@ export const memberSchema = z.object({
   accountId: uuidSchema,
   email: z.string(),
   displayName: z.string(),
+  avatarUrl: z.string().nullable(),
   role: membershipRoleSchema,
   createdAt: isoDateTimeSchema,
 })

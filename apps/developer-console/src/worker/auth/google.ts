@@ -26,6 +26,8 @@ export type GoogleIdentity = {
   /** Google Workspace domain (`hd`); null for consumer accounts. */
   hostedDomain: string | null
   name: string | null
+  /** Profile picture URL (https only). */
+  picture: string | null
   nonce: string | null
 }
 
@@ -40,8 +42,18 @@ const claimsSchema = z.object({
   email_verified: z.union([z.boolean(), z.enum(["true", "false"])]),
   hd: z.string().min(1).max(253).optional(),
   name: z.string().optional(),
+  picture: z.string().optional(),
   nonce: z.string().optional(),
 })
+
+/** Keeps only https picture URLs of a sane length. */
+export function avatarUrlFrom(value: string | null | undefined): string | null {
+  if (value === null || value === undefined) return null
+  const trimmed = value.trim()
+  return trimmed.startsWith("https://") && trimmed.length <= 2048
+    ? trimmed
+    : null
+}
 
 /** Maps verified JWT claims to an identity; null when claims are missing. */
 export function identityFromClaims(claims: unknown): GoogleIdentity | null {
@@ -55,6 +67,7 @@ export function identityFromClaims(claims: unknown): GoogleIdentity | null {
       value.email_verified === true || value.email_verified === "true",
     hostedDomain: value.hd?.toLowerCase() ?? null,
     name: value.name?.trim() || null,
+    picture: avatarUrlFrom(value.picture),
     nonce: value.nonce ?? null,
   }
 }

@@ -44,6 +44,8 @@ export type AccountRecord = {
   emailVerifiedAt: string | null
   /** Google `sub`; the sign-in identity. Null only for seeded accounts. */
   googleSub: string | null
+  /** Google profile picture URL; refreshed at each sign-in. */
+  avatarUrl: string | null
   displayName: string
   createdAt: string
   disabledAt: string | null
@@ -83,6 +85,7 @@ export type MembershipRecord = {
 export type MemberRecord = MembershipRecord & {
   email: string
   displayName: string
+  avatarUrl: string | null
   emailVerifiedAt: string | null
 }
 
@@ -281,6 +284,7 @@ export type ConsoleStore = {
     displayName: string
     emailVerifiedAt: string | null
     googleSub?: string | null
+    avatarUrl?: string | null
   }): Promise<AccountRecord>
   updateAccount(
     id: string,
@@ -289,6 +293,7 @@ export type ConsoleStore = {
       email?: string
       emailVerifiedAt?: string
       googleSub?: string
+      avatarUrl?: string | null
     },
   ): Promise<AccountRecord>
   getStaffRole(accountId: string): Promise<StaffRole | null>

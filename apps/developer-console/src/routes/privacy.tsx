@@ -92,10 +92,12 @@ function PrivacyPage(): ReactElement {
           <List>
             <li>
               Google sign-in: your name, email address, whether Google has
-              verified it, your Google account ID and, for Google Workspace
-              accounts, the Workspace domain. We store your name (as an editable
-              display name), email and Google account ID. The Workspace domain
-              is used at sign-in to grant staff access and is not stored.
+              verified it, your profile picture link, your Google account ID
+              and, for Google Workspace accounts, the Workspace domain. We store
+              your name (as an editable display name), email, profile picture
+              link and Google account ID; the picture is shown to you and to
+              members of your organizations. The Workspace domain is used at
+              sign-in to grant staff access and is not stored.
             </li>
             <li>
               Account content: organizations, members and invitations, apps and
@@ -172,11 +174,11 @@ function PrivacyPage(): ReactElement {
 
         <Section title="Sharing">
           <P>
-            Members of an organization can see each other's names and email
-            addresses and the organization's apps, settings and usage. Matchbox
-            staff can see account, app and review details to operate the
-            service. Otherwise we share data only with the providers above or
-            when required by law.
+            Members of an organization can see each other's names, email
+            addresses and profile pictures, and the organization's apps,
+            settings and usage. Matchbox staff can see account, app and review
+            details to operate the service. Otherwise we share data only with
+            the providers above or when required by law.
           </P>
         </Section>
 

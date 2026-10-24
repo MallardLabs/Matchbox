@@ -123,6 +123,35 @@ describe("Google sign-in", () => {
     expect(response.status).toBe(409)
   })
 
+  it("stores the Google picture and refreshes it at sign-in", async () => {
+    const harness = createHarness()
+    const first = await harness.googleSignIn({
+      sub: "1001",
+      email: "dev@example.com",
+      picture: "https://lh3.googleusercontent.com/a/one",
+    })
+    expect(
+      (await harness.json(first.response, meResponseSchema)).account.avatarUrl,
+    ).toBe("https://lh3.googleusercontent.com/a/one")
+    const second = await harness.googleSignIn({
+      sub: "1001",
+      email: "dev@example.com",
+      picture: "https://lh3.googleusercontent.com/a/two",
+    })
+    expect(
+      (await harness.json(second.response, meResponseSchema)).account.avatarUrl,
+    ).toBe("https://lh3.googleusercontent.com/a/two")
+    const removed = await harness.googleSignIn({
+      sub: "1001",
+      email: "dev@example.com",
+      picture: null,
+    })
+    expect(
+      (await harness.json(removed.response, meResponseSchema)).account
+        .avatarUrl,
+    ).toBeNull()
+  })
+
   it("follows a changed Google email", async () => {
     const harness = createHarness()
     await harness.googleSignIn({ sub: "1001", email: "old@example.com" })
@@ -334,7 +363,13 @@ describe("staff domains", () => {
   })
 
   it("matches the hosted domain exactly", () => {
-    const base = { sub: "1", emailVerified: true, name: null, nonce: null }
+    const base = {
+      sub: "1",
+      emailVerified: true,
+      name: null,
+      picture: null,
+      nonce: null,
+    }
     expect(
       isStaffIdentity(
         {
@@ -466,6 +501,7 @@ describe("Google claims", () => {
         email_verified: "true",
         hd: "Thesis.co",
         name: " Dev ",
+        picture: "https://lh3.googleusercontent.com/a/photo",
         nonce: "n",
       }),
     ).toEqual({
@@ -474,8 +510,17 @@ describe("Google claims", () => {
       emailVerified: true,
       hostedDomain: "thesis.co",
       name: "Dev",
+      picture: "https://lh3.googleusercontent.com/a/photo",
       nonce: "n",
     })
+    expect(
+      identityFromClaims({
+        sub: "1",
+        email: "a@b.co",
+        email_verified: true,
+        picture: "http://insecure.example/photo",
+      })?.picture,
+    ).toBeNull()
   })
 
   it("rejects tokens without the required claims", () => {

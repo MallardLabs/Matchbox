@@ -76,6 +76,8 @@ const accountRow = z
     email: z.string(),
     email_verified_at: nullableTimestamp,
     google_sub: z.string().nullable(),
+    // Added by 20261024000002; absent until that migration is applied.
+    avatar_url: z.string().nullable().default(null),
     display_name: z.string(),
     created_at: timestampSchema,
     disabled_at: nullableTimestamp,
@@ -85,6 +87,7 @@ const accountRow = z
     email: row.email,
     emailVerifiedAt: row.email_verified_at,
     googleSub: row.google_sub,
+    avatarUrl: row.avatar_url,
     displayName: row.display_name,
     createdAt: row.created_at,
     disabledAt: row.disabled_at,
@@ -150,6 +153,7 @@ const memberRow = z
     account: z.object({
       email: z.string(),
       display_name: z.string(),
+      avatar_url: z.string().nullable().default(null),
       email_verified_at: nullableTimestamp,
     }),
   })
@@ -160,6 +164,7 @@ const memberRow = z
     createdAt: row.created_at,
     email: row.account.email,
     displayName: row.account.display_name,
+    avatarUrl: row.account.avatar_url,
     emailVerifiedAt: row.account.email_verified_at,
   }))
 
@@ -613,14 +618,16 @@ export default function createSupabaseStore(
             display_name: input.displayName,
             email_verified_at: input.emailVerifiedAt,
             google_sub: input.googleSub ?? null,
+            avatar_url: input.avatarUrl ?? null,
           })
           .select("*")
           .single(),
       )
     },
     async updateAccount(id, patch) {
-      const row: Record<string, string> = {}
+      const row: Record<string, string | null> = {}
       if (patch.displayName !== undefined) row.display_name = patch.displayName
+      if (patch.avatarUrl !== undefined) row.avatar_url = patch.avatarUrl
       if (patch.emailVerifiedAt !== undefined) {
         row.email_verified_at = patch.emailVerifiedAt
       }
@@ -840,9 +847,7 @@ export default function createSupabaseStore(
         "list members",
         await supabase
           .from("mbx_dev_memberships")
-          .select(
-            "*, account:mbx_dev_accounts!inner(email, display_name, email_verified_at)",
-          )
+          .select("*, account:mbx_dev_accounts!inner(*)")
           .eq("organization_id", organizationId)
           .order("created_at"),
       )

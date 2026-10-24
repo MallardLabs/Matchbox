@@ -9,6 +9,7 @@ const me = {
     email: "dev@matchbox.local",
     emailVerifiedAt: "2026-09-30T12:00:00.000Z",
     displayName: "Dev",
+    avatarUrl: null,
     createdAt: "2026-09-30T12:00:00.000Z",
   },
   organizations: [],

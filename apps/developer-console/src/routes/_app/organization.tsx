@@ -25,7 +25,7 @@ import ConfirmDialog from "../../components/ConfirmDialog"
 import QueryError from "../../components/QueryError"
 import RequireOrg from "../../components/RequireOrg"
 import { Crumb, Crumbs } from "../../components/shell/Breadcrumbs"
-import { initials } from "../../components/ui/AppMark"
+import Avatar from "../../components/ui/Avatar"
 import LockHint from "../../components/ui/LockHint"
 import PageTitle from "../../components/ui/PageTitle"
 import { Pill } from "../../components/ui/Pill"
@@ -128,23 +128,21 @@ function Organization({ org }: { org: OrganizationSummary }): ReactElement {
   )
 }
 
-function Avatar({
+function MemberAvatar({
   name,
+  src,
   self,
 }: {
   name: string
+  src: string | null
   self: boolean
 }): ReactElement {
   return (
-    <span
-      aria-hidden="true"
-      className={cn(
-        "flex size-7 shrink-0 items-center justify-center rounded-full text-micro font-700",
-        self ? "bg-ink text-surface" : "bg-inset text-ink-2",
-      )}
-    >
-      {initials(name)}
-    </span>
+    <Avatar
+      name={name}
+      src={src}
+      className={cn("text-micro", self && "bg-ink text-surface")}
+    />
   )
 }
 
@@ -222,7 +220,11 @@ function Members({ org }: { org: OrganizationSummary }): ReactElement {
                 <Table.Row key={member.accountId}>
                   <Table.Cell className="py-2.5">
                     <span className="flex min-w-0 items-center gap-3">
-                      <Avatar name={member.displayName} self={self} />
+                      <MemberAvatar
+                        name={member.displayName}
+                        src={member.avatarUrl}
+                        self={self}
+                      />
                       <span className="flex min-w-0 flex-col">
                         <span className="flex min-w-0 items-center gap-2">
                           <span className="truncate text-body-sm font-600 text-ink">
