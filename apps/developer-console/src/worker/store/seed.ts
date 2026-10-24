@@ -15,7 +15,7 @@ export const demoAccountEmail = "dev@matchbox.local"
 
 /**
  * Demo data for `PLATFORM_STORE=memory`: one developer account (sign in with
- * `POST /api/auth/dev-sign-in`; a passkey cannot be seeded), the "Mallard
+ * `POST /api/auth/dev-sign-in`; Google sign-in cannot be seeded), the "Mallard
  * Labs" org, one approved live gauge-profile app and one app with a
  * `discord:profile` review open.
  */

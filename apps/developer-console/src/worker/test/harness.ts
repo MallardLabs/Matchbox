@@ -10,6 +10,7 @@ import {
 } from "@repo/platform-server"
 import type { z } from "zod"
 import createApp from "../app"
+import type { GoogleIdentity } from "../auth/google"
 import { sessionTokenHash } from "../auth/session"
 import type { ConsoleDeps } from "../context"
 import {
@@ -31,6 +32,13 @@ export const consoleOrigin = "https://developer.matchbox.markets"
 export const sessionPepper = "test-session-pepper-0123456789abcdef"
 export const apiKeyPepper = "test-api-key-pepper-0123456789abcdef"
 export const clientSecretPepper = "test-client-secret-pepper-012345678"
+export const googleClientId = "test-client.apps.googleusercontent.com"
+export const staffDomains = ["supernormal.foundation", "thesis.co"]
+
+/** Claims for a fake Google ID token; unset fields default to a verified
+ * consumer account. */
+export type GoogleTokenClaims = Pick<GoogleIdentity, "sub" | "email"> &
+  Partial<Omit<GoogleIdentity, "sub" | "email">>
 
 export type Harness = ReturnType<typeof createHarness>
 
@@ -49,6 +57,8 @@ export function createHarness(
     production?: boolean
     analytics?: UsageAnalytics
     health?: ConsoleDeps["health"]
+    /** false = `GOOGLE_CLIENT_ID` unset. */
+    google?: boolean
   } = {},
 ) {
   let current = new Date("2026-09-30T12:00:00.000Z")
@@ -56,6 +66,8 @@ export function createHarness(
   const store: MemoryConsoleStore = createMemoryStore(now)
   const email: MemoryEmailSender = createMemoryEmailSender()
   const apiLimiter = createMemoryRateLimitClient(() => current.getTime())
+  // Fake GIS: tokens are opaque handles for the claims they were minted with.
+  const googleTokens = new Map<string, GoogleIdentity>()
   const app = createApp({
     store,
     rateLimits: createMemoryRateLimitClient(() => current.getTime()),
@@ -65,11 +77,17 @@ export function createHarness(
       read: async (at: Date) => localPlatformHealth(at),
     },
     apiLimiter,
-    webauthn: {
-      rpId: "developer.matchbox.markets",
-      rpName: "Matchbox Developers",
-      origin: consoleOrigin,
-    },
+    google:
+      options.google === false
+        ? null
+        : {
+            clientId: googleClientId,
+            verifier: {
+              async verify(credential: string) {
+                return googleTokens.get(credential) ?? null
+              },
+            },
+          },
     now,
     flags: {
       consoleEnabled: options.consoleEnabled ?? true,
@@ -82,6 +100,7 @@ export function createHarness(
       apiKeyPepper,
       clientSecretPepper,
       devAccountEmail: "dev@matchbox.local",
+      staffDomains,
     },
   })
 
@@ -118,6 +137,70 @@ export function createHarness(
       email: emailAddress,
       displayName,
       emailVerifiedAt: now().toISOString(),
+      googleSub: googleSubFor(emailAddress),
+    })
+  }
+
+  /** Mints a fake Google ID token the harness verifier accepts. */
+  function googleToken(claims: GoogleTokenClaims): string {
+    const token = `gis.${crypto.randomUUID()}`
+    googleTokens.set(token, {
+      emailVerified: true,
+      hostedDomain: null,
+      name: null,
+      nonce: null,
+      ...claims,
+    })
+    return token
+  }
+
+  /** Requests a nonce; returns it with the cookie jar that carries it. */
+  async function googleNonce(
+    purpose: "sign-in" | "step-up",
+    cookie = "",
+  ): Promise<{ nonce: string; cookie: string }> {
+    const response = await request("POST", "/api/auth/google/nonce", {
+      body: { purpose },
+      ...(cookie === "" ? {} : { cookie }),
+    })
+    if (response.status !== 200) {
+      throw new Error(`nonce request failed: ${response.status}`)
+    }
+    const body = (await response.json()) as { nonce: string }
+    return { nonce: body.nonce, cookie: cookiesFrom(response, cookie) }
+  }
+
+  /** Full GIS sign-in: nonce, then a token carrying it. */
+  async function googleSignIn(
+    claims: GoogleTokenClaims,
+    signInOptions: { invitationToken?: string; cookie?: string } = {},
+  ): Promise<{ response: Response; cookie: string }> {
+    const issued = await googleNonce("sign-in", signInOptions.cookie)
+    const response = await request("POST", "/api/auth/google", {
+      cookie: issued.cookie,
+      body: {
+        credential: googleToken({ nonce: issued.nonce, ...claims }),
+        ...(signInOptions.invitationToken === undefined
+          ? {}
+          : { invitationToken: signInOptions.invitationToken }),
+      },
+    })
+    return { response, cookie: cookiesFrom(response, issued.cookie) }
+  }
+
+  /** Google step-up for the session in `cookie`, as `target` (or claims). */
+  async function googleStepUp(
+    cookie: string,
+    target: AccountRecord | GoogleTokenClaims,
+  ): Promise<Response> {
+    const claims =
+      "sub" in target
+        ? target
+        : { sub: target.googleSub ?? "missing", email: target.email }
+    const issued = await googleNonce("step-up", cookie)
+    return request("POST", "/api/auth/step-up/google", {
+      cookie: issued.cookie,
+      body: { credential: googleToken({ nonce: issued.nonce, ...claims }) },
     })
   }
 
@@ -213,6 +296,10 @@ export function createHarness(
     json,
     account,
     signIn,
+    googleToken,
+    googleNonce,
+    googleSignIn,
+    googleStepUp,
     organization,
     environment,
     appWithEnvironments,
@@ -223,12 +310,9 @@ export function createHarness(
   }
 }
 
-/** Extracts the 6-digit code from the last email sent to `to`. */
-export function lastCode(email: MemoryEmailSender, to: string): string | null {
-  const message = [...email.sent].reverse().find((item) => item.to === to)
-  return message === undefined
-    ? null
-    : (/\b([0-9]{6})\b/.exec(message.text)?.[1] ?? null)
+/** Google `sub` the harness assigns to accounts it creates. */
+export function googleSubFor(email: string): string {
+  return `google-${email}`
 }
 
 /** Every `Set-Cookie` header (iteration keeps them separate). */

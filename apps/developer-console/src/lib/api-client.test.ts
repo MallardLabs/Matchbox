@@ -87,7 +87,7 @@ describe("apiRequest", () => {
     respond(403, {
       error: {
         code: "step_up_required",
-        message: "Confirm with your passkey to continue.",
+        message: "Confirm with Google to continue.",
         requestId: "req_3",
         docsUrl:
           "https://developer.matchbox.markets/docs/errors#step_up_required",

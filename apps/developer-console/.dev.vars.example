@@ -7,7 +7,7 @@ SUPABASE_SERVICE_ROLE_KEY=replace-me
 
 # HMAC peppers (>= 32 random chars each). API_KEY_PEPPER must match the
 # developer-api Worker; CLIENT_SECRET_PEPPER must match matchbox-id;
-# SESSION_PEPPER hashes console sessions, email codes and invitation tokens.
+# SESSION_PEPPER hashes console sessions, Google nonces and invitation tokens.
 API_KEY_PEPPER=replace-with-at-least-32-random-characters
 CLIENT_SECRET_PEPPER=replace-with-at-least-32-random-characters
 SESSION_PEPPER=replace-with-at-least-32-random-characters
@@ -22,5 +22,8 @@ ENVIRONMENT=development
 DEVELOPER_CONSOLE_ENABLED=true
 # Memory store with seeded demo data + POST /api/auth/dev-sign-in.
 PLATFORM_STORE=memory
-WEBAUTHN_RP_ID=localhost
-WEBAUTHN_ORIGIN=http://localhost:5175
+CONSOLE_ORIGIN=http://localhost:5175
+# Optional locally (dev sign-in works without it). The Google client must list
+# http://localhost and http://localhost:5175 as authorized JavaScript origins.
+GOOGLE_CLIENT_ID=
+STAFF_EMAIL_DOMAINS=supernormal.foundation,thesis.co

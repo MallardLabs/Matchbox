@@ -9,13 +9,12 @@ import {
   requestLogger,
 } from "@repo/platform-server"
 import type { Context, Hono } from "hono"
-import type { WebauthnConfig } from "./auth/webauthn"
+import type { GoogleTokenVerifier } from "./auth/google"
 import type { EmailSender } from "./email/sender"
 import type { EmailContent } from "./email/templates"
 import type {
   AccountRecord,
   ConsoleStore,
-  PasskeyRecord,
   SessionRecord,
 } from "./store/console-store"
 import type { UsageAnalytics } from "./usage/analytics"
@@ -30,7 +29,8 @@ export type ConsoleDeps = {
   health: { read(now: Date): Promise<PlatformHealthResponse> }
   /** Reads the developer-api limiter's buckets (quota status). */
   apiLimiter: RateLimitReader
-  webauthn: WebauthnConfig
+  /** Sign in with Google; null when `GOOGLE_CLIENT_ID` is unset (local). */
+  google: { clientId: string; verifier: GoogleTokenVerifier } | null
   now: () => Date
   flags: {
     consoleEnabled: boolean
@@ -46,6 +46,8 @@ export type ConsoleDeps = {
     clientSecretPepper: string
     /** Account id `dev-sign-in` signs in as (memory mode). */
     devAccountEmail: string
+    /** Google Workspace domains whose accounts are staff operators. */
+    staffDomains: string[]
   }
 }
 
@@ -90,25 +92,7 @@ export function steppedUpUntil(
   return until > now.getTime() ? new Date(until).toISOString() : null
 }
 
-/** A passkey added through email recovery cannot step up for 24 h. */
-export const recoveryStepUpBlockMs = 24 * 60 * 60_000
-
-/**
- * Whether an assertion with `passkey` may step up a session (or yield a
- * stepped-up sign-in). Recovery passkeys are blocked until
- * `stepUpBlockedUntil`; pre-existing passkeys are not.
- */
-export function passkeyMayStepUp(
-  passkey: Pick<PasskeyRecord, "stepUpBlockedUntil">,
-  now: Date,
-): boolean {
-  return (
-    passkey.stepUpBlockedUntil === null ||
-    Date.parse(passkey.stepUpBlockedUntil) <= now.getTime()
-  )
-}
-
-/** 403 `step_up_required` unless a passkey assertion happened < 10 min ago. */
+/** 403 `step_up_required` unless a Google re-confirmation happened < 10 min ago. */
 export function requireStepUp(c: ConsoleContext): AuthContext {
   const auth = requireAuth(c)
   if (steppedUpUntil(auth.session, deps(c).now()) === null) {

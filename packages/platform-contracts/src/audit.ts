@@ -17,11 +17,7 @@ export const auditActionSchema = z.enum([
   "developer-account-created",
   "developer-signed-in",
   "developer-signed-out",
-  "developer-recovery-completed",
   "developer-step-up-completed",
-  "passkey-registered",
-  "passkey-renamed",
-  "passkey-removed",
   "developer-session-revoked",
   "developer-account-updated",
   // organizations
@@ -58,6 +54,7 @@ export const auditActionSchema = z.enum([
   "client-secret-created",
   "client-secret-revoked",
   // staff
+  "staff-role-granted",
   "app-status-changed",
   "quota-override-created",
   "quota-override-removed",

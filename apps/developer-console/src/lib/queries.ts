@@ -12,7 +12,6 @@ import { markServiceDisabled } from "./service-status"
 /** Query keys + options for every read. Mutations invalidate by prefix. */
 export const keys = {
   me: ["me"] as const,
-  passkeys: ["me", "passkeys"] as const,
   sessions: ["me", "sessions"] as const,
   orgs: ["orgs"] as const,
   org: (orgId: string) => ["orgs", orgId] as const,

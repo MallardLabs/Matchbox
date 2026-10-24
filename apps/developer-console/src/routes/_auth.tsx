@@ -24,7 +24,7 @@ function ApiStatus(): ReactElement {
   )
 }
 
-/** Sign-in, sign-up, recovery and invitations (C01, C01b, C01m). */
+/** Sign-in and invitations (C01, C01m). */
 function AuthLayout(): ReactElement {
   return (
     <div className="flex min-h-dvh flex-col bg-canvas bg-[radial-gradient(ellipse_90%_45%_at_50%_0%,color-mix(in_srgb,var(--accent)_11%,transparent),transparent_75%)] text-ink">

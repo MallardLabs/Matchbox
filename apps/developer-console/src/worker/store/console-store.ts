@@ -7,12 +7,10 @@ import type {
 import type {
   AppStatus,
   ClientType,
-  EmailChallengePurpose,
   MembershipRole,
   ReviewRecordState,
   ReviewState,
   StaffRole,
-  WebauthnChallengePurpose,
 } from "@repo/platform-contracts/console"
 import type { ApiKeyKind } from "@repo/platform-contracts/credentials"
 import type { GrantRevokedReason } from "@repo/platform-contracts/identity"
@@ -40,64 +38,15 @@ export class StoreConflictError extends Error {
   }
 }
 
-export type AuthenticatorTransport =
-  | "ble"
-  | "cable"
-  | "hybrid"
-  | "internal"
-  | "nfc"
-  | "smart-card"
-  | "usb"
-
-export type PasskeyDeviceType = "single-device" | "multi-device"
-
 export type AccountRecord = {
   id: string
   email: string
   emailVerifiedAt: string | null
+  /** Google `sub`; the sign-in identity. Null only for seeded accounts. */
+  googleSub: string | null
   displayName: string
   createdAt: string
   disabledAt: string | null
-}
-
-export type PasskeyRecord = {
-  id: string
-  accountId: string
-  credentialId: string
-  publicKey: string
-  counter: number
-  transports: AuthenticatorTransport[]
-  deviceType: PasskeyDeviceType
-  backedUp: boolean
-  name: string | null
-  createdAt: string
-  lastUsedAt: string | null
-  /**
-   * Passkeys registered through email recovery cannot step up (or yield a
-   * stepped-up sign-in) until this time; null = no restriction.
-   */
-  stepUpBlockedUntil: string | null
-}
-
-export type EmailChallengeRecord = {
-  id: string
-  email: string
-  purpose: EmailChallengePurpose
-  codeHash: string
-  attempts: number
-  expiresAt: string
-  consumedAt: string | null
-  createdAt: string
-}
-
-export type WebauthnChallengeRecord = {
-  id: string
-  challenge: string
-  purpose: WebauthnChallengePurpose
-  accountId: string | null
-  expiresAt: string
-  consumedAt: string | null
-  createdAt: string
 }
 
 export type SessionRecord = {
@@ -326,57 +275,25 @@ export type ConsoleStore = {
   // Accounts ---------------------------------------------------------------
   getAccount(id: string): Promise<AccountRecord | null>
   findAccountByEmail(email: string): Promise<AccountRecord | null>
+  findAccountByGoogleSub(googleSub: string): Promise<AccountRecord | null>
   createAccount(input: {
     email: string
     displayName: string
     emailVerifiedAt: string | null
+    googleSub?: string | null
   }): Promise<AccountRecord>
   updateAccount(
     id: string,
-    patch: { displayName?: string; emailVerifiedAt?: string },
+    patch: {
+      displayName?: string
+      email?: string
+      emailVerifiedAt?: string
+      googleSub?: string
+    },
   ): Promise<AccountRecord>
   getStaffRole(accountId: string): Promise<StaffRole | null>
-
-  // Passkeys ---------------------------------------------------------------
-  listPasskeys(accountId: string): Promise<PasskeyRecord[]>
-  findPasskeyByCredentialId(credentialId: string): Promise<PasskeyRecord | null>
-  createPasskey(
-    input: Omit<
-      PasskeyRecord,
-      "id" | "createdAt" | "lastUsedAt" | "stepUpBlockedUntil"
-    > & {
-      lastUsedAt: string | null
-      stepUpBlockedUntil?: string | null
-    },
-  ): Promise<PasskeyRecord>
-  updatePasskey(
-    id: string,
-    patch: {
-      name?: string
-      counter?: number
-      backedUp?: boolean
-      lastUsedAt?: string
-    },
-  ): Promise<void>
-  deletePasskey(id: string): Promise<void>
-
-  // Email + WebAuthn challenges -------------------------------------------
-  createEmailChallenge(
-    input: Omit<EmailChallengeRecord, "attempts" | "consumedAt">,
-  ): Promise<EmailChallengeRecord>
-  getEmailChallenge(id: string): Promise<EmailChallengeRecord | null>
-  /** Increments `attempts` and returns the new value. */
-  incrementEmailChallengeAttempts(id: string): Promise<number>
-  /** True when this call consumed the challenge. */
-  consumeEmailChallenge(id: string, now: string): Promise<boolean>
-  createWebauthnChallenge(
-    input: Omit<WebauthnChallengeRecord, "id" | "consumedAt">,
-  ): Promise<WebauthnChallengeRecord>
-  /** Marks the challenge used; null when missing, used or expired. */
-  consumeWebauthnChallenge(
-    id: string,
-    now: string,
-  ): Promise<WebauthnChallengeRecord | null>
+  /** Upserts the staff row; returns the role it held before (null = none). */
+  setStaffRole(accountId: string, role: StaffRole): Promise<StaffRole | null>
 
   // Sessions ---------------------------------------------------------------
   createSession(

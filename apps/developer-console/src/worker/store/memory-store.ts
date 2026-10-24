@@ -14,19 +14,16 @@ import {
   type AppRecord,
   type ClientSecretRow,
   type ConsoleStore,
-  type EmailChallengeRecord,
   type EnvironmentRecord,
   type InvitationRecord,
   type MembershipRecord,
   type OAuthStatsRecord,
   type OrganizationRecord,
   type OrganizationReviewRecord,
-  type PasskeyRecord,
   type QuotaOverrideRow,
   type ReviewRecord,
   type SessionRecord,
   StoreConflictError,
-  type WebauthnChallengeRecord,
 } from "./console-store"
 
 /** A grant row as the memory store keeps it (for OAuth stats only). */
@@ -54,6 +51,8 @@ export type MemoryOAuthToken = {
 export type MemoryConsoleStore = ConsoleStore & {
   /** Test/seed helpers that have no production equivalent. */
   seedStaff(accountId: string, role: "reviewer" | "operator"): void
+  /** Sets `disabledAt` (staff-side disabling has no console route). */
+  disableAccount(accountId: string, at: string): void
   /** Returns the new grant id. */
   seedGrant(
     grant: Omit<MemoryGrant, "id" | "scopeVersion"> & { scopeVersion?: number },
@@ -61,7 +60,6 @@ export type MemoryConsoleStore = ConsoleStore & {
   seedOAuthToken(token: Omit<MemoryOAuthToken, "id" | "revokedAt">): string
   oauthTokens(): MemoryOAuthToken[]
   auditEvents(): AuditEvent[]
-  emailChallenges(): EmailChallengeRecord[]
   sessions(): SessionRecord[]
 }
 
@@ -79,9 +77,6 @@ export default function createMemoryStore(
 ): MemoryConsoleStore {
   const accounts = new Map<string, AccountRecord>()
   const staff = new Map<string, "reviewer" | "operator">()
-  const passkeys = new Map<string, PasskeyRecord>()
-  const emailChallenges = new Map<string, EmailChallengeRecord>()
-  const webauthnChallenges = new Map<string, WebauthnChallengeRecord>()
   const sessions = new Map<string, SessionRecord>()
   const organizations = new Map<string, OrganizationRecord>()
   const memberships: MembershipRecord[] = []
@@ -155,14 +150,28 @@ export default function createMemoryStore(
       }
       return null
     },
+    async findAccountByGoogleSub(googleSub) {
+      for (const account of accounts.values()) {
+        if (account.googleSub === googleSub) return copy(account)
+      }
+      return null
+    },
     async createAccount(input) {
       if (await store.findAccountByEmail(input.email)) {
         throw new StoreConflictError("Account email already exists")
+      }
+      const googleSub = input.googleSub ?? null
+      if (
+        googleSub !== null &&
+        (await store.findAccountByGoogleSub(googleSub))
+      ) {
+        throw new StoreConflictError("Google account already linked")
       }
       const account: AccountRecord = {
         id: crypto.randomUUID(),
         email: input.email,
         emailVerifiedAt: input.emailVerifiedAt,
+        googleSub,
         displayName: input.displayName,
         createdAt: timestamp(),
         disabledAt: null,
@@ -179,101 +188,29 @@ export default function createMemoryStore(
       if (patch.emailVerifiedAt !== undefined) {
         account.emailVerifiedAt = patch.emailVerifiedAt
       }
+      if (patch.email !== undefined && patch.email !== account.email) {
+        const holder = await store.findAccountByEmail(patch.email)
+        if (holder !== null && holder.id !== id) {
+          throw new StoreConflictError("Account email already exists")
+        }
+        account.email = patch.email
+      }
+      if (patch.googleSub !== undefined) {
+        const holder = await store.findAccountByGoogleSub(patch.googleSub)
+        if (holder !== null && holder.id !== id) {
+          throw new StoreConflictError("Google account already linked")
+        }
+        account.googleSub = patch.googleSub
+      }
       return copy(account)
     },
     async getStaffRole(accountId) {
       return staff.get(accountId) ?? null
     },
-
-    async listPasskeys(accountId) {
-      return copy(
-        [...passkeys.values()]
-          .filter((passkey) => passkey.accountId === accountId)
-          .sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
-      )
-    },
-    async findPasskeyByCredentialId(credentialId) {
-      for (const passkey of passkeys.values()) {
-        if (passkey.credentialId === credentialId) return copy(passkey)
-      }
-      return null
-    },
-    async createPasskey(input) {
-      if (await store.findPasskeyByCredentialId(input.credentialId)) {
-        throw new StoreConflictError("Credential already registered")
-      }
-      const passkey: PasskeyRecord = {
-        ...copy(input),
-        id: crypto.randomUUID(),
-        createdAt: timestamp(),
-        stepUpBlockedUntil: input.stepUpBlockedUntil ?? null,
-      }
-      passkeys.set(passkey.id, passkey)
-      return copy(passkey)
-    },
-    async updatePasskey(id, patch) {
-      const passkey = passkeys.get(id)
-      if (passkey === undefined) throw missing("Passkey")
-      if (patch.name !== undefined) passkey.name = patch.name
-      if (patch.counter !== undefined) passkey.counter = patch.counter
-      if (patch.backedUp !== undefined) passkey.backedUp = patch.backedUp
-      if (patch.lastUsedAt !== undefined) passkey.lastUsedAt = patch.lastUsedAt
-    },
-    async deletePasskey(id) {
-      passkeys.delete(id)
-    },
-
-    async createEmailChallenge(input) {
-      const challenge: EmailChallengeRecord = {
-        ...input,
-        attempts: 0,
-        consumedAt: null,
-      }
-      emailChallenges.set(challenge.id, challenge)
-      return copy(challenge)
-    },
-    async getEmailChallenge(id) {
-      const challenge = emailChallenges.get(id)
-      return challenge === undefined ? null : copy(challenge)
-    },
-    async incrementEmailChallengeAttempts(id) {
-      const challenge = emailChallenges.get(id)
-      if (challenge === undefined) throw missing("Email challenge")
-      challenge.attempts += 1
-      return challenge.attempts
-    },
-    async consumeEmailChallenge(id, at) {
-      const challenge = emailChallenges.get(id)
-      if (
-        challenge === undefined ||
-        challenge.consumedAt !== null ||
-        Date.parse(challenge.expiresAt) <= Date.parse(at)
-      ) {
-        return false
-      }
-      challenge.consumedAt = at
-      return true
-    },
-    async createWebauthnChallenge(input) {
-      const challenge: WebauthnChallengeRecord = {
-        ...input,
-        id: crypto.randomUUID(),
-        consumedAt: null,
-      }
-      webauthnChallenges.set(challenge.id, challenge)
-      return copy(challenge)
-    },
-    async consumeWebauthnChallenge(id, at) {
-      const challenge = webauthnChallenges.get(id)
-      if (
-        challenge === undefined ||
-        challenge.consumedAt !== null ||
-        Date.parse(challenge.expiresAt) <= Date.parse(at)
-      ) {
-        return null
-      }
-      challenge.consumedAt = at
-      return copy(challenge)
+    async setStaffRole(accountId, role) {
+      const previous = staff.get(accountId) ?? null
+      staff.set(accountId, role)
+      return previous
     },
 
     async createSession(input) {
@@ -952,6 +889,11 @@ export default function createMemoryStore(
     seedStaff(accountId, role) {
       staff.set(accountId, role)
     },
+    disableAccount(accountId, at) {
+      const account = accounts.get(accountId)
+      if (account === undefined) throw missing("Account")
+      account.disabledAt = at
+    },
     seedGrant(grant) {
       const id = crypto.randomUUID()
       grants.push({ ...grant, scopeVersion: grant.scopeVersion ?? 1, id })
@@ -967,9 +909,6 @@ export default function createMemoryStore(
     },
     auditEvents() {
       return copy(audit)
-    },
-    emailChallenges() {
-      return copy([...emailChallenges.values()])
     },
     sessions() {
       return copy([...sessions.values()])

@@ -1,6 +1,7 @@
 import { flags } from "@repo/platform-server"
 import type { RateLimiterNamespace } from "@repo/platform-server"
 import { z } from "zod"
+import { parseStaffDomains } from "./auth/google"
 
 /** Bindings and vars declared in `wrangler.jsonc` (+ secrets). */
 export type WorkerBindings = {
@@ -12,9 +13,9 @@ export type WorkerBindings = {
   EMAIL?: SendEmail
   ENVIRONMENT?: string
   DEVELOPER_CONSOLE_ENABLED?: string
-  WEBAUTHN_RP_ID?: string
-  WEBAUTHN_RP_NAME?: string
-  WEBAUTHN_ORIGIN?: string
+  CONSOLE_ORIGIN?: string
+  GOOGLE_CLIENT_ID?: string
+  STAFF_EMAIL_DOMAINS?: string
   PUBLIC_API_ORIGIN?: string
   ID_ORIGIN?: string
   PLATFORM_STORE?: string
@@ -44,9 +45,9 @@ const optionalText = z
 const varsSchema = z
   .object({
     ENVIRONMENT: z.string().trim().min(1).default("production"),
-    WEBAUTHN_RP_ID: z.string().trim().min(1),
-    WEBAUTHN_RP_NAME: z.string().trim().min(1).default("Matchbox Developers"),
-    WEBAUTHN_ORIGIN: originSchema,
+    CONSOLE_ORIGIN: originSchema,
+    GOOGLE_CLIENT_ID: optionalText,
+    STAFF_EMAIL_DOMAINS: optionalText,
     PUBLIC_API_ORIGIN: originSchema.default("https://api.matchbox.markets"),
     ID_ORIGIN: originSchema.default("https://id.matchbox.markets"),
     PLATFORM_STORE: z.enum(["supabase", "memory"]).default("supabase"),
@@ -77,17 +78,11 @@ const varsSchema = z
         message: "SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required",
       })
     }
-    if (
-      production &&
-      new URL(vars.WEBAUTHN_ORIGIN).hostname !== vars.WEBAUTHN_RP_ID &&
-      !new URL(vars.WEBAUTHN_ORIGIN).hostname.endsWith(
-        `.${vars.WEBAUTHN_RP_ID}`,
-      )
-    ) {
+    if (production && vars.GOOGLE_CLIENT_ID === null) {
       context.addIssue({
         code: "custom",
-        path: ["WEBAUTHN_RP_ID"],
-        message: "WEBAUTHN_ORIGIN must be on the RP ID",
+        path: ["GOOGLE_CLIENT_ID"],
+        message: "GOOGLE_CLIENT_ID is required in production",
       })
     }
   })
@@ -99,7 +94,10 @@ export type ConsoleConfig = {
   store:
     | { kind: "memory" }
     | { kind: "supabase"; url: string; serviceRoleKey: string }
-  webauthn: { rpId: string; rpName: string; origin: string }
+  /** Google OAuth client id (GIS button audience); null = Google off. */
+  googleClientId: string | null
+  /** Lowercase Google Workspace domains whose accounts are operators. */
+  staffDomains: string[]
   /** Origin of this console; used for CSRF checks and email links. */
   consoleOrigin: string
   publicApiOrigin: string
@@ -144,12 +142,9 @@ export default function parseConfig(env: WorkerBindings): ConfigResult {
               url: vars.SUPABASE_URL,
               serviceRoleKey: vars.SUPABASE_SERVICE_ROLE_KEY,
             },
-      webauthn: {
-        rpId: vars.WEBAUTHN_RP_ID,
-        rpName: vars.WEBAUTHN_RP_NAME,
-        origin: vars.WEBAUTHN_ORIGIN,
-      },
-      consoleOrigin: vars.WEBAUTHN_ORIGIN,
+      googleClientId: vars.GOOGLE_CLIENT_ID,
+      staffDomains: parseStaffDomains(vars.STAFF_EMAIL_DOMAINS),
+      consoleOrigin: vars.CONSOLE_ORIGIN,
       publicApiOrigin: vars.PUBLIC_API_ORIGIN,
       idOrigin: vars.ID_ORIGIN,
       peppers: {

@@ -77,26 +77,6 @@ export const clientTypeSchema = z.enum(["confidential", "public"])
 
 export type ClientType = z.infer<typeof clientTypeSchema>
 
-export const emailChallengePurposeSchema = z.enum([
-  "sign-up",
-  "recovery",
-  "invitation",
-])
-
-export type EmailChallengePurpose = z.infer<typeof emailChallengePurposeSchema>
-
-export const webauthnChallengePurposeSchema = z.enum([
-  "register",
-  "authenticate",
-  "step-up",
-])
-
-export type WebauthnChallengePurpose = z.infer<
-  typeof webauthnChallengePurposeSchema
->
-
-export const passkeyDeviceTypeSchema = z.enum(["single-device", "multi-device"])
-
 export const credentialStatusSchema = z.enum(["active", "expired", "revoked"])
 
 export type CredentialStatus = z.infer<typeof credentialStatusSchema>
@@ -118,8 +98,6 @@ export function credentialStatus(
 
 const optionalText = (max: number) => z.string().trim().max(max).nullable()
 
-export const emailCodeSchema = z.string().regex(/^[0-9]{6}$/, "6-digit code")
-
 export const consolePaths = {
   orgId: z.object({ orgId: uuidSchema }),
   appId: z.object({ appId: uuidSchema }),
@@ -129,7 +107,6 @@ export const consolePaths = {
   invitation: z.object({ orgId: uuidSchema, invitationId: uuidSchema }),
   apiKeyId: z.object({ apiKeyId: uuidSchema }),
   clientSecretId: z.object({ clientSecretId: uuidSchema }),
-  passkeyId: z.object({ passkeyId: uuidSchema }),
   sessionId: z.object({ sessionId: uuidSchema }),
   reviewId: z.object({ reviewId: uuidSchema }),
   quotaOverrideId: z.object({ quotaOverrideId: uuidSchema }),
@@ -140,198 +117,47 @@ export const consolePaths = {
 } as const
 
 // ---------------------------------------------------------------------------
-// WebAuthn JSON (shapes of @simplewebauthn/server <-> /browser)
+// Auth: /api/auth/* (Sign in with Google)
 // ---------------------------------------------------------------------------
 
-export const authenticatorTransportSchema = z.enum([
-  "ble",
-  "cable",
-  "hybrid",
-  "internal",
-  "nfc",
-  "smart-card",
-  "usb",
-])
+/** What a Google nonce is issued for; bound into the signed nonce cookie. */
+export const googleNoncePurposeSchema = z.enum(["sign-in", "step-up"])
 
-const base64UrlStringSchema = z.string().regex(/^[A-Za-z0-9_-]+$/)
+export type GoogleNoncePurpose = z.infer<typeof googleNoncePurposeSchema>
 
-const credentialDescriptorSchema = z.object({
-  id: base64UrlStringSchema,
-  type: z.literal("public-key"),
-  transports: z.array(authenticatorTransportSchema).optional(),
+/** POST /api/auth/google/nonce */
+export const googleNonceRequestSchema = z.object({
+  purpose: googleNoncePurposeSchema,
 })
 
-const userVerificationSchema = z.enum(["required", "preferred", "discouraged"])
-
-export const registrationOptionsSchema = z.object({
-  rp: z.object({ name: z.string(), id: z.string().optional() }),
-  user: z.object({
-    id: base64UrlStringSchema,
-    name: z.string(),
-    displayName: z.string(),
-  }),
-  challenge: base64UrlStringSchema,
-  pubKeyCredParams: z.array(
-    z.object({ alg: z.number().int(), type: z.literal("public-key") }),
-  ),
-  timeout: z.number().int().optional(),
-  excludeCredentials: z.array(credentialDescriptorSchema).optional(),
-  authenticatorSelection: z
-    .object({
-      authenticatorAttachment: z
-        .enum(["platform", "cross-platform"])
-        .optional(),
-      residentKey: z.enum(["discouraged", "preferred", "required"]).optional(),
-      requireResidentKey: z.boolean().optional(),
-      userVerification: userVerificationSchema.optional(),
-    })
-    .optional(),
-  attestation: z.enum(["none", "indirect", "direct", "enterprise"]).optional(),
-  hints: z
-    .array(z.enum(["hybrid", "security-key", "client-device"]))
-    .optional(),
-  extensions: z.record(z.string(), z.unknown()).optional(),
-})
-
-export type RegistrationOptions = z.infer<typeof registrationOptionsSchema>
-
-export const authenticationOptionsSchema = z.object({
-  challenge: base64UrlStringSchema,
-  timeout: z.number().int().optional(),
-  rpId: z.string().optional(),
-  allowCredentials: z.array(credentialDescriptorSchema).optional(),
-  userVerification: userVerificationSchema.optional(),
-  hints: z
-    .array(z.enum(["hybrid", "security-key", "client-device"]))
-    .optional(),
-  extensions: z.record(z.string(), z.unknown()).optional(),
-})
-
-export type AuthenticationOptions = z.infer<typeof authenticationOptionsSchema>
-
-export const registrationCredentialSchema = z.object({
-  id: base64UrlStringSchema,
-  rawId: base64UrlStringSchema,
-  type: z.literal("public-key"),
-  response: z.object({
-    clientDataJSON: base64UrlStringSchema,
-    attestationObject: base64UrlStringSchema,
-    authenticatorData: base64UrlStringSchema.optional(),
-    transports: z.array(authenticatorTransportSchema).optional(),
-    publicKeyAlgorithm: z.number().int().optional(),
-    publicKey: base64UrlStringSchema.optional(),
-  }),
-  authenticatorAttachment: z.enum(["platform", "cross-platform"]).optional(),
-  clientExtensionResults: z.record(z.string(), z.unknown()),
-})
-
-export type RegistrationCredential = z.infer<
-  typeof registrationCredentialSchema
->
-
-export const authenticationCredentialSchema = z.object({
-  id: base64UrlStringSchema,
-  rawId: base64UrlStringSchema,
-  type: z.literal("public-key"),
-  response: z.object({
-    clientDataJSON: base64UrlStringSchema,
-    authenticatorData: base64UrlStringSchema,
-    signature: base64UrlStringSchema,
-    userHandle: base64UrlStringSchema.optional(),
-  }),
-  authenticatorAttachment: z.enum(["platform", "cross-platform"]).optional(),
-  clientExtensionResults: z.record(z.string(), z.unknown()),
-})
-
-export type AuthenticationCredential = z.infer<
-  typeof authenticationCredentialSchema
->
-
-// ---------------------------------------------------------------------------
-// Auth: /api/auth/*
-// ---------------------------------------------------------------------------
-
-/** POST /api/auth/sign-up/start — sends a 6-digit code. */
-export const signUpStartRequestSchema = z.object({
-  email: emailSchema,
-  displayName: displayNameSchema,
-  invitationToken: z.string().min(1).max(256).optional(),
-})
-
-export type SignUpStartRequest = z.infer<typeof signUpStartRequestSchema>
-
-/** Response for any endpoint that emails a code. Identical whether or not
- * the address exists, to avoid account enumeration. */
-export const emailChallengeResponseSchema = z.object({
-  challengeId: uuidSchema,
+/** Nonce for the Google Identity Services button, plus its client id. */
+export const googleNonceResponseSchema = z.object({
+  clientId: z.string().min(1),
+  nonce: z.string().min(1),
   expiresAt: isoDateTimeSchema,
 })
 
-export type EmailChallengeResponse = z.infer<
-  typeof emailChallengeResponseSchema
->
+export type GoogleNonceResponse = z.infer<typeof googleNonceResponseSchema>
 
-/** POST /api/auth/sign-up/verify and POST /api/auth/recovery/verify. */
-export const emailCodeVerifyRequestSchema = z.object({
-  challengeId: uuidSchema,
-  code: emailCodeSchema,
+/** A Google ID token (JWT) as returned by the GIS `callback`. */
+export const googleCredentialSchema = z.string().min(1).max(8192)
+
+/** POST /api/auth/google — signs in, creating the account on first use. */
+export const googleSignInRequestSchema = z.object({
+  credential: googleCredentialSchema,
+  invitationToken: z.string().min(1).max(256).optional(),
 })
 
-export type EmailCodeVerifyRequest = z.infer<
-  typeof emailCodeVerifyRequestSchema
->
+export type GoogleSignInRequest = z.infer<typeof googleSignInRequestSchema>
 
-/** Returned after email verification and by POST /api/me/passkeys/options. */
-export const passkeyRegistrationOptionsResponseSchema = z.object({
-  challengeId: uuidSchema,
-  options: registrationOptionsSchema,
+/** POST /api/auth/step-up/google — re-confirms the signed-in account. */
+export const googleStepUpRequestSchema = z.object({
+  credential: googleCredentialSchema,
 })
 
-export type PasskeyRegistrationOptionsResponse = z.infer<
-  typeof passkeyRegistrationOptionsResponseSchema
->
+export type GoogleStepUpRequest = z.infer<typeof googleStepUpRequestSchema>
 
-/** POST /api/auth/passkeys/register — completes sign-up, recovery, or an
- * additional passkey for the signed-in account. */
-export const passkeyRegisterRequestSchema = z.object({
-  challengeId: uuidSchema,
-  credential: registrationCredentialSchema,
-  name: z.string().trim().min(1).max(64).optional(),
-  /** Sign-up only: name of the first organization. */
-  organizationName: z.string().trim().min(1).max(80).optional(),
-})
-
-export type PasskeyRegisterRequest = z.infer<
-  typeof passkeyRegisterRequestSchema
->
-
-/** POST /api/auth/passkeys/authenticate/options and
- * POST /api/auth/step-up/options (no body). */
-export const passkeyAuthenticationOptionsResponseSchema = z.object({
-  challengeId: uuidSchema,
-  options: authenticationOptionsSchema,
-})
-
-export type PasskeyAuthenticationOptionsResponse = z.infer<
-  typeof passkeyAuthenticationOptionsResponseSchema
->
-
-/** POST /api/auth/passkeys/authenticate and POST /api/auth/step-up/verify. */
-export const passkeyAuthenticateRequestSchema = z.object({
-  challengeId: uuidSchema,
-  credential: authenticationCredentialSchema,
-})
-
-export type PasskeyAuthenticateRequest = z.infer<
-  typeof passkeyAuthenticateRequestSchema
->
-
-/** POST /api/auth/recovery/start. Responds with emailChallengeResponse. */
-export const recoveryStartRequestSchema = z.object({ email: emailSchema })
-
-export type RecoveryStartRequest = z.infer<typeof recoveryStartRequestSchema>
-
-/** POST /api/auth/step-up/verify response. */
+/** POST /api/auth/step-up/google response. */
 export const stepUpResponseSchema = z.object({
   steppedUpUntil: isoDateTimeSchema,
 })
@@ -363,7 +189,7 @@ export const organizationSummarySchema = z.object({
 
 export type OrganizationSummary = z.infer<typeof organizationSummarySchema>
 
-/** Response of every successful sign-in/sign-up/recovery and GET /api/me. */
+/** Response of every successful sign-in and GET /api/me. */
 export const meResponseSchema = z.object({
   account: developerAccountSchema,
   organizations: z.array(organizationSummarySchema),
@@ -383,31 +209,6 @@ export type MeResponse = z.infer<typeof meResponseSchema>
 export const updateMeRequestSchema = z.object({
   displayName: displayNameSchema,
 })
-
-export const passkeySchema = z.object({
-  id: uuidSchema,
-  name: z.string().nullable(),
-  deviceType: passkeyDeviceTypeSchema,
-  backedUp: z.boolean(),
-  transports: z.array(authenticatorTransportSchema),
-  createdAt: isoDateTimeSchema,
-  lastUsedAt: isoDateTimeSchema.nullable(),
-})
-
-export type Passkey = z.infer<typeof passkeySchema>
-
-/** GET /api/me/passkeys */
-export const passkeyListResponseSchema = z.object({
-  data: z.array(passkeySchema),
-})
-
-/** PATCH /api/me/passkeys/{passkeyId} */
-export const renamePasskeyRequestSchema = z.object({
-  name: z.string().trim().min(1).max(64),
-})
-
-// DELETE /api/me/passkeys/{passkeyId} -> ok (refuses to delete the last one)
-// POST /api/me/passkeys/options -> passkeyRegistrationOptionsResponse
 
 export const consoleSessionSchema = z.object({
   id: uuidSchema,

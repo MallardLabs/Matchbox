@@ -3,16 +3,35 @@ import userEvent from "@testing-library/user-event"
 import type { ReactElement } from "react"
 import { describe, expect, it, vi } from "vitest"
 import { ApiError } from "./api-client"
-import { StepUpCancelledError, StepUpProvider, useStepUp } from "./step-up"
+import {
+  StepUpCancelledError,
+  type StepUpControl,
+  StepUpProvider,
+  useStepUp,
+} from "./step-up"
 
 function stepUpRequired(): ApiError {
   return new ApiError({
     status: 403,
     code: "step_up_required",
-    message: "Confirm with your passkey to continue.",
+    message: "Confirm with Google to continue.",
     requestId: "req_1",
   })
 }
+
+/** Stands in for the GIS button: yields a fixed credential. */
+const FakeGoogle: StepUpControl = ({ onCredential, onError }) => (
+  <button
+    type="button"
+    onClick={() => {
+      onCredential("google-id-token").catch((error: Error) =>
+        onError(error.message),
+      )
+    }}
+  >
+    Google
+  </button>
+)
 
 function Harness({
   action,
@@ -41,21 +60,25 @@ describe("useStepUp", () => {
       .fn<() => Promise<string>>()
       .mockRejectedValueOnce(stepUpRequired())
       .mockResolvedValueOnce("created")
-    const verify = vi.fn(async () => {})
+    const verify = vi.fn(async (_credential: string) => {})
     const onResult = vi.fn()
     render(
-      <StepUpProvider verify={verify} allowDevStepUp={false}>
+      <StepUpProvider
+        verify={verify}
+        control={FakeGoogle}
+        allowDevStepUp={false}
+      >
         <Harness action={action} onResult={onResult} />
       </StepUpProvider>,
     )
     await user.click(screen.getByRole("button", { name: "Run" }))
     expect(
-      await screen.findByRole("dialog", { name: "Confirm with passkey" }),
+      await screen.findByRole("dialog", { name: "Confirm with Google" }),
     ).toBeInTheDocument()
     expect(action).toHaveBeenCalledTimes(1)
-    await user.click(screen.getByRole("button", { name: "Use passkey" }))
+    await user.click(screen.getByRole("button", { name: "Google" }))
     await waitFor(() => expect(onResult).toHaveBeenCalledWith("created"))
-    expect(verify).toHaveBeenCalledTimes(1)
+    expect(verify).toHaveBeenCalledWith("google-id-token")
     expect(action).toHaveBeenCalledTimes(2)
     await waitFor(() =>
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
@@ -73,7 +96,11 @@ describe("useStepUp", () => {
     const action = vi.fn<() => Promise<string>>().mockRejectedValue(conflict)
     const onResult = vi.fn()
     render(
-      <StepUpProvider verify={async () => {}} allowDevStepUp={false}>
+      <StepUpProvider
+        verify={async () => {}}
+        control={FakeGoogle}
+        allowDevStepUp={false}
+      >
         <Harness action={action} onResult={onResult} />
       </StepUpProvider>,
     )
@@ -89,7 +116,11 @@ describe("useStepUp", () => {
       .mockRejectedValue(stepUpRequired())
     const onResult = vi.fn()
     render(
-      <StepUpProvider verify={async () => {}} allowDevStepUp={false}>
+      <StepUpProvider
+        verify={async () => {}}
+        control={FakeGoogle}
+        allowDevStepUp={false}
+      >
         <Harness action={action} onResult={onResult} />
       </StepUpProvider>,
     )
@@ -108,20 +139,24 @@ describe("useStepUp", () => {
       .mockRejectedValueOnce(stepUpRequired())
       .mockResolvedValueOnce("ok")
     const verify = vi
-      .fn(async () => {})
-      .mockRejectedValueOnce(new Error("Passkey request failed."))
+      .fn(async (_credential: string) => {})
+      .mockRejectedValueOnce(new Error("Google sign-in failed."))
     const onResult = vi.fn()
     render(
-      <StepUpProvider verify={verify} allowDevStepUp={false}>
+      <StepUpProvider
+        verify={verify}
+        control={FakeGoogle}
+        allowDevStepUp={false}
+      >
         <Harness action={action} onResult={onResult} />
       </StepUpProvider>,
     )
     await user.click(screen.getByRole("button", { name: "Run" }))
-    await user.click(await screen.findByRole("button", { name: "Use passkey" }))
+    await user.click(await screen.findByRole("button", { name: "Google" }))
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Passkey request failed.",
+      "Google sign-in failed.",
     )
-    await user.click(screen.getByRole("button", { name: "Use passkey" }))
+    await user.click(screen.getByRole("button", { name: "Google" }))
     await waitFor(() => expect(onResult).toHaveBeenCalledWith("ok"))
   })
 })

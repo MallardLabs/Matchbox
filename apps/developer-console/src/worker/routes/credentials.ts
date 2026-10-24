@@ -47,7 +47,7 @@ import {
 } from "../store/console-store"
 
 /**
- * Step-up (passkey within 10 min) is required to create or rotate any
+ * Step-up (Google within 10 min) is required to create or rotate any
  * secret key, any live key, and any client secret.
  */
 export function apiKeyNeedsStepUp(

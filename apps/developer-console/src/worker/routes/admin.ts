@@ -45,7 +45,7 @@ import { approvalOutcome, environmentReviewState } from "../review-policy"
 import type { AdminAppRecord, AdminReviewRecord } from "../store/console-store"
 import { auditSearch } from "./audit-search"
 
-/** Staff writes: the role plus a fresh passkey step-up. */
+/** Staff writes: the role plus a fresh Google step-up. */
 async function staffAction(c: ConsoleContext, minimum: StaffRole) {
   const staff = await requireStaff(c, minimum)
   requireStepUp(c)

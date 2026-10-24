@@ -1,8 +1,5 @@
-import type { Passkey } from "@repo/platform-contracts/console"
-import * as Badge from "@repo/ui/badge"
 import * as Button from "@repo/ui/button"
 import * as Card from "@repo/ui/card"
-import * as Dialog from "@repo/ui/dialog"
 import * as Field from "@repo/ui/field"
 import * as Fieldset from "@repo/ui/fieldset"
 import * as Input from "@repo/ui/input"
@@ -11,9 +8,7 @@ import * as Table from "@repo/ui/table"
 import * as Toast from "@repo/ui/toast"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { createFileRoute } from "@tanstack/react-router"
-import { Fingerprint } from "lucide-react"
 import { type FormEvent, type ReactElement, useState } from "react"
-import ConfirmDialog from "../../components/ConfirmDialog"
 import QueryError from "../../components/QueryError"
 import { Crumb, Crumbs } from "../../components/shell/Breadcrumbs"
 import PageTitle from "../../components/ui/PageTitle"
@@ -23,9 +18,7 @@ import { errorMessage } from "../../lib/api-client"
 import { formatDate, formatRelative } from "../../lib/format"
 import { keys, meQuery } from "../../lib/queries"
 import { useSession } from "../../lib/session"
-import { isStepUpCancelled, useStepUp } from "../../lib/step-up"
 import { useTitle } from "../../lib/title"
-import { PasskeyError, createPasskey } from "../../lib/webauthn"
 
 export const Route = createFileRoute("/_app/account")({
   component: AccountPage,
@@ -42,7 +35,6 @@ function AccountPage(): ReactElement {
       </Crumbs>
       <PageTitle eyebrow={me.account.email} title="Account" />
       <ProfileForm key={me.account.displayName} />
-      <Passkeys />
       <Sessions />
     </div>
   )
@@ -92,7 +84,7 @@ function ProfileForm(): ReactElement {
               <Input.Root value={me.account.email} readOnly />
             </Field.Control>
             <Field.Description>
-              {me.account.emailVerifiedAt === null ? "Unverified" : "Verified"}
+              {me.account.emailVerifiedAt === null ? "Unverified" : "Google"}
             </Field.Description>
           </Field.Root>
         </Fieldset.Fields>
@@ -107,269 +99,6 @@ function ProfileForm(): ReactElement {
         </Button.Root>
       </p>
     </form>
-  )
-}
-
-function Passkeys(): ReactElement {
-  const passkeys = useQuery({
-    queryKey: keys.passkeys,
-    queryFn: () => api.me.passkeys(),
-  })
-  const [renaming, setRenaming] = useState<Passkey | null>(null)
-  const [deleting, setDeleting] = useState<Passkey | null>(null)
-  const [newName, setNewName] = useState("")
-  const [adding, setAdding] = useState(false)
-  const queryClient = useQueryClient()
-  const stepUp = useStepUp()
-  const { toast } = Toast.useToast()
-  const add = useMutation({
-    mutationFn: async (name: string) => {
-      const { challengeId, options } = await stepUp.run(() =>
-        api.me.passkeyOptions(),
-      )
-      const credential = await createPasskey(options)
-      return api.auth.registerPasskey({
-        challengeId,
-        credential,
-        ...(name === "" ? {} : { name }),
-      })
-    },
-    async onSuccess() {
-      await queryClient.invalidateQueries({ queryKey: keys.passkeys })
-      toast({ title: "Passkey added" })
-      setNewName("")
-      setAdding(false)
-    },
-  })
-  const list = passkeys.data?.data ?? []
-  const addCancelled =
-    (add.error instanceof PasskeyError && add.error.reason === "cancelled") ||
-    isStepUpCancelled(add.error)
-
-  return (
-    <Card.Root>
-      <Card.Header>
-        <Card.Title>Passkeys</Card.Title>
-        <Card.Actions>
-          <Button.Root variant="secondary" onClick={() => setAdding(true)}>
-            <Fingerprint aria-hidden="true" size={13} strokeWidth={1.75} />
-            Add passkey
-          </Button.Root>
-        </Card.Actions>
-      </Card.Header>
-      {passkeys.isPending ? (
-        <Skeleton.Root shape="block" />
-      ) : passkeys.isError ? (
-        <QueryError
-          error={passkeys.error}
-          onRetry={() => void passkeys.refetch()}
-        />
-      ) : (
-        <Table.Root>
-          <Table.Header>
-            <Table.Row>
-              <Table.Head>Name</Table.Head>
-              <Table.Head className="hidden sm:table-cell">Type</Table.Head>
-              <Table.Head className="hidden md:table-cell">Added</Table.Head>
-              <Table.Head>Last used</Table.Head>
-              <Table.Head>
-                <span className="sr-only">Actions</span>
-              </Table.Head>
-            </Table.Row>
-          </Table.Header>
-          <Table.Body>
-            {list.map((passkey) => (
-              <Table.Row key={passkey.id}>
-                <Table.Cell className="font-600">
-                  {passkey.name ?? "Passkey"}
-                </Table.Cell>
-                <Table.Cell className="hidden sm:table-cell">
-                  <Badge.Root>
-                    {passkey.backedUp ? "Synced" : "Device-bound"}
-                  </Badge.Root>
-                </Table.Cell>
-                <Table.Cell className="hidden text-secondary md:table-cell">
-                  {formatDate(passkey.createdAt)}
-                </Table.Cell>
-                <Table.Cell className="text-secondary">
-                  {formatRelative(passkey.lastUsedAt)}
-                </Table.Cell>
-                <Table.Cell className="whitespace-nowrap text-right">
-                  <Button.Root
-                    variant="ghost"
-                    size="sm"
-                    aria-label={`Rename ${passkey.name ?? "passkey"}`}
-                    onClick={() => setRenaming(passkey)}
-                  >
-                    Rename
-                  </Button.Root>
-                  <Button.Root
-                    variant="ghost"
-                    size="sm"
-                    disabled={list.length <= 1}
-                    aria-label={`Delete ${passkey.name ?? "passkey"}`}
-                    onClick={() => setDeleting(passkey)}
-                  >
-                    Delete
-                  </Button.Root>
-                </Table.Cell>
-              </Table.Row>
-            ))}
-          </Table.Body>
-        </Table.Root>
-      )}
-      <Dialog.Root
-        open={adding}
-        onOpenChange={(open) => {
-          setAdding(open)
-          if (!open) add.reset()
-        }}
-      >
-        <Dialog.Content size="sm" aria-describedby={undefined}>
-          <Dialog.Header>
-            <Dialog.Title>Add passkey</Dialog.Title>
-          </Dialog.Header>
-          <form
-            className="flex flex-col gap-4"
-            noValidate
-            onSubmit={(event) => {
-              event.preventDefault()
-              add.mutate(newName.trim())
-            }}
-          >
-            <Fieldset.Root disabled={add.isPending}>
-              <Fieldset.Legend hidden>Passkey</Fieldset.Legend>
-              <Fieldset.Fields>
-                <Field.Root>
-                  <Field.Label>Name</Field.Label>
-                  <Field.Control>
-                    <Input.Root
-                      maxLength={64}
-                      placeholder="Laptop"
-                      value={newName}
-                      onChange={(event) => setNewName(event.target.value)}
-                    />
-                  </Field.Control>
-                  <Field.Error>
-                    {add.isError && !addCancelled
-                      ? errorMessage(add.error)
-                      : null}
-                  </Field.Error>
-                </Field.Root>
-              </Fieldset.Fields>
-            </Fieldset.Root>
-            <Dialog.Footer>
-              <Dialog.Close asChild>
-                <Button.Root variant="secondary">Cancel</Button.Root>
-              </Dialog.Close>
-              <Button.Root type="submit" loading={add.isPending}>
-                Create passkey
-              </Button.Root>
-            </Dialog.Footer>
-          </form>
-        </Dialog.Content>
-      </Dialog.Root>
-      <RenameDialog passkey={renaming} onClose={() => setRenaming(null)} />
-      <ConfirmDialog
-        open={deleting !== null}
-        onOpenChange={(open) => {
-          if (!open) setDeleting(null)
-        }}
-        title="Delete passkey?"
-        description={`${deleting?.name ?? "This passkey"} can no longer sign in.`}
-        confirmLabel="Delete"
-        onConfirm={async () => {
-          if (deleting === null) return
-          await stepUp.run(() => api.me.deletePasskey(deleting.id))
-          await queryClient.invalidateQueries({ queryKey: keys.passkeys })
-          toast({ title: "Passkey deleted" })
-        }}
-      />
-    </Card.Root>
-  )
-}
-
-function RenameDialog({
-  passkey,
-  onClose,
-}: {
-  passkey: Passkey | null
-  onClose: () => void
-}): ReactElement {
-  const [name, setName] = useState("")
-  const queryClient = useQueryClient()
-  const stepUp = useStepUp()
-  const rename = useMutation({
-    mutationFn: (input: { id: string; name: string }) =>
-      stepUp.run(() => api.me.renamePasskey(input.id, input.name)),
-    async onSuccess() {
-      await queryClient.invalidateQueries({ queryKey: keys.passkeys })
-      onClose()
-    },
-  })
-
-  return (
-    <Dialog.Root
-      open={passkey !== null}
-      onOpenChange={(open) => {
-        if (open) return
-        rename.reset()
-        onClose()
-      }}
-    >
-      <Dialog.Content
-        size="sm"
-        aria-describedby={undefined}
-        onOpenAutoFocus={() => setName(passkey?.name ?? "")}
-      >
-        <Dialog.Header>
-          <Dialog.Title>Rename passkey</Dialog.Title>
-        </Dialog.Header>
-        <form
-          className="flex flex-col gap-4"
-          noValidate
-          onSubmit={(event) => {
-            event.preventDefault()
-            if (passkey !== null && name.trim() !== "") {
-              rename.mutate({ id: passkey.id, name: name.trim() })
-            }
-          }}
-        >
-          <Fieldset.Root disabled={rename.isPending}>
-            <Fieldset.Legend hidden>Passkey name</Fieldset.Legend>
-            <Fieldset.Fields>
-              <Field.Root required>
-                <Field.Label>Name</Field.Label>
-                <Field.Control>
-                  <Input.Root
-                    maxLength={64}
-                    value={name}
-                    onChange={(event) => setName(event.target.value)}
-                  />
-                </Field.Control>
-                <Field.Error>
-                  {rename.isError && !isStepUpCancelled(rename.error)
-                    ? errorMessage(rename.error)
-                    : null}
-                </Field.Error>
-              </Field.Root>
-            </Fieldset.Fields>
-          </Fieldset.Root>
-          <Dialog.Footer>
-            <Dialog.Close asChild>
-              <Button.Root variant="secondary">Cancel</Button.Root>
-            </Dialog.Close>
-            <Button.Root
-              type="submit"
-              loading={rename.isPending}
-              disabled={name.trim() === ""}
-            >
-              Save
-            </Button.Root>
-          </Dialog.Footer>
-        </form>
-      </Dialog.Content>
-    </Dialog.Root>
   )
 }
 

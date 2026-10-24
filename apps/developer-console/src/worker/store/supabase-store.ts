@@ -7,15 +7,11 @@ import {
   appStatusSchema,
   clientTypeSchema,
   compareReviewsNewestFirst,
-  emailChallengePurposeSchema,
   membershipRoleSchema,
-  passkeyDeviceTypeSchema,
   reviewRecordStateSchema,
   reviewStateSchema,
   staffRoleSchema,
-  webauthnChallengePurposeSchema,
 } from "@repo/platform-contracts/console"
-import { authenticatorTransportSchema } from "@repo/platform-contracts/console"
 import { apiKeyKindSchema } from "@repo/platform-contracts/credentials"
 import { grantRevokedReasonSchema } from "@repo/platform-contracts/identity"
 import {
@@ -79,6 +75,7 @@ const accountRow = z
     id: z.string(),
     email: z.string(),
     email_verified_at: nullableTimestamp,
+    google_sub: z.string().nullable(),
     display_name: z.string(),
     created_at: timestampSchema,
     disabled_at: nullableTimestamp,
@@ -87,82 +84,10 @@ const accountRow = z
     id: row.id,
     email: row.email,
     emailVerifiedAt: row.email_verified_at,
+    googleSub: row.google_sub,
     displayName: row.display_name,
     createdAt: row.created_at,
     disabledAt: row.disabled_at,
-  }))
-
-const passkeyRow = z
-  .object({
-    id: z.string(),
-    account_id: z.string(),
-    credential_id: z.string(),
-    public_key: z.string(),
-    counter: z.coerce.number().int().nonnegative(),
-    transports: z.array(authenticatorTransportSchema),
-    device_type: passkeyDeviceTypeSchema,
-    backed_up: z.boolean(),
-    name: z.string().nullable(),
-    created_at: timestampSchema,
-    last_used_at: nullableTimestamp,
-    // Added by 20260930000002; absent until that migration is applied.
-    step_up_blocked_until: nullableTimestamp.default(null),
-  })
-  .transform((row) => ({
-    id: row.id,
-    accountId: row.account_id,
-    credentialId: row.credential_id,
-    publicKey: row.public_key,
-    counter: row.counter,
-    transports: row.transports,
-    deviceType: row.device_type,
-    backedUp: row.backed_up,
-    name: row.name,
-    createdAt: row.created_at,
-    lastUsedAt: row.last_used_at,
-    stepUpBlockedUntil: row.step_up_blocked_until,
-  }))
-
-const emailChallengeRow = z
-  .object({
-    id: z.string(),
-    email: z.string(),
-    purpose: emailChallengePurposeSchema,
-    code_hash: z.string(),
-    attempts: z.number().int(),
-    expires_at: timestampSchema,
-    consumed_at: nullableTimestamp,
-    created_at: timestampSchema,
-  })
-  .transform((row) => ({
-    id: row.id,
-    email: row.email,
-    purpose: row.purpose,
-    codeHash: row.code_hash,
-    attempts: row.attempts,
-    expiresAt: row.expires_at,
-    consumedAt: row.consumed_at,
-    createdAt: row.created_at,
-  }))
-
-const webauthnChallengeRow = z
-  .object({
-    id: z.string(),
-    challenge: z.string(),
-    purpose: webauthnChallengePurposeSchema,
-    account_id: z.string().nullable(),
-    expires_at: timestampSchema,
-    consumed_at: nullableTimestamp,
-    created_at: timestampSchema,
-  })
-  .transform((row) => ({
-    id: row.id,
-    challenge: row.challenge,
-    purpose: row.purpose,
-    accountId: row.account_id,
-    expiresAt: row.expires_at,
-    consumedAt: row.consumed_at,
-    createdAt: row.created_at,
   }))
 
 const sessionRow = z
@@ -666,6 +591,17 @@ export default function createSupabaseStore(
           .maybeSingle(),
       )
     },
+    async findAccountByGoogleSub(googleSub) {
+      return maybe(
+        accountRow,
+        "find account by google sub",
+        await supabase
+          .from("mbx_dev_accounts")
+          .select("*")
+          .eq("google_sub", googleSub)
+          .maybeSingle(),
+      )
+    },
     async createAccount(input) {
       return one(
         accountRow,
@@ -676,6 +612,7 @@ export default function createSupabaseStore(
             email: input.email,
             display_name: input.displayName,
             email_verified_at: input.emailVerifiedAt,
+            google_sub: input.googleSub ?? null,
           })
           .select("*")
           .single(),
@@ -687,6 +624,8 @@ export default function createSupabaseStore(
       if (patch.emailVerifiedAt !== undefined) {
         row.email_verified_at = patch.emailVerifiedAt
       }
+      if (patch.email !== undefined) row.email = patch.email
+      if (patch.googleSub !== undefined) row.google_sub = patch.googleSub
       return one(
         accountRow,
         "update account",
@@ -710,161 +649,18 @@ export default function createSupabaseStore(
       )
       return row?.role ?? null
     },
-
-    async listPasskeys(accountId) {
-      return many(
-        passkeyRow,
-        "list passkeys",
-        await supabase
-          .from("mbx_dev_passkeys")
-          .select("*")
-          .eq("account_id", accountId)
-          .order("created_at"),
-      )
-    },
-    async findPasskeyByCredentialId(credentialId) {
-      return maybe(
-        passkeyRow,
-        "find passkey",
-        await supabase
-          .from("mbx_dev_passkeys")
-          .select("*")
-          .eq("credential_id", credentialId)
-          .maybeSingle(),
-      )
-    },
-    async createPasskey(input) {
-      return one(
-        passkeyRow,
-        "create passkey",
-        await supabase
-          .from("mbx_dev_passkeys")
-          .insert({
-            account_id: input.accountId,
-            credential_id: input.credentialId,
-            public_key: input.publicKey,
-            counter: input.counter,
-            transports: input.transports,
-            device_type: input.deviceType,
-            backed_up: input.backedUp,
-            name: input.name,
-            last_used_at: input.lastUsedAt,
-            ...((input.stepUpBlockedUntil ?? null) === null
-              ? {}
-              : { step_up_blocked_until: input.stepUpBlockedUntil }),
-          })
-          .select("*")
-          .single(),
-      )
-    },
-    async updatePasskey(id, patch) {
-      const row: Record<string, string | number | boolean> = {}
-      if (patch.name !== undefined) row.name = patch.name
-      if (patch.counter !== undefined) row.counter = patch.counter
-      if (patch.backedUp !== undefined) row.backed_up = patch.backedUp
-      if (patch.lastUsedAt !== undefined) row.last_used_at = patch.lastUsedAt
+    async setStaffRole(accountId, role) {
+      const previous = await store.getStaffRole(accountId)
       done(
-        "update passkey",
-        await supabase.from("mbx_dev_passkeys").update(row).eq("id", id),
-      )
-    },
-    async deletePasskey(id) {
-      done(
-        "delete passkey",
-        await supabase.from("mbx_dev_passkeys").delete().eq("id", id),
-      )
-    },
-
-    async createEmailChallenge(input) {
-      return one(
-        emailChallengeRow,
-        "create email challenge",
+        "set staff",
         await supabase
-          .from("mbx_dev_email_challenges")
-          .insert({
-            id: input.id,
-            email: input.email,
-            purpose: input.purpose,
-            code_hash: input.codeHash,
-            expires_at: input.expiresAt,
-            created_at: input.createdAt,
-          })
-          .select("*")
-          .single(),
+          .from("mbx_dev_staff")
+          .upsert(
+            { account_id: accountId, role },
+            { onConflict: "account_id" },
+          ),
       )
-    },
-    async getEmailChallenge(id) {
-      return maybe(
-        emailChallengeRow,
-        "get email challenge",
-        await supabase
-          .from("mbx_dev_email_challenges")
-          .select("*")
-          .eq("id", id)
-          .maybeSingle(),
-      )
-    },
-    async incrementEmailChallengeAttempts(id) {
-      // Optimistic compare-and-set; a lost race counts as exhausted.
-      const current = await store.getEmailChallenge(id)
-      if (current === null) throw new StoreQueryError("attempts", null)
-      const next = current.attempts + 1
-      const updated = many(
-        z.object({ attempts: z.number().int() }),
-        "increment attempts",
-        await supabase
-          .from("mbx_dev_email_challenges")
-          .update({ attempts: Math.min(next, 10) })
-          .eq("id", id)
-          .eq("attempts", current.attempts)
-          .select("attempts"),
-      )
-      return updated[0]?.attempts ?? Number.MAX_SAFE_INTEGER
-    },
-    async consumeEmailChallenge(id, now) {
-      const rows = many(
-        z.object({ id: z.string() }),
-        "consume email challenge",
-        await supabase
-          .from("mbx_dev_email_challenges")
-          .update({ consumed_at: now })
-          .eq("id", id)
-          .is("consumed_at", null)
-          .gt("expires_at", now)
-          .select("id"),
-      )
-      return rows.length === 1
-    },
-    async createWebauthnChallenge(input) {
-      return one(
-        webauthnChallengeRow,
-        "create webauthn challenge",
-        await supabase
-          .from("mbx_dev_webauthn_challenges")
-          .insert({
-            challenge: input.challenge,
-            purpose: input.purpose,
-            account_id: input.accountId,
-            expires_at: input.expiresAt,
-            created_at: input.createdAt,
-          })
-          .select("*")
-          .single(),
-      )
-    },
-    async consumeWebauthnChallenge(id, now) {
-      const rows = many(
-        webauthnChallengeRow,
-        "consume webauthn challenge",
-        await supabase
-          .from("mbx_dev_webauthn_challenges")
-          .update({ consumed_at: now })
-          .eq("id", id)
-          .is("consumed_at", null)
-          .gt("expires_at", now)
-          .select("*"),
-      )
-      return rows[0] ?? null
+      return previous
     },
 
     async createSession(input) {

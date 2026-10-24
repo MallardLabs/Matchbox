@@ -12,7 +12,7 @@ export const changelog: ChangelogEntry[] = [
     version: "2.0.0",
     title: "Developer platform v2",
     items: [
-      "Passkey sign-in and email recovery",
+      "Sign in with Google; staff domains are operators",
       "Test (Mezo testnet) and live (Mezo) environments per app",
       "Publishable and secret API keys with rotation overlap",
       "Sign in with Matchbox: OIDC, PKCE S256, pairwise subjects",

@@ -6,15 +6,10 @@ import {
 } from "@repo/platform-server"
 import { type ConsoleContext, deps } from "../context"
 
-/** Auth endpoints: per client IP prefix, plus per email for code sends. */
+/** Auth endpoints: per client IP prefix. */
 export const authIpPolicy = {
   perMinute: 20,
   perDay: 500,
-} as const satisfies RateLimitPolicy
-
-export const emailSendPolicy = {
-  perMinute: 2,
-  perDay: 15,
 } as const satisfies RateLimitPolicy
 
 /** Invitations and other outbound email from signed-in accounts. */
@@ -43,14 +38,6 @@ export function limitByIp(c: ConsoleContext, scope: string): Promise<void> {
     `console:${scope}:ip:${ipPrefix(c.req.raw) ?? "unknown"}`,
     authIpPolicy,
   )
-}
-
-export function limitByEmail(
-  c: ConsoleContext,
-  scope: string,
-  email: string,
-): Promise<void> {
-  return consume(c, `console:${scope}:email:${email}`, emailSendPolicy)
 }
 
 export function limitByAccount(

@@ -55,7 +55,7 @@ export function expiryFor(choice: ExpiryChoice, now: number): string | null {
   return days === null ? null : new Date(now + days * day).toISOString()
 }
 
-/** True when moving the expiry later than it is (needs a passkey). */
+/** True when moving the expiry later than it is (needs step-up). */
 export function extendsExpiry(current: string | null, next: string): boolean {
   return current !== null && Date.parse(next) > Date.parse(current)
 }

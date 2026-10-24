@@ -1,6 +1,6 @@
 # Matchbox developer console (`developer.matchbox.markets`)
 
-Passkey-authenticated console for organizations, apps, test/live
+Sign-in-with-Google console for organizations, apps, test/live
 environments, API keys, client secrets, usage and docs, plus staff review at
 `/admin` ([ARCHITECTURE §8](../../docs/developer-platform/ARCHITECTURE.md)).
 Hono Worker + Vite SPA (TanStack Router) served through `ASSETS`. Worker
@@ -28,8 +28,8 @@ pnpm dev
 ```
 
 `.dev.vars.example` sets `PLATFORM_STORE=memory`,
-`DEVELOPER_CONSOLE_ENABLED=true`, `WEBAUTHN_RP_ID=localhost` and
-`WEBAUTHN_ORIGIN=http://localhost:5175`. Memory mode is refused when
+`DEVELOPER_CONSOLE_ENABLED=true` and `CONSOLE_ORIGIN=http://localhost:5175`;
+set `GOOGLE_CLIENT_ID` to use the real Google button. Memory mode is refused when
 `ENVIRONMENT=production`. Seed (`src/worker/store/seed.ts`): account
 `dev@matchbox.local` (staff `reviewer`), org "Mallard Labs", an approved live
 gauge-profile app, an app with an open `discord:profile` review and one
@@ -41,8 +41,10 @@ production only). Usage data is synthetic unless `CF_ACCOUNT_ID` and
 ## Configuration
 
 Vars (`wrangler.jsonc`): `ENVIRONMENT`, `DEVELOPER_CONSOLE_ENABLED` (default
-`"false"`: `/api/*` returns 503 `service_disabled`), `WEBAUTHN_RP_ID`,
-`WEBAUTHN_ORIGIN`, `PUBLIC_API_ORIGIN`, `ID_ORIGIN`.
+`"false"`: `/api/*` returns 503 `service_disabled`), `CONSOLE_ORIGIN`,
+`GOOGLE_CLIENT_ID` (Google OAuth client id; required in production),
+`STAFF_EMAIL_DOMAINS` (comma-separated Workspace domains whose accounts are
+staff operators), `PUBLIC_API_ORIGIN`, `ID_ORIGIN`.
 
 Secrets (`wrangler secret put`): `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`,
 `API_KEY_PEPPER` (same value as the developer API), `CLIENT_SECRET_PEPPER`
@@ -64,5 +66,6 @@ Platform health (`GET /api/platform/health`, public) reads the
 (`source: "local"`). Without `API_RATE_LIMITER`, memory mode reads an empty
 in-memory limiter (quota shows real zeros) and deployed consoles show "—".
 
-Staff: insert into `mbx_dev_staff` (`account_id`, `role` = `reviewer` |
-`operator`) by SQL; see the runbook.
+Staff: Google Workspace accounts on `STAFF_EMAIL_DOMAINS` become `operator`
+at sign-in. Anyone else is added to `mbx_dev_staff` (`account_id`, `role` =
+`reviewer` | `operator`) by SQL; see the runbook.

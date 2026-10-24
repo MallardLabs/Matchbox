@@ -2,10 +2,10 @@ import { cn } from "@repo/ui/cn"
 import { Lock } from "lucide-react"
 import type { ReactElement } from "react"
 
-/** "🔒 Passkey": the action asks for passkey re-confirmation. */
+/** "🔒 Google": the action asks for Google re-confirmation. */
 export default function LockHint({
   className,
-  label = "Passkey",
+  label = "Google",
 }: {
   className?: string | undefined
   label?: string

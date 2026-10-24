@@ -42,7 +42,6 @@ function InvitePage(): ReactElement {
   }
 
   const signedOut = me.isError && isApiError(me.error, "unauthorized")
-  const invitePath = `/invite/${encodeURIComponent(token)}`
 
   return (
     <>
@@ -50,13 +49,8 @@ function InvitePage(): ReactElement {
       {signedOut || me.isError ? (
         <div className="flex flex-col gap-3">
           <Button.Root size="lg" asChild>
-            <Link to="/sign-up" search={{ invitation: token }}>
-              Create account
-            </Link>
-          </Button.Root>
-          <Button.Root size="lg" variant="secondary" asChild>
-            <Link to="/sign-in" search={{ redirect: invitePath }}>
-              Sign in
+            <Link to="/sign-in" search={{ invitation: token }}>
+              Continue with Google
             </Link>
           </Button.Root>
         </div>

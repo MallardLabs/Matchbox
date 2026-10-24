@@ -61,7 +61,7 @@ export const defaultErrorMessages = {
   forbidden: "Not allowed.",
   not_found: "Not found.",
   conflict: "Conflicts with the current state.",
-  step_up_required: "Confirm with your passkey to continue.",
+  step_up_required: "Confirm with Google to continue.",
   rate_limited: "Rate limit exceeded.",
   service_disabled: "This service is temporarily unavailable.",
   origin_not_allowed: "Origin not registered for this key.",

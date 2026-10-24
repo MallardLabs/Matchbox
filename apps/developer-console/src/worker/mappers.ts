@@ -35,7 +35,6 @@ import type {
   InvitationRecord,
   MemberRecord,
   OrganizationMembershipRecord,
-  PasskeyRecord,
   QuotaOverrideRow,
   ReviewRecord,
   SessionRecord,
@@ -58,18 +57,6 @@ export function toAccount(account: AccountRecord): DeveloperAccount {
     emailVerifiedAt: account.emailVerifiedAt,
     displayName: account.displayName,
     createdAt: account.createdAt,
-  }
-}
-
-export function toPasskey(passkey: PasskeyRecord) {
-  return {
-    id: passkey.id,
-    name: passkey.name,
-    deviceType: passkey.deviceType,
-    backedUp: passkey.backedUp,
-    transports: passkey.transports,
-    createdAt: passkey.createdAt,
-    lastUsedAt: passkey.lastUsedAt,
   }
 }
 

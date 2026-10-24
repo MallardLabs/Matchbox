@@ -18,9 +18,7 @@ import { Route as AppAdminRouteImport } from './routes/_app/admin'
 import { Route as AppDocsRouteImport } from './routes/_app/docs'
 import { Route as AppOrganizationRouteImport } from './routes/_app/organization'
 import { Route as AppUsageRouteImport } from './routes/_app/usage'
-import { Route as AuthRecoverRouteImport } from './routes/_auth/recover'
 import { Route as AuthSignInRouteImport } from './routes/_auth/sign-in'
-import { Route as AuthSignUpRouteImport } from './routes/_auth/sign-up'
 import { Route as AppAdminIndexRouteImport } from './routes/_app/admin/index'
 import { Route as AppAdminAppsRouteImport } from './routes/_app/admin/apps'
 import { Route as AppAdminAuditRouteImport } from './routes/_app/admin/audit'
@@ -83,19 +81,9 @@ const AppUsageRoute = AppUsageRouteImport.update({
   path: '/usage',
   getParentRoute: () => AppRoute,
 } as any)
-const AuthRecoverRoute = AuthRecoverRouteImport.update({
-  id: '/recover',
-  path: '/recover',
-  getParentRoute: () => AuthRoute,
-} as any)
 const AuthSignInRoute = AuthSignInRouteImport.update({
   id: '/sign-in',
   path: '/sign-in',
-  getParentRoute: () => AuthRoute,
-} as any)
-const AuthSignUpRoute = AuthSignUpRouteImport.update({
-  id: '/sign-up',
-  path: '/sign-up',
   getParentRoute: () => AuthRoute,
 } as any)
 const AppAdminIndexRoute = AppAdminIndexRouteImport.update({
@@ -198,9 +186,7 @@ export interface FileRoutesByFullPath {
   '/docs': typeof AppDocsRouteWithChildren
   '/organization': typeof AppOrganizationRoute
   '/usage': typeof AppUsageRoute
-  '/recover': typeof AuthRecoverRoute
   '/sign-in': typeof AuthSignInRoute
-  '/sign-up': typeof AuthSignUpRoute
   '/admin/apps': typeof AppAdminAppsRoute
   '/admin/audit': typeof AppAdminAuditRoute
   '/admin/quotas': typeof AppAdminQuotasRoute
@@ -226,9 +212,7 @@ export interface FileRoutesByTo {
   '/account': typeof AppAccountRoute
   '/organization': typeof AppOrganizationRoute
   '/usage': typeof AppUsageRoute
-  '/recover': typeof AuthRecoverRoute
   '/sign-in': typeof AuthSignInRoute
-  '/sign-up': typeof AuthSignUpRoute
   '/admin/apps': typeof AppAdminAppsRoute
   '/admin/audit': typeof AppAdminAuditRoute
   '/admin/quotas': typeof AppAdminQuotasRoute
@@ -257,9 +241,7 @@ export interface FileRoutesById {
   '/_app/docs': typeof AppDocsRouteWithChildren
   '/_app/organization': typeof AppOrganizationRoute
   '/_app/usage': typeof AppUsageRoute
-  '/_auth/recover': typeof AuthRecoverRoute
   '/_auth/sign-in': typeof AuthSignInRoute
-  '/_auth/sign-up': typeof AuthSignUpRoute
   '/_app/': typeof AppIndexRoute
   '/_app/admin/apps': typeof AppAdminAppsRoute
   '/_app/admin/audit': typeof AppAdminAuditRoute
@@ -290,9 +272,7 @@ export interface FileRouteTypes {
     | '/docs'
     | '/organization'
     | '/usage'
-    | '/recover'
     | '/sign-in'
-    | '/sign-up'
     | '/admin/apps'
     | '/admin/audit'
     | '/admin/quotas'
@@ -318,9 +298,7 @@ export interface FileRouteTypes {
     | '/account'
     | '/organization'
     | '/usage'
-    | '/recover'
     | '/sign-in'
-    | '/sign-up'
     | '/admin/apps'
     | '/admin/audit'
     | '/admin/quotas'
@@ -348,9 +326,7 @@ export interface FileRouteTypes {
     | '/_app/docs'
     | '/_app/organization'
     | '/_app/usage'
-    | '/_auth/recover'
     | '/_auth/sign-in'
-    | '/_auth/sign-up'
     | '/_app/'
     | '/_app/admin/apps'
     | '/_app/admin/audit'
@@ -443,25 +419,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppUsageRouteImport
       parentRoute: typeof AppRoute
     }
-    '/_auth/recover': {
-      id: '/_auth/recover'
-      path: '/recover'
-      fullPath: '/recover'
-      preLoaderRoute: typeof AuthRecoverRouteImport
-      parentRoute: typeof AuthRoute
-    }
     '/_auth/sign-in': {
       id: '/_auth/sign-in'
       path: '/sign-in'
       fullPath: '/sign-in'
       preLoaderRoute: typeof AuthSignInRouteImport
-      parentRoute: typeof AuthRoute
-    }
-    '/_auth/sign-up': {
-      id: '/_auth/sign-up'
-      path: '/sign-up'
-      fullPath: '/sign-up'
-      preLoaderRoute: typeof AuthSignUpRouteImport
       parentRoute: typeof AuthRoute
     }
     '/_app/admin/': {
@@ -677,16 +639,12 @@ const AppRouteChildren: AppRouteChildren = {
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 
 interface AuthRouteChildren {
-  AuthRecoverRoute: typeof AuthRecoverRoute
   AuthSignInRoute: typeof AuthSignInRoute
-  AuthSignUpRoute: typeof AuthSignUpRoute
   AuthInviteTokenRoute: typeof AuthInviteTokenRoute
 }
 
 const AuthRouteChildren: AuthRouteChildren = {
-  AuthRecoverRoute: AuthRecoverRoute,
   AuthSignInRoute: AuthSignInRoute,
-  AuthSignUpRoute: AuthSignUpRoute,
   AuthInviteTokenRoute: AuthInviteTokenRoute,
 }
 

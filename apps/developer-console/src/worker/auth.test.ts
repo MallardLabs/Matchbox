@@ -1,597 +1,488 @@
 import {
-  emailChallengeResponseSchema,
+  googleNonceResponseSchema,
   meResponseSchema,
-  passkeyAuthenticationOptionsResponseSchema,
-  passkeyRegistrationOptionsResponseSchema,
   stepUpResponseSchema,
 } from "@repo/platform-contracts/console"
 import { errorBodySchema } from "@repo/platform-contracts/errors"
+import { describe, expect, it } from "vitest"
+import { identityFromClaims, isStaffIdentity } from "./auth/google"
+import { invitationTokenHash } from "./routes/organizations"
 import {
-  verifyAuthenticationResponse,
-  verifyRegistrationResponse,
-} from "@simplewebauthn/server"
-import { beforeEach, describe, expect, it, vi } from "vitest"
-import { emailCodeHash } from "./auth/email-codes"
-import {
+  type Harness,
   cookiesFrom,
   createHarness,
-  lastCode,
+  googleClientId,
   sessionPepper,
   setCookieHeaders,
+  staffDomains,
 } from "./test/harness"
 
-vi.mock("@simplewebauthn/server", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@simplewebauthn/server")>()
-  return {
-    ...actual,
-    verifyRegistrationResponse: vi.fn(),
-    verifyAuthenticationResponse: vi.fn(),
-  }
-})
-
-const registrationCredential = {
-  id: "Y3JlZGVudGlhbC0x",
-  rawId: "Y3JlZGVudGlhbC0x",
-  type: "public-key",
-  response: {
-    clientDataJSON: "e30",
-    attestationObject: "o2NmbXRkbm9uZQ",
-    transports: ["internal", "hybrid"],
-  },
-  clientExtensionResults: {},
-} as const
-
-const authenticationCredential = {
-  id: "Y3JlZGVudGlhbC0x",
-  rawId: "Y3JlZGVudGlhbC0x",
-  type: "public-key",
-  response: {
-    clientDataJSON: "e30",
-    authenticatorData: "AAAA",
-    signature: "c2lnbmF0dXJl",
-  },
-  clientExtensionResults: {},
-} as const
-
-function mockRegistration(verified: boolean) {
-  vi.mocked(verifyRegistrationResponse).mockResolvedValue(
-    verified
-      ? {
-          verified: true,
-          registrationInfo: {
-            fmt: "none",
-            aaguid: "00000000-0000-0000-0000-000000000000",
-            credential: {
-              id: "Y3JlZGVudGlhbC0x",
-              publicKey: new Uint8Array([1, 2, 3, 4]),
-              counter: 0,
-              transports: ["internal", "hybrid"],
-            },
-            credentialType: "public-key",
-            attestationObject: new Uint8Array([0]),
-            userVerified: true,
-            credentialDeviceType: "multiDevice",
-            credentialBackedUp: true,
-            origin: "https://developer.matchbox.markets",
-            rpID: "developer.matchbox.markets",
-          },
-        }
-      : { verified: false },
-  )
+async function errorCode(harness: Harness, response: Response) {
+  return (await harness.json(response, errorBodySchema)).error.code
 }
 
-function mockAuthentication(verified: boolean, newCounter = 1) {
-  vi.mocked(verifyAuthenticationResponse).mockResolvedValue({
-    verified,
-    authenticationInfo: {
-      credentialID: "Y3JlZGVudGlhbC0x",
-      newCounter,
-      userVerified: true,
-      credentialDeviceType: "multiDevice",
-      credentialBackedUp: true,
-      origin: "https://developer.matchbox.markets",
-      rpID: "developer.matchbox.markets",
-    },
-  })
+function staffGrants(harness: Harness) {
+  return harness.store
+    .auditEvents()
+    .filter((event) => event.action === "staff-role-granted")
 }
 
-beforeEach(() => {
-  vi.mocked(verifyRegistrationResponse).mockReset()
-  vi.mocked(verifyAuthenticationResponse).mockReset()
-})
-
-/** Runs sign-up start + verify, returning the cookie jar and challenge. */
-async function signUpToPasskey(
-  harness: ReturnType<typeof createHarness>,
-  email = "new@example.com",
-) {
-  const start = await harness.request("POST", "/api/auth/sign-up/start", {
-    body: { email, displayName: "New Dev" },
-  })
-  expect(start.status).toBe(200)
-  const { challengeId } = await harness.json(
-    start,
-    emailChallengeResponseSchema,
-  )
-  let cookie = cookiesFrom(start)
-  const code = lastCode(harness.email, email)
-  expect(code).not.toBeNull()
-  const verify = await harness.request("POST", "/api/auth/sign-up/verify", {
-    body: { challengeId, code },
-    cookie,
-  })
-  expect(verify.status).toBe(200)
-  cookie = cookiesFrom(verify, cookie)
-  const registration = await harness.json(
-    verify,
-    passkeyRegistrationOptionsResponseSchema,
-  )
-  return { cookie, registration }
-}
-
-describe("sign-up email codes", () => {
-  it("stores only an HMAC of the code and consumes it once", async () => {
+describe("Google nonce", () => {
+  it("issues a signed single-use nonce cookie with the client id", async () => {
     const harness = createHarness()
-    const response = await harness.request("POST", "/api/auth/sign-up/start", {
-      body: { email: "Dev@Example.com", displayName: "Dev" },
+    const response = await harness.request("POST", "/api/auth/google/nonce", {
+      body: { purpose: "sign-in" },
     })
     expect(response.status).toBe(200)
-    const { challengeId } = await harness.json(
-      response,
-      emailChallengeResponseSchema,
-    )
-    const code = lastCode(harness.email, "dev@example.com")
-    expect(code).toMatch(/^[0-9]{6}$/)
-    const [challenge] = harness.store.emailChallenges()
-    expect(challenge?.codeHash).toBe(
-      await emailCodeHash(sessionPepper, challengeId, code ?? ""),
-    )
-    expect(JSON.stringify(challenge)).not.toContain(`"${code}"`)
-
-    const cookie = cookiesFrom(response)
-    const first = await harness.request("POST", "/api/auth/sign-up/verify", {
-      body: { challengeId, code },
-      cookie,
-    })
-    expect(first.status).toBe(200)
-    const second = await harness.request("POST", "/api/auth/sign-up/verify", {
-      body: { challengeId, code },
-      cookie,
-    })
-    expect(second.status).toBe(400)
-    const account = await harness.store.findAccountByEmail("dev@example.com")
-    expect(account?.emailVerifiedAt).not.toBeNull()
-    expect(account?.displayName).toBe("Dev")
+    const body = await harness.json(response, googleNonceResponseSchema)
+    expect(body.clientId).toBe(googleClientId)
+    const cookie = setCookieHeaders(response).join("\n")
+    expect(cookie).toMatch(/__Host-mbx_dev_google=/)
+    expect(cookie).toMatch(/HttpOnly/)
+    expect(cookie).toMatch(/SameSite=Strict/)
   })
 
-  it("locks the challenge after five wrong attempts", async () => {
+  it("needs a session for a step-up nonce", async () => {
     const harness = createHarness()
-    const response = await harness.request("POST", "/api/auth/sign-up/start", {
-      body: { email: "dev@example.com", displayName: "Dev" },
+    const response = await harness.request("POST", "/api/auth/google/nonce", {
+      body: { purpose: "step-up" },
     })
-    const { challengeId } = await harness.json(
-      response,
-      emailChallengeResponseSchema,
-    )
-    const code = lastCode(harness.email, "dev@example.com") ?? ""
-    const wrong = code === "000000" ? "111111" : "000000"
-    for (let attempt = 0; attempt < 5; attempt++) {
-      const failed = await harness.request("POST", "/api/auth/sign-up/verify", {
-        body: { challengeId, code: wrong },
-      })
-      expect(failed.status).toBe(400)
-    }
-    const locked = await harness.request("POST", "/api/auth/sign-up/verify", {
-      body: { challengeId, code },
-    })
-    expect(locked.status).toBe(400)
-    const body = await harness.json(locked, errorBodySchema)
-    expect(body.error.message).toBe("Invalid or expired code.")
+    expect(response.status).toBe(401)
   })
 
-  it("rejects expired codes", async () => {
-    const harness = createHarness()
-    const response = await harness.request("POST", "/api/auth/sign-up/start", {
-      body: { email: "dev@example.com", displayName: "Dev" },
+  it("answers 503 when Google is not configured", async () => {
+    const harness = createHarness({ google: false })
+    const response = await harness.request("POST", "/api/auth/google/nonce", {
+      body: { purpose: "sign-in" },
     })
-    const { challengeId } = await harness.json(
-      response,
-      emailChallengeResponseSchema,
-    )
-    const code = lastCode(harness.email, "dev@example.com")
-    harness.advance(15 * 60_000 + 1)
-    const verify = await harness.request("POST", "/api/auth/sign-up/verify", {
-      body: { challengeId, code },
-    })
-    expect(verify.status).toBe(400)
-  })
-
-  it("answers identically whether or not the email exists", async () => {
-    const harness = createHarness()
-    const existing = await harness.account("taken@example.com")
-    await harness.store.createPasskey({
-      accountId: existing.id,
-      credentialId: "ZXhpc3Rpbmc",
-      publicKey: "AQID",
-      counter: 0,
-      transports: [],
-      deviceType: "single-device",
-      backedUp: false,
-      name: null,
-      lastUsedAt: null,
-    })
-    for (const path of [
-      "/api/auth/sign-up/start",
-      "/api/auth/recovery/start",
-    ]) {
-      const known = await harness.request("POST", path, {
-        body: { email: "taken@example.com", displayName: "Someone" },
-      })
-      const unknown = await harness.request("POST", path, {
-        body: { email: "nobody@example.com", displayName: "Someone" },
-      })
-      expect(known.status).toBe(200)
-      expect(unknown.status).toBe(200)
-      const knownBody = await harness.json(known, emailChallengeResponseSchema)
-      const unknownBody = await harness.json(
-        unknown,
-        emailChallengeResponseSchema,
-      )
-      expect(Object.keys(knownBody)).toEqual(Object.keys(unknownBody))
-      expect(knownBody.expiresAt).toBe(unknownBody.expiresAt)
-    }
-    // A registered address never receives a sign-up code.
-    const signUpMail = harness.email.sent.filter(
-      (message) => message.to === "taken@example.com",
-    )
-    expect(signUpMail[0]?.text).not.toMatch(/\b[0-9]{6}\b/)
-    // Recovery for an unknown address sends nothing.
-    expect(
-      harness.email.sent.filter(
-        (message) =>
-          message.to === "nobody@example.com" &&
-          message.subject.includes("recovery"),
-      ),
-    ).toHaveLength(0)
-  })
-
-  it("rate limits code sends per email", async () => {
-    const harness = createHarness()
-    const statuses: number[] = []
-    for (let attempt = 0; attempt < 3; attempt++) {
-      const response = await harness.request(
-        "POST",
-        "/api/auth/sign-up/start",
-        { body: { email: "dev@example.com", displayName: "Dev" } },
-      )
-      statuses.push(response.status)
-    }
-    expect(statuses).toEqual([200, 200, 429])
+    expect(response.status).toBe(503)
   })
 })
 
-describe("passkey registration and sign-in", () => {
-  it("completes sign-up: passkey, first organization, session", async () => {
+describe("Google sign-in", () => {
+  it("creates the account, its first organization and a stepped-up session", async () => {
     const harness = createHarness()
-    const { cookie, registration } = await signUpToPasskey(harness)
-    expect(registration.options.authenticatorSelection?.residentKey).toBe(
-      "required",
-    )
-    expect(registration.options.authenticatorSelection?.userVerification).toBe(
-      "preferred",
-    )
-    mockRegistration(true)
-    const response = await harness.request(
-      "POST",
-      "/api/auth/passkeys/register",
-      {
-        body: {
-          challengeId: registration.challengeId,
-          credential: registrationCredential,
-          organizationName: "New Co",
-        },
-        cookie,
-      },
-    )
+    const { response, cookie } = await harness.googleSignIn({
+      sub: "1001",
+      email: "New.Dev@Example.com",
+      name: "New Dev",
+    })
     expect(response.status).toBe(200)
     const me = await harness.json(response, meResponseSchema)
-    expect(me.account.email).toBe("new@example.com")
-    expect(me.organizations).toEqual([
-      expect.objectContaining({ name: "New Co", role: "owner" }),
-    ])
+    expect(me.account.email).toBe("new.dev@example.com")
+    expect(me.account.displayName).toBe("New Dev")
+    expect(me.account.emailVerifiedAt).not.toBeNull()
+    expect(me.organizations).toHaveLength(1)
+    expect(me.organizations[0]?.role).toBe("owner")
+    expect(me.staffRole).toBeNull()
     expect(me.session.steppedUpUntil).not.toBeNull()
-    const sessionCookie = cookiesFrom(response)
-    expect(sessionCookie).toMatch(/__Host-mbx_dev=/)
-    const setCookie = setCookieHeaders(response).join("\n")
-    expect(setCookie).toMatch(/HttpOnly/)
-    expect(setCookie).toMatch(/SameSite=Strict/)
-    expect(setCookie).toMatch(/Secure/)
-
-    const session = harness.store.sessions()[0]
-    expect(session?.tokenHash).toMatch(/^[0-9a-f]{64}$/)
-    expect(sessionCookie).not.toContain(session?.tokenHash ?? "missing")
-
+    expect((await harness.request("GET", "/api/me", { cookie })).status).toBe(
+      200,
+    )
     const actions = harness.store.auditEvents().map((event) => event.action)
-    expect(actions).toEqual(
-      expect.arrayContaining([
-        "developer-account-created",
-        "passkey-registered",
-        "organization-created",
-        "developer-signed-in",
-      ]),
-    )
+    expect(actions).toContain("developer-account-created")
+    expect(actions).toContain("developer-signed-in")
+  })
 
-    // The challenge is single use.
-    const replay = await harness.request(
-      "POST",
-      "/api/auth/passkeys/register",
-      {
-        body: {
-          challengeId: registration.challengeId,
-          credential: registrationCredential,
-        },
-        cookie,
-      },
+  it("signs the same Google account back in without a second organization", async () => {
+    const harness = createHarness()
+    await harness.googleSignIn({ sub: "1001", email: "dev@example.com" })
+    const again = await harness.googleSignIn({
+      sub: "1001",
+      email: "dev@example.com",
+    })
+    expect(again.response.status).toBe(200)
+    const me = await harness.json(again.response, meResponseSchema)
+    expect(me.organizations).toHaveLength(1)
+  })
+
+  it("links an account without a Google identity by verified email", async () => {
+    const harness = createHarness()
+    const seeded = await harness.store.createAccount({
+      email: "dev@example.com",
+      displayName: "Seeded",
+      emailVerifiedAt: null,
+    })
+    const { response } = await harness.googleSignIn({
+      sub: "2002",
+      email: "dev@example.com",
+    })
+    expect(response.status).toBe(200)
+    const linked = await harness.store.getAccount(seeded.id)
+    expect(linked?.googleSub).toBe("2002")
+    expect(linked?.emailVerifiedAt).not.toBeNull()
+  })
+
+  it("refuses an email held by another Google account", async () => {
+    const harness = createHarness()
+    await harness.account("dev@example.com")
+    const { response } = await harness.googleSignIn({
+      sub: "someone-else",
+      email: "dev@example.com",
+    })
+    expect(response.status).toBe(409)
+  })
+
+  it("follows a changed Google email", async () => {
+    const harness = createHarness()
+    await harness.googleSignIn({ sub: "1001", email: "old@example.com" })
+    const { response } = await harness.googleSignIn({
+      sub: "1001",
+      email: "new@example.com",
+    })
+    const me = await harness.json(response, meResponseSchema)
+    expect(me.account.email).toBe("new@example.com")
+  })
+
+  it("refuses unverified emails", async () => {
+    const harness = createHarness()
+    const { response } = await harness.googleSignIn({
+      sub: "1001",
+      email: "dev@example.com",
+      emailVerified: false,
+    })
+    expect(response.status).toBe(403)
+    expect(await harness.store.findAccountByGoogleSub("1001")).toBeNull()
+  })
+
+  it("refuses disabled accounts", async () => {
+    const harness = createHarness()
+    const account = await harness.account("dev@example.com")
+    harness.store.disableAccount(account.id, harness.now().toISOString())
+    const { response, cookie } = await harness.googleSignIn({
+      sub: account.googleSub ?? "",
+      email: account.email,
+    })
+    expect(response.status).toBe(403)
+    expect((await harness.request("GET", "/api/me", { cookie })).status).toBe(
+      401,
     )
+  })
+
+  it("rejects a token without the issued nonce", async () => {
+    const harness = createHarness()
+    const issued = await harness.googleNonce("sign-in")
+    const response = await harness.request("POST", "/api/auth/google", {
+      cookie: issued.cookie,
+      body: {
+        credential: harness.googleToken({
+          sub: "1001",
+          email: "dev@example.com",
+          nonce: "another-nonce",
+        }),
+      },
+    })
+    expect(response.status).toBe(401)
+    expect(await errorCode(harness, response)).toBe("unauthorized")
+  })
+
+  it("rejects a token the verifier does not accept", async () => {
+    const harness = createHarness()
+    const issued = await harness.googleNonce("sign-in")
+    const response = await harness.request("POST", "/api/auth/google", {
+      cookie: issued.cookie,
+      body: { credential: "not-a-google-token" },
+    })
+    expect(response.status).toBe(401)
+  })
+
+  it("needs the nonce cookie and consumes it once", async () => {
+    const harness = createHarness()
+    const issued = await harness.googleNonce("sign-in")
+    const credential = harness.googleToken({
+      sub: "1001",
+      email: "dev@example.com",
+      nonce: issued.nonce,
+    })
+    const withoutCookie = await harness.request("POST", "/api/auth/google", {
+      body: { credential },
+    })
+    expect(withoutCookie.status).toBe(400)
+    const first = await harness.request("POST", "/api/auth/google", {
+      cookie: issued.cookie,
+      body: { credential },
+    })
+    expect(first.status).toBe(200)
+    expect(setCookieHeaders(first).join("\n")).toMatch(
+      /__Host-mbx_dev_google=; Max-Age=0/,
+    )
+    const replay = await harness.request("POST", "/api/auth/google", {
+      cookie: cookiesFrom(first, issued.cookie),
+      body: { credential },
+    })
     expect(replay.status).toBe(400)
   })
 
-  it("refuses registration without the verified-email cookie", async () => {
+  it("refuses an expired nonce", async () => {
     const harness = createHarness()
-    const { registration } = await signUpToPasskey(harness)
-    mockRegistration(true)
-    const response = await harness.request(
-      "POST",
-      "/api/auth/passkeys/register",
-      {
-        body: {
-          challengeId: registration.challengeId,
-          credential: registrationCredential,
-        },
+    const issued = await harness.googleNonce("sign-in")
+    harness.advance(10 * 60_000 + 1)
+    const response = await harness.request("POST", "/api/auth/google", {
+      cookie: issued.cookie,
+      body: {
+        credential: harness.googleToken({
+          sub: "1001",
+          email: "dev@example.com",
+          nonce: issued.nonce,
+        }),
       },
-    )
-    expect(response.status).toBe(401)
-    expect(verifyRegistrationResponse).not.toHaveBeenCalled()
-  })
-
-  it("rejects an attestation that does not verify", async () => {
-    const harness = createHarness()
-    const { cookie, registration } = await signUpToPasskey(harness)
-    mockRegistration(false)
-    const response = await harness.request(
-      "POST",
-      "/api/auth/passkeys/register",
-      {
-        body: {
-          challengeId: registration.challengeId,
-          credential: registrationCredential,
-        },
-        cookie,
-      },
-    )
+    })
     expect(response.status).toBe(400)
-    expect(
-      await harness.store.listPasskeys(
-        (await harness.store.findAccountByEmail("new@example.com"))?.id ?? "",
-      ),
-    ).toHaveLength(0)
   })
 
-  it("signs in with a discoverable passkey and updates the counter", async () => {
+  it("refuses a step-up nonce for sign-in", async () => {
     const harness = createHarness()
     const account = await harness.account("dev@example.com")
-    const passkey = await harness.store.createPasskey({
-      accountId: account.id,
-      credentialId: "Y3JlZGVudGlhbC0x",
-      publicKey: "AQIDBA",
-      counter: 3,
-      transports: ["internal"],
-      deviceType: "multi-device",
-      backedUp: true,
-      name: "Laptop",
-      lastUsedAt: null,
-    })
-    const optionsResponse = await harness.request(
-      "POST",
-      "/api/auth/passkeys/authenticate/options",
-    )
-    const options = await harness.json(
-      optionsResponse,
-      passkeyAuthenticationOptionsResponseSchema,
-    )
-    expect(options.options.allowCredentials ?? []).toHaveLength(0)
-    mockAuthentication(true, 7)
-    const response = await harness.request(
-      "POST",
-      "/api/auth/passkeys/authenticate",
-      {
-        body: {
-          challengeId: options.challengeId,
-          credential: authenticationCredential,
-        },
+    const session = await harness.signIn(account)
+    const issued = await harness.googleNonce("step-up", session)
+    const response = await harness.request("POST", "/api/auth/google", {
+      cookie: issued.cookie,
+      body: {
+        credential: harness.googleToken({
+          sub: account.googleSub ?? "",
+          email: account.email,
+          nonce: issued.nonce,
+        }),
       },
+    })
+    expect(response.status).toBe(400)
+  })
+
+  it("accepts an invitation during first sign-in", async () => {
+    const harness = createHarness()
+    const owner = await harness.account("owner@example.com")
+    const organization = await harness.organization(owner)
+    const token = "invitation-token-0123456789"
+    await harness.store.createInvitation({
+      organizationId: organization.id,
+      email: "invitee@example.com",
+      role: "developer",
+      tokenHash: await invitationTokenHash(sessionPepper, token),
+      invitedBy: owner.id,
+      createdAt: harness.now().toISOString(),
+      expiresAt: new Date(
+        harness.now().getTime() + 7 * 86_400_000,
+      ).toISOString(),
+    })
+    const { response } = await harness.googleSignIn(
+      { sub: "3003", email: "invitee@example.com" },
+      { invitationToken: token },
     )
     expect(response.status).toBe(200)
     const me = await harness.json(response, meResponseSchema)
-    expect(me.account.id).toBe(account.id)
-    const [updated] = await harness.store.listPasskeys(account.id)
-    expect(updated?.id).toBe(passkey.id)
-    expect(updated?.counter).toBe(7)
-    const call = vi.mocked(verifyAuthenticationResponse).mock.calls[0]?.[0]
-    expect(call?.expectedRPID).toBe("developer.matchbox.markets")
-    expect(call?.expectedOrigin).toBe("https://developer.matchbox.markets")
-    expect(call?.credential.counter).toBe(3)
+    expect(me.organizations.map((item) => item.id)).toEqual([organization.id])
+    expect(me.organizations[0]?.role).toBe("developer")
+  })
+})
+
+describe("staff domains", () => {
+  it("makes Workspace accounts on a staff domain operators", async () => {
+    const harness = createHarness()
+    for (const [sub, email, domain] of [
+      ["4001", "pyke@supernormal.foundation", "supernormal.foundation"],
+      ["4002", "ops@thesis.co", "thesis.co"],
+    ] as const) {
+      const { response } = await harness.googleSignIn({
+        sub,
+        email,
+        hostedDomain: domain,
+      })
+      expect(response.status).toBe(200)
+      const me = await harness.json(response, meResponseSchema)
+      expect(me.staffRole).toBe("operator")
+    }
+    const grants = staffGrants(harness)
+    expect(grants).toHaveLength(2)
+    expect(grants[0]?.actorType).toBe("system")
   })
 
-  it("rejects a failed assertion without creating a session", async () => {
+  it("audits the grant once across sign-ins", async () => {
     const harness = createHarness()
-    const account = await harness.account("dev@example.com")
-    await harness.store.createPasskey({
-      accountId: account.id,
-      credentialId: "Y3JlZGVudGlhbC0x",
-      publicKey: "AQIDBA",
-      counter: 0,
-      transports: [],
-      deviceType: "single-device",
-      backedUp: false,
-      name: null,
-      lastUsedAt: null,
+    const claims = {
+      sub: "4001",
+      email: "pyke@supernormal.foundation",
+      hostedDomain: "supernormal.foundation",
+    }
+    await harness.googleSignIn(claims)
+    await harness.googleSignIn(claims)
+    expect(staffGrants(harness)).toHaveLength(1)
+  })
+
+  it("upgrades a reviewer on a staff domain to operator", async () => {
+    const harness = createHarness()
+    const account = await harness.account("rev@thesis.co")
+    harness.store.seedStaff(account.id, "reviewer")
+    const { response } = await harness.googleSignIn({
+      sub: account.googleSub ?? "",
+      email: account.email,
+      hostedDomain: "thesis.co",
     })
-    const options = await harness.json(
-      await harness.request("POST", "/api/auth/passkeys/authenticate/options"),
-      passkeyAuthenticationOptionsResponseSchema,
-    )
-    mockAuthentication(false)
-    const response = await harness.request(
-      "POST",
-      "/api/auth/passkeys/authenticate",
-      {
-        body: {
-          challengeId: options.challengeId,
-          credential: authenticationCredential,
+    const me = await harness.json(response, meResponseSchema)
+    expect(me.staffRole).toBe("operator")
+  })
+
+  it("ignores consumer accounts that use a staff-domain address", async () => {
+    const harness = createHarness()
+    const { response } = await harness.googleSignIn({
+      sub: "5001",
+      email: "someone@thesis.co",
+      hostedDomain: null,
+    })
+    const me = await harness.json(response, meResponseSchema)
+    expect(me.staffRole).toBeNull()
+    expect(staffGrants(harness)).toHaveLength(0)
+  })
+
+  it("matches the hosted domain exactly", () => {
+    const base = { sub: "1", emailVerified: true, name: null, nonce: null }
+    expect(
+      isStaffIdentity(
+        {
+          ...base,
+          email: "a@thesis.co.evil.com",
+          hostedDomain: "thesis.co.evil.com",
         },
-      },
-    )
-    expect(response.status).toBe(401)
-    expect(harness.store.sessions()).toHaveLength(0)
-  })
-
-  it("recovers access by registering a new passkey", async () => {
-    const harness = createHarness()
-    const account = await harness.account("dev@example.com")
-    await harness.store.createPasskey({
-      accountId: account.id,
-      credentialId: "b2xkLWtleQ",
-      publicKey: "AQIDBA",
-      counter: 0,
-      transports: [],
-      deviceType: "single-device",
-      backedUp: false,
-      name: "Old",
-      lastUsedAt: null,
-    })
-    const start = await harness.request("POST", "/api/auth/recovery/start", {
-      body: { email: "dev@example.com" },
-    })
-    const { challengeId } = await harness.json(
-      start,
-      emailChallengeResponseSchema,
-    )
-    let cookie = cookiesFrom(start)
-    const verify = await harness.request("POST", "/api/auth/recovery/verify", {
-      body: { challengeId, code: lastCode(harness.email, "dev@example.com") },
-      cookie,
-    })
-    expect(verify.status).toBe(200)
-    cookie = cookiesFrom(verify, cookie)
-    const registration = await harness.json(
-      verify,
-      passkeyRegistrationOptionsResponseSchema,
-    )
-    expect(registration.options.excludeCredentials?.[0]?.id).toBe("b2xkLWtleQ")
-    mockRegistration(true)
-    const response = await harness.request(
-      "POST",
-      "/api/auth/passkeys/register",
-      {
-        body: {
-          challengeId: registration.challengeId,
-          credential: registrationCredential,
+        staffDomains,
+      ),
+    ).toBe(false)
+    expect(
+      isStaffIdentity(
+        { ...base, email: "a@gmail.com", hostedDomain: "thesis.co" },
+        staffDomains,
+      ),
+    ).toBe(false)
+    expect(
+      isStaffIdentity(
+        {
+          ...base,
+          email: "a@thesis.co",
+          hostedDomain: "thesis.co",
+          emailVerified: false,
         },
-        cookie,
-      },
-    )
-    expect(response.status).toBe(200)
-    expect(await harness.store.listPasskeys(account.id)).toHaveLength(2)
-    expect(await harness.store.listOrganizationsForAccount(account.id)).toEqual(
-      [],
-    )
-    expect(harness.store.auditEvents().map((event) => event.action)).toContain(
-      "developer-recovery-completed",
-    )
+        staffDomains,
+      ),
+    ).toBe(false)
+    expect(
+      isStaffIdentity(
+        { ...base, email: "a@thesis.co", hostedDomain: "thesis.co" },
+        staffDomains,
+      ),
+    ).toBe(true)
   })
+})
 
-  it("steps up the session with a passkey assertion", async () => {
+describe("Google step-up", () => {
+  it("steps up the session with the signed-in Google account", async () => {
     const harness = createHarness()
     const account = await harness.account("dev@example.com")
-    await harness.store.createPasskey({
-      accountId: account.id,
-      credentialId: "Y3JlZGVudGlhbC0x",
-      publicKey: "AQIDBA",
-      counter: 0,
-      transports: ["internal"],
-      deviceType: "single-device",
-      backedUp: false,
-      name: null,
-      lastUsedAt: null,
-    })
     const cookie = await harness.signIn(account)
-    const options = await harness.json(
-      await harness.request("POST", "/api/auth/step-up/options", { cookie }),
-      passkeyAuthenticationOptionsResponseSchema,
-    )
-    expect(options.options.allowCredentials?.[0]?.id).toBe("Y3JlZGVudGlhbC0x")
-    mockAuthentication(true)
-    const response = await harness.request("POST", "/api/auth/step-up/verify", {
-      body: {
-        challengeId: options.challengeId,
-        credential: authenticationCredential,
-      },
-      cookie,
-    })
+    const response = await harness.googleStepUp(cookie, account)
     expect(response.status).toBe(200)
-    const body = await harness.json(response, stepUpResponseSchema)
-    expect(Date.parse(body.steppedUpUntil)).toBe(
-      harness.now().getTime() + 10 * 60_000,
-    )
+    await harness.json(response, stepUpResponseSchema)
     const me = await harness.json(
       await harness.request("GET", "/api/me", { cookie }),
       meResponseSchema,
     )
-    expect(me.session.steppedUpUntil).toBe(body.steppedUpUntil)
+    expect(me.session.steppedUpUntil).not.toBeNull()
   })
 
-  it("does not step up with another account's passkey", async () => {
+  it("refuses another Google account", async () => {
     const harness = createHarness()
     const account = await harness.account("dev@example.com")
-    const other = await harness.account("other@example.com")
-    await harness.store.createPasskey({
-      accountId: account.id,
-      credentialId: "b3duLWtleQ",
-      publicKey: "AQIDBA",
-      counter: 0,
-      transports: [],
-      deviceType: "single-device",
-      backedUp: false,
-      name: null,
-      lastUsedAt: null,
-    })
-    await harness.store.createPasskey({
-      accountId: other.id,
-      credentialId: "Y3JlZGVudGlhbC0x",
-      publicKey: "AQIDBA",
-      counter: 0,
-      transports: [],
-      deviceType: "single-device",
-      backedUp: false,
-      name: null,
-      lastUsedAt: null,
-    })
     const cookie = await harness.signIn(account)
-    const options = await harness.json(
-      await harness.request("POST", "/api/auth/step-up/options", { cookie }),
-      passkeyAuthenticationOptionsResponseSchema,
-    )
-    mockAuthentication(true)
-    const response = await harness.request("POST", "/api/auth/step-up/verify", {
-      body: {
-        challengeId: options.challengeId,
-        credential: authenticationCredential,
-      },
-      cookie,
+    const response = await harness.googleStepUp(cookie, {
+      sub: "attacker",
+      email: "attacker@example.com",
     })
-    expect(response.status).toBe(401)
-    expect(verifyAuthenticationResponse).not.toHaveBeenCalled()
+    expect(response.status).toBe(403)
+    const me = await harness.json(
+      await harness.request("GET", "/api/me", { cookie }),
+      meResponseSchema,
+    )
+    expect(me.session.steppedUpUntil).toBeNull()
+  })
+
+  it("binds the nonce to the session that asked for it", async () => {
+    const harness = createHarness()
+    const account = await harness.account("dev@example.com")
+    const first = await harness.signIn(account)
+    const second = await harness.signIn(account)
+    const issued = await harness.googleNonce("step-up", first)
+    const nonceCookie = issued.cookie
+      .split("; ")
+      .filter((part) => part.startsWith("__Host-mbx_dev_google="))
+      .join("; ")
+    const response = await harness.request("POST", "/api/auth/step-up/google", {
+      cookie: `${second}; ${nonceCookie}`,
+      body: {
+        credential: harness.googleToken({
+          sub: account.googleSub ?? "",
+          email: account.email,
+          nonce: issued.nonce,
+        }),
+      },
+    })
+    expect(response.status).toBe(400)
+  })
+
+  it("refuses a sign-in nonce for step-up", async () => {
+    const harness = createHarness()
+    const account = await harness.account("dev@example.com")
+    const session = await harness.signIn(account)
+    const issued = await harness.googleNonce("sign-in", session)
+    const response = await harness.request("POST", "/api/auth/step-up/google", {
+      cookie: issued.cookie,
+      body: {
+        credential: harness.googleToken({
+          sub: account.googleSub ?? "",
+          email: account.email,
+          nonce: issued.nonce,
+        }),
+      },
+    })
+    expect(response.status).toBe(400)
+  })
+
+  it("lasts 10 minutes", async () => {
+    const harness = createHarness()
+    const account = await harness.account("dev@example.com")
+    const cookie = await harness.signIn(account)
+    await harness.googleStepUp(cookie, account)
+    harness.advance(10 * 60_000 + 1)
+    const me = await harness.json(
+      await harness.request("GET", "/api/me", { cookie }),
+      meResponseSchema,
+    )
+    expect(me.session.steppedUpUntil).toBeNull()
+  })
+})
+
+describe("Google claims", () => {
+  it("normalizes claims and accepts string booleans", () => {
+    expect(
+      identityFromClaims({
+        sub: "1",
+        email: " Dev@Thesis.CO ",
+        email_verified: "true",
+        hd: "Thesis.co",
+        name: " Dev ",
+        nonce: "n",
+      }),
+    ).toEqual({
+      sub: "1",
+      email: "dev@thesis.co",
+      emailVerified: true,
+      hostedDomain: "thesis.co",
+      name: "Dev",
+      nonce: "n",
+    })
+  })
+
+  it("rejects tokens without the required claims", () => {
+    expect(identityFromClaims({ sub: "1" })).toBeNull()
+    expect(
+      identityFromClaims({ email: "a@b.co", email_verified: true }),
+    ).toBeNull()
   })
 })
 
@@ -669,6 +560,15 @@ describe("request guards", () => {
       cookie,
     })
     expect(allowed.status).toBe(201)
+  })
+
+  it("rejects cross-origin Google sign-in", async () => {
+    const harness = createHarness()
+    const response = await harness.request("POST", "/api/auth/google", {
+      body: { credential: "x" },
+      origin: "https://evil.example",
+    })
+    expect(response.status).toBe(403)
   })
 
   it("returns 503 service_disabled when the flag is off", async () => {

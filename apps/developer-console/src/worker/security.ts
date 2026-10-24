@@ -4,7 +4,12 @@ import { themeScript } from "@repo/ui/theme-script"
 /**
  * Headers for SPA documents served through the Worker (`ASSETS` fallthrough).
  * The only inline script is the `@repo/ui` theme script, allowed by hash.
+ * Google Identity Services (sign-in button) is allowed per Google's CSP
+ * guidance; its popup needs `same-origin-allow-popups` and its FedCM prompt
+ * `identity-credentials-get`.
  */
+
+const googleIdentityOrigin = "https://accounts.google.com"
 
 async function sha256Base64(value: string): Promise<string> {
   const digest = new Uint8Array(
@@ -21,11 +26,12 @@ export function documentContentSecurityPolicy(): Promise<string> {
   cachedPolicy ??= sha256Base64(themeScript).then((hash) =>
     [
       "default-src 'self'",
-      `script-src 'self' 'sha256-${hash}'`,
-      "style-src 'self' 'unsafe-inline'",
+      `script-src 'self' 'sha256-${hash}' ${googleIdentityOrigin}/gsi/client`,
+      `style-src 'self' 'unsafe-inline' ${googleIdentityOrigin}/gsi/style`,
       "img-src 'self' data: https:",
       "font-src 'self' data:",
-      "connect-src 'self'",
+      `connect-src 'self' ${googleIdentityOrigin}/gsi/`,
+      `frame-src ${googleIdentityOrigin}/gsi/`,
       "object-src 'none'",
       "base-uri 'none'",
       "form-action 'self'",
@@ -43,9 +49,8 @@ const baseHeaders = {
 
 const documentHeaders = {
   "X-Frame-Options": "DENY",
-  "Cross-Origin-Opener-Policy": "same-origin",
-  "Permissions-Policy":
-    "camera=(), microphone=(), geolocation=(), publickey-credentials-get=(self), publickey-credentials-create=(self)",
+  "Cross-Origin-Opener-Policy": "same-origin-allow-popups",
+  "Permissions-Policy": `camera=(), microphone=(), geolocation=(), publickey-credentials-get=(), publickey-credentials-create=(), identity-credentials-get=(self "${googleIdentityOrigin}")`,
 } as const
 
 /**

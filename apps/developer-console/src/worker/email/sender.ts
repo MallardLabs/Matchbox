@@ -30,7 +30,7 @@ export function createBindingEmailSender(binding: SendEmail): EmailSender {
 
 /**
  * Local development without the binding: logs the text body (which carries
- * the code or link) so sign-up works offline. Never used in production.
+ * the link) so invitations work offline. Never used in production.
  */
 export function createLogEmailSender(logger: Logger): EmailSender {
   return {

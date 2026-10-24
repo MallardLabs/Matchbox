@@ -4,11 +4,10 @@ import {
   type AuditSearchQuery,
   type CreateApiKeyRequest,
   type CreateAppRequest,
-  type EmailCodeVerifyRequest,
   type EnvironmentKindFilter,
+  type GoogleNoncePurpose,
+  type GoogleSignInRequest,
   type MembershipRole,
-  type PasskeyAuthenticateRequest,
-  type PasskeyRegisterRequest,
   type ReviewDecisionRequest,
   type ReviewRecordState,
   type UpdateAppRequest,
@@ -29,9 +28,9 @@ import {
   consoleSessionListResponseSchema,
   createdApiKeyResponseSchema,
   createdClientSecretResponseSchema,
-  emailChallengeResponseSchema,
   environmentReviewListResponseSchema,
   environmentSchema,
+  googleNonceResponseSchema,
   invitationListResponseSchema,
   invitationSchema,
   meResponseSchema,
@@ -42,10 +41,6 @@ import {
   orgUsageResponseSchema,
   organizationListResponseSchema,
   organizationSchema,
-  passkeyAuthenticationOptionsResponseSchema,
-  passkeyListResponseSchema,
-  passkeyRegistrationOptionsResponseSchema,
-  passkeySchema,
   quotaOverrideListResponseSchema,
   quotaOverrideRecordSchema,
   requestLogEntrySchema,
@@ -133,67 +128,22 @@ function auditQuery(filters: AuditFilters): Record<string, QueryValue> {
 }
 
 export const auth = {
-  signUpStart(body: {
-    email: string
-    displayName: string
-    invitationToken?: string
-  }) {
-    return apiRequest(emailChallengeResponseSchema, "/api/auth/sign-up/start", {
+  googleNonce(purpose: GoogleNoncePurpose) {
+    return apiRequest(googleNonceResponseSchema, "/api/auth/google/nonce", {
+      method: post,
+      body: { purpose },
+    })
+  },
+  googleSignIn(body: GoogleSignInRequest) {
+    return apiRequest(meResponseSchema, "/api/auth/google", {
       method: post,
       body,
     })
   },
-  signUpVerify(body: EmailCodeVerifyRequest) {
-    return apiRequest(
-      passkeyRegistrationOptionsResponseSchema,
-      "/api/auth/sign-up/verify",
-      { method: post, body },
-    )
-  },
-  recoveryStart(body: { email: string }) {
-    return apiRequest(
-      emailChallengeResponseSchema,
-      "/api/auth/recovery/start",
-      { method: post, body },
-    )
-  },
-  recoveryVerify(body: EmailCodeVerifyRequest) {
-    return apiRequest(
-      passkeyRegistrationOptionsResponseSchema,
-      "/api/auth/recovery/verify",
-      { method: post, body },
-    )
-  },
-  registerPasskey(body: PasskeyRegisterRequest) {
-    return apiRequest(meResponseSchema, "/api/auth/passkeys/register", {
+  googleStepUp(credential: string) {
+    return apiRequest(stepUpResponseSchema, "/api/auth/step-up/google", {
       method: post,
-      body,
-    })
-  },
-  authenticationOptions() {
-    return apiRequest(
-      passkeyAuthenticationOptionsResponseSchema,
-      "/api/auth/passkeys/authenticate/options",
-      { method: post },
-    )
-  },
-  authenticate(body: PasskeyAuthenticateRequest) {
-    return apiRequest(meResponseSchema, "/api/auth/passkeys/authenticate", {
-      method: post,
-      body,
-    })
-  },
-  stepUpOptions() {
-    return apiRequest(
-      passkeyAuthenticationOptionsResponseSchema,
-      "/api/auth/step-up/options",
-      { method: post },
-    )
-  },
-  stepUpVerify(body: PasskeyAuthenticateRequest) {
-    return apiRequest(stepUpResponseSchema, "/api/auth/step-up/verify", {
-      method: post,
-      body,
+      body: { credential },
     })
   },
   signOut() {
@@ -219,27 +169,6 @@ export const me = {
     return apiRequest(meResponseSchema, "/api/me", {
       method: "PATCH",
       body,
-    })
-  },
-  passkeys() {
-    return apiRequest(passkeyListResponseSchema, "/api/me/passkeys")
-  },
-  passkeyOptions() {
-    return apiRequest(
-      passkeyRegistrationOptionsResponseSchema,
-      "/api/me/passkeys/options",
-      { method: post },
-    )
-  },
-  renamePasskey(passkeyId: string, name: string) {
-    return apiRequest(passkeySchema, `/api/me/passkeys/${enc(passkeyId)}`, {
-      method: "PATCH",
-      body: { name },
-    })
-  },
-  deletePasskey(passkeyId: string) {
-    return apiRequest(okResponseSchema, `/api/me/passkeys/${enc(passkeyId)}`, {
-      method: "DELETE",
     })
   },
   sessions() {

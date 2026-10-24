@@ -11,6 +11,7 @@ import {
 } from "@repo/platform-server"
 import type { Hono } from "hono"
 import createApp from "./app"
+import { createGoogleTokenVerifier } from "./auth/google"
 import type { ConsoleEnv } from "./context"
 import { createBindingEmailSender, createLogEmailSender } from "./email/sender"
 import parseConfig, { type ConsoleConfig, type WorkerBindings } from "./env"
@@ -149,7 +150,13 @@ async function buildApp(
     analytics,
     health,
     apiLimiter,
-    webauthn: config.webauthn,
+    google:
+      config.googleClientId === null
+        ? null
+        : {
+            clientId: config.googleClientId,
+            verifier: createGoogleTokenVerifier(config.googleClientId),
+          },
     now: () => new Date(),
     flags: {
       consoleEnabled: config.consoleEnabled,
@@ -162,6 +169,7 @@ async function buildApp(
       apiKeyPepper: config.peppers.apiKey,
       clientSecretPepper: config.peppers.clientSecret,
       devAccountEmail: demoAccountEmail,
+      staffDomains: config.staffDomains,
     },
   })
   built = { env, app }

@@ -1,281 +1,87 @@
 import {
-  emailChallengeResponseSchema,
   environmentSchema,
   meResponseSchema,
-  passkeyAuthenticationOptionsResponseSchema,
-  passkeyRegistrationOptionsResponseSchema,
   revokeOtherSessionsResponseSchema,
 } from "@repo/platform-contracts/console"
 import { errorBodySchema } from "@repo/platform-contracts/errors"
-import {
-  verifyAuthenticationResponse,
-  verifyRegistrationResponse,
-} from "@simplewebauthn/server"
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { describe, expect, it } from "vitest"
 import { inertText, invitationEmail } from "./email/templates"
-import type { AccountRecord } from "./store/console-store"
 import {
   type Harness,
   cookiesFrom,
   createHarness,
-  lastCode,
   setCookieHeaders,
 } from "./test/harness"
 
 /**
- * Regression tests for the console security review: step-up around
- * passkeys (H1), client type and redirect changes (H2), recovery (M2), staff
- * roles (M4), and the low-severity hardening items.
+ * Regression tests for the console security review: step-up is bound to the
+ * signed-in Google account (H1), client type and redirect changes (H2),
+ * sessions (M2), staff roles (M4), and the low-severity hardening items.
  */
-
-vi.mock("@simplewebauthn/server", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@simplewebauthn/server")>()
-  return {
-    ...actual,
-    verifyRegistrationResponse: vi.fn(),
-    verifyAuthenticationResponse: vi.fn(),
-  }
-})
-
-const newCredentialId = "bmV3LWtleQ"
-const oldCredentialId = "b2xkLWtleQ"
-
-const registrationCredential = {
-  id: newCredentialId,
-  rawId: newCredentialId,
-  type: "public-key",
-  response: {
-    clientDataJSON: "e30",
-    attestationObject: "o2NmbXRkbm9uZQ",
-    transports: ["internal"],
-  },
-  clientExtensionResults: {},
-} as const
-
-function assertion(credentialId: string) {
-  return {
-    id: credentialId,
-    rawId: credentialId,
-    type: "public-key",
-    response: {
-      clientDataJSON: "e30",
-      authenticatorData: "AAAA",
-      signature: "c2lnbmF0dXJl",
-    },
-    clientExtensionResults: {},
-  } as const
-}
-
-function mockRegistration() {
-  vi.mocked(verifyRegistrationResponse).mockResolvedValue({
-    verified: true,
-    registrationInfo: {
-      fmt: "none",
-      aaguid: "00000000-0000-0000-0000-000000000000",
-      credential: {
-        id: newCredentialId,
-        publicKey: new Uint8Array([1, 2, 3, 4]),
-        counter: 0,
-        transports: ["internal"],
-      },
-      credentialType: "public-key",
-      attestationObject: new Uint8Array([0]),
-      userVerified: true,
-      credentialDeviceType: "multiDevice",
-      credentialBackedUp: true,
-      origin: "https://developer.matchbox.markets",
-      rpID: "developer.matchbox.markets",
-    },
-  })
-}
-
-function mockAuthentication(options: { userVerified?: boolean } = {}) {
-  vi.mocked(verifyAuthenticationResponse).mockResolvedValue({
-    verified: true,
-    authenticationInfo: {
-      credentialID: "unused",
-      newCounter: 1,
-      userVerified: options.userVerified ?? true,
-      credentialDeviceType: "multiDevice",
-      credentialBackedUp: true,
-      origin: "https://developer.matchbox.markets",
-      rpID: "developer.matchbox.markets",
-    },
-  })
-}
-
-beforeEach(() => {
-  vi.mocked(verifyRegistrationResponse).mockReset()
-  vi.mocked(verifyAuthenticationResponse).mockReset()
-})
 
 async function errorCode(harness: Harness, response: Response) {
   return (await harness.json(response, errorBodySchema)).error.code
-}
-
-async function addPasskey(
-  harness: Harness,
-  account: AccountRecord,
-  credentialId: string,
-  name: string | null = null,
-) {
-  return harness.store.createPasskey({
-    accountId: account.id,
-    credentialId,
-    publicKey: "AQIDBA",
-    counter: 0,
-    transports: ["internal"],
-    deviceType: "multi-device",
-    backedUp: true,
-    name,
-    lastUsedAt: null,
-  })
-}
-
-async function stepUpWith(
-  harness: Harness,
-  cookie: string,
-  credentialId: string,
-) {
-  const options = await harness.json(
-    await harness.request("POST", "/api/auth/step-up/options", { cookie }),
-    passkeyAuthenticationOptionsResponseSchema,
-  )
-  mockAuthentication()
-  return harness.request("POST", "/api/auth/step-up/verify", {
-    cookie,
-    body: {
-      challengeId: options.challengeId,
-      credential: assertion(credentialId),
-    },
-  })
 }
 
 function mailTo(harness: Harness, to: string) {
   return harness.email.sent.filter((message) => message.to === to)
 }
 
-describe("H1: passkey changes need step-up", () => {
-  it("refuses registration options without a fresh step-up", async () => {
+describe("H1: step-up needs the signed-in Google account", () => {
+  it("a stolen session cannot step up with another Google account", async () => {
     const harness = createHarness()
-    const account = await harness.account("dev@example.com")
-    await addPasskey(harness, account, oldCredentialId)
-    const cookie = await harness.signIn(account)
-    const response = await harness.request("POST", "/api/me/passkeys/options", {
-      cookie,
+    const victim = await harness.account("dev@example.com")
+    const stolen = await harness.signIn(victim)
+    const response = await harness.googleStepUp(stolen, {
+      sub: "attacker-sub",
+      email: "attacker@example.com",
     })
     expect(response.status).toBe(403)
-    expect(await errorCode(harness, response)).toBe("step_up_required")
+    const me = await harness.json(
+      await harness.request("GET", "/api/me", { cookie: stolen }),
+      meResponseSchema,
+    )
+    expect(me.session.steppedUpUntil).toBeNull()
   })
 
-  it("refuses a signed-in registration without a fresh step-up", async () => {
+  it("a Google token minted for another page is refused", async () => {
     const harness = createHarness()
     const account = await harness.account("dev@example.com")
-    await addPasskey(harness, account, oldCredentialId)
     const cookie = await harness.signIn(account)
-    const createdAt = harness.now()
-    const challenge = await harness.store.createWebauthnChallenge({
-      challenge: "Y2hhbGxlbmdl",
-      purpose: "register",
-      accountId: account.id,
-      createdAt: createdAt.toISOString(),
-      expiresAt: new Date(createdAt.getTime() + 60_000).toISOString(),
+    const issued = await harness.googleNonce("step-up", cookie)
+    const response = await harness.request("POST", "/api/auth/step-up/google", {
+      cookie: issued.cookie,
+      body: {
+        credential: harness.googleToken({
+          sub: account.googleSub ?? "",
+          email: account.email,
+          nonce: null,
+        }),
+      },
     })
-    mockRegistration()
-    const response = await harness.request(
-      "POST",
-      "/api/auth/passkeys/register",
-      {
-        cookie,
-        body: {
-          challengeId: challenge.id,
-          credential: registrationCredential,
-        },
-      },
-    )
-    expect(response.status).toBe(403)
-    expect(await errorCode(harness, response)).toBe("step_up_required")
-    expect(verifyRegistrationResponse).not.toHaveBeenCalled()
-    expect(await harness.store.listPasskeys(account.id)).toHaveLength(1)
+    expect(response.status).toBe(401)
   })
 
-  it("adds a passkey after step-up and emails the account", async () => {
+  it("a step-up nonce cannot be reused", async () => {
     const harness = createHarness()
     const account = await harness.account("dev@example.com")
-    await addPasskey(harness, account, oldCredentialId)
     const cookie = await harness.signIn(account)
-    expect((await stepUpWith(harness, cookie, oldCredentialId)).status).toBe(
-      200,
-    )
-    const options = await harness.json(
-      await harness.request("POST", "/api/me/passkeys/options", { cookie }),
-      passkeyRegistrationOptionsResponseSchema,
-    )
-    mockRegistration()
-    const response = await harness.request(
-      "POST",
-      "/api/auth/passkeys/register",
-      {
-        cookie,
-        body: {
-          challengeId: options.challengeId,
-          credential: registrationCredential,
-          name: "Phone",
-        },
-      },
-    )
-    expect(response.status).toBe(200)
-    expect(await harness.store.listPasskeys(account.id)).toHaveLength(2)
-    const [notice] = mailTo(harness, account.email)
-    expect(notice?.subject).toMatch(/Passkey added/)
-    expect(notice?.text).toContain("Phone")
-  })
-
-  it("requires step-up to rename or remove a passkey", async () => {
-    const harness = createHarness()
-    const account = await harness.account("dev@example.com")
-    const old = await addPasskey(harness, account, oldCredentialId)
-    await addPasskey(harness, account, newCredentialId)
-    const cookie = await harness.signIn(account)
-    const rename = await harness.request(
-      "PATCH",
-      `/api/me/passkeys/${old.id}`,
-      { cookie, body: { name: "Mine" } },
-    )
-    expect(rename.status).toBe(403)
-    expect(await errorCode(harness, rename)).toBe("step_up_required")
-    const remove = await harness.request(
-      "DELETE",
-      `/api/me/passkeys/${old.id}`,
-      { cookie },
-    )
-    expect(remove.status).toBe(403)
-    expect(await errorCode(harness, remove)).toBe("step_up_required")
-    expect(await harness.store.listPasskeys(account.id)).toHaveLength(2)
-  })
-
-  it("removing a passkey signs out other sessions and emails the account", async () => {
-    const harness = createHarness()
-    const account = await harness.account("dev@example.com")
-    const old = await addPasskey(harness, account, oldCredentialId, "Old")
-    await addPasskey(harness, account, newCredentialId)
-    const other = await harness.signIn(account)
-    const current = await harness.signIn(account, { steppedUp: true })
-    const response = await harness.request(
-      "DELETE",
-      `/api/me/passkeys/${old.id}`,
-      { cookie: current },
-    )
-    expect(response.status).toBe(200)
-    expect(
-      (await harness.request("GET", "/api/me", { cookie: other })).status,
-    ).toBe(401)
-    expect(
-      (await harness.request("GET", "/api/me", { cookie: current })).status,
-    ).toBe(200)
-    const [notice] = mailTo(harness, account.email)
-    expect(notice?.subject).toMatch(/Passkey removed/)
-    expect(notice?.text).toContain("Old")
+    const issued = await harness.googleNonce("step-up", cookie)
+    const credential = harness.googleToken({
+      sub: account.googleSub ?? "",
+      email: account.email,
+      nonce: issued.nonce,
+    })
+    const first = await harness.request("POST", "/api/auth/step-up/google", {
+      cookie: issued.cookie,
+      body: { credential },
+    })
+    expect(first.status).toBe(200)
+    const replay = await harness.request("POST", "/api/auth/step-up/google", {
+      cookie: cookiesFrom(first, issued.cookie),
+      body: { credential },
+    })
+    expect(replay.status).toBe(400)
   })
 })
 
@@ -439,117 +245,7 @@ describe("H2: client type and redirect changes", () => {
   })
 })
 
-describe("M2: recovery", () => {
-  async function recover(harness: Harness, account: AccountRecord) {
-    const start = await harness.request("POST", "/api/auth/recovery/start", {
-      body: { email: account.email },
-    })
-    const { challengeId } = await harness.json(
-      start,
-      emailChallengeResponseSchema,
-    )
-    let cookie = cookiesFrom(start)
-    const verify = await harness.request("POST", "/api/auth/recovery/verify", {
-      body: { challengeId, code: lastCode(harness.email, account.email) },
-      cookie,
-    })
-    cookie = cookiesFrom(verify, cookie)
-    const registration = await harness.json(
-      verify,
-      passkeyRegistrationOptionsResponseSchema,
-    )
-    mockRegistration()
-    const response = await harness.request(
-      "POST",
-      "/api/auth/passkeys/register",
-      {
-        body: {
-          challengeId: registration.challengeId,
-          credential: registrationCredential,
-        },
-        cookie,
-      },
-    )
-    expect(response.status).toBe(200)
-    return {
-      me: await harness.json(response, meResponseSchema),
-      cookie: cookiesFrom(response, cookie),
-    }
-  }
-
-  it("yields a session that is not stepped up and notifies the account", async () => {
-    const harness = createHarness()
-    const account = await harness.account("dev@example.com")
-    await addPasskey(harness, account, oldCredentialId)
-    const { me, cookie } = await recover(harness, account)
-    expect(me.session.steppedUpUntil).toBeNull()
-    expect(
-      mailTo(harness, account.email).some((message) =>
-        message.subject.includes("was recovered"),
-      ),
-    ).toBe(true)
-    const gated = await harness.request("POST", "/api/me/passkeys/options", {
-      cookie,
-    })
-    expect(gated.status).toBe(403)
-    expect(await errorCode(harness, gated)).toBe("step_up_required")
-  })
-
-  it("blocks step-up with the recovery passkey for 24 hours", async () => {
-    const harness = createHarness()
-    const account = await harness.account("dev@example.com")
-    await addPasskey(harness, account, oldCredentialId)
-    const { cookie } = await recover(harness, account)
-
-    const options = await harness.json(
-      await harness.request("POST", "/api/auth/step-up/options", { cookie }),
-      passkeyAuthenticationOptionsResponseSchema,
-    )
-    expect(
-      (options.options.allowCredentials ?? []).map((item) => item.id),
-    ).toEqual([oldCredentialId])
-    mockAuthentication()
-    const blocked = await harness.request("POST", "/api/auth/step-up/verify", {
-      cookie,
-      body: {
-        challengeId: options.challengeId,
-        credential: assertion(newCredentialId),
-      },
-    })
-    expect(blocked.status).toBe(403)
-    expect(verifyAuthenticationResponse).not.toHaveBeenCalled()
-
-    // A pre-existing passkey still works.
-    expect((await stepUpWith(harness, cookie, oldCredentialId)).status).toBe(
-      200,
-    )
-
-    // Sign-in with the recovery passkey is not stepped up either.
-    const signInOptions = await harness.json(
-      await harness.request("POST", "/api/auth/passkeys/authenticate/options"),
-      passkeyAuthenticationOptionsResponseSchema,
-    )
-    mockAuthentication()
-    const signIn = await harness.request(
-      "POST",
-      "/api/auth/passkeys/authenticate",
-      {
-        body: {
-          challengeId: signInOptions.challengeId,
-          credential: assertion(newCredentialId),
-        },
-      },
-    )
-    expect(signIn.status).toBe(200)
-    expect(
-      (await harness.json(signIn, meResponseSchema)).session.steppedUpUntil,
-    ).toBeNull()
-
-    harness.advance(24 * 60 * 60_000 + 1)
-    const later = await harness.signIn(account)
-    expect((await stepUpWith(harness, later, newCredentialId)).status).toBe(200)
-  })
-
+describe("M2: sessions", () => {
   it("signs out every other session", async () => {
     const harness = createHarness()
     const account = await harness.account("dev@example.com")
@@ -698,53 +394,6 @@ describe("low-severity hardening", () => {
     expect((await harness.request("GET", "/api/me", { cookie })).status).toBe(
       401,
     )
-  })
-
-  it("step-up requires user verification", async () => {
-    const harness = createHarness()
-    const account = await harness.account("dev@example.com")
-    await addPasskey(harness, account, oldCredentialId)
-    const cookie = await harness.signIn(account)
-    const options = await harness.json(
-      await harness.request("POST", "/api/auth/step-up/options", { cookie }),
-      passkeyAuthenticationOptionsResponseSchema,
-    )
-    expect(options.options.userVerification).toBe("required")
-    mockAuthentication()
-    await harness.request("POST", "/api/auth/step-up/verify", {
-      cookie,
-      body: {
-        challengeId: options.challengeId,
-        credential: assertion(oldCredentialId),
-      },
-    })
-    const call = vi.mocked(verifyAuthenticationResponse).mock.calls[0]?.[0]
-    expect(call?.requireUserVerification).toBe(true)
-  })
-
-  it("a sign-in without user verification is not stepped up", async () => {
-    const harness = createHarness()
-    const account = await harness.account("dev@example.com")
-    await addPasskey(harness, account, oldCredentialId)
-    const options = await harness.json(
-      await harness.request("POST", "/api/auth/passkeys/authenticate/options"),
-      passkeyAuthenticationOptionsResponseSchema,
-    )
-    mockAuthentication({ userVerified: false })
-    const response = await harness.request(
-      "POST",
-      "/api/auth/passkeys/authenticate",
-      {
-        body: {
-          challengeId: options.challengeId,
-          credential: assertion(oldCredentialId),
-        },
-      },
-    )
-    expect(response.status).toBe(200)
-    expect(
-      (await harness.json(response, meResponseSchema)).session.steppedUpUntil,
-    ).toBeNull()
   })
 
   it("secret-key CIDR changes and expiry extensions need step-up", async () => {

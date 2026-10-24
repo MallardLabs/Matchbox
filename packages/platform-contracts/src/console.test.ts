@@ -4,9 +4,8 @@ import {
   createApiKeyRequestSchema,
   createAppRequestSchema,
   credentialStatus,
-  passkeyRegisterRequestSchema,
+  googleSignInRequestSchema,
   reviewDecisionRequestSchema,
-  signUpStartRequestSchema,
   usageQuerySchema,
 } from "./console"
 import {
@@ -18,36 +17,19 @@ import {
 const now = new Date("2026-09-30T12:00:00.000Z")
 
 describe("console auth schemas", () => {
-  it("normalizes sign-up emails", () => {
+  it("accepts a Google credential with an optional invitation", () => {
     expect(
-      signUpStartRequestSchema.parse({
-        email: "  Dev@Example.COM ",
-        displayName: "Dev",
-      }).email,
-    ).toBe("dev@example.com")
+      googleSignInRequestSchema.safeParse({ credential: "eyJ.a.b" }).success,
+    ).toBe(true)
     expect(
-      signUpStartRequestSchema.safeParse({ email: "nope", displayName: "Dev" })
-        .success,
-    ).toBe(false)
-  })
-
-  it("accepts a WebAuthn registration payload", () => {
-    expect(
-      passkeyRegisterRequestSchema.safeParse({
-        challengeId: "4b9a3b2e-8f25-4a55-9f0e-4f7f2b9a1c3d",
-        credential: {
-          id: "abc",
-          rawId: "abc",
-          type: "public-key",
-          response: {
-            clientDataJSON: "eyJ0",
-            attestationObject: "o2Nm",
-            transports: ["internal", "hybrid"],
-          },
-          clientExtensionResults: {},
-        },
+      googleSignInRequestSchema.safeParse({
+        credential: "eyJ.a.b",
+        invitationToken: "token",
       }).success,
     ).toBe(true)
+    expect(
+      googleSignInRequestSchema.safeParse({ credential: "" }).success,
+    ).toBe(false)
   })
 })
 

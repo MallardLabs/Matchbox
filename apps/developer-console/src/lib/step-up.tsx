@@ -1,7 +1,8 @@
 import * as Button from "@repo/ui/button"
 import * as Dialog from "@repo/ui/dialog"
-import { KeyRound } from "lucide-react"
+import { ShieldCheck } from "lucide-react"
 import {
+  type ComponentType,
   type ReactElement,
   type ReactNode,
   createContext,
@@ -11,9 +12,11 @@ import {
   useRef,
   useState,
 } from "react"
+import GoogleButton, {
+  type GoogleButtonProps,
+} from "../components/auth/GoogleButton"
 import * as api from "./api"
-import { ApiError, errorMessage } from "./api-client"
-import { assertPasskey } from "./webauthn"
+import { ApiError } from "./api-client"
 
 /** Thrown when the user dismisses the step-up prompt. */
 export class StepUpCancelledError extends Error {
@@ -27,29 +30,22 @@ export function isStepUpCancelled(error: unknown): boolean {
   return error instanceof StepUpCancelledError
 }
 
-export type StepUpVerifier = () => Promise<void>
+/** Exchanges a Google ID token for a stepped-up session. */
+export type StepUpVerifier = (credential: string) => Promise<void>
 
-/** Passkey assertion against `/api/auth/step-up/*`. */
-export async function passkeyStepUp(): Promise<void> {
-  const { challengeId, options } = await api.auth.stepUpOptions()
-  const credential = await assertPasskey(options)
-  await api.auth.stepUpVerify({ challengeId, credential })
+export async function googleStepUp(credential: string): Promise<void> {
+  await api.auth.googleStepUp(credential)
 }
 
-/** Terse copy for the recovery lock-out; other errors pass through. */
-export function stepUpErrorMessage(error: unknown): string {
-  if (
-    error instanceof ApiError &&
-    error.code === "forbidden" &&
-    /recover/i.test(error.message)
-  ) {
-    return "Recovered passkey · step-up in 24 h. Use another passkey."
-  }
-  return errorMessage(error)
-}
+/** The control that yields a credential (the GIS button in the app). */
+export type StepUpControl = ComponentType<
+  Pick<GoogleButtonProps, "onCredential" | "onError">
+>
 
-async function devStepUp(): Promise<void> {
-  await api.auth.devStepUp()
+function GoogleStepUpButton(
+  props: Pick<GoogleButtonProps, "onCredential" | "onError">,
+): ReactElement {
+  return <GoogleButton purpose="step-up" text="continue_with" {...props} />
 }
 
 type Pending = { resolve: () => void; reject: (error: Error) => void }
@@ -60,19 +56,21 @@ const StepUpContext = createContext<StepUpContextValue | null>(null)
 
 type StepUpProviderProps = {
   children: ReactNode
-  /** Injected in tests; defaults to the passkey ceremony. */
+  /** Injected in tests; defaults to `POST /api/auth/step-up/google`. */
   verify?: StepUpVerifier
-  /** Dev memory mode: offer the no-passkey step-up route. */
+  /** Injected in tests; defaults to the Google button. */
+  control?: StepUpControl
+  /** Dev memory mode: offer the no-Google step-up route. */
   allowDevStepUp?: boolean
 }
 
 export function StepUpProvider({
   children,
-  verify = passkeyStepUp,
+  verify = googleStepUp,
+  control: Control = GoogleStepUpButton,
   allowDevStepUp = import.meta.env.DEV,
 }: StepUpProviderProps): ReactElement {
   const [open, setOpen] = useState(false)
-  const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const pending = useRef<Pending | null>(null)
 
@@ -85,25 +83,29 @@ export function StepUpProvider({
     })
   }, [])
 
-  function settle(outcome: "done" | "cancel"): void {
+  const settle = useCallback((outcome: "done" | "cancel") => {
     const current = pending.current
     pending.current = null
     setOpen(false)
-    setBusy(false)
     if (current === null) return
     if (outcome === "done") current.resolve()
     else current.reject(new StepUpCancelledError())
-  }
+  }, [])
 
-  async function confirm(verifier: StepUpVerifier): Promise<void> {
-    setBusy(true)
-    setError(null)
+  const confirm = useCallback(
+    async (credential: string) => {
+      await verify(credential)
+      settle("done")
+    },
+    [settle, verify],
+  )
+
+  async function devConfirm(): Promise<void> {
     try {
-      await verifier()
+      await api.auth.devStepUp()
       settle("done")
     } catch (caught) {
-      setBusy(false)
-      setError(stepUpErrorMessage(caught))
+      setError(caught instanceof Error ? caught.message : "Failed.")
     }
   }
 
@@ -120,13 +122,16 @@ export function StepUpProvider({
       >
         <Dialog.Content size="sm" aria-describedby={undefined}>
           <Dialog.Header>
-            <Dialog.Title>Confirm with passkey</Dialog.Title>
+            <Dialog.Title>Confirm with Google</Dialog.Title>
           </Dialog.Header>
           <Dialog.Body>
             <p className="flex items-center gap-2 text-body-sm text-secondary">
-              <KeyRound aria-hidden="true" size={16} strokeWidth={1.75} />
+              <ShieldCheck aria-hidden="true" size={16} strokeWidth={1.75} />
               Valid 10 min
             </p>
+            {open ? (
+              <Control onCredential={confirm} onError={setError} />
+            ) : null}
             {error === null ? null : (
               <p role="alert" className="text-label font-500 text-neg">
                 {error}
@@ -135,22 +140,13 @@ export function StepUpProvider({
           </Dialog.Body>
           <Dialog.Footer>
             {allowDevStepUp ? (
-              <Button.Root
-                variant="ghost"
-                disabled={busy}
-                onClick={() => void confirm(devStepUp)}
-              >
+              <Button.Root variant="ghost" onClick={() => void devConfirm()}>
                 Dev step-up
               </Button.Root>
             ) : null}
             <Dialog.Close asChild>
-              <Button.Root variant="secondary" disabled={busy}>
-                Cancel
-              </Button.Root>
+              <Button.Root variant="secondary">Cancel</Button.Root>
             </Dialog.Close>
-            <Button.Root loading={busy} onClick={() => void confirm(verify)}>
-              Use passkey
-            </Button.Root>
           </Dialog.Footer>
         </Dialog.Content>
       </Dialog.Root>

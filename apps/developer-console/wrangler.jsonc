@@ -43,8 +43,12 @@
   "vars": {
     "ENVIRONMENT": "production",
     "DEVELOPER_CONSOLE_ENABLED": "false",
-    "WEBAUTHN_RP_ID": "developer.matchbox.markets",
-    "WEBAUTHN_ORIGIN": "https://developer.matchbox.markets",
+    "CONSOLE_ORIGIN": "https://developer.matchbox.markets",
+    // Google OAuth client id (public; the GIS button audience). Required in
+    // production: an empty value makes /api/* answer 500 internal_error.
+    "GOOGLE_CLIENT_ID": "",
+    // Google Workspace domains whose accounts become staff operators.
+    "STAFF_EMAIL_DOMAINS": "supernormal.foundation,thesis.co",
     "PUBLIC_API_ORIGIN": "https://api.matchbox.markets",
     "ID_ORIGIN": "https://id.matchbox.markets",
   },
@@ -70,8 +74,9 @@
       "vars": {
         "ENVIRONMENT": "preview",
         "DEVELOPER_CONSOLE_ENABLED": "true",
-        "WEBAUTHN_RP_ID": "matchbox-developer-console-staging.mallard.workers.dev",
-        "WEBAUTHN_ORIGIN": "https://matchbox-developer-console-staging.mallard.workers.dev",
+        "CONSOLE_ORIGIN": "https://matchbox-developer-console-staging.mallard.workers.dev",
+        "GOOGLE_CLIENT_ID": "",
+        "STAFF_EMAIL_DOMAINS": "supernormal.foundation,thesis.co",
         "PUBLIC_API_ORIGIN": "https://matchbox-developer-api-staging.mallard.workers.dev",
         "ID_ORIGIN": "https://matchbox-id-staging.mallard.workers.dev",
       },

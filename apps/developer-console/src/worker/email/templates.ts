@@ -24,38 +24,6 @@ function layout(lines: string[]): string {
 
 const footer = "Matchbox Developers"
 
-export type CodePurpose = "sign-up" | "recovery"
-
-const codeSubjects = {
-  "sign-up": "Your Matchbox sign-up code",
-  recovery: "Your Matchbox recovery code",
-} as const satisfies Record<CodePurpose, string>
-
-export function codeEmail(code: string, purpose: CodePurpose): EmailContent {
-  const intro =
-    purpose === "sign-up" ? "Sign-up code:" : "Account recovery code:"
-  return {
-    subject: codeSubjects[purpose],
-    text: `${intro} ${code}\n\nExpires in 15 minutes. If you did not request it, ignore this email.\n\n${footer}`,
-    html: layout([
-      escapeHtml(intro),
-      `<strong style="font-family:ui-monospace,monospace;font-size:22px;letter-spacing:4px">${escapeHtml(code)}</strong>`,
-      "Expires in 15 minutes. If you did not request it, ignore this email.",
-    ]),
-  }
-}
-
-export function existingAccountEmail(signInUrl: string): EmailContent {
-  return {
-    subject: "Your Matchbox developer account",
-    text: `This email already has an account. Sign in with your passkey or recover access: ${signInUrl}\n\n${footer}`,
-    html: layout([
-      "This email already has an account.",
-      `<a href="${escapeHtml(signInUrl)}">Sign in or recover access</a>`,
-    ]),
-  }
-}
-
 const urlPattern = /(?:[a-z][a-z0-9+.-]*:\/\/|www\.)\S*/giu
 const domainPattern =
   /[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)*\.\p{L}{2,}(?:[/:?#]\S*)?/gu
@@ -114,54 +82,6 @@ export function invitationEmail(input: {
       `<a href="${escapeHtml(input.link)}">Accept invitation</a>`,
       "Expires in 7 days.",
       escapeHtml(sender),
-    ]),
-  }
-}
-
-export type PasskeyChange = "added" | "removed"
-
-const passkeyChangeSubjects = {
-  added: "Passkey added to your Matchbox developer account",
-  removed: "Passkey removed from your Matchbox developer account",
-} as const satisfies Record<PasskeyChange, string>
-
-export function passkeyChangedEmail(input: {
-  change: PasskeyChange
-  passkeyName: string | null
-  at: string
-  accountUrl: string
-}): EmailContent {
-  const name = inertText(input.passkeyName ?? "", "Unnamed passkey", 64)
-  const line = `Passkey ${input.change}: ${name}. Time: ${input.at}.`
-  const help =
-    input.change === "removed"
-      ? "Other sessions were signed out."
-      : "Not you? Recover your account and remove it."
-  return {
-    subject: passkeyChangeSubjects[input.change],
-    text: [line, help, `Passkeys: ${input.accountUrl}`, footer].join("\n\n"),
-    html: layout([
-      escapeHtml(line),
-      escapeHtml(help),
-      `<a href="${escapeHtml(input.accountUrl)}">Review passkeys</a>`,
-    ]),
-  }
-}
-
-export function accountRecoveredEmail(input: {
-  at: string
-  accountUrl: string
-}): EmailContent {
-  const line = `Account recovered by email. A new passkey was added. Time: ${input.at}.`
-  const help =
-    "It cannot confirm sensitive actions for 24 hours. Not you? Sign in with an existing passkey, remove it and sign out everywhere."
-  return {
-    subject: "Your Matchbox developer account was recovered",
-    text: [line, help, `Account: ${input.accountUrl}`, footer].join("\n\n"),
-    html: layout([
-      escapeHtml(line),
-      escapeHtml(help),
-      `<a href="${escapeHtml(input.accountUrl)}">Review account</a>`,
     ]),
   }
 }

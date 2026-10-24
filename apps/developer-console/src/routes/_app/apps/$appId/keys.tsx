@@ -766,7 +766,7 @@ function KeyPanel({
               </Select.Content>
             </Select.Root>
             <Field.Description className="text-caption text-muted">
-              Shortening needs no passkey
+              Shortening needs no step-up
             </Field.Description>
           </Field.Root>
           <div className="mt-[18px] flex items-center gap-2">
