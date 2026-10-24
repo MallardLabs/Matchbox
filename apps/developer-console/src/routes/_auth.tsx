@@ -58,6 +58,12 @@ function AuthLayout(): ReactElement {
           <a href={proUrl} className="text-label text-secondary hover:text-ink">
             Matchbox Pro
           </a>
+          <Link
+            to="/privacy"
+            className="text-label text-secondary hover:text-ink"
+          >
+            Privacy
+          </Link>
         </nav>
         <span className="text-caption font-500 text-faint">
           Built by Trellium
