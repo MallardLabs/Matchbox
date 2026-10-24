@@ -129,5 +129,7 @@ database, so it wakes the compute: check it by hand, not from a monitor.
 ## History
 
 `SPIKE.md` records the August Goldsky Turbo/Mirror spike that preceded this
-design. The spike tables `matchbox_raw.logs_spike_*` and the `goldsink` role may
-still exist on the dev branch. `roles` strips `goldsink`'s privileges.
+design. Its leftovers were removed on 2026-10-24: the Goldsky
+`matchbox-mainnet-spike-turbo` and `matchbox-mainnet-spike-mirror` pipelines,
+the `MATCHBOX_NEON_SPIKE` secret, and on the dev branch the
+`matchbox_raw.logs_spike_*` tables and the `goldsink` role.
