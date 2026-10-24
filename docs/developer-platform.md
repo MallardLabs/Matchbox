@@ -13,7 +13,7 @@ of truth). Per-app detail: [matchbox-id](../apps/matchbox-id/README.md),
 | Path                          | Package                    | Worker                       | Host                         | Role                                                                             |
 | ----------------------------- | -------------------------- | ---------------------------- | ---------------------------- | -------------------------------------------------------------------------------- |
 | `apps/matchbox-id`            | `@repo/matchbox-id`        | `matchbox-id`                | `id.matchbox.markets`        | OIDC provider (SIWE wallet sign-in), consent, connected apps, sessions           |
-| `apps/developer-console`      | `@repo/developer-console`  | `matchbox-developer-console` | `developer.matchbox.markets` | Passkey developer console: orgs, apps, environments, keys, usage; staff `/admin` |
+| `apps/developer-console`      | `@repo/developer-console`  | `matchbox-developer-console` | `developer.matchbox.markets` | Google sign-in developer console: orgs, apps, environments, keys, usage; staff `/admin` |
 | `apps/developer-api`          | `@repo/developer-api`      | `matchbox-developer-api`     | `api.matchbox.markets`       | Gauge Profile API (`/v1/*`), health-probe + chain-state reconciliation crons     |
 | `packages/ui`                 | `@repo/ui`                 | —                            | —                            | React component + token library                                                  |
 | `packages/platform-contracts` | `@repo/platform-contracts` | —                            | —                            | Zod schemas, OpenAPI document, scopes, rate-limit policies                       |
@@ -21,20 +21,26 @@ of truth). Per-app detail: [matchbox-id](../apps/matchbox-id/README.md),
 | `packages/logger`             | `@repo/logger`             | —                            | —                            | Structured logger                                                                |
 | `packages/developer-sdk`      | `@matchbox-markets/sdk`    | —                            | —                            | API client + `./oidc` helpers (1.0.0-beta.1)                                     |
 
-Migrations (apply in order; all additive):
+Migrations (apply in order; additive except 5, which drops the unused
+passkey tables):
 
 1. `supabase/migrations/20260930000001_create_developer_platform_v2.sql` —
    `mbx_id_*`, `mbx_dev_*`, `mbx_platform_audit_events`,
    `mbx_api_gauge_chain_state`, view `mbx_api_gauge_profiles`, Discord grant
    invalidation trigger.
 2. `supabase/migrations/20260930000002_developer_console_functions.sql` —
-   console transactional functions, recovery-passkey step-up block.
+   console transactional functions (its passkey step-up block is dropped
+   with the table by migration 5).
 3. `supabase/migrations/20260930000003_matchbox_id_functions.sql` — SIWE
    network binding, refresh-token families, purge function.
 4. `supabase/migrations/20261021000002_developer_platform_optional_scopes.sql`
    — `mbx_dev_environments.optional_scopes`, `mbx_id_grants.declined_scopes`,
    re-consent index. Apply before deploying Workers that read them (PostgREST
    rejects selects of a missing column).
+5. `supabase/migrations/20261024000001_developer_console_google_sign_in.sql`
+   — `mbx_dev_accounts.google_sub`; drops `mbx_dev_passkeys`,
+   `mbx_dev_email_challenges`, `mbx_dev_webauthn_challenges`. Apply before
+   deploying the Google-sign-in console.
 
 Each file has a manual rollback block in its header comment.
 
@@ -60,8 +66,7 @@ api.matchbox.markets        → Worker matchbox-developer-api      Hono, DO Rate
   consumes) through a cross-script Durable Object binding to the API Worker's
   `RateLimiter` class, so the API must be deployed first.
 - Email: console binding `EMAIL` (`send_email`), sender
-  `no-reply@matchbox.markets` (sign-up/recovery codes, invitations, review
-  notices). A missing binding in production is logged as an error.
+  `no-reply@matchbox.markets` (invitations and review notices). A missing binding in production is logged as an error.
 - Cron triggers:
   - `matchbox-id` `17 * * * *` — purges expired nonces, authorization
     requests, codes, tokens and empty token families (`mbx_id_purge_expired`).
@@ -101,22 +106,25 @@ Safe rollout order:
    or run each file once, in order, in the Supabase SQL editor). Test against
    realistic data first per
    [agent-instructions/supabase-migrations.md](../agent-instructions/supabase-migrations.md).
-3. Complete the Cloudflare prerequisites (§5).
+3. Complete the Cloudflare and Google prerequisites (§5).
 4. Set secrets on all three Workers (§4). Invalid or missing config makes the
    console and API answer `500 internal_error` even while disabled; Matchbox ID
    validates its config only when enabled.
 5. Deploy the three Workers (§4.4). Each deploy attaches its custom domain,
    which needs the host's Netlify CNAME removed first (§11).
 6. Smoke-test the disabled state (§7.1).
-7. Enable the console: `DEVELOPER_CONSOLE_ENABLED` → `"true"`, deploy. Sign up
-   with the staff member's email (email code → passkey).
-8. Create the staff row (SQL editor):
+7. Enable the console: `DEVELOPER_CONSOLE_ENABLED` → `"true"`, deploy. Sign
+   in with Google using a `@supernormal.foundation` or `@thesis.co` Workspace
+   account.
+8. Staff: Workspace accounts on `STAFF_EMAIL_DOMAINS` become `operator` at
+   sign-in (audited as `staff-role-granted`). Confirm `/admin` loads. Other
+   people (e.g. a `reviewer`) are added by SQL after their first sign-in:
 
    ```sql
    INSERT INTO public.mbx_dev_staff (account_id, role)
-   SELECT id, 'operator'
+   SELECT id, 'reviewer'
    FROM public.mbx_dev_accounts
-   WHERE email = lower('staff@example.com')
+   WHERE email = lower('reviewer@example.com')
    ON CONFLICT (account_id) DO UPDATE SET role = EXCLUDED.role;
    ```
 
@@ -124,7 +132,7 @@ Safe rollout order:
    `role` (`reviewer | operator`), `created_at` (defaults to now). `operator`
    includes `reviewer`. Reviewers read the queue, apps and audit log and decide
    reviews; app status changes and quota overrides need `operator`. Staff
-   writes also need a fresh passkey step-up. Confirm `/admin` loads.
+   writes also need a fresh Google step-up.
 
 9. Enable the API: `GAUGE_PROFILE_API_ENABLED` → `"true"`, deploy. Create a
    test app and key in the console; run §7.2.
@@ -158,8 +166,9 @@ pnpm --filter @repo/developer-api exec wrangler secret list
 | `MEZO_MAINNET_RPC_URL`, `MEZO_TESTNET_RPC_URL` |      ✓      |                   |       ✓       | ID: SIWE ERC-1271/6492 checks (has defaults). API: cron; a network without a URL is skipped |
 
 Vars already in the wrangler files: `ENVIRONMENT=production`, `ISSUER` (ID);
-`WEBAUTHN_RP_ID`, `WEBAUTHN_ORIGIN`, `PUBLIC_API_ORIGIN`, `ID_ORIGIN`
-(console); `API_VERSION`, `PUBLISHABLE_QUOTA_SHARE`, `HEALTH_API_URL`,
+`CONSOLE_ORIGIN`, `GOOGLE_CLIENT_ID`, `STAFF_EMAIL_DOMAINS`,
+`PUBLIC_API_ORIGIN`, `ID_ORIGIN` (console; `GOOGLE_CLIENT_ID` is required in
+production, see §5); `API_VERSION`, `PUBLISHABLE_QUOTA_SHARE`, `HEALTH_API_URL`,
 `HEALTH_ID_URL` (API; health probe targets, blank skips one). Leave
 `PLATFORM_STORE` unset in production (`memory` is refused when
 `ENVIRONMENT=production`).
@@ -245,8 +254,17 @@ pnpm --filter @repo/matchbox-id run deploy             # vite build && wrangler 
   `pnpm --filter <package> run deploy` (plus the `@repo/shared` build for the
   API).
 
-## 5. Cloudflare prerequisites
+## 5. Cloudflare and Google prerequisites
 
+- **Google OAuth client** (console sign-in) — Google Cloud console → APIs &
+  Services → Credentials → Create OAuth client ID → Web application. The
+  consent screen should be External (partners sign in with any Google
+  account). Authorized JavaScript origins:
+  `https://developer.matchbox.markets`,
+  `https://matchbox-developer-console-staging.mallard.workers.dev`,
+  `http://localhost`, `http://localhost:5175`. No redirect URIs; the client
+  secret is not used. Put the client id in `GOOGLE_CLIENT_ID` (a var: it is
+  public). <https://developers.google.com/identity/gsi/web/guides/get-google-api-clientid>
 - **Custom domains** — created by `wrangler deploy` from the wrangler routes.
   A custom domain cannot be created on a hostname that still has a CNAME
   record: delete the Netlify CNAME for `id.`, `developer.` and `api.` at
@@ -288,7 +306,8 @@ pnpm --filter @repo/developer-console dev
 ```
 
 - `.dev.vars.example` already sets `PLATFORM_STORE=memory`,
-  `DEVELOPER_CONSOLE_ENABLED=true`, `WEBAUTHN_RP_ID=localhost`.
+  `DEVELOPER_CONSOLE_ENABLED=true`, `CONSOLE_ORIGIN=http://localhost:5175`.
+  Set `GOOGLE_CLIENT_ID` to try the real Google button locally.
 - Seed: account `dev@matchbox.local` (staff `reviewer`), org "Mallard Labs",
   an approved live gauge-profile app, an app with an open `discord:profile`
   review.
@@ -392,14 +411,14 @@ grant shows on `https://id.matchbox.markets/` and can be revoked there.
 
 ### 7.4 Console enabled
 
-Sign up (code arrives from `no-reply@matchbox.markets`), register a passkey,
-create an org and an app, create a test API key (step-up prompt), rotate and
-revoke it, open `/admin` as staff.
+Sign in with Google (a staff-domain Workspace account), confirm the first
+organization exists, create an app, create a test API key (Google step-up
+prompt), rotate and revoke it, open `/admin`.
 
 ## 8. Partner quickstart
 
-1. Sign up at `https://developer.matchbox.markets` (email code → passkey) and
-   create an organization.
+1. Sign in at `https://developer.matchbox.markets` with Google; the first
+   organization is created with the account.
 2. Create an app; its test (`mezo-testnet`) and live (`mezo`) environments are
    created with it.
 3. Test environment → API keys: secret (`mbx_sk_test_…`, server-only) or
@@ -456,11 +475,12 @@ Full reference: the console Docs section and
 - [ ] Stale beta secrets removed from `matchbox-developer-api`
       (`wrangler secret list`; delete `API_GATEWAY_SECRET` and `MEZO_RPC_URL`
       if present).
-- [ ] `WEBAUTHN_RP_ID=developer.matchbox.markets`,
-      `WEBAUTHN_ORIGIN=https://developer.matchbox.markets`,
-      `ISSUER=https://id.matchbox.markets`.
+- [ ] `CONSOLE_ORIGIN=https://developer.matchbox.markets`,
+      `GOOGLE_CLIENT_ID` set, `STAFF_EMAIL_DOMAINS` lists only Matchbox
+      Workspace domains, `ISSUER=https://id.matchbox.markets`.
 - [ ] Email Sending domain verified (SPF, DKIM, DMARC).
-- [ ] Staff rows limited to named people; `operator` only where needed.
+- [ ] Manual staff rows limited to named people; domain operators match
+      `STAFF_EMAIL_DOMAINS`.
 - [ ] Intended flag state committed in each `wrangler.jsonc`.
 
 ## 10. Emergency controls
@@ -485,9 +505,9 @@ Pepper rotation consequences (there is no dual-pepper overlap):
 - `SESSION_PEPPER` (ID) — wallet sessions, pending codes and refresh tokens
   stop matching: users sign in again and apps re-authorize. Access tokens run
   out within 10 min.
-- `SESSION_PEPPER` (console) — console sessions, pending email codes, sign-up
-  state and invitation tokens become invalid: developers sign in again;
-  resend invitations.
+- `SESSION_PEPPER` (console) — console sessions, pending Google nonces and
+  invitation tokens become invalid: developers sign in again; resend
+  invitations.
 
 ## 11. Beta cutover
 
@@ -510,8 +530,9 @@ Pepper rotation consequences (there is no dual-pepper overlap):
 
 ## 12. Known boundaries and follow-ups
 
-- Staff are added by SQL only; there is no staff UI and no staff-side API-key
-  revoke (SQL fallback above).
+- Staff-domain operators are granted at sign-in and never removed
+  automatically; other staff are added by SQL. There is no staff UI and no
+  staff-side API-key revoke (SQL fallback above).
 - Revocation latency: API keys ≤ 15 s; quota overrides ≤ 60 s. Rate limiters
   fail open if the Durable Object is unavailable; console quota reads then
   show "—".
@@ -526,8 +547,8 @@ Pepper rotation consequences (there is no dual-pepper overlap):
 - `pool_address` in chain state is always null.
 - Matchbox MCP hosting is out of scope.
 - `matchbox-id` has no `workers_dev` setting, so its first live test is on
-  `id.matchbox.markets`; SIWE domain, WebAuthn RP ID and issuer are bound to
-  the production hosts anyway.
+  `id.matchbox.markets`; SIWE domain and issuer are bound to the production
+  hosts anyway.
 - `turbo.json` `globalEnv` still lists beta variables
   (`DEVELOPER_API_ORIGIN`, `API_GATEWAY_SECRET`,
   `DEVELOPER_PLATFORM_ENABLED`, `DEVELOPER_PROFILE_API_ENABLED`,

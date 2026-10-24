@@ -10,8 +10,9 @@ them in the same PR.
 
 - Own sessions on Workers; Supabase Postgres is the data store only (service
   role, RLS on, no anon/authenticated policies). No Supabase Auth.
-- Matchbox ID: SIWE (EIP-4361) wallet sign-in. Developer console: passkeys +
-  email recovery.
+- Matchbox ID: SIWE (EIP-4361) wallet sign-in. Developer console: Sign in
+  with Google (Google Identity Services); Workspace accounts on
+  `STAFF_EMAIL_DOMAINS` are staff operators.
 - Scope: Matchbox ID / OIDC, developer console + staff review, Gauge Profile
   API + generated SDK. Matchbox MCP hosting is out of scope.
 - Clean break from the beta: `apps/developer-platform`, the custom
@@ -138,16 +139,12 @@ grants that contain a `discord:*` scope for the old wallet, reason
 ### 4.2 Developer console (`mbx_dev_*`)
 
 - `mbx_dev_accounts` — `id`, `email` unique (lower-cased), `email_verified_at`,
-  `display_name`, `created_at`, `disabled_at`.
-- `mbx_dev_passkeys` — `id`, `account_id`, `credential_id` unique (base64url),
-  `public_key` (base64url COSE), `counter bigint`, `transports text[]`,
-  `device_type`, `backed_up bool`, `name`, `created_at`, `last_used_at`.
-- `mbx_dev_email_challenges` — `id`, `email`, `purpose` (`sign-up | recovery |
-  invitation`), `code_hash`, `attempts int`, `expires_at` (15 min),
-  `consumed_at`, `created_at`.
-- `mbx_dev_webauthn_challenges` — `id`, `challenge`, `purpose`
-  (`register | authenticate | step-up`), `account_id null`, `expires_at`
-  (5 min), `consumed_at`.
+  `google_sub` unique (Google account id; null until the first Google
+  sign-in), `display_name`, `created_at`, `disabled_at`.
+- Passkeys and email/WebAuthn challenges (`mbx_dev_passkeys`,
+  `mbx_dev_email_challenges`, `mbx_dev_webauthn_challenges`) were created by
+  20260930000001 and dropped by 20261024000001 when Google sign-in replaced
+  them.
 - `mbx_dev_sessions` — as `mbx_id_sessions` plus `stepped_up_at` (step-up
   valid 10 min) and `account_id` → `mbx_dev_accounts`.
 - `mbx_dev_organizations` — `id`, `name`, `slug` unique, `created_at`.
@@ -186,7 +183,8 @@ grants that contain a `discord:*` scope for the old wallet, reason
   `per_minute`, `per_day`, `reason`, `created_by`, `created_at`,
   `expires_at`.
 - `mbx_dev_staff` — `account_id` PK, `role` (`reviewer | operator`),
-  `created_at`. Bootstrap by SQL insert.
+  `created_at`. Google sign-in upserts `operator` for staff-domain accounts
+  (§8); other rows (e.g. `reviewer`) by SQL insert.
 - `mbx_platform_audit_events` — `id bigserial`, `occurred_at`, `actor_type`
   (`developer | staff | wallet | system`), `actor_id`, `organization_id
   null`, `app_id null`, `environment_id null`, `action` (kebab-case, e.g.
@@ -215,7 +213,7 @@ grants that contain a `discord:*` scope for the old wallet, reason
 Additions to the column lists above, all additive:
 
 - `created_at` on `mbx_id_authorization_requests`, `mbx_id_access_tokens`,
-  `mbx_dev_webauthn_challenges`, `mbx_dev_invitations` (lifetime CHECKs
+  `mbx_dev_invitations` (lifetime CHECKs
   compare `expires_at` with it, plus ~1 min clock slack).
 - `auth_time timestamptz not null` on `mbx_id_authorization_codes` and
   `mbx_id_refresh_tokens` so ID tokens (incl. refreshed ones) carry the real
@@ -225,11 +223,6 @@ Additions to the column lists above, all additive:
   by the immutability trigger). UPDATE/DELETE/TRUNCATE are blocked by
   trigger and revoked from `service_role`.
 - `mbx_dev_quota_overrides.expires_at` is nullable (no expiry).
-- `mbx_dev_webauthn_challenges`: `account_id` is required unless
-  `purpose = 'authenticate'`. Sign-up therefore creates the
-  `mbx_dev_accounts` row (with `email_verified_at`) when the email code is
-  verified, then registers the passkey against it; an account with no
-  passkey can re-run sign-up for the same email.
 - `sector_id` defaults to the environment id via a BEFORE INSERT trigger.
 - The live-environment `https://`-only rule for redirect URIs/origins is
   also enforced by trigger; format CHECKs reject fragments, wildcards,
@@ -571,15 +564,48 @@ SPA pages: `/` (account: wallet, linked Discord, connected apps, sessions),
 
 ## 8. Developer console (`developer.matchbox.markets`)
 
-Auth: WebAuthn via `@simplewebauthn/server` + `@simplewebauthn/browser`
-(RP ID `developer.matchbox.markets`; `localhost` in dev). Sign-up: email →
-6-digit code (Cloudflare Email Service `send_email` binding `EMAIL`, from
-`no-reply@matchbox.markets`; when the binding is absent in dev the code is
-logged) → create passkey → first org created. Sign-in: passkey
-(discoverable, conditional UI). Recovery: email code → register a new
-passkey (old passkeys kept; user can remove). Step-up: passkey assertion
-within 10 min for secret/API-key creation+rotation, client secret rotation,
-member/role changes, org deletion.
+### 8.1 Sign in with Google
+
+The SPA renders the Google Identity Services (GIS) button (FedCM where the
+browser supports it, else Google's popup) and posts the ID token to the
+Worker. There is no other sign-in method, no email codes and no passkeys.
+
+1. `POST /api/auth/google/nonce {purpose}` (`sign-in` | `step-up`) returns
+   `{clientId, nonce}` and sets `__Host-mbx_dev_google`: HMAC-signed
+   (`SESSION_PEPPER`), 10 min, single-use, holding the nonce, the purpose and,
+   for step-up, the session id. The nonce is passed to GIS `initialize`.
+2. `POST /api/auth/google {credential, invitationToken?}` verifies the JWT
+   against Google's JWKS (RS256, `iss` accounts.google.com, `aud` =
+   `GOOGLE_CLIENT_ID`, `exp`, `iat` ≤ 10 min), clears the nonce cookie and
+   requires `nonce` to match it and `email_verified`. Account lookup:
+   `google_sub` → else an account with the same email and no `google_sub`
+   (linked) → else a new account (`display_name` from `name`) with its first
+   organization (skipped when an invitation is accepted). A changed Google
+   email follows when free. A new session is stepped up (fresh sign-in).
+3. Staff: if the token's `hd` (Workspace domain) is in `STAFF_EMAIL_DOMAINS`
+   and the email is on that domain, `mbx_dev_staff` is upserted to
+   `operator` and `staff-role-granted` audited (system actor) the first time.
+   Consumer Google accounts never have `hd`, so a personal account using a
+   staff address is not staff. Leaving the Workspace ends Google sign-in, so
+   such staff cannot step up again; their role row stays until removed.
+4. Step-up: `POST /api/auth/step-up/google {credential}` with a `step-up`
+   nonce bound to the current session; the token's `sub` must equal the
+   account's `google_sub`. Valid 10 min, for secret/API-key creation and
+   rotation, client secret rotation, member/role changes, org deletion and
+   staff writes.
+
+Email (Cloudflare Email Service `send_email` binding `EMAIL`, from
+`no-reply@matchbox.markets`; logged when the binding is absent in dev) is
+used for invitations and review decisions only.
+
+CSP allows `https://accounts.google.com/gsi/client` (script),
+`/gsi/style` (style) and `/gsi/` (frame, connect); COOP is
+`same-origin-allow-popups`; `identity-credentials-get` is delegated to
+`accounts.google.com`. The Google OAuth client lists each console origin
+(production, staging, `http://localhost` + `:5175`) as an authorized
+JavaScript origin; no redirect URIs or client secret are used.
+
+### 8.2 API and SPA
 
 API (`/api/*`, all JSON, all validated with `@repo/platform-contracts`):
 auth (`/api/auth/*`), `me`, organizations, members, invitations, apps,
@@ -615,7 +641,7 @@ scopes).
 SPA sections: Overview, Apps (list, create), App detail (Settings,
 Environments [test/live tabs: credentials, redirect URIs, origins, scopes,
 review], API keys, OAuth, Usage), Organization (members, invitations),
-Account (passkeys, sessions), Docs (quickstart TS + curl for the selected
+Account (profile, sessions), Docs (quickstart TS + curl for the selected
 environment, API reference rendered from `openapi.json`, guides: auth &
 keys, OIDC integration, rate limits, errors, pagination, changelog), Admin.
 
