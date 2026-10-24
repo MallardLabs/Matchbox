@@ -11,6 +11,7 @@ export const Route = createFileRoute("/_auth")({
 })
 
 const proUrl = "https://pro.matchbox.markets"
+const privacyPolicyUrl = "https://matchbox.markets/privacy#matchbox-developer"
 
 function ApiStatus(): ReactElement {
   const health = useQuery(healthQuery)
@@ -58,12 +59,12 @@ function AuthLayout(): ReactElement {
           <a href={proUrl} className="text-label text-secondary hover:text-ink">
             Matchbox Pro
           </a>
-          <Link
-            to="/privacy"
+          <a
+            href={privacyPolicyUrl}
             className="text-label text-secondary hover:text-ink"
           >
             Privacy
-          </Link>
+          </a>
         </nav>
         <span className="text-caption font-500 text-faint">
           Built by Trellium

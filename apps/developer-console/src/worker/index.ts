@@ -15,6 +15,7 @@ import { createGoogleTokenVerifier } from "./auth/google"
 import type { ConsoleEnv } from "./context"
 import { createBindingEmailSender, createLogEmailSender } from "./email/sender"
 import parseConfig, { type ConsoleConfig, type WorkerBindings } from "./env"
+import { privacyRedirect } from "./privacy"
 import { withDocumentHeaders } from "./security"
 import type { ConsoleStore } from "./store/console-store"
 import createMemoryStore, {
@@ -183,6 +184,8 @@ function isApiPath(pathname: string): boolean {
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url)
+    const redirect = privacyRedirect(url)
+    if (redirect !== null) return redirect
     if (!isApiPath(url.pathname)) {
       return withDocumentHeaders(await env.ASSETS.fetch(request), {
         development: env.ENVIRONMENT === "development",

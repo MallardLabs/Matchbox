@@ -16,6 +16,7 @@ import * as Switch from "@repo/ui/switch"
 import { shortenAddress } from "@repo/ui/wallet-address"
 import { BadgeCheck } from "lucide-react"
 import { type ReactElement, useId, useState } from "react"
+import { legalLinks } from "../lib/legal"
 import AppMark from "./AppMark"
 import DiscordLinkHint from "./DiscordLinkHint"
 import EnvChip from "./EnvChip"
@@ -359,6 +360,17 @@ export default function ConsentView({
           Allow
         </Button.Root>
       </footer>
+      <p className="border-t border-line px-4 py-2.5 text-label text-secondary md:px-5">
+        <a
+          href={legalLinks.privacy}
+          target="_blank"
+          rel="noreferrer noopener"
+          className="rounded-sm underline-offset-2 hover:text-ink hover:underline"
+        >
+          Matchbox ID privacy
+          <span className="sr-only"> (opens in a new tab)</span>
+        </a>
+      </p>
     </article>
   )
 }
