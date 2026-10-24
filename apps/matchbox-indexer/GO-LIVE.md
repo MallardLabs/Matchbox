@@ -354,6 +354,13 @@ The header must be present and within about 300 blocks of head; vote rows
 have a real `blockNumber` (not `"0"`) and no `earn-vote:` ids. Open
 `/activity` and a gauge page; there must be no "as of" chip.
 
+Done 2026-10-24 on `matchbox` version `74a08e0d`, both secrets in one
+`wrangler secret bulk`. `secret put` and `secret bulk` refuse while the
+latest version is an undeployed preview (Workers Builds uploads one per
+push to a non-production branch, alias `feat-developer-platform-v2`). Run
+them right after a production deploy, while that deploy is still the latest
+version. `versions secret put` would copy the preview's code into production.
+
 Rollback (seconds): `printf 'explorer' | ... wrangler secret put
 MEZO_ACTIVITY_SOURCE --name matchbox`. The webapp returns to the frozen
 explorer plus earn-votes. Keep `matchbox-explorer/3.4.0` until step 10.
