@@ -2,41 +2,77 @@
   "$schema": "../../node_modules/wrangler/config-schema.json",
   "name": "matchbox-developer-api",
   "main": "src/index.ts",
-  "compatibility_date": "2026-06-20",
-  "compatibility_flags": ["nodejs_compat"],
+  "compatibility_date": "2026-09-01",
+  // global_fetch_strictly_public: the health cron fetches this Worker's own
+  // custom domain (/v1/health) through the public front door; without it a
+  // Custom Domain Worker fetching its own hostname gets a 522.
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
   "workers_dev": true,
+  "routes": [{ "pattern": "api.matchbox.markets", "custom_domain": true }],
   "durable_objects": {
-    "bindings": [
-      {
-        "name": "API_QUOTAS",
-        "class_name": "ApiQuotaLimiter",
-      },
-    ],
+    "bindings": [{ "name": "RATE_LIMITER", "class_name": "RateLimiter" }],
   },
   "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["ApiQuotaLimiter"] },
     {
-      "tag": "v1",
-      "new_sqlite_classes": ["ApiQuotaLimiter"],
+      "tag": "v2",
+      "deleted_classes": ["ApiQuotaLimiter"],
+      "new_sqlite_classes": ["RateLimiter"],
     },
   ],
+  // REQUEST_LOG: one data point per request (layout in
+  // @repo/platform-contracts/api-request-log). HEALTH_LOG: one data point per
+  // health probe (layout in @repo/platform-contracts/platform-health).
+  "analytics_engine_datasets": [
+    { "binding": "REQUEST_LOG", "dataset": "mbx_api_requests" },
+    { "binding": "HEALTH_LOG", "dataset": "mbx_platform_health" },
+  ],
+  // "* * * * *": health probes (src/health/probes.ts).
+  // "*/10 * * * *": chain-state reconciliation (mbx_api_gauge_chain_state).
+  "triggers": { "crons": ["* * * * *", "*/10 * * * *"] },
   "observability": {
-    "enabled": false,
+    "enabled": true,
     "head_sampling_rate": 1,
-    "logs": {
-      "enabled": true,
-      "head_sampling_rate": 1,
-      "persist": true,
-      "invocation_logs": true,
-    },
-    "traces": {
-      "enabled": true,
-      "persist": true,
-      "head_sampling_rate": 1,
-    },
+    "logs": { "enabled": true, "invocation_logs": true },
+    "traces": { "enabled": true, "head_sampling_rate": 1 },
   },
+  // Secrets (wrangler secret put): SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
+  // API_KEY_PEPPER, MEZO_MAINNET_RPC_URL, MEZO_TESTNET_RPC_URL.
   "vars": {
-    "DEVELOPER_PLATFORM_ENABLED": "true",
-    "DEVELOPER_PROFILE_API_ENABLED": "false",
-    "MEZO_RPC_URL": "https://mezo-mainnet.boar.network",
+    "ENVIRONMENT": "production",
+    "GAUGE_PROFILE_API_ENABLED": "true",
+    "API_VERSION": "2.0.0",
+    // Publishable keys' share of each environment's quota (0, 1].
+    "PUBLISHABLE_QUOTA_SHARE": "0.5",
+    // Health cron targets (blank = skip that probe).
+    "HEALTH_API_URL": "https://api.matchbox.markets/v1/health",
+    "HEALTH_ID_URL": "https://id.matchbox.markets/.well-known/openid-configuration",
+  },
+  // Staging on workers.dev (no custom domain):
+  // `pnpm --filter @repo/developer-api exec wrangler deploy --env staging`.
+  // A new Worker, so it starts from its own migration history. It shares
+  // the mbx_api_requests dataset; rows are keyed by staging environment ids.
+  "env": {
+    "staging": {
+      "workers_dev": true,
+      "routes": [],
+      "durable_objects": {
+        "bindings": [{ "name": "RATE_LIMITER", "class_name": "RateLimiter" }],
+      },
+      "migrations": [{ "tag": "v1", "new_sqlite_classes": ["RateLimiter"] }],
+      "analytics_engine_datasets": [
+        { "binding": "REQUEST_LOG", "dataset": "mbx_api_requests" },
+        { "binding": "HEALTH_LOG", "dataset": "mbx_platform_health" },
+      ],
+      "triggers": { "crons": ["* * * * *", "*/10 * * * *"] },
+      "vars": {
+        "ENVIRONMENT": "preview",
+        "GAUGE_PROFILE_API_ENABLED": "true",
+        "API_VERSION": "2.0.0",
+        "PUBLISHABLE_QUOTA_SHARE": "0.5",
+        "HEALTH_API_URL": "https://matchbox-developer-api-staging.mallard.workers.dev/v1/health",
+        "HEALTH_ID_URL": "https://matchbox-id-staging.mallard.workers.dev/.well-known/openid-configuration",
+      },
+    },
   },
 }

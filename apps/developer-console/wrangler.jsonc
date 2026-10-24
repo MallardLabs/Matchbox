@@ -1,0 +1,86 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "matchbox-developer-console",
+  "main": "src/worker/index.ts",
+  "compatibility_date": "2026-09-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "routes": [
+    { "pattern": "developer.matchbox.markets", "custom_domain": true },
+  ],
+  // SPA from Vite. The Worker runs first for every path except hashed
+  // build assets so SPA documents get its CSP and security headers; non-API
+  // paths fall through to env.ASSETS.
+  "assets": {
+    "directory": "dist/client",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/*", "!/assets/*"],
+  },
+  // API_RATE_LIMITER reads the developer-api's buckets (quota status);
+  // the console never consumes from it.
+  "durable_objects": {
+    "bindings": [
+      { "name": "RATE_LIMITER", "class_name": "RateLimiter" },
+      {
+        "name": "API_RATE_LIMITER",
+        "class_name": "RateLimiter",
+        "script_name": "matchbox-developer-api",
+      },
+    ],
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["RateLimiter"] }],
+  // Cloudflare Email Service (sign-up/recovery codes, invitations, reviews).
+  "send_email": [{ "name": "EMAIL" }],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+    "logs": { "enabled": true, "invocation_logs": true },
+  },
+  // Secrets (wrangler secret put): SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
+  // API_KEY_PEPPER, CLIENT_SECRET_PEPPER, SESSION_PEPPER, CF_ACCOUNT_ID,
+  // CF_ANALYTICS_TOKEN.
+  "vars": {
+    "ENVIRONMENT": "production",
+    "DEVELOPER_CONSOLE_ENABLED": "true",
+    "CONSOLE_ORIGIN": "https://developer.matchbox.markets",
+    // Google OAuth client id (public; the GIS button audience). Google Cloud
+    // project "Matchbox Developer" (matchbox-developers). Required in
+    // production: an empty value makes /api/* answer 500 internal_error.
+    "GOOGLE_CLIENT_ID": "567898478426-iq0aisolqm4tsp8cpr03ei8h1j313lqn.apps.googleusercontent.com",
+    // Google Workspace domains whose accounts become staff operators.
+    "STAFF_EMAIL_DOMAINS": "supernormal.foundation,thesis.co",
+    "PUBLIC_API_ORIGIN": "https://api.matchbox.markets",
+    "ID_ORIGIN": "https://id.matchbox.markets",
+  },
+  // Staging on workers.dev (no custom domain). Build + deploy with
+  // `CLOUDFLARE_ENV=staging pnpm --filter @repo/developer-console run deploy`.
+  // Non-inheritable keys are repeated; secrets are set per environment.
+  "env": {
+    "staging": {
+      "workers_dev": true,
+      "routes": [],
+      "durable_objects": {
+        "bindings": [
+          { "name": "RATE_LIMITER", "class_name": "RateLimiter" },
+          {
+            "name": "API_RATE_LIMITER",
+            "class_name": "RateLimiter",
+            "script_name": "matchbox-developer-api-staging",
+          },
+        ],
+      },
+      "migrations": [{ "tag": "v1", "new_sqlite_classes": ["RateLimiter"] }],
+      "send_email": [{ "name": "EMAIL" }],
+      "vars": {
+        "ENVIRONMENT": "preview",
+        "DEVELOPER_CONSOLE_ENABLED": "true",
+        "CONSOLE_ORIGIN": "https://matchbox-developer-console-staging.mallard.workers.dev",
+        "GOOGLE_CLIENT_ID": "567898478426-iq0aisolqm4tsp8cpr03ei8h1j313lqn.apps.googleusercontent.com",
+        "STAFF_EMAIL_DOMAINS": "supernormal.foundation,thesis.co",
+        "PUBLIC_API_ORIGIN": "https://matchbox-developer-api-staging.mallard.workers.dev",
+        "ID_ORIGIN": "https://matchbox-id-staging.mallard.workers.dev",
+      },
+    },
+  },
+}

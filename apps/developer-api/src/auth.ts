@@ -1,160 +1,130 @@
-import type { SupabaseClient } from "@supabase/supabase-js"
-import ipaddr from "ipaddr.js"
-import { hmacSha256Base64Url, timingSafeEqual } from "./crypto"
-import { apiKeyRowSchema, appRowSchema } from "./schemas"
-import type { ApiKeyContext, ApiScope, Environment } from "./types"
+import type { ApiKeyKind } from "@repo/platform-contracts/credentials"
+import type { ErrorCode } from "@repo/platform-contracts/errors"
+import type { EnvironmentKind } from "@repo/platform-contracts/network"
+import { ipMatchesCidrs } from "@repo/platform-server"
+import type { ApiKeyRecord } from "./store/api-store"
 
-const KEY_PATTERN =
-  /^(mbx_(?:pk|sk)_live_[A-Za-z0-9]{16})_([A-Za-z0-9_-]{32,})$/
+/** Verified key policy cache lifetime; bounds revocation latency. */
+export const keyPolicyCacheTtlMs = 15_000
 
-export type AuthenticationResult =
-  | { ok: true; context: ApiKeyContext }
-  | { ok: false; reason: "invalid-key" | "expired-key" | "inactive-app" }
+const maxCacheEntries = 10_000
 
-function isScopeAllowed(scopes: ApiScope[], requiredScope: ApiScope): boolean {
-  return scopes.includes(requiredScope)
+export type TtlCache<Value> = {
+  get(key: string): { value: Value } | undefined
+  set(key: string, value: Value): void
+  clear(): void
 }
 
-export async function authenticateApiKey(
-  request: Request,
-  database: SupabaseClient,
-  environment: Environment,
-): Promise<AuthenticationResult> {
-  const authorization = request.headers.get("Authorization")
-  if (!authorization?.startsWith("Bearer ")) {
-    return { ok: false, reason: "invalid-key" }
-  }
-
-  const rawKey = authorization.slice("Bearer ".length).trim()
-  const match = KEY_PATTERN.exec(rawKey)
-  if (!match) return { ok: false, reason: "invalid-key" }
-
-  const keyPrefix = match[1]
-  const { data: rawKeyRow, error: keyError } = await database
-    .from("developer_api_keys")
-    .select(
-      "id,app_id,key_type,key_prefix,secret_hash,scopes,allowed_cidrs,expires_at,revoked_at",
-    )
-    .eq("key_prefix", keyPrefix)
-    .maybeSingle()
-
-  if (keyError || !rawKeyRow) return { ok: false, reason: "invalid-key" }
-  const parsedKey = apiKeyRowSchema.safeParse(rawKeyRow)
-  if (!parsedKey.success || parsedKey.data.revoked_at) {
-    return { ok: false, reason: "invalid-key" }
-  }
-
-  if (
-    parsedKey.data.expires_at &&
-    Date.parse(parsedKey.data.expires_at) <= Date.now()
-  ) {
-    return { ok: false, reason: "expired-key" }
-  }
-
-  const computedHash = await hmacSha256Base64Url(
-    environment.API_KEY_PEPPER,
-    rawKey,
-  )
-  if (!timingSafeEqual(computedHash, parsedKey.data.secret_hash)) {
-    return { ok: false, reason: "invalid-key" }
-  }
-
-  const { data: rawApp, error: appError } = await database
-    .from("developer_apps")
-    .select(
-      "id,client_id,name,status,approved_scopes,scope_version,gauge_requests_per_minute,gauge_requests_per_day,profile_requests_per_minute,profile_requests_per_day",
-    )
-    .eq("id", parsedKey.data.app_id)
-    .maybeSingle()
-
-  if (appError || !rawApp) return { ok: false, reason: "inactive-app" }
-  const parsedApp = appRowSchema.safeParse(rawApp)
-  if (!parsedApp.success || parsedApp.data.status !== "approved") {
-    return { ok: false, reason: "inactive-app" }
-  }
-
+/** Small in-isolate TTL cache with oldest-first eviction. */
+export function createTtlCache<Value>(
+  ttlMs: number,
+  now: () => number,
+): TtlCache<Value> {
+  const entries = new Map<string, { value: Value; expiresAt: number }>()
   return {
-    ok: true,
-    context: {
-      keyId: parsedKey.data.id,
-      appId: parsedKey.data.app_id,
-      keyType: parsedKey.data.key_type,
-      scopes: parsedKey.data.scopes,
-      allowedCidrs: parsedKey.data.allowed_cidrs,
-      app: {
-        id: parsedApp.data.id,
-        clientId: parsedApp.data.client_id,
-        name: parsedApp.data.name,
-        status: parsedApp.data.status,
-        approvedScopes: parsedApp.data.approved_scopes,
-        scopeVersion: parsedApp.data.scope_version,
-        gaugeRequestsPerMinute: parsedApp.data.gauge_requests_per_minute,
-        gaugeRequestsPerDay: parsedApp.data.gauge_requests_per_day,
-        profileRequestsPerMinute: parsedApp.data.profile_requests_per_minute,
-        profileRequestsPerDay: parsedApp.data.profile_requests_per_day,
-      },
+    get(key) {
+      const entry = entries.get(key)
+      if (entry === undefined) return undefined
+      if (entry.expiresAt <= now()) {
+        entries.delete(key)
+        return undefined
+      }
+      return { value: entry.value }
+    },
+    set(key, value) {
+      entries.delete(key)
+      if (entries.size >= maxCacheEntries) {
+        const oldest = entries.keys().next()
+        if (oldest.done !== true) entries.delete(oldest.value)
+      }
+      entries.set(key, { value, expiresAt: now() + ttlMs })
+    },
+    clear() {
+      entries.clear()
     },
   }
 }
 
-export function hasScope(context: ApiKeyContext, scope: ApiScope): boolean {
-  return (
-    isScopeAllowed(context.scopes, scope) &&
-    isScopeAllowed(context.app.approvedScopes, scope)
-  )
+/** What routes know about the caller once a key is fully authorised. */
+export type RequestAuth = {
+  keyId: string
+  keyKind: ApiKeyKind
+  environmentId: string
+  environmentKind: EnvironmentKind
+  appStatus: ApiKeyRecord["app"]["status"]
+  ipPrefix: string | null
 }
 
-export function requestIpIsAllowed(
-  request: Request,
-  cidrs: string[],
-  gatewaySecret?: string,
-): boolean {
-  if (cidrs.length === 0) return true
-  const suppliedGatewaySecret = request.headers.get("X-Matchbox-Gateway-Secret")
-  const isTrustedGateway =
-    !!gatewaySecret &&
-    !!suppliedGatewaySecret &&
-    timingSafeEqual(gatewaySecret, suppliedGatewaySecret)
-  const rawIp = isTrustedGateway
-    ? request.headers.get("X-Matchbox-Client-IP")
-    : request.headers.get("CF-Connecting-IP")
-  if (!rawIp || !ipaddr.isValid(rawIp)) return false
-  const requestIp = ipaddr.process(rawIp)
+export type KeyRequestContext = {
+  /** Environment kind encoded in the presented key string. */
+  presentedKind: ApiKeyKind
+  presentedEnvironmentKind: EnvironmentKind
+  origin: string | null
+  clientIp: string | null
+  now: Date
+}
 
-  return cidrs.some((cidr) => {
-    try {
-      const [network, prefix] = ipaddr.parseCIDR(cidr)
-      return (
-        requestIp.kind() === network.kind() && requestIp.match(network, prefix)
-      )
-    } catch {
-      return false
+export type KeyEvaluation =
+  | { ok: true }
+  | { ok: false; code: ErrorCode; message: string }
+
+function deny(code: ErrorCode, message: string): KeyEvaluation {
+  return { ok: false, code, message }
+}
+
+/**
+ * Applies every per-request rule to a verified key record. Pure, so the
+ * cached record is re-evaluated on each request (expiry, origin, IP).
+ */
+export function evaluateKey(
+  record: ApiKeyRecord,
+  request: KeyRequestContext,
+): KeyEvaluation {
+  if (
+    record.key.kind !== request.presentedKind ||
+    record.environment.kind !== request.presentedEnvironmentKind
+  ) {
+    return deny("unauthorized", "Missing or invalid credentials.")
+  }
+  if (record.key.revokedAt !== null) {
+    return deny("unauthorized", "This API key has been revoked.")
+  }
+  if (
+    record.key.expiresAt !== null &&
+    Date.parse(record.key.expiresAt) <= request.now.getTime()
+  ) {
+    return deny("unauthorized", "This API key has expired.")
+  }
+  if (record.app.status === "suspended" || record.app.status === "retired") {
+    return deny("forbidden", "This app is not active.")
+  }
+  if (record.environment.kind === "live") {
+    if (record.environment.reviewState !== "approved") {
+      return deny("forbidden", "The live environment is not approved yet.")
     }
-  })
-}
-
-export async function publishableOriginIsAllowed(
-  request: Request,
-  database: SupabaseClient,
-  context: ApiKeyContext,
-): Promise<boolean> {
-  if (context.keyType !== "publishable") return true
-  const origin = request.headers.get("Origin")
-  if (!origin) return false
-
-  const { data, error } = await database
-    .from("developer_app_origins")
-    .select("id")
-    .eq("app_id", context.appId)
-    .eq("origin", origin)
-    .maybeSingle()
-
-  return !error && !!data
-}
-
-export function secretKeyIsServerSide(
-  request: Request,
-  context: ApiKeyContext,
-): boolean {
-  return context.keyType !== "secret" || request.headers.get("Origin") === null
+    if (!record.environment.approvedScopes.includes("gauge-profiles:read")) {
+      return deny("forbidden", "Gauge profile access is not approved.")
+    }
+  }
+  if (record.key.kind === "publishable") {
+    if (request.origin === null || !record.origins.includes(request.origin)) {
+      return deny("origin_not_allowed", "Origin not registered for this key.")
+    }
+    return { ok: true }
+  }
+  if (request.origin !== null) {
+    return deny(
+      "origin_not_allowed",
+      "Secret keys cannot be used from browsers. Use a publishable key.",
+    )
+  }
+  if (record.key.allowedCidrs.length > 0) {
+    if (
+      request.clientIp === null ||
+      !ipMatchesCidrs(request.clientIp, record.key.allowedCidrs)
+    ) {
+      return deny("forbidden", "Client IP is not in this key's allowlist.")
+    }
+  }
+  return { ok: true }
 }

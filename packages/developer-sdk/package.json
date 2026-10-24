@@ -1,36 +1,64 @@
 {
   "name": "@matchbox-markets/sdk",
-  "version": "0.1.0-beta.1",
-  "description": "TypeScript client for the Matchbox Developer API",
+  "version": "1.0.0-beta.1",
+  "description": "TypeScript client for the Matchbox API and Sign in with Matchbox (OIDC)",
+  "license": "MIT",
   "type": "module",
-  "main": "./dist/index.js",
+  "sideEffects": false,
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
-    }
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./oidc": {
+      "import": {
+        "types": "./dist/oidc.d.ts",
+        "default": "./dist/oidc.js"
+      },
+      "require": {
+        "types": "./dist/oidc.d.cts",
+        "default": "./dist/oidc.cjs"
+      }
+    },
+    "./package.json": "./package.json"
   },
   "files": [
     "dist",
     "README.md"
   ],
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
-    "build": "tsup",
-    "lint": "biome check src/",
-    "lint:fix": "biome check --write src/",
+    "build": "tsup && tsup --config tsup.cjs.config.ts",
+    "generate": "tsx scripts/generate-types.ts",
+    "lint": "biome check src/ scripts/",
+    "lint:fix": "biome check --write src/ scripts/",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "zod": "^4.1.12"
+    "jose": "^6.1.2"
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
     "@repo/biome-config": "workspace:*",
+    "@repo/platform-contracts": "workspace:*",
     "@repo/typescript-config": "workspace:*",
-    "tsup": "^8.3.5",
-    "typescript": "^5.7.2",
+    "@types/node": "^24.13.2",
+    "openapi-typescript": "^7.10.1",
+    "tsup": "^8.5.1",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3",
     "vitest": "^2.1.9"
   },
   "publishConfig": {

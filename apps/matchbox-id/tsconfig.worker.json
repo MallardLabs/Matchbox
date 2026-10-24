@@ -1,0 +1,14 @@
+{
+  "extends": "@repo/typescript-config/base.json",
+  "compilerOptions": {
+    "lib": ["ES2022"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "noEmit": true,
+    "declaration": false,
+    "declarationMap": false,
+    "types": ["@cloudflare/workers-types"]
+  },
+  "include": ["src/worker", "src/shared"],
+  "exclude": ["node_modules", "dist"]
+}

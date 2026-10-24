@@ -1,0 +1,22 @@
+# Copy to .dev.vars (never commit it). `vite dev` and `wrangler dev` read it.
+ENVIRONMENT=development
+MATCHBOX_ID_ENABLED=true
+DISCORD_CLAIMS_ENABLED=true
+ISSUER=http://localhost:5180
+
+# memory = seeded in-memory store (refused when ENVIRONMENT=production).
+PLATFORM_STORE=memory
+
+# Required when PLATFORM_STORE is unset or "supabase".
+SUPABASE_URL=
+SUPABASE_SERVICE_ROLE_KEY=
+
+# At least 16 characters each.
+SESSION_PEPPER=dev-session-pepper-change-me
+CLIENT_SECRET_PEPPER=dev-client-secret-pepper-change-me
+
+# JSON array of private ES256 JWKs with `kid`: `pnpm keys:generate`.
+OIDC_SIGNING_KEYS=
+
+MEZO_MAINNET_RPC_URL=https://rpc-internal.mezo.org
+MEZO_TESTNET_RPC_URL=https://rpc.test.mezo.org

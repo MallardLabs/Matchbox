@@ -1,0 +1,20 @@
+@import "@repo/ui/tokens.css";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Usage chart series (validated with the dataviz palette checker:
+   light #f7931a/#c23b3b, dark #cf7a17/#b8352c). Contrast WARN is
+   relieved by the legend, tooltip and data table. */
+:root,
+.light {
+  --chart-ok: #f7931a;
+  --chart-error: #c23b3b;
+  --chart-line: #6e6e69;
+}
+
+.dark {
+  --chart-ok: #cf7a17;
+  --chart-error: #b8352c;
+  --chart-line: #a69f94;
+}

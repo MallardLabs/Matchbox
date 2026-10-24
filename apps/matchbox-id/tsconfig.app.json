@@ -1,0 +1,14 @@
+{
+  "extends": "@repo/typescript-config/react-library.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "declaration": false,
+    "declarationMap": false,
+    "types": ["vite/client", "@testing-library/jest-dom/vitest"],
+    // jest-dom augments whichever `vitest` it resolves; pin it to ours so
+    // the matchers type-check regardless of how pnpm hoists vitest.
+    "paths": { "vitest": ["./node_modules/vitest"] }
+  },
+  "include": ["src/app", "src/shared"],
+  "exclude": ["node_modules", "dist"]
+}

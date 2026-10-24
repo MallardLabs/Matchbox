@@ -5,26 +5,33 @@
   "type": "module",
   "scripts": {
     "build": "wrangler deploy --dry-run --outdir dist",
-    "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "lint": "biome check src/",
-    "lint:fix": "biome check --write src/",
+    "dev": "wrangler dev",
+    "dev:memory": "wrangler dev --var PLATFORM_STORE:memory --var ENVIRONMENT:development --var GAUGE_PROFILE_API_ENABLED:true",
+    "dev:seed-keys": "tsx scripts/print-dev-keys.ts",
+    "lint": "biome check src/ scripts/",
+    "lint:fix": "biome check --write src/ scripts/",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@repo/logger": "workspace:*",
+    "@repo/platform-contracts": "workspace:*",
+    "@repo/platform-server": "workspace:*",
     "@repo/shared": "workspace:*",
-    "@supabase/supabase-js": "2.46.0",
-    "ipaddr.js": "^2.2.0",
-    "viem": "^2.21.45",
-    "zod": "^4.1.12"
+    "@supabase/supabase-js": "^2.108.2",
+    "hono": "^4.10.7",
+    "viem": "^2.40.3",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
-    "@cloudflare/workers-types": "^4.20260620.0",
+    "@cloudflare/workers-types": "^4.20260620.1",
     "@repo/biome-config": "workspace:*",
     "@repo/typescript-config": "workspace:*",
-    "typescript": "^5.7.2",
+    "@types/node": "^24.13.2",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3",
     "vitest": "^2.1.9",
     "wrangler": "^4.51.0"
   }
