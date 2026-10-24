@@ -12,7 +12,7 @@ import {
   useState,
 } from "react"
 
-const storageKey = "matchbox-developers:org"
+const storageKey = "matchbox-developer:org"
 
 function readStoredOrg(): string | null {
   try {

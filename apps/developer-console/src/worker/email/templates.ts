@@ -19,10 +19,10 @@ function escapeHtml(value: string): string {
 
 function layout(lines: string[]): string {
   const body = lines.map((line) => `<p>${line}</p>`).join("")
-  return `<!doctype html><html><body style="font-family:system-ui,sans-serif;font-size:15px;line-height:1.5;color:#111">${body}<p style="color:#666;font-size:13px">Matchbox Developers</p></body></html>`
+  return `<!doctype html><html><body style="font-family:system-ui,sans-serif;font-size:15px;line-height:1.5;color:#111">${body}<p style="color:#666;font-size:13px">Matchbox Developer</p></body></html>`
 }
 
-const footer = "Matchbox Developers"
+const footer = "Matchbox Developer"
 
 const urlPattern = /(?:[a-z][a-z0-9+.-]*:\/\/|www\.)\S*/giu
 const domainPattern =

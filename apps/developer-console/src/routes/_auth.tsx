@@ -31,12 +31,12 @@ function AuthLayout(): ReactElement {
       <header className="flex h-16 items-center px-5 md:h-[88px] md:px-12">
         <Link
           to="/"
-          aria-label="Matchbox Developers home"
+          aria-label="Matchbox Developer home"
           className="flex items-center gap-3"
         >
           <Logo.Root alt="" className="h-[18px] md:h-[25px]" />
           <span className="text-body-sm font-500 text-secondary">
-            Developers
+            Developer
           </span>
         </Link>
       </header>

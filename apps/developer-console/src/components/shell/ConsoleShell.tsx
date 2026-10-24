@@ -105,12 +105,12 @@ export default function ConsoleShell({
                 collapsed ? undefined : "h-auto flex-col items-start gap-0.5"
               }
             >
-              <Link to="/" aria-label="Matchbox Developers home">
+              <Link to="/" aria-label="Matchbox Developer home">
                 <Logo.Root variant={collapsed ? "icon" : "wordmark"} alt="" />
               </Link>
               {collapsed ? null : (
                 <span className="pl-0.5 text-label font-500 text-muted">
-                  Developers
+                  Developer
                 </span>
               )}
             </AppShell.SidebarHeader>
@@ -137,7 +137,7 @@ export default function ConsoleShell({
             <AppShell.TopBar className="gap-3 md:gap-2.5 md:pl-8">
               <Link
                 to="/"
-                aria-label="Matchbox Developers home"
+                aria-label="Matchbox Developer home"
                 className="shrink-0 md:hidden"
               >
                 <Logo.Root variant="icon" alt="" className="h-4" />
