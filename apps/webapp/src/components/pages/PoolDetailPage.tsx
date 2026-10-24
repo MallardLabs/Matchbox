@@ -391,13 +391,21 @@ export default function PoolDetailPage({
                   </span>
                 </div>
                 {hasGauge && (
-                  <Button
-                    kind="secondary"
-                    size="small"
-                    onClick={() => setAddOpen(true)}
-                  >
-                    Add
-                  </Button>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <Link
+                      href="/incentives?view=pools"
+                      className="text-xs text-[var(--content-secondary)] no-underline transition-colors hover:text-[#F7931A]"
+                    >
+                      Vote with veBTC &rarr;
+                    </Link>
+                    <Button
+                      kind="secondary"
+                      size="small"
+                      onClick={() => setAddOpen(true)}
+                    >
+                      Add
+                    </Button>
+                  </div>
                 )}
               </div>
 
