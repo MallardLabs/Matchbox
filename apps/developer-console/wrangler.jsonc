@@ -42,7 +42,7 @@
   // CF_ANALYTICS_TOKEN.
   "vars": {
     "ENVIRONMENT": "production",
-    "DEVELOPER_CONSOLE_ENABLED": "false",
+    "DEVELOPER_CONSOLE_ENABLED": "true",
     "CONSOLE_ORIGIN": "https://developer.matchbox.markets",
     // Google OAuth client id (public; the GIS button audience). Google Cloud
     // project "Matchbox Developer" (matchbox-developers). Required in
