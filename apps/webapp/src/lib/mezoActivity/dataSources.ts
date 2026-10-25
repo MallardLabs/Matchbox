@@ -1,29 +1,15 @@
-import {
-  ACTION_TYPE_MAP,
-  ACTIVITY_EVENT_FIELDS,
-  type ActivityEventRow,
-  mapActivityEventRow,
-} from "@/lib/mezoActivity/activityEvent"
 import { fetchEarnVoteActivity } from "@/lib/mezoActivity/earnVotes"
 import { sortActivityDesc } from "@/lib/mezoActivity/normalize"
 import { fetchWarehouseActivity } from "@/lib/mezoActivity/warehouse"
+import { EARN_PAGE_SIZE } from "@/lib/mezoEarn"
 import {
   type IndexedThrough,
-  isWarehouseSource,
+  WarehouseUnavailableError,
   recordWarehouseFailure,
   warehouseReadable,
 } from "@/lib/warehouse"
 import type { MezoActivityItem } from "@/types/mezoActivity"
 import { CHAIN_ID, type SupportedChainId } from "@repo/shared/contracts"
-
-const MATCHBOX_EXPLORER_SUBGRAPH_BY_CHAIN: Record<SupportedChainId, string> = {
-  [CHAIN_ID.mainnet]:
-    process.env.MATCHBOX_EXPLORER_SUBGRAPH_MEZO_URL ??
-    "https://api.goldsky.com/api/public/project_cmoiy2fc3z9sl01rk465n7poh/subgraphs/matchbox-explorer/live/gn",
-  [CHAIN_ID.testnet]:
-    process.env.MATCHBOX_EXPLORER_SUBGRAPH_MEZO_TESTNET_URL ??
-    "https://api.goldsky.com/api/public/project_cmoiy2fc3z9sl01rk465n7poh/subgraphs/matchbox-explorer-testnet/live/gn",
-}
 
 export type SourceOptions = {
   chainId: SupportedChainId
@@ -41,113 +27,8 @@ export type SourceOptions = {
   source?: string | undefined
 }
 
-type ExplorerActivityResponse = {
-  data?: {
-    activityEvents: ActivityEventRow[]
-  }
-  errors?: Array<{ message: string }>
-}
-
-function buildWhereClause(options: SourceOptions): string {
-  const parts: string[] = [
-    `timestamp_gte: "${options.fromTimestamp}"`,
-    `timestamp_lte: "${options.toTimestamp}"`,
-  ]
-  if (options.actionTypes && options.actionTypes.length > 0) {
-    const list = options.actionTypes.map((t) => t).join(", ")
-    parts.push(`actionType_in: [${list}]`)
-  }
-  if (options.actor) {
-    parts.push(`actor: "${options.actor.toLowerCase()}"`)
-  }
-  if (options.recipient) {
-    parts.push(`recipient: "${options.recipient.toLowerCase()}"`)
-  }
-  if (options.gauge) {
-    parts.push(`gauge: "${options.gauge.toLowerCase()}"`)
-  }
-  if (options.source) {
-    parts.push(`source: ${options.source}`)
-  }
-  return `{ ${parts.join(", ")} }`
-}
-
-// The Graph caps the `first` argument at 1000. Asking for 1001 (limit + 1 to
-// peek ahead for hasMore) silently errors out and returns []. Clamp here.
-const SUBGRAPH_FIRST_MAX = 1000
-
-async function fetchExplorerActivityRaw(
-  options: SourceOptions,
-): Promise<MezoActivityItem[]> {
-  const endpoint = MATCHBOX_EXPLORER_SUBGRAPH_BY_CHAIN[options.chainId]
-  const fetchSize = Math.min(options.limit + 1, SUBGRAPH_FIRST_MAX)
-  const skip = Math.max(options.page, 0) * options.limit
-  const where = buildWhereClause(options)
-  const orderDirection = options.orderDirection === "asc" ? "asc" : "desc"
-  const query = `
-      query {
-        activityEvents(
-          first: ${fetchSize},
-          skip: ${skip},
-          orderBy: timestamp,
-          orderDirection: ${orderDirection},
-          where: ${where}
-        ) {
-          ${ACTIVITY_EVENT_FIELDS.join("\n          ")}
-        }
-      }
-    `
-  const response = await fetch(endpoint, {
-    method: "POST",
-    cache: "no-store",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ query }),
-  })
-  if (!response.ok) {
-    throw new Error(`Explorer subgraph request failed with ${response.status}`)
-  }
-  const json = (await response.json()) as ExplorerActivityResponse
-  if (json.errors?.length) {
-    throw new Error(
-      `Explorer subgraph errors: ${json.errors.map((e) => e.message).join("; ")}`,
-    )
-  }
-  const items: MezoActivityItem[] = []
-  for (const event of json.data?.activityEvents ?? []) {
-    const item = mapActivityEventRow(event, "subgraph")
-    if (item) items.push(item)
-  }
-  return items
-}
-
-async function fetchExplorerActivity(
-  options: SourceOptions,
-): Promise<MezoActivityItem[]> {
-  if (options.actor) {
-    const [actorItems, recipientItems] = await Promise.all([
-      fetchExplorerActivityRaw({ ...options, recipient: undefined }),
-      fetchExplorerActivityRaw({
-        ...options,
-        actor: undefined,
-        recipient: options.actor,
-      }),
-    ])
-
-    const merged = [...actorItems]
-    const seen = new Set(merged.map((x) => x.id))
-    for (const item of recipientItems) {
-      if (!seen.has(item.id)) {
-        merged.push(item)
-      }
-    }
-    return merged
-  }
-
-  return fetchExplorerActivityRaw(options)
-}
-
-// Votes and abstains come from Mezo's earn-votes subgraph on mainnet; the
-// explorer no longer serves them.
+// Votes and abstains are the only activity outside the warehouse: Mezo's
+// earn-votes subgraph serves them on mainnet.
 const EARN_VOTE_ACTION_TYPES = new Set(["BOOST_VOTE", "BOOST_ABSTAIN"])
 
 function includesEarnVotes(options: SourceOptions): boolean {
@@ -156,22 +37,9 @@ function includesEarnVotes(options: SourceOptions): boolean {
   return options.actionTypes.some((type) => EARN_VOTE_ACTION_TYPES.has(type))
 }
 
-function explorerActionTypesFor(
-  actionTypes: string[] | undefined,
-): string[] | undefined {
-  const requested =
-    actionTypes && actionTypes.length > 0
-      ? actionTypes
-      : Object.keys(ACTION_TYPE_MAP)
-  const remaining = requested.filter(
-    (actionType) => !EARN_VOTE_ACTION_TYPES.has(actionType),
-  )
-  return remaining.length > 0 ? remaining : undefined
-}
-
-// "warehouse": the warehouse read failed and the explorer and earn-votes
-// served the page instead.
-export type ActivitySourceName = "explorer" | "votes" | "warehouse"
+// "warehouse": the warehouse did not serve the page, so it holds earn-votes
+// rows only. When earn-votes fails as well, the read throws.
+export type ActivitySourceName = "warehouse"
 
 export type MezoActivityResult = {
   data: MezoActivityItem[]
@@ -191,132 +59,87 @@ function sortActivity(
   return orderDirection === "asc" ? sorted.reverse() : sorted
 }
 
-/**
- * Explorer subgraph only, every requested action type included. Pages with
- * `skip`, so any depth works.
- */
-export async function fetchExplorerOnlyActivity(
-  options: SourceOptions,
-): Promise<MezoActivityResult> {
-  const explorerItems = await fetchExplorerActivity(options)
-  const merged = sortActivity(explorerItems, options.orderDirection)
-  // When limit ≥ 1000 we couldn't peek ahead (capped at 1000). Treat a full
-  // page as "maybe more" so callers can page forward.
-  const hasMore =
-    options.limit >= SUBGRAPH_FIRST_MAX
-      ? merged.length >= SUBGRAPH_FIRST_MAX
-      : merged.length > options.limit
-  return {
-    data: merged.slice(0, options.limit),
-    hasMore,
-    page: options.page,
-    degraded: [],
-  }
-}
-
 export async function fetchMezoActivity(
   options: SourceOptions,
 ): Promise<MezoActivityResult> {
   // A failed or timed-out warehouse read (Neon down, or its Free quota
-  // spent) falls back to the explorer and earn-votes below, marked
-  // "warehouse" in `degraded`; the breaker then skips the warehouse for a
-  // while.
-  const fallback: ActivitySourceName[] = []
-  if (isWarehouseSource(options.chainId)) {
-    if (warehouseReadable(options.chainId)) {
-      try {
-        // The warehouse decodes every action type, votes included, and pages
-        // with a true offset.
-        const result = await fetchWarehouseActivity(options)
-        return {
-          data: result.data,
-          hasMore: result.hasMore,
-          page: options.page,
-          degraded: [],
-          indexedThrough: result.indexedThrough,
-        }
-      } catch (error) {
-        recordWarehouseFailure("activity", error)
+  // spent) falls back to earn-votes, marked "warehouse" in `degraded`; the
+  // breaker then skips the warehouse for a while.
+  if (warehouseReadable(options.chainId)) {
+    try {
+      // The warehouse decodes every action type, votes included, and pages
+      // with a true offset.
+      const result = await fetchWarehouseActivity(options)
+      return {
+        data: result.data,
+        hasMore: result.hasMore,
+        page: options.page,
+        degraded: [],
+        indexedThrough: result.indexedThrough,
       }
+    } catch (error) {
+      recordWarehouseFailure("activity", error)
     }
-    fallback.push("warehouse")
   }
 
-  const result = await fetchPreWarehouseActivity(options)
-  return fallback.length > 0
-    ? { ...result, degraded: [...fallback, ...result.degraded] }
-    : result
+  if (!includesEarnVotes(options)) {
+    if (options.chainId !== CHAIN_ID.mainnet) {
+      throw new WarehouseUnavailableError(
+        "No activity source: the warehouse and earn-votes are mainnet only",
+      )
+    }
+    return {
+      data: [],
+      hasMore: false,
+      page: options.page,
+      degraded: ["warehouse"],
+    }
+  }
+  return fetchEarnVotesOnly(options)
 }
 
-// The explorer subgraph plus Mezo's earn-votes: the source before the
-// warehouse, and its fallback.
-async function fetchPreWarehouseActivity(
+// Mezo's earn-votes alone. It pages by cursor, not offset, so read the first
+// (page + 1) × limit rows and slice the page. Depth is capped at
+// EARN_PAGE_SIZE rows.
+async function fetchEarnVotesOnly(
   options: SourceOptions,
 ): Promise<MezoActivityResult> {
-  if (!includesEarnVotes(options)) return fetchExplorerOnlyActivity(options)
-
-  // Two sources can't share a `skip`, so read the first (page + 1) × limit
-  // rows of each, merge, then slice the page. Depth is capped at 1000 rows.
   const page = options.page > 0 ? options.page : 0
   const limit = options.limit > 0 ? options.limit : 0
-  const windowLimit = Math.min((page + 1) * limit, SUBGRAPH_FIRST_MAX)
+  const windowLimit = Math.min((page + 1) * limit, EARN_PAGE_SIZE)
   const peekLimit =
-    windowLimit >= SUBGRAPH_FIRST_MAX ? windowLimit : windowLimit + 1
-  const explorerTypes = explorerActionTypesFor(options.actionTypes)
-  const [votes, explorer] = await Promise.allSettled([
-    peekLimit > 0
-      ? fetchEarnVoteActivity({
-          chainId: options.chainId,
-          fromTimestamp: options.fromTimestamp,
-          toTimestamp: options.toTimestamp,
-          limit: peekLimit,
-          orderDirection: options.orderDirection,
-          actionTypes: options.actionTypes,
-          actor: options.actor,
-          gauge: options.gauge,
-          source: options.source,
-        })
-      : Promise.resolve([]),
-    explorerTypes && peekLimit > 0
-      ? fetchExplorerActivity({
-          ...options,
-          page: 0,
-          limit: peekLimit,
-          actionTypes: explorerTypes,
-        })
-      : Promise.resolve([]),
-  ])
-  if (votes.status === "rejected" && explorer.status === "rejected") {
+    windowLimit >= EARN_PAGE_SIZE ? windowLimit : windowLimit + 1
+  let votes: MezoActivityItem[]
+  try {
+    votes =
+      peekLimit > 0
+        ? await fetchEarnVoteActivity({
+            chainId: options.chainId,
+            fromTimestamp: options.fromTimestamp,
+            toTimestamp: options.toTimestamp,
+            limit: peekLimit,
+            orderDirection: options.orderDirection,
+            actionTypes: options.actionTypes,
+            actor: options.actor,
+            gauge: options.gauge,
+            source: options.source,
+          })
+        : []
+  } catch (error) {
     throw new AggregateError(
-      [votes.reason, explorer.reason],
-      "All activity sources failed",
+      [error],
+      "All activity sources failed: warehouse and earn-votes",
     )
   }
-  const degraded: ActivitySourceName[] = []
-  if (votes.status === "rejected") {
-    console.error("Activity votes source failed", votes.reason)
-    degraded.push("votes")
-  }
-  if (explorer.status === "rejected") {
-    console.error("Activity explorer source failed", explorer.reason)
-    degraded.push("explorer")
-  }
-  const voteItems = votes.status === "fulfilled" ? votes.value : []
-  const explorerItems = explorer.status === "fulfilled" ? explorer.value : []
-  const merged = sortActivity(
-    [...voteItems, ...explorerItems],
-    options.orderDirection,
-  )
+  const sorted = sortActivity(votes, options.orderDirection)
   const start = page * limit
   const end = start + limit
-  const hasMore =
-    merged.length > end ||
-    (windowLimit >= SUBGRAPH_FIRST_MAX &&
-      (voteItems.length >= windowLimit || explorerItems.length >= windowLimit))
   return {
-    data: merged.slice(start, end),
-    hasMore,
+    data: sorted.slice(start, end),
+    hasMore:
+      sorted.length > end ||
+      (windowLimit >= EARN_PAGE_SIZE && votes.length >= windowLimit),
     page: options.page,
-    degraded,
+    degraded: ["warehouse"],
   }
 }

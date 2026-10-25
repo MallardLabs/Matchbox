@@ -270,22 +270,41 @@ test("a hung warehouse read times out", async () => {
   assert.ok(Date.now() - started >= WAREHOUSE_TIMEOUT_MS - 50)
 })
 
-test("fetchMezoActivity serves the explorer and earn-votes when the warehouse fails", async () => {
+test("fetchMezoActivity serves earn-votes alone when the warehouse fails", async () => {
   process.env.MEZO_ACTIVITY_SOURCE = "warehouse"
   Reflect.deleteProperty(process.env, "MATCHBOX_WAREHOUSE_URL")
   const requested: string[] = []
   globalThis.fetch = async (input) => {
-    const url = String(input)
-    requested.push(url)
-    const body = url.includes("matchbox-explorer")
-      ? { data: { activityEvents: [] } }
-      : { data: { voteEvents: [] } }
-    return Response.json(body)
+    requested.push(String(input))
+    return Response.json({ data: { voteEvents: [] } })
   }
   const result = await fetchMezoActivity({ ...BASE })
   assert.deepEqual(result.data, [])
   assert.deepEqual(result.degraded, ["warehouse"])
   assert.equal(result.indexedThrough, undefined)
-  assert.ok(requested.some((url) => url.includes("matchbox-explorer")))
+  assert.ok(requested.length > 0)
+  assert.ok(!requested.some((url) => url.includes("matchbox-explorer")))
   assert.equal(warehouseReadable(CHAIN_ID.mainnet), false)
+})
+
+test("fetchMezoActivity returns an empty degraded page for non-vote types without the warehouse", async () => {
+  Reflect.deleteProperty(process.env, "MEZO_ACTIVITY_SOURCE")
+  globalThis.fetch = async () => {
+    throw new Error("no source should be read")
+  }
+  const result = await fetchMezoActivity({
+    ...BASE,
+    actionTypes: ["LOCK_CREATED"],
+  })
+  assert.deepEqual(result.data, [])
+  assert.equal(result.hasMore, false)
+  assert.deepEqual(result.degraded, ["warehouse"])
+})
+
+test("fetchMezoActivity has no source on testnet without the warehouse", async () => {
+  Reflect.deleteProperty(process.env, "MEZO_ACTIVITY_SOURCE")
+  await assert.rejects(
+    fetchMezoActivity({ ...BASE, chainId: CHAIN_ID.testnet }),
+    WarehouseUnavailableError,
+  )
 })

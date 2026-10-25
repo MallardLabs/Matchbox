@@ -37,9 +37,9 @@ export function isWarehouseSource(chainId: SupportedChainId): boolean {
   )
 }
 
-// When a warehouse read fails or times out, Classic serves the pre-warehouse
-// sources (the frozen explorer, Mezo's earn-votes and earn-locks) and stops
-// asking the warehouse for WAREHOUSE_BREAKER_SECONDS. Neon suspends a Free
+// When a warehouse read fails or times out, Classic serves what Mezo's
+// earn-votes and earn-locks still cover (the explorer subgraph is deleted)
+// and stops asking the warehouse for WAREHOUSE_BREAKER_SECONDS. Neon suspends a Free
 // project for the rest of the month once its compute quota is spent; the
 // breaker keeps Classic up without hammering the dead endpoint (each isolate
 // probes once per window).
