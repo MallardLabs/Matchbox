@@ -64,13 +64,15 @@ Neon. There is no Goldsky pipeline. Go-live steps are in `GO-LIVE.md`.
 `src/decode` projects raw logs into `matchbox.activity_events` (the explorer's
 `ActivityEvent`, field for field), `lock_positions`, `votes`, `bribe_to_pool`,
 and the warehouse-only `reward_deposits` and `trove_updates`. Rows the explorer
-would not have produced have `explorer_parity = false`; `parity` compares the
-rest with frozen `matchbox-explorer` 3.4.0. `DECODER_VERSION` is 2. A database
+would not have produced have `explorer_parity = false`. The rest matched
+`matchbox-explorer` 3.4.0 row for row (last run 2026-10-24); that subgraph was
+deleted on 2026-10-25, so the decoder fixture tests, recorded from it, are the
+remaining check. `DECODER_VERSION` is 2. A database
 built by another version halts projection until `rebuild:history -- --replay`.
 
 ## Commands
 
-Migrations, roles, the loads, projection and parity need the direct
+Migrations, roles, the loads and projection need the direct
 (non-pooler) `DATABASE_URL_UNPOOLED`. The linked Neon development branch puts it
 in the repository-root ignored `.env.local`.
 
@@ -94,9 +96,6 @@ pnpm --filter @repo/matchbox-indexer backfill -- --network mezo \
 
 # Project raw logs. --replay refuses once raw is pruned: use rebuild:history.
 pnpm --filter @repo/matchbox-indexer project -- --network mezo [--replay]
-
-# Row-level diff against frozen matchbox-explorer 3.4.0 (exits 1 on a diff).
-pnpm --filter @repo/matchbox-indexer parity -- --network mezo [--out file.json]
 
 # Once, on a database ingested before full claim calldata was kept.
 pnpm --filter @repo/matchbox-indexer refetch:claims -- --network mezo [--dry-run]

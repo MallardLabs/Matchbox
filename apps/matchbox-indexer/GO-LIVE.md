@@ -44,12 +44,13 @@ up for the tick plus the 5-minute suspend timeout.
   minutes around the clock, the compute never sleeps and the month needs
   about 180 CU-h. Neon then suspends the project until the next month.
 - If that happens (or Neon is down): Classic falls back on its own. A
-  warehouse read that fails or takes over 6 s is served from the frozen
-  explorer plus earn-votes (`degraded: ["warehouse"]` in `/api/activity`
-  meta; the gauge pages use earn-votes and earn-locks), and a breaker skips
-  the warehouse for 2 minutes per isolate so the dead endpoint is not
-  hammered. Once `matchbox-explorer/3.4.0` is deleted (step 10), only the
-  vote rows survive that fallback. Pro does the same with its own 6 s
+  warehouse read that fails or takes over 6 s is served from earn-votes
+  alone (`degraded: ["warehouse"]` in `/api/activity` meta): vote rows only,
+  and an empty page for other action types. The gauge snapshot and lock
+  charts use earn-votes and earn-locks; third-party emissions have no other
+  source and fail. A breaker skips the warehouse for 2 minutes per isolate
+  so the dead endpoint is not hammered. The frozen explorer stopped being
+  part of the fallback when it was deleted (step 10). Pro does the same with its own 6 s
   timeout and 2-minute breaker (`apps/matchbox-pro/src/worker/history/neon.ts`):
   activity, transaction pages and `/api/history/status` are served from
   Classic's `/api/activity`, marked `frozen-explorer` (stale); it returns 503
@@ -270,6 +271,9 @@ rows at or below the frozen block it did not compare. `--out` writes into
 
 A non-zero exit is a stop: do not continue to step 6.
 
+This step is historical: `matchbox-explorer/3.4.0` was deleted in step 10
+and the `parity` script with it, so parity cannot be re-run.
+
 Run 2026-10-24 on `matchbox-warehouse` (history loaded 2026-10-21 through
 block 12,669,080): "Parity exact", 147,270 rows, 42 action types, 17,367
 enriched fields.
@@ -362,8 +366,9 @@ them right after a production deploy, while that deploy is still the latest
 version. `versions secret put` would copy the preview's code into production.
 
 Rollback (seconds): `printf 'explorer' | ... wrangler secret put
-MEZO_ACTIVITY_SOURCE --name matchbox`. The webapp returns to the frozen
-explorer plus earn-votes. Keep `matchbox-explorer/3.4.0` until step 10.
+MEZO_ACTIVITY_SOURCE --name matchbox`. Since step 10 that leaves the webapp
+on the fallback sources only (vote rows, earn-locks lock charts, no
+third-party emissions), so it is only worth it while Neon is down.
 
 ## 8. Give Matchbox Pro read access [OUTWARD]
 
@@ -458,6 +463,15 @@ goldsky subgraph delete matchbox-explorer/3.4.0
 Then confirm in the Goldsky dashboard that the `Matchbox` project has no
 subgraph storage left.
 
+Done 2026-10-25 after a clean step 9 (about 2.2 CU-h a day, both checkpoints
+16 minutes old, 306 MB of 1 GB, voter bribe counts 721/24/7; trove updates
+and reward deposits matched the chain's own quiet stretch). The `live` tag
+had to go first (`goldsky subgraph tag delete matchbox-explorer/3.4.0 --tag
+live`): Goldsky refuses to delete a tagged version. `goldsky subgraph list`
+now shows no subgraphs. Classic's explorer fallback and the `parity` script
+were removed the same day; deleting the `apps/activity-subgraph` package
+waits for a quiet moment on `pnpm-lock.yaml`.
+
 ## Replaying the projection [OUTWARD]
 
 A decoder version change halts projection ("PROJECTION HALTED ... replay
@@ -474,10 +488,9 @@ so a replay re-ingests history from RPC:
 
    It truncates the projection tables, then loads history as in step 4
    (about 110 minutes on dev). Readers see a growing, incomplete
-   history until it finishes: point the webapp at the explorer meanwhile if
-   it still exists (step 7 rollback), or accept the gap.
+   history until it finishes; there is no explorer to point them at.
 
-3. Run parity (step 5) if the explorer still exists, then restore the cron.
+3. Compare per-type counts with the step 9 queries, then restore the cron.
 
 `project -- --replay` refuses on a pruned database for this reason.
 

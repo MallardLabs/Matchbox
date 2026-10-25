@@ -12,7 +12,8 @@ import { InMemoryStore } from "../../src/decode/store"
 import type { RawLog, RawTx } from "../../src/ingest/rpc"
 
 // Real explorer rows (matchbox-explorer 3.4.0) with the log and transaction
-// behind each, built by fixtures/build-fixtures.ts. Each log runs through the
+// behind each. Recorded before that subgraph was deleted on 2026-10-25, so
+// the fixtures are frozen and cannot be rebuilt. Each log runs through the
 // full dispatch path and must reproduce the explorer row field for field.
 
 const hex = z.custom<Hex>((value) => typeof value === "string" && isHex(value))

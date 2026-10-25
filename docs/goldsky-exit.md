@@ -126,8 +126,10 @@ Intended differences:
 
 ### Read path (webapp)
 
-- `MEZO_ACTIVITY_SOURCE=explorer|warehouse` selects the source. The default
-  stays `explorer` until go-live.
+- `MEZO_ACTIVITY_SOURCE=warehouse` selects the warehouse. Production has
+  set it since 2026-10-24. Any other value, or a failed warehouse read,
+  serves only the fallback sources (earn-votes, earn-locks); the explorer
+  path was removed with the subgraph on 2026-10-25.
 - `warehouse` reads `matchbox.activity_events` with the read-only role
   through `MATCHBOX_WAREHOUSE_URL`. Votes come from the warehouse too, so
   `earn-votes` drops out.
@@ -276,6 +278,13 @@ outward-facing step marked. In short:
 3. Watch lag and per-type counts for a day.
 4. Delete `matchbox-explorer/3.4.0`. Matchbox then has no Goldsky subgraph
    storage.
+
+Status 2026-10-25: steps 1 to 4 are done. Classic went live on the warehouse
+on 2026-10-24. Goldsky 3.5.0 was deleted that day and 3.4.0 the next, after
+a clean day, so the Goldsky project has no subgraphs and no pipelines.
+Classic's explorer fallback and the `parity` script went with it. Still
+open: Pro's `MATCHBOX_WAREHOUSE_URL` (it waits for the Pro rebuild to
+deploy), and deleting the `apps/activity-subgraph` package.
 
 ## Out of scope
 
