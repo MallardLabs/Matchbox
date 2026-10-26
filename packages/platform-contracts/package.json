@@ -48,6 +48,10 @@
       "types": "./src/identity.ts",
       "default": "./src/identity.ts"
     },
+    "./market": {
+      "types": "./src/market.ts",
+      "default": "./src/market.ts"
+    },
     "./network": {
       "types": "./src/network.ts",
       "default": "./src/network.ts"
