@@ -13,8 +13,8 @@ import {
 import {
   type NetworkSlug,
   describeNetwork,
-  networkForEnvironmentKind,
   networkSlugSchema,
+  readableNetworks,
 } from "@repo/platform-contracts/network"
 import openApiDocument from "@repo/platform-contracts/openapi.json"
 import {
@@ -78,13 +78,12 @@ function requireAuth(c: ApiContext): RequestAuth {
   return auth
 }
 
-/** 403 unless the key's environment reads `network`. */
-function allowedNetwork(auth: RequestAuth, network: string): NetworkSlug {
-  const allowed = networkForEnvironmentKind(auth.environmentKind)
+/** 403 unless `network` is one the API serves. Every key reads all of them. */
+function allowedNetwork(network: string): NetworkSlug {
   const parsed = networkSlugSchema.safeParse(network)
-  if (!parsed.success || parsed.data !== allowed) {
+  if (!parsed.success) {
     throw new PlatformError("network_not_allowed", {
-      message: `This key reads the ${allowed} network only.`,
+      message: `Unknown network. Use one of: ${readableNetworks.join(", ")}.`,
     })
   }
   return parsed.data
@@ -156,15 +155,13 @@ export function createApp(deps: AppDeps) {
 
   app.get("/v1/networks", (c) => {
     c.set("routeTemplate", "/v1/networks")
-    const auth = requireAuth(c)
-    return respondJson(c, {
-      data: [describeNetwork(networkForEnvironmentKind(auth.environmentKind))],
-    })
+    requireAuth(c)
+    return respondJson(c, { data: readableNetworks.map(describeNetwork) })
   })
 
   app.get("/v1/gauge-profiles", async (c) => {
     c.set("routeTemplate", "/v1/gauge-profiles")
-    const auth = requireAuth(c)
+    requireAuth(c)
     const parsed = parseGaugeProfileListQuery(new URL(c.req.url).searchParams)
     if (!parsed.ok) {
       throw new PlatformError("invalid_request", {
@@ -174,7 +171,7 @@ export function createApp(deps: AppDeps) {
       })
     }
     const { query, cursor } = parsed
-    const network = allowedNetwork(auth, query.network)
+    const network = allowedNetwork(query.network)
     const page = await deps.store.listGaugeProfiles({
       network,
       profileType: query.profileType ?? null,
@@ -197,8 +194,8 @@ export function createApp(deps: AppDeps) {
 
   app.get("/v1/gauge-profiles/:network/:gaugeAddress", async (c) => {
     c.set("routeTemplate", "/v1/gauge-profiles/{network}/{gaugeAddress}")
-    const auth = requireAuth(c)
-    const network = allowedNetwork(auth, c.req.param("network"))
+    requireAuth(c)
+    const network = allowedNetwork(c.req.param("network"))
     const address = gaugeAddressParamSchema.safeParse(
       c.req.param("gaugeAddress"),
     )
@@ -211,8 +208,8 @@ export function createApp(deps: AppDeps) {
 
   app.get("/v1/vebtc/:network/:tokenId/gauge-profile", async (c) => {
     c.set("routeTemplate", "/v1/vebtc/{network}/{tokenId}/gauge-profile")
-    const auth = requireAuth(c)
-    const network = allowedNetwork(auth, c.req.param("network"))
+    requireAuth(c)
+    const network = allowedNetwork(c.req.param("network"))
     const params = vebtcGaugeProfileParamsSchema.safeParse({
       network,
       tokenId: c.req.param("tokenId"),

@@ -54,23 +54,25 @@ describe("health and OpenAPI", () => {
 })
 
 describe("networks", () => {
-  it("lists only the network the key's environment reads", async () => {
+  it("lists both networks for test and live keys", async () => {
     const harness = await createHarness()
     const test = networkListSchema.parse(
       await (await harness.get("/v1/networks")).json(),
     )
-    expect(test.data.map((network) => network.slug)).toEqual(["mezo-testnet"])
+    expect(test.data.map((network) => network.slug)).toEqual([
+      "mezo",
+      "mezo-testnet",
+    ])
     const live = networkListSchema.parse(
       await (await harness.get("/v1/networks", { key: keys.skLive })).json(),
     )
-    expect(live.data).toEqual([
-      {
-        slug: "mezo",
-        chainId: 31612,
-        name: "Mezo",
-        environmentKind: "live",
-      },
-    ])
+    expect(live.data[0]).toEqual({
+      slug: "mezo",
+      chainId: 31612,
+      name: "Mezo",
+      environmentKind: "live",
+    })
+    expect(live.data).toEqual(test.data)
   })
 })
 
@@ -385,7 +387,7 @@ describe("gauge profiles", () => {
     expect(body.data.displayName).toBe("Orange Pill Treasury")
   })
 
-  it("treats path networks outside the key's environment as not allowed", async () => {
+  it("rejects path networks the API does not serve", async () => {
     const harness = await createHarness()
     const response = await harness.get(
       "/v1/gauge-profiles/ethereum/0x2B5E8D1A4C7F0E3B6D9A2C5F8E1B4D7A0C3F6E9B",

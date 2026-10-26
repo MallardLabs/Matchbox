@@ -68,7 +68,7 @@ describe("API key auth", () => {
 
   const cases: Case[] = [
     {
-      name: "publishable + registered origin + matching network",
+      name: "publishable + registered origin",
       key: keys.pkTest,
       path: testnetList,
       origin: testOrigin,
@@ -92,12 +92,11 @@ describe("API key auth", () => {
       code: "origin_not_allowed",
     },
     {
-      name: "publishable + registered origin + network mismatch",
+      name: "test publishable + registered origin + mainnet",
       key: keys.pkTest,
       path: mainnetList,
       origin: testOrigin,
-      status: 403,
-      code: "network_not_allowed",
+      status: 200,
       allowOrigin: testOrigin,
     },
     {
@@ -133,18 +132,16 @@ describe("API key auth", () => {
       allowOrigin: null,
     },
     {
-      name: "secret + network mismatch",
+      name: "test secret + mainnet",
       key: keys.skTest,
       path: mainnetList,
-      status: 403,
-      code: "network_not_allowed",
+      status: 200,
     },
     {
       name: "live secret + testnet",
       key: keys.skLive,
       path: testnetList,
-      status: 403,
-      code: "network_not_allowed",
+      status: 200,
     },
     {
       name: "live secret + mainnet",

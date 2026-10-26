@@ -20,7 +20,8 @@ them in the same PR.
   `/id-bridge` are deleted. Old `developer_*` tables are left untouched (a later
   migration drops them after cutover).
 - Additive tables; one kill switch per product.
-- Test environment = Mezo testnet; live = Mezo mainnet. Enforced by policy.
+- Test environment = Mezo testnet; live = Mezo mainnet, for Matchbox ID and
+  quotas. API data is public: every key reads both networks (since 2026-10-26).
 - Staff review lives at `/admin` in the developer console.
 - UI borrows the Matchbox Pro design language (tokens, Figtree + DM Mono,
   Radix, Tailwind 3, Vite + TanStack Router, React 18).
@@ -365,14 +366,14 @@ All `/v1` routes require `Authorization: Bearer mbx_{pk|sk}_{test|live}_…`.
 | --- | --- |
 | `GET /v1/health` | no auth; `{ status, version, flags }` |
 | `GET /openapi.json` | no auth |
-| `GET /v1/networks` | networks the key's environment may read |
+| `GET /v1/networks` | both networks (every key reads both) |
 | `GET /v1/gauge-profiles` | `network` (required), `profileType`, `tag`, `updatedSince`, `address` (repeatable, ≤ 50), `limit` (≤ 100, default 50), `cursor` (opaque base64url of `(updated_at, gauge_address)`) |
 | `GET /v1/gauge-profiles/{network}/{gaugeAddress}` | 404 `not_found` |
 | `GET /v1/vebtc/{network}/{tokenId}/gauge-profile` | via chain state + profile |
 
 Rules:
 
-- Key's environment network must equal the requested network, else
+- Every key reads `mezo` and `mezo-testnet`; any other network returns
   `403 network_not_allowed`.
 - Publishable keys: `Origin` must match a registered origin, else
   `403 origin_not_allowed`. Secret keys: rejected when an `Origin` header is

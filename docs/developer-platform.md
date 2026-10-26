@@ -381,7 +381,7 @@ list (names only, never values).
 curl -i https://api.matchbox.markets/v1/networks        # 401 unauthorized
 curl -i -H "Authorization: Bearer $MBX_TEST_SK" https://api.matchbox.markets/v1/networks
 curl -i -H "Authorization: Bearer $MBX_TEST_SK" "https://api.matchbox.markets/v1/gauge-profiles?network=mezo-testnet&limit=5"
-curl -i -H "Authorization: Bearer $MBX_TEST_SK" "https://api.matchbox.markets/v1/gauge-profiles?network=mezo"   # 403 network_not_allowed
+curl -i -H "Authorization: Bearer $MBX_TEST_SK" "https://api.matchbox.markets/v1/gauge-profiles?network=mezo"   # 200: every key reads both networks
 curl -i -H "Authorization: Bearer $MBX_TEST_SK" -H "Origin: https://example.com" https://api.matchbox.markets/v1/networks   # 403 origin_not_allowed
 ```
 
@@ -436,18 +436,19 @@ prompt), rotate and revoke it, open `/admin`.
      apiKey: process.env.MATCHBOX_API_KEY ?? "",
    });
    const page = await matchbox.gaugeProfiles.list({
-     network: "mezo-testnet",
+     network: "mezo",
      limit: 50,
    });
    for await (const profile of matchbox.gaugeProfiles.iterate({
-     network: "mezo-testnet",
+     network: "mezo",
    })) {
      console.log(profile.gaugeAddress, profile.displayName);
    }
    ```
 
-   Test keys read `mezo-testnet` only (validator gauges; boost gauges are
-   mainnet-only). Live keys need the live environment approved: a submission
+   Test and live keys both read `mezo` and `mezo-testnet` (profiles are on
+   `mezo`); live keys get higher rate limits. Live keys need the live
+   environment approved: a submission
    for `gauge-profiles:read` alone is auto-approved when the owner email is
    verified, the app has a website URL and the app is `active`.
 

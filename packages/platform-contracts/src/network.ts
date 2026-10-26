@@ -70,10 +70,11 @@ export function describeNetwork(network: NetworkSlug): Network {
   }
 }
 
-/** Test environments read Mezo testnet only; live reads Mezo mainnet only. */
-export function isNetworkAllowedForEnvironment(
-  kind: EnvironmentKind,
-  network: NetworkSlug,
-): boolean {
-  return networkByEnvironmentKind[kind] === network
-}
+/**
+ * Networks every API key reads, test or live. Chain data is public, so the
+ * environment kind sets quotas and Matchbox ID pairing, not data access.
+ */
+export const readableNetworks = [
+  "mezo",
+  "mezo-testnet",
+] as const satisfies readonly NetworkSlug[]

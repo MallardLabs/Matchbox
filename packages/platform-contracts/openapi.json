@@ -145,7 +145,7 @@
             "name": "network",
             "in": "query",
             "required": true,
-            "description": "Must match the key's environment network.",
+            "description": "`mezo` or `mezo-testnet`; every key reads both.",
             "schema": {
               "$ref": "#/components/schemas/NetworkSlug"
             }
@@ -335,7 +335,7 @@
             "name": "network",
             "in": "path",
             "required": true,
-            "description": "`mezo` for live keys, `mezo-testnet` for test keys. Other values return 403 `network_not_allowed`.",
+            "description": "`mezo` or `mezo-testnet`; every key reads both. Other values return 403 `network_not_allowed`.",
             "schema": {
               "$ref": "#/components/schemas/NetworkSlug"
             }
@@ -472,7 +472,7 @@
             "name": "network",
             "in": "path",
             "required": true,
-            "description": "`mezo` for live keys, `mezo-testnet` for test keys. Other values return 403 `network_not_allowed`.",
+            "description": "`mezo` or `mezo-testnet`; every key reads both. Other values return 403 `network_not_allowed`.",
             "schema": {
               "$ref": "#/components/schemas/NetworkSlug"
             }
@@ -605,7 +605,7 @@
         "type": "http",
         "scheme": "bearer",
         "bearerFormat": "mbx_{pk|sk}_{test|live}_<id>_<secret>",
-        "description": "Send `Authorization: Bearer <key>`.\n\n- **Publishable keys** (`mbx_pk_test_…`, `mbx_pk_live_…`) are safe in browsers. The request `Origin` must be registered on the key's environment.\n- **Secret keys** (`mbx_sk_test_…`, `mbx_sk_live_…`) are server-only. Requests carrying an `Origin` header are rejected; an optional CIDR allowlist applies.\n\nTest keys read `mezo-testnet`; live keys read `mezo` and require an approved environment. Revocation takes effect within 15 seconds."
+        "description": "Send `Authorization: Bearer <key>`.\n\n- **Publishable keys** (`mbx_pk_test_…`, `mbx_pk_live_…`) are safe in browsers. The request `Origin` must be registered on the key's environment.\n- **Secret keys** (`mbx_sk_test_…`, `mbx_sk_live_…`) are server-only. Requests carrying an `Origin` header are rejected; an optional CIDR allowlist applies.\n\nTest and live keys both read `mezo` and `mezo-testnet`. Live keys require an approved environment and get higher rate limits. Revocation takes effect within 15 seconds."
       }
     },
     "responses": {

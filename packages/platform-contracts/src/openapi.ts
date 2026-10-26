@@ -182,7 +182,7 @@ const networkPathParameter = {
   in: "path",
   required: true,
   description:
-    "`mezo` for live keys, `mezo-testnet` for test keys. Other values return 403 `network_not_allowed`.",
+    "`mezo` or `mezo-testnet`; every key reads both. Other values return 403 `network_not_allowed`.",
   schema: componentRef("NetworkSlug"),
 }
 
@@ -192,7 +192,7 @@ const securityDescription = [
   "- **Publishable keys** (`mbx_pk_test_…`, `mbx_pk_live_…`) are safe in browsers. The request `Origin` must be registered on the key's environment.",
   "- **Secret keys** (`mbx_sk_test_…`, `mbx_sk_live_…`) are server-only. Requests carrying an `Origin` header are rejected; an optional CIDR allowlist applies.",
   "",
-  "Test keys read `mezo-testnet`; live keys read `mezo` and require an approved environment. Revocation takes effect within 15 seconds.",
+  "Test and live keys both read `mezo` and `mezo-testnet`. Live keys require an approved environment and get higher rate limits. Revocation takes effect within 15 seconds.",
 ].join("\n")
 
 export function createOpenApiDocument() {
@@ -250,7 +250,7 @@ export function createOpenApiDocument() {
               name: "network",
               in: "query",
               required: true,
-              description: "Must match the key's environment network.",
+              description: "`mezo` or `mezo-testnet`; every key reads both.",
               schema: componentRef("NetworkSlug"),
             },
             {

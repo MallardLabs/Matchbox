@@ -49,7 +49,8 @@ try {
 }
 ```
 
-- Test keys (`mbx_*_test_…`) read `mezo-testnet`; live keys read `mezo`.
+- Test (`mbx_*_test_…`) and live keys both read `mezo` and `mezo-testnet`;
+  live keys get higher rate limits.
 - Publishable keys (`mbx_pk_…`) work in browsers from registered origins.
   Secret keys (`mbx_sk_…`) are server-only.
 - 429 and 503 responses are retried up to `maxRetries` (default 2),

@@ -374,7 +374,7 @@ export interface operations {
     listGaugeProfiles: {
         parameters: {
             query: {
-                /** @description Must match the key's environment network. */
+                /** @description `mezo` or `mezo-testnet`; every key reads both. */
                 network: components["schemas"]["NetworkSlug"];
                 profileType?: components["schemas"]["GaugeProfileType"];
                 /** @description Only profiles with this tag (a lower-case slug). */
@@ -448,7 +448,7 @@ export interface operations {
                 "If-None-Match"?: string;
             };
             path: {
-                /** @description `mezo` for live keys, `mezo-testnet` for test keys. Other values return 403 `network_not_allowed`. */
+                /** @description `mezo` or `mezo-testnet`; every key reads both. Other values return 403 `network_not_allowed`. */
                 network: components["schemas"]["NetworkSlug"];
                 /** @description Gauge contract address (any case). */
                 gaugeAddress: string;
@@ -510,7 +510,7 @@ export interface operations {
                 "If-None-Match"?: string;
             };
             path: {
-                /** @description `mezo` for live keys, `mezo-testnet` for test keys. Other values return 403 `network_not_allowed`. */
+                /** @description `mezo` or `mezo-testnet`; every key reads both. Other values return 403 `network_not_allowed`. */
                 network: components["schemas"]["NetworkSlug"];
                 /** @description veBTC token id (decimal). */
                 tokenId: components["schemas"]["DecimalString"];

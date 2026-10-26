@@ -3,10 +3,10 @@ import {
   chainIdForNetwork,
   describeNetwork,
   environmentKindForNetwork,
-  isNetworkAllowedForEnvironment,
   networkForChainId,
   networkForEnvironmentKind,
   networkSlugSchema,
+  readableNetworks,
 } from "./network"
 
 describe("network", () => {
@@ -25,11 +25,8 @@ describe("network", () => {
     expect(networkForChainId(1)).toBeNull()
   })
 
-  it("enforces the env/network pairing", () => {
-    expect(isNetworkAllowedForEnvironment("test", "mezo-testnet")).toBe(true)
-    expect(isNetworkAllowedForEnvironment("test", "mezo")).toBe(false)
-    expect(isNetworkAllowedForEnvironment("live", "mezo")).toBe(true)
-    expect(isNetworkAllowedForEnvironment("live", "mezo-testnet")).toBe(false)
+  it("lets every key read both networks", () => {
+    expect(readableNetworks).toEqual(["mezo", "mezo-testnet"])
   })
 
   it("describes networks", () => {

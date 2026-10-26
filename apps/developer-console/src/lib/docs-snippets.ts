@@ -1,6 +1,6 @@
-import {
-  type EnvironmentKind,
-  networkForEnvironmentKind,
+import type {
+  EnvironmentKind,
+  NetworkSlug,
 } from "@repo/platform-contracts/network"
 import {
   type Endpoint,
@@ -32,10 +32,13 @@ export function placeholderCredentials(kind: EnvironmentKind): DocsCredentials {
 export const apiOrigin = "https://api.matchbox.markets"
 export const idIssuer = "https://id.matchbox.markets"
 
+/** Examples read mainnet: every key reads it, and that is where the data is. */
+export const sampleNetwork: NetworkSlug = "mezo"
+
 export function quickstartSnippets(
   credentials: DocsCredentials,
 ): [Snippet, Snippet] {
-  const network = networkForEnvironmentKind(credentials.kind)
+  const network = sampleNetwork
   return [
     {
       language: "ts",

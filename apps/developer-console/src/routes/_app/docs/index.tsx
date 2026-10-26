@@ -1,4 +1,3 @@
-import { networkForEnvironmentKind } from "@repo/platform-contracts/network"
 import { oidcEndpointPaths } from "@repo/platform-contracts/oidc"
 import openapi from "@repo/platform-contracts/openapi.json"
 import * as Button from "@repo/ui/button"
@@ -18,6 +17,7 @@ import {
   apiOrigin,
   installSnippets,
   quickstartSnippets,
+  sampleNetwork,
 } from "../../../lib/docs-snippets"
 import { groupEndpoints, parseOpenApi } from "../../../lib/openapi"
 import { useTitle } from "../../../lib/title"
@@ -87,7 +87,7 @@ function QuickstartPage(): ReactElement {
   useTitle("Quickstart · Docs")
   const credentials = useDocsCredentials()
   const { apps, appId, setApp } = useDocsControls()
-  const network = networkForEnvironmentKind(credentials.kind)
+  const network = sampleNetwork
   const [ts, curl] = quickstartSnippets(credentials)
   return (
     <div className="flex flex-col gap-6">

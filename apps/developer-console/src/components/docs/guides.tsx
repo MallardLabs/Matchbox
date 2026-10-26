@@ -460,9 +460,10 @@ function EnvironmentsGuide(): ReactElement {
         </Table.Body>
       </Table.Root>
       <P>
-        A key for one environment gets <C>403 network_not_allowed</C> on the
-        other network. Live access requires review: gauge-profile-only apps are
-        approved automatically; Discord scopes are reviewed manually.
+        API keys from either environment read both networks; the environment
+        sets rate limits and the Sign in with Matchbox network. Live access
+        requires review: gauge-profile-only apps are approved automatically;
+        Discord scopes are reviewed manually.
       </P>
     </Guide>
   )
