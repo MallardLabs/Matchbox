@@ -1,4 +1,4 @@
-# matchbox-markets
+# @matchbox-dev/sdk
 
 TypeScript client for the [Matchbox API](https://developer.matchbox.markets)
 and Sign in with Matchbox (OpenID Connect). ESM + CJS, typed from the
@@ -7,13 +7,13 @@ browsers, Cloudflare Workers, Deno, Bun and Node 18+ (OIDC helpers need
 WebCrypto: Node 20+, or Node 18 with `--experimental-global-webcrypto`).
 
 ```sh
-npm install matchbox-markets
+npm install @matchbox-dev/sdk
 ```
 
 ## Gauge profiles
 
 ```ts
-import { createMatchboxClient, MatchboxApiError } from "matchbox-markets"
+import { createMatchboxClient, MatchboxApiError } from "@matchbox-dev/sdk"
 
 const matchbox = createMatchboxClient({
   apiKey: process.env.MATCHBOX_API_KEY ?? "", // mbx_sk_live_… on servers
@@ -115,7 +115,7 @@ import {
   refreshTokens,
   revokeToken,
   verifyIdToken,
-} from "matchbox-markets/oidc"
+} from "@matchbox-dev/sdk/oidc"
 
 const clientId = "mbx_live_…"
 const redirectUri = "https://app.example.com/auth/callback"
@@ -159,7 +159,7 @@ Refresh tokens rotate: always store the newest one. Every helper accepts
 ## Development
 
 ```sh
-pnpm --filter matchbox-markets generate  # regenerate src/generated/schema.ts
-pnpm --filter matchbox-markets test      # fails if the generated types are stale
-pnpm --filter matchbox-markets build
+pnpm --filter @matchbox-dev/sdk generate  # regenerate src/generated/schema.ts
+pnpm --filter @matchbox-dev/sdk test      # fails if the generated types are stale
+pnpm --filter @matchbox-dev/sdk build
 ```

@@ -44,7 +44,7 @@ export function quickstartSnippets(
       language: "ts",
       label: "TypeScript",
       code: [
-        'import { createMatchboxClient } from "matchbox-markets"',
+        'import { createMatchboxClient } from "@matchbox-dev/sdk"',
         "",
         "const matchbox = createMatchboxClient({",
         `  apiKey: process.env.MATCHBOX_API_KEY, // ${credentials.secretKeyPrefix}_…`,
@@ -73,11 +73,11 @@ export function quickstartSnippets(
 
 export function installSnippets(): [Snippet, Snippet] {
   return [
-    { language: "pnpm", label: "pnpm", code: "pnpm add matchbox-markets" },
+    { language: "pnpm", label: "pnpm", code: "pnpm add @matchbox-dev/sdk" },
     {
       language: "npm",
       label: "npm",
-      code: "npm install matchbox-markets",
+      code: "npm install @matchbox-dev/sdk",
     },
   ]
 }
@@ -132,7 +132,7 @@ export function endpointSnippets(
           "const body = await response.json()",
         ].join("\n")
       : [
-          'import { createMatchboxClient } from "matchbox-markets"',
+          'import { createMatchboxClient } from "@matchbox-dev/sdk"',
           "",
           "const matchbox = createMatchboxClient({ apiKey: process.env.MATCHBOX_API_KEY })",
           `const result = ${call}`,

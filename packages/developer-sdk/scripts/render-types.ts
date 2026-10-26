@@ -15,7 +15,7 @@ export async function renderSchemaTypes(): Promise<string> {
     alphabetize: false,
     exportType: true,
   })
-  const header = `${COMMENT_HEADER}// Source: @repo/platform-contracts/openapi.json\n// Regenerate: pnpm --filter matchbox-markets generate\n\n`
+  const header = `${COMMENT_HEADER}// Source: @repo/platform-contracts/openapi.json\n// Regenerate: pnpm --filter @matchbox-dev/sdk generate\n\n`
   return `${header}${astToString(ast)}`
 }
 

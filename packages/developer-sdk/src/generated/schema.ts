@@ -4,7 +4,7 @@
  */
 
 // Source: @repo/platform-contracts/openapi.json
-// Regenerate: pnpm --filter matchbox-markets generate
+// Regenerate: pnpm --filter @matchbox-dev/sdk generate
 
 export type paths = {
     "/v1/health": {

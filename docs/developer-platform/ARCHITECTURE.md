@@ -37,7 +37,7 @@ them in the same PR.
 | `packages/platform-contracts` | `@repo/platform-contracts` | — | Zod schemas, OpenAPI generator, shared constants |
 | `packages/platform-server` | `@repo/platform-server` | — | Worker-side helpers shared by the three Workers |
 | `packages/logger` | `@repo/logger` | — | Tiny structured logger (JSON in Workers) |
-| `packages/developer-sdk` | `matchbox-markets` (rewritten) | — | Generated types + ergonomic client |
+| `packages/developer-sdk` | `@matchbox-dev/sdk` (rewritten) | — | Generated types + ergonomic client |
 
 Rules:
 
@@ -670,7 +670,7 @@ Account (profile, sessions), Docs (quickstart TS + curl for the selected
 environment, API reference rendered from `openapi.json`, guides: auth &
 keys, OIDC integration, rate limits, errors, pagination, changelog), Admin.
 
-## 9. SDK (`matchbox-markets`)
+## 9. SDK (`@matchbox-dev/sdk`)
 
 - Types generated from `packages/platform-contracts/openapi.json` with
   `openapi-typescript`; runtime via a small typed fetch wrapper (no
@@ -684,7 +684,7 @@ keys, OIDC integration, rate limits, errors, pagination, changelog), Admin.
   `jose` + remote JWKS).
 - No React or wallet dependency. ESM + CJS via tsup.
 - As built (1.0.0-beta.1): `src/generated/schema.ts` is checked in and
-  regenerated with `pnpm --filter matchbox-markets generate`; a test
+  regenerated with `pnpm --filter @matchbox-dev/sdk generate`; a test
   fails when it is stale. Client options `{ apiKey, baseUrl?, fetch?,
   maxRetries? (2), maxRetryDelayMs? (10 000) }`; responses are shape-checked
   with type guards (no zod dependency). OIDC lives on the `./oidc` subpath

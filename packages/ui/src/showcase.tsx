@@ -46,7 +46,7 @@ const snippets: [CodeBlock.CodeSnippet, ...CodeBlock.CodeSnippet[]] = [
   {
     language: "ts",
     label: "TypeScript",
-    code: 'import { createMatchboxClient } from "matchbox-markets"\n\nconst client = createMatchboxClient({ apiKey: process.env.MATCHBOX_KEY })\nconst page = await client.gaugeProfiles.list({ limit: 20 })',
+    code: 'import { createMatchboxClient } from "@matchbox-dev/sdk"\n\nconst client = createMatchboxClient({ apiKey: process.env.MATCHBOX_KEY })\nconst page = await client.gaugeProfiles.list({ limit: 20 })',
   },
   {
     language: "curl",
