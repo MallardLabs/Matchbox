@@ -100,6 +100,18 @@ function sdkCall(
       return `await matchbox.gaugeProfiles.get("${network}", "${parameter("gaugeAddress")}")`
     case "getGaugeProfileByVebtc":
       return `await matchbox.gaugeProfiles.byVebtc("${network}", ${parameter("tokenId")}n)`
+    case "getCurrentEpoch":
+      return "await matchbox.epochs.current()"
+    case "listGauges":
+      return `await matchbox.gauges.list({ network: "${network}", voter: "boost" })`
+    case "getGauge":
+      return `await matchbox.gauges.get("${network}", "${parameter("gaugeAddress")}")`
+    case "listGaugeEpochs":
+      return `await matchbox.gauges.epochs("${network}", "${parameter("gaugeAddress")}", { limit: 12 })`
+    case "getGaugeByVebtc":
+      return `await matchbox.gauges.byVebtc("${network}", ${parameter("tokenId")}n)`
+    case "listIncentives":
+      return `await matchbox.incentives.list({ network: "${network}", epoch: "current" })`
     default:
       return null
   }

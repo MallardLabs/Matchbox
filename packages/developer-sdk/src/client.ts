@@ -14,11 +14,50 @@ export type GaugeProfileChainState = Schemas["GaugeProfileChainState"]
 export type GaugeProfileList = Schemas["GaugeProfileList"]
 export type GaugeProfileDetail = Schemas["GaugeProfileDetail"]
 export type SourceMeta = Schemas["SourceMeta"]
+export type EpochStatus = Schemas["EpochStatus"]
+export type Epoch = Schemas["Epoch"]
+export type CurrentEpochResponse = Schemas["CurrentEpochResponse"]
+export type VoterKind = Schemas["VoterKind"]
+export type Gauge = Schemas["Gauge"]
+export type BoostGauge = Schemas["BoostGauge"]
+export type PoolGauge = Schemas["PoolGauge"]
+export type ValidatorGauge = Schemas["ValidatorGauge"]
+export type ThirdPartyGauge = Schemas["ThirdPartyGauge"]
+export type GaugeList = Schemas["GaugeList"]
+export type GaugeDetail = Schemas["GaugeDetail"]
+export type RewardKind = Schemas["RewardKind"]
+export type Reward = Schemas["Reward"]
+export type GaugeIncentives = Schemas["GaugeIncentives"]
+export type IncentiveList = Schemas["IncentiveList"]
+export type GaugeEpoch = Schemas["GaugeEpoch"]
+export type GaugeEpochList = Schemas["GaugeEpochList"]
+export type MarketMeta = Schemas["MarketMeta"]
+export type MarketPrices = Schemas["MarketPrices"]
+export type ReferencePrice = Schemas["ReferencePrice"]
+export type PriceSource = Schemas["PriceSource"]
 
 export type GaugeProfileListParams =
   operations["listGaugeProfiles"]["parameters"]["query"]
 
 export type GaugeProfileIterateParams = Omit<GaugeProfileListParams, "cursor">
+
+/** `alive` is a boolean here; the wire format is `"true"` / `"false"`. */
+export type GaugeListParams = Omit<
+  operations["listGauges"]["parameters"]["query"],
+  "alive"
+> & { alive?: boolean }
+
+/** `current` (default), `next`, or an epoch start in unix seconds. */
+export type EpochSelector = "current" | "next" | number
+
+export type IncentiveListParams = Omit<
+  operations["listIncentives"]["parameters"]["query"],
+  "epoch"
+> & { epoch?: EpochSelector }
+
+export type GaugeEpochsParams = NonNullable<
+  operations["listGaugeEpochs"]["parameters"]["query"]
+>
 
 export type FetchLike = (
   input: string,
@@ -70,6 +109,39 @@ export type MatchboxClient = {
       tokenId: string | bigint | number,
       options?: RequestOptions,
     ): Promise<GaugeProfileDetail>
+  }
+  epochs: {
+    /** The current and next Mezo Earn epoch. */
+    current(options?: RequestOptions): Promise<CurrentEpochResponse>
+  }
+  gauges: {
+    /** Every matching gauge in one response (no pagination). */
+    list(params: GaugeListParams, options?: RequestOptions): Promise<GaugeList>
+    get(
+      network: NetworkSlug,
+      gaugeAddress: string,
+      options?: RequestOptions,
+    ): Promise<GaugeDetail>
+    /** The gauge's incentives per epoch, newest first (default 12). */
+    epochs(
+      network: NetworkSlug,
+      gaugeAddress: string,
+      params?: GaugeEpochsParams,
+      options?: RequestOptions,
+    ): Promise<GaugeEpochList>
+    /** Boost gauge for a veBTC token id. */
+    byVebtc(
+      network: NetworkSlug,
+      tokenId: string | bigint | number,
+      options?: RequestOptions,
+    ): Promise<GaugeDetail>
+  }
+  incentives: {
+    /** Gauges with at least one reward for the epoch (default `current`). */
+    list(
+      params: IncentiveListParams,
+      options?: RequestOptions,
+    ): Promise<IncentiveList>
   }
 }
 
@@ -146,6 +218,63 @@ function listQuery(params: GaugeProfileListParams): string {
   if (params.limit !== undefined) search.set("limit", String(params.limit))
   if (params.cursor !== undefined) search.set("cursor", params.cursor)
   return search.toString()
+}
+
+function isCurrentEpochResponse(value: unknown): value is CurrentEpochResponse {
+  return (
+    isRecord(value) &&
+    isRecord(value.data) &&
+    isRecord(value.data.current) &&
+    isRecord(value.data.next)
+  )
+}
+
+/** `{ data: [...], meta: {...} }`, the market list envelope. */
+function isMarketList(value: unknown): boolean {
+  return isRecord(value) && Array.isArray(value.data) && isRecord(value.meta)
+}
+
+function isGaugeList(value: unknown): value is GaugeList {
+  return isMarketList(value)
+}
+
+function isIncentiveList(value: unknown): value is IncentiveList {
+  return isMarketList(value)
+}
+
+function isGaugeEpochList(value: unknown): value is GaugeEpochList {
+  return isMarketList(value)
+}
+
+function isGaugeDetail(value: unknown): value is GaugeDetail {
+  return (
+    isRecord(value) &&
+    isRecord(value.data) &&
+    typeof value.data.voter === "string" &&
+    isRecord(value.meta)
+  )
+}
+
+function gaugeListQuery(params: GaugeListParams): string {
+  const search = new URLSearchParams()
+  search.set("network", params.network)
+  if (params.voter !== undefined) search.set("voter", params.voter)
+  if (params.alive !== undefined) search.set("alive", String(params.alive))
+  for (const gauge of params.gauge ?? []) search.append("gauge", gauge)
+  return search.toString()
+}
+
+function incentiveListQuery(params: IncentiveListParams): string {
+  const search = new URLSearchParams()
+  search.set("network", params.network)
+  if (params.epoch !== undefined) search.set("epoch", String(params.epoch))
+  if (params.voter !== undefined) search.set("voter", params.voter)
+  for (const gauge of params.gauge ?? []) search.append("gauge", gauge)
+  return search.toString()
+}
+
+function gaugePath(network: NetworkSlug, gaugeAddress: string): string {
+  return `/v1/gauges/${encodeURIComponent(network)}/${encodeURIComponent(gaugeAddress)}`
 }
 
 /**
@@ -285,6 +414,48 @@ export function createMatchboxClient(
         return getJson(
           `/v1/vebtc/${encodeURIComponent(network)}/${encodeURIComponent(String(tokenId))}/gauge-profile`,
           isGaugeProfileDetail,
+          request,
+        )
+      },
+    },
+    epochs: {
+      current(request) {
+        return getJson("/v1/epochs/current", isCurrentEpochResponse, request)
+      },
+    },
+    gauges: {
+      list(params, request) {
+        return getJson(
+          `/v1/gauges?${gaugeListQuery(params)}`,
+          isGaugeList,
+          request,
+        )
+      },
+      get(network, gaugeAddress, request) {
+        return getJson(gaugePath(network, gaugeAddress), isGaugeDetail, request)
+      },
+      epochs(network, gaugeAddress, params, request) {
+        const limit = params?.limit
+        const query = limit === undefined ? "" : `?limit=${String(limit)}`
+        return getJson(
+          `${gaugePath(network, gaugeAddress)}/epochs${query}`,
+          isGaugeEpochList,
+          request,
+        )
+      },
+      byVebtc(network, tokenId, request) {
+        return getJson(
+          `/v1/vebtc/${encodeURIComponent(network)}/${encodeURIComponent(String(tokenId))}/gauge`,
+          isGaugeDetail,
+          request,
+        )
+      },
+    },
+    incentives: {
+      list(params, request) {
+        return getJson(
+          `/v1/incentives?${incentiveListQuery(params)}`,
+          isIncentiveList,
           request,
         )
       },

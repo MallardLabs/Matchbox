@@ -1,5 +1,10 @@
 import { z } from "zod"
-import { addressSchema, decimalStringSchema, isoDateTimeSchema } from "./common"
+import {
+  addressInputSchema,
+  addressSchema,
+  decimalStringSchema,
+  isoDateTimeSchema,
+} from "./common"
 import { errorBodySchema, errorCodeSchema } from "./errors"
 import {
   boostGaugeProfileSchema,
@@ -18,12 +23,41 @@ import {
   validatorGaugeProfileSchema,
 } from "./gauge-profiles"
 import {
+  boostGaugeSchema,
+  currentEpochResponseSchema,
+  epochSchema,
+  epochSeconds,
+  epochStatusSchema,
+  fixedDecimalSchema,
+  gaugeDetailSchema,
+  gaugeEpochListSchema,
+  gaugeEpochSchema,
+  gaugeEpochsDefaultLimit,
+  gaugeEpochsMaxLimit,
+  gaugeIncentivesSchema,
+  gaugeListQuerySchema,
+  gaugeListSchema,
+  gaugeSchema,
+  incentiveListSchema,
+  marketMaxGaugeFilters,
+  marketMetaSchema,
+  poolGaugeSchema,
+  priceSourceSchema,
+  referencePriceSchema,
+  rewardKindSchema,
+  rewardSchema,
+  thirdPartyGaugeSchema,
+  validatorGaugeSchema,
+  voterKindSchema,
+  voterTotalWeightsSchema,
+} from "./market"
+import {
   environmentKindSchema,
   networkSchema,
   networkSlugSchema,
 } from "./network"
 
-export const publicApiVersion = "2.0.0"
+export const publicApiVersion = "2.1.0"
 export const publicApiServerUrl = "https://api.matchbox.markets"
 
 type JsonSchema = Record<string, unknown>
@@ -44,6 +78,29 @@ const componentSchemas = {
   SourceMeta: sourceMetaSchema,
   GaugeProfileList: gaugeProfileListSchema,
   GaugeProfileDetail: gaugeProfileDetailSchema,
+  FixedDecimal: fixedDecimalSchema,
+  EpochStatus: epochStatusSchema,
+  Epoch: epochSchema,
+  CurrentEpochResponse: currentEpochResponseSchema,
+  VoterKind: voterKindSchema,
+  BoostGauge: boostGaugeSchema,
+  PoolGauge: poolGaugeSchema,
+  ValidatorGauge: validatorGaugeSchema,
+  ThirdPartyGauge: thirdPartyGaugeSchema,
+  Gauge: gaugeSchema,
+  RewardKind: rewardKindSchema,
+  Reward: rewardSchema,
+  GaugeIncentives: gaugeIncentivesSchema,
+  PriceSource: priceSourceSchema,
+  ReferencePrice: referencePriceSchema,
+  MarketPrices: marketMetaSchema.shape.prices,
+  VoterTotalWeights: voterTotalWeightsSchema,
+  MarketMeta: marketMetaSchema,
+  GaugeList: gaugeListSchema,
+  GaugeDetail: gaugeDetailSchema,
+  IncentiveList: incentiveListSchema,
+  GaugeEpoch: gaugeEpochSchema,
+  GaugeEpochList: gaugeEpochListSchema,
   ErrorCode: errorCodeSchema,
   ErrorBody: errorBodySchema,
 } as const satisfies Record<string, z.ZodType>
@@ -52,6 +109,114 @@ type ComponentName = keyof typeof componentSchemas
 
 function componentRef(name: ComponentName): JsonSchema {
   return { $ref: `#/components/schemas/${name}` }
+}
+
+function isJsonSchema(value: unknown): value is JsonSchema {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+type ComponentDocs = {
+  description?: string
+  properties?: Record<string, string>
+}
+
+const weightDescription =
+  "Voting power on this gauge in base units (18 decimals); `null` if unread."
+
+const gaugeDocs: ComponentDocs = { properties: { weight: weightDescription } }
+
+/**
+ * Descriptions for the market schemas, mirroring the doc comments in
+ * `market.ts` (zod `.meta()` there would make these unnecessary).
+ */
+const componentDocs: Partial<Record<ComponentName, ComponentDocs>> = {
+  FixedDecimal: {
+    description:
+      "Non-negative decimal string with an optional fraction (USD, multipliers, percentages).",
+  },
+  Epoch: {
+    description:
+      "A Mezo Earn epoch in unix seconds: one week from Thursday 00:00 UTC, the same on every network.",
+    properties: {
+      voteStart: "Votes open one hour into the epoch.",
+      voteEnd: "Votes close one hour before the epoch ends.",
+    },
+  },
+  VoterKind: {
+    description:
+      "The four Mezo Earn voters. `boost` and `third-party` count veMEZO voting power; `pools` and `validators` count veBTC voting power.",
+  },
+  BoostGauge: {
+    properties: {
+      weight: weightDescription,
+      vebtcTokenId: "The veBTC lock this gauge boosts.",
+      beneficiary:
+        "Receives the gauge's emissions (the veBTC owner at creation).",
+      boostMultiplier:
+        '`BoostVoter.getBoost`, e.g. "1.25" for 1.25x; between 1 and 5.',
+    },
+  },
+  PoolGauge: gaugeDocs,
+  ValidatorGauge: gaugeDocs,
+  ThirdPartyGauge: gaugeDocs,
+  RewardKind: {
+    description:
+      "`bribe` = voting incentives; `fees` = pool trading fees (pools only).",
+  },
+  Reward: {
+    properties: {
+      amount: "`tokenRewardsPerEpoch(token, epoch.start)` in token base units.",
+      usd: "USD value of `amount`; `null` when the token has no registry price.",
+    },
+  },
+  GaugeIncentives: {
+    description: "One gauge's rewards for one epoch.",
+    properties: {
+      weight: weightDescription,
+      totalUsd: "Sum of priced rewards; `null` when none is priced.",
+      unpricedRewards:
+        "Rewards left out of `totalUsd` because their token has no price.",
+      aprPercent:
+        "Annualizes `totalUsd` against the gauge's voting power valued at the voting token's price (MEZO for veMEZO voters, BTC for veBTC voters): `totalUsd * 52 / (weight / 1e18 * votingTokenUsd) * 100`. `null` with no priced rewards, no weight or no voting-token price.",
+    },
+  },
+  PriceSource: {
+    description:
+      "`skip-oracle`: Skip Connect BTC/USD oracle on Mezo. `aerodrome-cl`: Aerodrome Slipstream MEZO/MUSD pool on Base. `stablecoin`: registry stablecoin at $1. `btc-pegged`: registry BTC-pegged token at the BTC price. `mezo`: the MEZO token at the MEZO price.",
+  },
+  MarketMeta: {
+    description:
+      "Where and when the data was read. Market data is a snapshot refreshed about every 5 minutes, not live.",
+    properties: {
+      blockNumber: "Mezo block the snapshot was read at.",
+      asOf: "When the snapshot was read.",
+    },
+  },
+  GaugeEpoch: {
+    description:
+      "One epoch of a gauge's history, as last snapshotted in that epoch.",
+  },
+}
+
+/** Applies `componentDocs`; throws when a documented property is gone. */
+function documentComponents(components: Record<string, JsonSchema>): void {
+  for (const [name, docs] of Object.entries(componentDocs)) {
+    const component = components[name]
+    if (component === undefined) throw new Error(`No component ${name}`)
+    if (docs.description !== undefined) {
+      component.description = docs.description
+    }
+    const properties = component.properties
+    for (const [property, description] of Object.entries(
+      docs.properties ?? {},
+    )) {
+      const schema = isJsonSchema(properties) ? properties[property] : null
+      if (!isJsonSchema(properties) || !isJsonSchema(schema)) {
+        throw new Error(`${name} has no property ${property}`)
+      }
+      properties[property] = { ...schema, description }
+    }
+  }
 }
 
 /**
@@ -93,6 +258,19 @@ function buildComponents(): Record<string, JsonSchema> {
       },
     }
   }
+  const gauge = components.Gauge
+  if (gauge !== undefined) {
+    gauge.discriminator = {
+      propertyName: "voter",
+      mapping: {
+        boost: "#/components/schemas/BoostGauge",
+        pools: "#/components/schemas/PoolGauge",
+        validators: "#/components/schemas/ValidatorGauge",
+        "third-party": "#/components/schemas/ThirdPartyGauge",
+      },
+    }
+  }
+  documentComponents(components)
   return components
 }
 
@@ -145,6 +323,11 @@ const authenticatedErrorResponses = {
   "503": { $ref: "#/components/responses/ServiceDisabled" },
 }
 
+const marketErrorResponses = {
+  ...authenticatedErrorResponses,
+  "503": { $ref: "#/components/responses/MarketUnavailable" },
+}
+
 function okResponse(description: string, schema: ComponentName) {
   return {
     description,
@@ -186,6 +369,47 @@ const networkPathParameter = {
   schema: componentRef("NetworkSlug"),
 }
 
+const networkQueryParameter = {
+  name: "network",
+  in: "query",
+  required: true,
+  description: "`mezo` or `mezo-testnet`; every key reads both.",
+  schema: componentRef("NetworkSlug"),
+}
+
+const gaugeAddressPathParameter = {
+  name: "gaugeAddress",
+  in: "path",
+  required: true,
+  description: "Gauge contract address (any case).",
+  schema: parameterSchema(z.string().regex(/^0x[0-9a-fA-F]{40}$/)),
+}
+
+const voterQueryParameter = {
+  name: "voter",
+  in: "query",
+  required: false,
+  schema: componentRef("VoterKind"),
+}
+
+const gaugeQueryParameter = {
+  name: "gauge",
+  in: "query",
+  required: false,
+  description: `Gauge addresses (repeatable or comma-separated, up to ${marketMaxGaugeFilters}).`,
+  style: "form",
+  explode: true,
+  schema: {
+    type: "array",
+    minItems: 1,
+    maxItems: marketMaxGaugeFilters,
+    items: parameterSchema(addressInputSchema),
+  },
+}
+
+const snapshotDescription =
+  "Data is a snapshot refreshed about every 5 minutes; see `meta.asOf` and `meta.blockNumber`."
+
 const securityDescription = [
   "Send `Authorization: Bearer <key>`.",
   "",
@@ -203,12 +427,19 @@ export function createOpenApiDocument() {
       title: "Matchbox API",
       version: publicApiVersion,
       description:
-        "Read Matchbox gauge profiles for Mezo boost and validator gauges. Generated from `@repo/platform-contracts`.",
+        "Read Mezo Earn market data and Matchbox gauge profiles: every gauge across the four voters, per-epoch incentives with USD values and APRs, epoch timing, and curated profiles for boost and validator gauges. Market data is a snapshot refreshed about every 5 minutes. Generated from `@repo/platform-contracts`.",
       contact: { url: "https://developer.matchbox.markets" },
     },
     servers: [{ url: publicApiServerUrl }],
     security: [{ bearerAuth: [] }],
-    tags: [{ name: "Meta" }, { name: "Networks" }, { name: "Gauge profiles" }],
+    tags: [
+      { name: "Meta" },
+      { name: "Networks" },
+      { name: "Epochs" },
+      { name: "Gauges" },
+      { name: "Incentives" },
+      { name: "Gauge profiles" },
+    ],
     paths: {
       "/v1/health": {
         get: {
@@ -361,6 +592,169 @@ export function createOpenApiDocument() {
           },
         },
       },
+      "/v1/epochs/current": {
+        get: {
+          operationId: "getCurrentEpoch",
+          tags: ["Epochs"],
+          summary: "Current and next epoch",
+          description:
+            "Mezo Earn epochs last one week from Thursday 00:00 UTC. Votes open one hour after the start and close one hour before the end. Unix seconds, the same on every network.",
+          parameters: [ifNoneMatchParameter],
+          responses: {
+            "200": okResponse(
+              "The current and next epoch.",
+              "CurrentEpochResponse",
+            ),
+            "304": notModifiedResponse,
+            ...authenticatedErrorResponses,
+          },
+        },
+      },
+      "/v1/gauges": {
+        get: {
+          operationId: "listGauges",
+          tags: ["Gauges"],
+          summary: "List gauges",
+          description: `Every gauge on the network across the four voters, in one response (no pagination; about 780 on \`mezo\`). \`voter\` discriminates the variants. ${snapshotDescription}`,
+          parameters: [
+            networkQueryParameter,
+            voterQueryParameter,
+            {
+              name: "alive",
+              in: "query",
+              required: false,
+              description: "Only gauges whose `isAlive` matches.",
+              schema: parameterSchema(
+                gaugeListQuerySchema.shape.alive.unwrap(),
+              ),
+            },
+            gaugeQueryParameter,
+            ifNoneMatchParameter,
+          ],
+          responses: {
+            "200": okResponse("Every matching gauge.", "GaugeList"),
+            "304": notModifiedResponse,
+            ...marketErrorResponses,
+          },
+        },
+      },
+      "/v1/gauges/{network}/{gaugeAddress}": {
+        get: {
+          operationId: "getGauge",
+          tags: ["Gauges"],
+          summary: "Get a gauge",
+          description: snapshotDescription,
+          parameters: [
+            networkPathParameter,
+            gaugeAddressPathParameter,
+            ifNoneMatchParameter,
+          ],
+          responses: {
+            "200": okResponse("The gauge.", "GaugeDetail"),
+            "304": notModifiedResponse,
+            "404": { $ref: "#/components/responses/NotFound" },
+            ...marketErrorResponses,
+          },
+        },
+      },
+      "/v1/gauges/{network}/{gaugeAddress}/epochs": {
+        get: {
+          operationId: "listGaugeEpochs",
+          tags: ["Gauges"],
+          summary: "List a gauge's epochs",
+          description:
+            "The gauge's incentives, weight and prices per epoch as last snapshotted in that epoch, newest first. History starts when Matchbox began snapshotting.",
+          parameters: [
+            networkPathParameter,
+            gaugeAddressPathParameter,
+            {
+              name: "limit",
+              in: "query",
+              required: false,
+              description: "Epochs to return, newest first.",
+              schema: {
+                type: "integer",
+                minimum: 1,
+                maximum: gaugeEpochsMaxLimit,
+                default: gaugeEpochsDefaultLimit,
+              },
+            },
+            ifNoneMatchParameter,
+          ],
+          responses: {
+            "200": okResponse("The gauge's epochs.", "GaugeEpochList"),
+            "304": notModifiedResponse,
+            "404": { $ref: "#/components/responses/NotFound" },
+            ...marketErrorResponses,
+          },
+        },
+      },
+      "/v1/vebtc/{network}/{tokenId}/gauge": {
+        get: {
+          operationId: "getGaugeByVebtc",
+          tags: ["Gauges"],
+          summary: "Get the boost gauge for a veBTC token",
+          description: `The boost gauge whose \`vebtcTokenId\` is this token; 404 when the token has none. ${snapshotDescription}`,
+          parameters: [
+            networkPathParameter,
+            {
+              name: "tokenId",
+              in: "path",
+              required: true,
+              description: "veBTC token id (decimal).",
+              schema: componentRef("DecimalString"),
+            },
+            ifNoneMatchParameter,
+          ],
+          responses: {
+            "200": okResponse("The boost gauge.", "GaugeDetail"),
+            "304": notModifiedResponse,
+            "404": { $ref: "#/components/responses/NotFound" },
+            ...marketErrorResponses,
+          },
+        },
+      },
+      "/v1/incentives": {
+        get: {
+          operationId: "listIncentives",
+          tags: ["Incentives"],
+          summary: "List incentives for an epoch",
+          description: [
+            "Gauges with at least one non-zero reward for the epoch: voting incentives (`bribe`) and pool trading fees (`fees`), in token base units.",
+            "`usd` is `null` for tokens without a registry price; `totalUsd` sums the priced rewards and `unpricedRewards` counts the rest.",
+            "`aprPercent` annualizes `totalUsd` against the gauge's voting power valued at the voting token's price (MEZO for veMEZO voters, BTC for veBTC voters): `totalUsd * 52 / (weight / 1e18 * votingTokenUsd) * 100`. It is `null` with no priced rewards, no weight or no voting-token price.",
+            snapshotDescription,
+          ].join("\n\n"),
+          parameters: [
+            networkQueryParameter,
+            {
+              name: "epoch",
+              in: "query",
+              required: false,
+              description: `\`current\` (the newest snapshot up to now; see \`meta.epoch\`), \`next\`, or an epoch start in unix seconds (a multiple of ${epochSeconds}).`,
+              schema: {
+                anyOf: [
+                  { type: "string", enum: ["current", "next"] },
+                  { type: "string", pattern: "^[0-9]{1,12}$" },
+                ],
+                default: "current",
+              },
+            },
+            voterQueryParameter,
+            gaugeQueryParameter,
+            ifNoneMatchParameter,
+          ],
+          responses: {
+            "200": okResponse(
+              "Gauges with rewards for the epoch.",
+              "IncentiveList",
+            ),
+            "304": notModifiedResponse,
+            "404": errorResponse("`not_found`: no snapshot for that epoch."),
+            ...marketErrorResponses,
+          },
+        },
+      },
     },
     components: {
       securitySchemes: {
@@ -392,6 +786,9 @@ export function createOpenApiDocument() {
         InternalError: errorResponse("`internal_error`."),
         ServiceDisabled: errorResponse(
           "`service_disabled`: the API is temporarily off.",
+        ),
+        MarketUnavailable: errorResponse(
+          "`service_disabled`: the API is temporarily off, or no market snapshot exists yet for this network.",
         ),
       },
       schemas: buildComponents(),

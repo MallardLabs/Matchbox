@@ -1,7 +1,13 @@
 import { describe, expect, it, vi } from "vitest"
 import {
+  type CurrentEpochResponse,
+  type Epoch,
   type FetchLike,
+  type Gauge,
+  type GaugeEpochList,
+  type GaugeIncentives,
   type GaugeProfile,
+  type MarketMeta,
   MatchboxApiError,
   createMatchboxClient,
   parseRetryAfter,
@@ -232,6 +238,195 @@ describe("createMatchboxClient", () => {
       code: "network_error",
       status: 0,
     })
+  })
+})
+
+const epochStart = 1_761_782_400
+
+const epoch: Epoch = {
+  start: epochStart,
+  end: epochStart + 604_800,
+  voteStart: epochStart + 3_600,
+  voteEnd: epochStart + 604_800 - 3_600,
+  status: "current",
+}
+
+const marketMeta: MarketMeta = {
+  source: "matchbox-market",
+  network: "mezo",
+  epoch,
+  blockNumber: "4200000",
+  asOf: "2025-10-31T12:00:00.000Z",
+  totalWeights: {
+    boost: "1000000000000000000000",
+    pools: null,
+    validators: null,
+    "third-party": null,
+  },
+  prices: {
+    btcUsd: { usd: "110000", source: "skip-oracle" },
+    mezoUsd: null,
+  },
+}
+
+const boostGauge: Gauge = {
+  voter: "boost",
+  network: "mezo",
+  gaugeAddress: "0x8f3cf7ad23cd3cadbd9735aff958023239c6a063",
+  isAlive: true,
+  weight: "1000000000000000000",
+  bribeContract: null,
+  vebtcTokenId: "42",
+  beneficiary: null,
+  boostMultiplier: "1.25",
+}
+
+const incentives: GaugeIncentives = {
+  network: "mezo",
+  voter: "boost",
+  gaugeAddress: boostGauge.gaugeAddress,
+  epochStart,
+  isAlive: true,
+  weight: "1000000000000000000",
+  rewards: [
+    {
+      kind: "bribe",
+      contract: "0x3c6f9e2d5a8b1c4f7e0d3a6b9c2f5e8d1a4b7c0e",
+      token: "0x1a4b7c0e3c6f9e2d5a8b1c4f7e0d3a6b9c2f5e8d",
+      symbol: "MUSD",
+      decimals: 18,
+      amount: "5000000000000000000",
+      usd: "5",
+    },
+  ],
+  totalUsd: "5",
+  unpricedRewards: 0,
+  aprPercent: "12.5",
+}
+
+describe("market endpoints", () => {
+  it("reads the current epoch", async () => {
+    const body: CurrentEpochResponse = {
+      data: { current: epoch, next: { ...epoch, status: "upcoming" } },
+    }
+    const { fetch, calls } = mockFetch([json(body)])
+    const client = createMatchboxClient({ apiKey, fetch })
+    await expect(client.epochs.current()).resolves.toEqual(body)
+    expect(calls[0]?.url).toBe("https://api.matchbox.markets/v1/epochs/current")
+  })
+
+  it("serialises gauge list filters", async () => {
+    const { fetch, calls } = mockFetch([
+      json({ data: [boostGauge], meta: marketMeta }),
+      json({ data: [], meta: marketMeta }),
+    ])
+    const client = createMatchboxClient({ apiKey, fetch })
+    const list = await client.gauges.list({
+      network: "mezo",
+      voter: "pools",
+      alive: false,
+      gauge: ["0x01", "0x02"],
+    })
+    expect(list.data[0]?.voter).toBe("boost")
+    await client.gauges.list({ network: "mezo-testnet" })
+    expect(calls.map((call) => call.url)).toEqual([
+      "https://api.matchbox.markets/v1/gauges?network=mezo&voter=pools&alive=false&gauge=0x01&gauge=0x02",
+      "https://api.matchbox.markets/v1/gauges?network=mezo-testnet",
+    ])
+  })
+
+  it("narrows gauge details on voter", async () => {
+    const { fetch, calls } = mockFetch([
+      json({ data: boostGauge, meta: marketMeta }),
+      json({ data: boostGauge, meta: marketMeta }),
+    ])
+    const client = createMatchboxClient({ apiKey, fetch })
+    const detail = await client.gauges.get("mezo", "0x8F3C")
+    if (detail.data.voter !== "boost") throw new Error("expected a boost gauge")
+    expect(detail.data.boostMultiplier).toBe("1.25")
+    await client.gauges.byVebtc("mezo", 42n)
+    expect(calls.map((call) => new URL(call.url).pathname)).toEqual([
+      "/v1/gauges/mezo/0x8F3C",
+      "/v1/vebtc/mezo/42/gauge",
+    ])
+  })
+
+  it("lists a gauge's epochs with an optional limit", async () => {
+    const body: GaugeEpochList = {
+      data: [
+        {
+          epoch,
+          incentives,
+          totalWeight: "1000000000000000000000",
+          blockNumber: "4200000",
+          asOf: "2025-10-31T12:00:00.000Z",
+          prices: marketMeta.prices,
+        },
+      ],
+      meta: {
+        source: "matchbox-market",
+        network: "mezo",
+        gaugeAddress: boostGauge.gaugeAddress,
+      },
+    }
+    const { fetch, calls } = mockFetch([json(body), json(body)])
+    const client = createMatchboxClient({ apiKey, fetch })
+    const history = await client.gauges.epochs("mezo", "0xabc")
+    expect(history.data[0]?.incentives.aprPercent).toBe("12.5")
+    await client.gauges.epochs("mezo", "0xabc", { limit: 52 })
+    expect(calls.map((call) => call.url)).toEqual([
+      "https://api.matchbox.markets/v1/gauges/mezo/0xabc/epochs",
+      "https://api.matchbox.markets/v1/gauges/mezo/0xabc/epochs?limit=52",
+    ])
+  })
+
+  it("selects incentive epochs by name or start", async () => {
+    const { fetch, calls } = mockFetch([
+      json({ data: [incentives], meta: marketMeta }),
+      json({ data: [], meta: marketMeta }),
+      json({ data: [], meta: marketMeta }),
+    ])
+    const client = createMatchboxClient({ apiKey, fetch })
+    const current = await client.incentives.list({ network: "mezo" })
+    expect(current.data[0]?.rewards[0]?.usd).toBe("5")
+    await client.incentives.list({
+      network: "mezo",
+      epoch: "next",
+      voter: "third-party",
+    })
+    await client.incentives.list({
+      network: "mezo",
+      epoch: epochStart,
+      gauge: ["0x01"],
+    })
+    expect(calls.map((call) => new URL(call.url).search)).toEqual([
+      "?network=mezo",
+      "?network=mezo&epoch=next&voter=third-party",
+      `?network=mezo&epoch=${epochStart}&gauge=0x01`,
+    ])
+  })
+
+  it("rejects bodies of the wrong shape", async () => {
+    const { fetch } = mockFetch([
+      json({ data: profile("0xabc"), meta }),
+      json({ data: {} }),
+    ])
+    const client = createMatchboxClient({ apiKey, fetch })
+    await expect(client.gauges.get("mezo", "0xabc")).rejects.toMatchObject({
+      code: "invalid_response",
+    })
+    await expect(client.epochs.current()).rejects.toMatchObject({
+      code: "invalid_response",
+    })
+  })
+
+  it("surfaces a missing epoch snapshot as not_found", async () => {
+    const { fetch } = mockFetch([errorJson("not_found", 404)])
+    const client = createMatchboxClient({ apiKey, fetch })
+    await expect(
+      client.incentives.list({ network: "mezo", epoch: 0 }),
+    ).rejects.toMatchObject({ status: 404, code: "not_found" })
+    expect(fetch).toHaveBeenCalledTimes(1)
   })
 })
 

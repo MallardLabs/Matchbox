@@ -58,6 +58,47 @@ try {
 - Options: `{ apiKey, baseUrl?, fetch?, maxRetries?, maxRetryDelayMs? }`.
   Every method accepts `{ signal }` for cancellation.
 
+## Gauges and incentives
+
+```ts
+// Current epoch's incentives, best APR first
+const { data, meta } = await matchbox.incentives.list({ network: "mezo" })
+const ranked = data
+  .filter((gauge) => gauge.aprPercent !== null)
+  .sort((a, b) => Number(b.aprPercent) - Number(a.aprPercent)) // ordering only
+for (const gauge of ranked.slice(0, 10)) {
+  console.log(gauge.voter, gauge.gaugeAddress, `${gauge.aprPercent}%`, gauge.totalUsd)
+}
+console.log(meta.epoch.start, meta.asOf, meta.blockNumber)
+
+// Next epoch, or a past one by its start (unix seconds)
+await matchbox.incentives.list({ network: "mezo", epoch: "next", voter: "pools" })
+await matchbox.incentives.list({ network: "mezo", epoch: 1761782400 })
+
+// Every gauge in one response (no pagination); `voter` narrows the type
+const gauges = await matchbox.gauges.list({ network: "mezo", alive: true })
+for (const gauge of gauges.data) {
+  if (gauge.voter === "boost") console.log(gauge.vebtcTokenId, gauge.boostMultiplier)
+}
+
+const gauge = await matchbox.gauges.get("mezo", "0x…")
+const history = await matchbox.gauges.epochs("mezo", "0x…", { limit: 52 }) // newest first
+const boost = await matchbox.gauges.byVebtc("mezo", 1042n)
+const { current, next } = (await matchbox.epochs.current()).data
+```
+
+- Values are decimal strings: `amount` and `weight` in base units (18
+  decimals for `weight`), `usd`, `totalUsd` and `aprPercent` as decimals.
+  Use a decimal library for arithmetic.
+- `usd` is `null` for tokens without a registry price; `totalUsd` sums the
+  priced rewards and `unpricedRewards` counts the rest.
+- `aprPercent` = `totalUsd * 52 / (weight / 1e18 * votingTokenUsd) * 100`,
+  where the voting token is MEZO for veMEZO voters (`boost`, `third-party`)
+  and BTC for veBTC voters (`pools`, `validators`). `null` with no priced
+  rewards, no weight or no voting-token price.
+- Market data is a snapshot refreshed about every 5 minutes (`meta.asOf`,
+  `meta.blockNumber`). Epochs run one week from Thursday 00:00 UTC.
+
 ## Sign in with Matchbox
 
 Authorization code flow with PKCE (S256), pairwise subjects and ES256 ID

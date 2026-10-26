@@ -42,6 +42,14 @@ function expandable(
   return null
 }
 
+/** A property's own description (next to its `$ref`) wins over the target's. */
+function descriptionOf(...schemas: JsonSchema[]): string | null {
+  for (const schema of schemas) {
+    if (typeof schema.description === "string") return schema.description
+  }
+  return null
+}
+
 /** Nested property list for a response/parameter schema. */
 export default function SchemaTree({
   schema,
@@ -93,10 +101,7 @@ export default function SchemaTree({
           property.schema,
           document,
         )
-        const description =
-          typeof propertySchema.description === "string"
-            ? propertySchema.description
-            : null
+        const description = descriptionOf(property.schema, propertySchema)
         return (
           <li
             key={property.name}

@@ -95,6 +95,132 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/v1/epochs/current": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Current and next epoch
+         * @description Mezo Earn epochs last one week from Thursday 00:00 UTC. Votes open one hour after the start and close one hour before the end. Unix seconds, the same on every network.
+         */
+        get: operations["getCurrentEpoch"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/gauges": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List gauges
+         * @description Every gauge on the network across the four voters, in one response (no pagination; about 780 on `mezo`). `voter` discriminates the variants. Data is a snapshot refreshed about every 5 minutes; see `meta.asOf` and `meta.blockNumber`.
+         */
+        get: operations["listGauges"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/gauges/{network}/{gaugeAddress}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get a gauge
+         * @description Data is a snapshot refreshed about every 5 minutes; see `meta.asOf` and `meta.blockNumber`.
+         */
+        get: operations["getGauge"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/gauges/{network}/{gaugeAddress}/epochs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List a gauge's epochs
+         * @description The gauge's incentives, weight and prices per epoch as last snapshotted in that epoch, newest first. History starts when Matchbox began snapshotting.
+         */
+        get: operations["listGaugeEpochs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/vebtc/{network}/{tokenId}/gauge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get the boost gauge for a veBTC token
+         * @description The boost gauge whose `vebtcTokenId` is this token; 404 when the token has none. Data is a snapshot refreshed about every 5 minutes; see `meta.asOf` and `meta.blockNumber`.
+         */
+        get: operations["getGaugeByVebtc"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/incentives": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List incentives for an epoch
+         * @description Gauges with at least one non-zero reward for the epoch: voting incentives (`bribe`) and pool trading fees (`fees`), in token base units.
+         *
+         *     `usd` is `null` for tokens without a registry price; `totalUsd` sums the priced rewards and `unpricedRewards` counts the rest.
+         *
+         *     `aprPercent` annualizes `totalUsd` against the gauge's voting power valued at the voting token's price (MEZO for veMEZO voters, BTC for veBTC voters): `totalUsd * 52 / (weight / 1e18 * votingTokenUsd) * 100`. It is `null` with no priced rewards, no weight or no voting-token price.
+         *
+         *     Data is a snapshot refreshed about every 5 minutes; see `meta.asOf` and `meta.blockNumber`.
+         */
+        get: operations["listIncentives"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 };
 export type webhooks = Record<string, never>;
 export type components = {
@@ -201,6 +327,194 @@ export type components = {
             data: components["schemas"]["GaugeProfile"];
             meta: components["schemas"]["SourceMeta"];
         };
+        /** @description Non-negative decimal string with an optional fraction (USD, multipliers, percentages). */
+        FixedDecimal: string;
+        /** @enum {string} */
+        EpochStatus: "closed" | "current" | "upcoming";
+        /** @description A Mezo Earn epoch in unix seconds: one week from Thursday 00:00 UTC, the same on every network. */
+        Epoch: {
+            start: number;
+            end: number;
+            /** @description Votes open one hour into the epoch. */
+            voteStart: number;
+            /** @description Votes close one hour before the epoch ends. */
+            voteEnd: number;
+            status: components["schemas"]["EpochStatus"];
+        };
+        CurrentEpochResponse: {
+            data: {
+                current: components["schemas"]["Epoch"];
+                next: components["schemas"]["Epoch"];
+            };
+        };
+        /**
+         * @description The four Mezo Earn voters. `boost` and `third-party` count veMEZO voting power; `pools` and `validators` count veBTC voting power.
+         * @enum {string}
+         */
+        VoterKind: "boost" | "pools" | "validators" | "third-party";
+        BoostGauge: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            voter: "boost";
+            network: components["schemas"]["NetworkSlug"];
+            gaugeAddress: components["schemas"]["Address"];
+            isAlive: boolean | null;
+            /** @description Voting power on this gauge in base units (18 decimals); `null` if unread. */
+            weight: components["schemas"]["DecimalString"] | null;
+            bribeContract: components["schemas"]["Address"] | null;
+            /** @description The veBTC lock this gauge boosts. */
+            vebtcTokenId: components["schemas"]["DecimalString"] | null;
+            /** @description Receives the gauge's emissions (the veBTC owner at creation). */
+            beneficiary: components["schemas"]["Address"] | null;
+            /** @description `BoostVoter.getBoost`, e.g. "1.25" for 1.25x; between 1 and 5. */
+            boostMultiplier: components["schemas"]["FixedDecimal"] | null;
+        };
+        PoolGauge: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            voter: "pools";
+            network: components["schemas"]["NetworkSlug"];
+            gaugeAddress: components["schemas"]["Address"];
+            isAlive: boolean | null;
+            /** @description Voting power on this gauge in base units (18 decimals); `null` if unread. */
+            weight: components["schemas"]["DecimalString"] | null;
+            bribeContract: components["schemas"]["Address"] | null;
+            poolAddress: components["schemas"]["Address"];
+            poolSymbol: string | null;
+            feesContract: components["schemas"]["Address"] | null;
+        };
+        ValidatorGauge: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            voter: "validators";
+            network: components["schemas"]["NetworkSlug"];
+            gaugeAddress: components["schemas"]["Address"];
+            isAlive: boolean | null;
+            /** @description Voting power on this gauge in base units (18 decimals); `null` if unread. */
+            weight: components["schemas"]["DecimalString"] | null;
+            bribeContract: components["schemas"]["Address"] | null;
+            operatorAddress: components["schemas"]["Address"] | null;
+            moniker: string | null;
+        };
+        ThirdPartyGauge: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            voter: "third-party";
+            network: components["schemas"]["NetworkSlug"];
+            gaugeAddress: components["schemas"]["Address"];
+            isAlive: boolean | null;
+            /** @description Voting power on this gauge in base units (18 decimals); `null` if unread. */
+            weight: components["schemas"]["DecimalString"] | null;
+            bribeContract: components["schemas"]["Address"] | null;
+        };
+        Gauge: components["schemas"]["BoostGauge"] | components["schemas"]["PoolGauge"] | components["schemas"]["ValidatorGauge"] | components["schemas"]["ThirdPartyGauge"];
+        /**
+         * @description `bribe` = voting incentives; `fees` = pool trading fees (pools only).
+         * @enum {string}
+         */
+        RewardKind: "bribe" | "fees";
+        Reward: {
+            kind: components["schemas"]["RewardKind"];
+            contract: components["schemas"]["Address"];
+            token: components["schemas"]["Address"];
+            symbol: string | null;
+            decimals: number | null;
+            /** @description `tokenRewardsPerEpoch(token, epoch.start)` in token base units. */
+            amount: components["schemas"]["DecimalString"];
+            /** @description USD value of `amount`; `null` when the token has no registry price. */
+            usd: components["schemas"]["FixedDecimal"] | null;
+        };
+        /** @description One gauge's rewards for one epoch. */
+        GaugeIncentives: {
+            network: components["schemas"]["NetworkSlug"];
+            voter: components["schemas"]["VoterKind"];
+            gaugeAddress: components["schemas"]["Address"];
+            epochStart: number;
+            isAlive: boolean | null;
+            /** @description Voting power on this gauge in base units (18 decimals); `null` if unread. */
+            weight: components["schemas"]["DecimalString"] | null;
+            rewards: components["schemas"]["Reward"][];
+            /** @description Sum of priced rewards; `null` when none is priced. */
+            totalUsd: components["schemas"]["FixedDecimal"] | null;
+            /** @description Rewards left out of `totalUsd` because their token has no price. */
+            unpricedRewards: number;
+            /** @description Annualizes `totalUsd` against the gauge's voting power valued at the voting token's price (MEZO for veMEZO voters, BTC for veBTC voters): `totalUsd * 52 / (weight / 1e18 * votingTokenUsd) * 100`. `null` with no priced rewards, no weight or no voting-token price. */
+            aprPercent: components["schemas"]["FixedDecimal"] | null;
+        };
+        /**
+         * @description `skip-oracle`: Skip Connect BTC/USD oracle on Mezo. `aerodrome-cl`: Aerodrome Slipstream MEZO/MUSD pool on Base. `stablecoin`: registry stablecoin at $1. `btc-pegged`: registry BTC-pegged token at the BTC price. `mezo`: the MEZO token at the MEZO price.
+         * @enum {string}
+         */
+        PriceSource: "skip-oracle" | "aerodrome-cl" | "stablecoin" | "btc-pegged" | "mezo";
+        ReferencePrice: {
+            usd: components["schemas"]["FixedDecimal"];
+            source: components["schemas"]["PriceSource"];
+        };
+        MarketPrices: {
+            btcUsd: components["schemas"]["ReferencePrice"] | null;
+            mezoUsd: components["schemas"]["ReferencePrice"] | null;
+        };
+        VoterTotalWeights: {
+            boost: components["schemas"]["DecimalString"] | null;
+            pools: components["schemas"]["DecimalString"] | null;
+            validators: components["schemas"]["DecimalString"] | null;
+            "third-party": components["schemas"]["DecimalString"] | null;
+        };
+        /** @description Where and when the data was read. Market data is a snapshot refreshed about every 5 minutes, not live. */
+        MarketMeta: {
+            /** @constant */
+            source: "matchbox-market";
+            network: components["schemas"]["NetworkSlug"];
+            epoch: components["schemas"]["Epoch"];
+            /** @description Mezo block the snapshot was read at. */
+            blockNumber: components["schemas"]["DecimalString"];
+            /**
+             * Format: date-time
+             * @description When the snapshot was read.
+             */
+            asOf: string;
+            totalWeights: components["schemas"]["VoterTotalWeights"];
+            prices: components["schemas"]["MarketPrices"];
+        };
+        GaugeList: {
+            data: components["schemas"]["Gauge"][];
+            meta: components["schemas"]["MarketMeta"];
+        };
+        GaugeDetail: {
+            data: components["schemas"]["Gauge"];
+            meta: components["schemas"]["MarketMeta"];
+        };
+        IncentiveList: {
+            data: components["schemas"]["GaugeIncentives"][];
+            meta: components["schemas"]["MarketMeta"];
+        };
+        /** @description One epoch of a gauge's history, as last snapshotted in that epoch. */
+        GaugeEpoch: {
+            epoch: components["schemas"]["Epoch"];
+            incentives: components["schemas"]["GaugeIncentives"];
+            totalWeight: components["schemas"]["DecimalString"] | null;
+            blockNumber: components["schemas"]["DecimalString"];
+            /** Format: date-time */
+            asOf: string;
+            prices: components["schemas"]["MarketPrices"];
+        };
+        GaugeEpochList: {
+            data: components["schemas"]["GaugeEpoch"][];
+            meta: {
+                /** @constant */
+                source: "matchbox-market";
+                network: components["schemas"]["NetworkSlug"];
+                gaugeAddress: components["schemas"]["Address"];
+            };
+        };
         /** @enum {string} */
         ErrorCode: "invalid_request" | "unauthorized" | "forbidden" | "not_found" | "conflict" | "step_up_required" | "rate_limited" | "service_disabled" | "origin_not_allowed" | "network_not_allowed" | "internal_error";
         ErrorBody: {
@@ -294,6 +608,17 @@ export type components = {
         };
         /** @description `service_disabled`: the API is temporarily off. */
         ServiceDisabled: {
+            headers: {
+                /** @description Unique id for this request; include it in support requests. */
+                "X-Request-Id"?: string;
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorBody"];
+            };
+        };
+        /** @description `service_disabled`: the API is temporarily off, or no market snapshot exists yet for this network. */
+        MarketUnavailable: {
             headers: {
                 /** @description Unique id for this request; include it in support requests. */
                 "X-Request-Id"?: string;
@@ -562,6 +887,390 @@ export interface operations {
             429: components["responses"]["RateLimited"];
             500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceDisabled"];
+        };
+    };
+    getCurrentEpoch: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description `ETag` from a previous response; returns 304 when unchanged. */
+                "If-None-Match"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The current and next epoch. */
+            200: {
+                headers: {
+                    /** @description Unique id for this request; include it in support requests. */
+                    "X-Request-Id"?: string;
+                    /** @description Weak validator for `If-None-Match`. */
+                    ETag?: string;
+                    /** @description `private, max-age=30`. */
+                    "Cache-Control"?: string;
+                    /** @description Requests allowed in the current window. */
+                    "RateLimit-Limit"?: number;
+                    /** @description Requests left in the current window. */
+                    "RateLimit-Remaining"?: number;
+                    /** @description Seconds until the current window resets. */
+                    "RateLimit-Reset"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CurrentEpochResponse"];
+                };
+            };
+            /** @description Not modified (`If-None-Match` matched the current `ETag`). */
+            304: {
+                headers: {
+                    /** @description Unique id for this request; include it in support requests. */
+                    "X-Request-Id"?: string;
+                    /** @description Requests allowed in the current window. */
+                    "RateLimit-Limit"?: number;
+                    /** @description Requests left in the current window. */
+                    "RateLimit-Remaining"?: number;
+                    /** @description Seconds until the current window resets. */
+                    "RateLimit-Reset"?: number;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceDisabled"];
+        };
+    };
+    listGauges: {
+        parameters: {
+            query: {
+                /** @description `mezo` or `mezo-testnet`; every key reads both. */
+                network: components["schemas"]["NetworkSlug"];
+                voter?: components["schemas"]["VoterKind"];
+                /** @description Only gauges whose `isAlive` matches. */
+                alive?: "true" | "false";
+                /** @description Gauge addresses (repeatable or comma-separated, up to 50). */
+                gauge?: string[];
+            };
+            header?: {
+                /** @description `ETag` from a previous response; returns 304 when unchanged. */
+                "If-None-Match"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every matching gauge. */
+            200: {
+                headers: {
+                    /** @description Unique id for this request; include it in support requests. */
+                    "X-Request-Id"?: string;
+                    /** @description Weak validator for `If-None-Match`. */
+                    ETag?: string;
+                    /** @description `private, max-age=30`. */
+                    "Cache-Control"?: string;
+                    /** @description Requests allowed in the current window. */
+                    "RateLimit-Limit"?: number;
+                    /** @description Requests left in the current window. */
+                    "RateLimit-Remaining"?: number;
+                    /** @description Seconds until the current window resets. */
+                    "RateLimit-Reset"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GaugeList"];
+                };
+            };
+            /** @description Not modified (`If-None-Match` matched the current `ETag`). */
+            304: {
+                headers: {
+                    /** @description Unique id for this request; include it in support requests. */
+                    "X-Request-Id"?: string;
+                    /** @description Requests allowed in the current window. */
+                    "RateLimit-Limit"?: number;
+                    /** @description Requests left in the current window. */
+                    "RateLimit-Remaining"?: number;
+                    /** @description Seconds until the current window resets. */
+                    "RateLimit-Reset"?: number;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["MarketUnavailable"];
+        };
+    };
+    getGauge: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description `ETag` from a previous response; returns 304 when unchanged. */
+                "If-None-Match"?: string;
+            };
+            path: {
+                /** @description `mezo` or `mezo-testnet`; every key reads both. Other values return 403 `network_not_allowed`. */
+                network: components["schemas"]["NetworkSlug"];
+                /** @description Gauge contract address (any case). */
+                gaugeAddress: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The gauge. */
+            200: {
+                headers: {
+                    /** @description Unique id for this request; include it in support requests. */
+                    "X-Request-Id"?: string;
+                    /** @description Weak validator for `If-None-Match`. */
+                    ETag?: string;
+                    /** @description `private, max-age=30`. */
+                    "Cache-Control"?: string;
+                    /** @description Requests allowed in the current window. */
+                    "RateLimit-Limit"?: number;
+                    /** @description Requests left in the current window. */
+                    "RateLimit-Remaining"?: number;
+                    /** @description Seconds until the current window resets. */
+                    "RateLimit-Reset"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GaugeDetail"];
+                };
+            };
+            /** @description Not modified (`If-None-Match` matched the current `ETag`). */
+            304: {
+                headers: {
+                    /** @description Unique id for this request; include it in support requests. */
+                    "X-Request-Id"?: string;
+                    /** @description Requests allowed in the current window. */
+                    "RateLimit-Limit"?: number;
+                    /** @description Requests left in the current window. */
+                    "RateLimit-Remaining"?: number;
+                    /** @description Seconds until the current window resets. */
+                    "RateLimit-Reset"?: number;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["MarketUnavailable"];
+        };
+    };
+    listGaugeEpochs: {
+        parameters: {
+            query?: {
+                /** @description Epochs to return, newest first. */
+                limit?: number;
+            };
+            header?: {
+                /** @description `ETag` from a previous response; returns 304 when unchanged. */
+                "If-None-Match"?: string;
+            };
+            path: {
+                /** @description `mezo` or `mezo-testnet`; every key reads both. Other values return 403 `network_not_allowed`. */
+                network: components["schemas"]["NetworkSlug"];
+                /** @description Gauge contract address (any case). */
+                gaugeAddress: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The gauge's epochs. */
+            200: {
+                headers: {
+                    /** @description Unique id for this request; include it in support requests. */
+                    "X-Request-Id"?: string;
+                    /** @description Weak validator for `If-None-Match`. */
+                    ETag?: string;
+                    /** @description `private, max-age=30`. */
+                    "Cache-Control"?: string;
+                    /** @description Requests allowed in the current window. */
+                    "RateLimit-Limit"?: number;
+                    /** @description Requests left in the current window. */
+                    "RateLimit-Remaining"?: number;
+                    /** @description Seconds until the current window resets. */
+                    "RateLimit-Reset"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GaugeEpochList"];
+                };
+            };
+            /** @description Not modified (`If-None-Match` matched the current `ETag`). */
+            304: {
+                headers: {
+                    /** @description Unique id for this request; include it in support requests. */
+                    "X-Request-Id"?: string;
+                    /** @description Requests allowed in the current window. */
+                    "RateLimit-Limit"?: number;
+                    /** @description Requests left in the current window. */
+                    "RateLimit-Remaining"?: number;
+                    /** @description Seconds until the current window resets. */
+                    "RateLimit-Reset"?: number;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["MarketUnavailable"];
+        };
+    };
+    getGaugeByVebtc: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description `ETag` from a previous response; returns 304 when unchanged. */
+                "If-None-Match"?: string;
+            };
+            path: {
+                /** @description `mezo` or `mezo-testnet`; every key reads both. Other values return 403 `network_not_allowed`. */
+                network: components["schemas"]["NetworkSlug"];
+                /** @description veBTC token id (decimal). */
+                tokenId: components["schemas"]["DecimalString"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The boost gauge. */
+            200: {
+                headers: {
+                    /** @description Unique id for this request; include it in support requests. */
+                    "X-Request-Id"?: string;
+                    /** @description Weak validator for `If-None-Match`. */
+                    ETag?: string;
+                    /** @description `private, max-age=30`. */
+                    "Cache-Control"?: string;
+                    /** @description Requests allowed in the current window. */
+                    "RateLimit-Limit"?: number;
+                    /** @description Requests left in the current window. */
+                    "RateLimit-Remaining"?: number;
+                    /** @description Seconds until the current window resets. */
+                    "RateLimit-Reset"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GaugeDetail"];
+                };
+            };
+            /** @description Not modified (`If-None-Match` matched the current `ETag`). */
+            304: {
+                headers: {
+                    /** @description Unique id for this request; include it in support requests. */
+                    "X-Request-Id"?: string;
+                    /** @description Requests allowed in the current window. */
+                    "RateLimit-Limit"?: number;
+                    /** @description Requests left in the current window. */
+                    "RateLimit-Remaining"?: number;
+                    /** @description Seconds until the current window resets. */
+                    "RateLimit-Reset"?: number;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["MarketUnavailable"];
+        };
+    };
+    listIncentives: {
+        parameters: {
+            query: {
+                /** @description `mezo` or `mezo-testnet`; every key reads both. */
+                network: components["schemas"]["NetworkSlug"];
+                /** @description `current` (the newest snapshot up to now; see `meta.epoch`), `next`, or an epoch start in unix seconds (a multiple of 604800). */
+                epoch?: ("current" | "next") | string;
+                voter?: components["schemas"]["VoterKind"];
+                /** @description Gauge addresses (repeatable or comma-separated, up to 50). */
+                gauge?: string[];
+            };
+            header?: {
+                /** @description `ETag` from a previous response; returns 304 when unchanged. */
+                "If-None-Match"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Gauges with rewards for the epoch. */
+            200: {
+                headers: {
+                    /** @description Unique id for this request; include it in support requests. */
+                    "X-Request-Id"?: string;
+                    /** @description Weak validator for `If-None-Match`. */
+                    ETag?: string;
+                    /** @description `private, max-age=30`. */
+                    "Cache-Control"?: string;
+                    /** @description Requests allowed in the current window. */
+                    "RateLimit-Limit"?: number;
+                    /** @description Requests left in the current window. */
+                    "RateLimit-Remaining"?: number;
+                    /** @description Seconds until the current window resets. */
+                    "RateLimit-Reset"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IncentiveList"];
+                };
+            };
+            /** @description Not modified (`If-None-Match` matched the current `ETag`). */
+            304: {
+                headers: {
+                    /** @description Unique id for this request; include it in support requests. */
+                    "X-Request-Id"?: string;
+                    /** @description Requests allowed in the current window. */
+                    "RateLimit-Limit"?: number;
+                    /** @description Requests left in the current window. */
+                    "RateLimit-Remaining"?: number;
+                    /** @description Seconds until the current window resets. */
+                    "RateLimit-Reset"?: number;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description `not_found`: no snapshot for that epoch. */
+            404: {
+                headers: {
+                    /** @description Unique id for this request; include it in support requests. */
+                    "X-Request-Id"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["MarketUnavailable"];
         };
     };
 }

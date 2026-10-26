@@ -4,6 +4,10 @@ import {
   errorStatusByCode,
 } from "@repo/platform-contracts/errors"
 import {
+  gaugeEpochsDefaultLimit,
+  gaugeEpochsMaxLimit,
+} from "@repo/platform-contracts/market"
+import {
   chainIdByNetwork,
   environmentKindSchema,
   networkByEnvironmentKind,
@@ -74,7 +78,8 @@ function AuthGuide(): ReactElement {
     <Guide title="Authentication & keys">
       <P>
         Every <C>/v1</C> request sends an API key as a bearer token. Keys belong
-        to one environment and read only that environment&apos;s network.
+        to one environment; every key reads both <C>mezo</C> and{" "}
+        <C>mezo-testnet</C>.
       </P>
       <CodeBlock.Root
         title="Header"
@@ -113,8 +118,9 @@ function AuthGuide(): ReactElement {
       </P>
       <H2>Scope</H2>
       <P>
-        API keys carry <C>gauge-profiles:read</C>. Live keys work once the live
-        environment is approved and the app is active.
+        API keys carry <C>gauge-profiles:read</C>, which covers every <C>/v1</C>{" "}
+        read: gauges, incentives, epochs and gauge profiles. Live keys work once
+        the live environment is approved and the app is active.
       </P>
     </Guide>
   )
@@ -387,7 +393,7 @@ function PaginationGuide(): ReactElement {
   return (
     <Guide title="Pagination">
       <P>
-        List endpoints return <C>{"{ data, nextCursor }"}</C>, ordered by{" "}
+        Gauge profile lists return <C>{"{ data, nextCursor }"}</C>, ordered by{" "}
         <C>updatedAt</C> descending then address. Pass <C>nextCursor</C> back as{" "}
         <C>cursor</C> until it is <C>null</C>. Cursors are opaque; <C>limit</C>{" "}
         is 1–100 (default 50).
@@ -416,9 +422,14 @@ function PaginationGuide(): ReactElement {
         ]}
       />
       <P>
+        <C>/v1/gauges</C> and <C>/v1/incentives</C> return every match in one
+        response. Gauge epoch history is newest first; <C>limit</C> is 1–
+        {gaugeEpochsMaxLimit} (default {gaugeEpochsDefaultLimit}).
+      </P>
+      <P>
         Responses carry a weak <C>ETag</C>; send it as <C>If-None-Match</C> to
         get <C>304</C> when nothing changed. Use <C>updatedSince</C> for
-        incremental sync.
+        incremental profile sync.
       </P>
     </Guide>
   )
@@ -462,8 +473,8 @@ function EnvironmentsGuide(): ReactElement {
       <P>
         API keys from either environment read both networks; the environment
         sets rate limits and the Sign in with Matchbox network. Live access
-        requires review: gauge-profile-only apps are approved automatically;
-        Discord scopes are reviewed manually.
+        requires review: apps requesting only <C>gauge-profiles:read</C> are
+        approved automatically; Discord scopes are reviewed manually.
       </P>
     </Guide>
   )

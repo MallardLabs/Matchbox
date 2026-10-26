@@ -55,4 +55,33 @@ describe("OpenApiReference", () => {
     const example = exampleValue(list ?? {}, document)
     expect(example).toMatchObject({ data: [expect.any(Object)] })
   })
+
+  it("shows property descriptions, including ones next to a $ref", () => {
+    render(<OpenApiReference document={document} network="mezo" />)
+    expect(
+      screen.getAllByText(/^Annualizes `totalUsd`/).length,
+    ).toBeGreaterThan(0)
+    expect(
+      screen.getAllByText(/^`tokenRewardsPerEpoch\(token, epoch\.start\)`/)
+        .length,
+    ).toBeGreaterThan(0)
+  })
+
+  it("builds market examples from the first gauge variant", () => {
+    const gauges = exampleValue(
+      document.components.schemas.GaugeList ?? {},
+      document,
+    )
+    expect(gauges).toMatchObject({
+      data: [{ voter: "boost" }],
+      meta: { source: "matchbox-market" },
+    })
+    const incentives = exampleValue(
+      document.components.schemas.IncentiveList ?? {},
+      document,
+    )
+    expect(incentives).toMatchObject({
+      data: [{ rewards: [{ kind: "bribe" }] }],
+    })
+  })
 })

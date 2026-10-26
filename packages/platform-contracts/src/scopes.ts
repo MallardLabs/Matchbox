@@ -52,8 +52,8 @@ export const scopeDefinitions = {
   "gauge-profiles:read": {
     scope: "gauge-profiles:read",
     kind: "api-key",
-    label: "Gauge profiles",
-    consentDescription: "Read public gauge profiles",
+    label: "Gauge and market data",
+    consentDescription: "Read public gauge, incentive and epoch data",
     claims: [],
     requiresReview: false,
     optionalAllowed: false,
