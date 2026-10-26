@@ -1,0 +1,401 @@
+<!doctype html>
+<!--
+  Open Graph cards for developer.matchbox.markets (1200×630).
+  `card.html?variant=default|docs`; render with `node render.mjs`.
+  Tokens are the dark theme from packages/ui/src/tokens.css.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Matchbox Developer OG card</title>
+    <style>
+      @font-face {
+        font-family: "Figtree";
+        src: url("../../../../packages/ui/node_modules/@fontsource-variable/figtree/files/figtree-latin-wght-normal.woff2")
+          format("woff2");
+        font-weight: 300 900;
+      }
+      @font-face {
+        font-family: "DM Mono";
+        src: url("../../../../packages/ui/node_modules/@fontsource/dm-mono/files/dm-mono-latin-400-normal.woff2")
+          format("woff2");
+        font-weight: 400;
+      }
+      @font-face {
+        font-family: "DM Mono";
+        src: url("../../../../packages/ui/node_modules/@fontsource/dm-mono/files/dm-mono-latin-500-normal.woff2")
+          format("woff2");
+        font-weight: 500;
+      }
+
+      :root {
+        --canvas: #141210;
+        --surface: #1b1917;
+        --raised: #232019;
+        --inset: #1f1c19;
+        --ink: #f1ede6;
+        --ink-2: #d6d0c6;
+        --secondary: #a69f94;
+        --muted: #857d71;
+        --faint: #5f584e;
+        --line: #2b2722;
+        --line-2: #3c362e;
+        --accent: #f7931a;
+        --accent-ink: #ffa94d;
+        --accent-line: #5a3d1c;
+        --pos: #5fbe8e;
+      }
+
+      html,
+      body {
+        margin: 0;
+        background: var(--canvas);
+      }
+
+      .card {
+        position: relative;
+        width: 1200px;
+        height: 630px;
+        overflow: hidden;
+        color: var(--ink);
+        font-family: "Figtree", sans-serif;
+        font-feature-settings: "tnum" 1;
+        -webkit-font-smoothing: antialiased;
+        /* The Matchbox dark sunset: near-black sky, ember glow at the horizon. */
+        background:
+          radial-gradient(
+            70% 75% at 60% 120%,
+            rgb(247 147 26 / 0.42) 0%,
+            rgb(247 147 26 / 0.16) 42%,
+            rgb(247 147 26 / 0) 80%
+          ),
+          linear-gradient(180deg, #0e0d0c 0%, #12100e 55%, #1a140d 100%);
+      }
+
+      .card[hidden] {
+        display: none;
+      }
+
+      .lockup {
+        position: absolute;
+        top: 64px;
+        left: 72px;
+        display: flex;
+        align-items: center;
+        gap: 22px;
+      }
+
+      .lockup img {
+        display: block;
+        height: 34px;
+      }
+
+      .lockup .rule {
+        width: 2px;
+        height: 34px;
+        background: var(--line-2);
+      }
+
+      .lockup .product {
+        font-size: 34px;
+        font-weight: 500;
+        letter-spacing: -0.01em;
+        color: var(--ink);
+      }
+
+      .copy {
+        position: absolute;
+        left: 72px;
+        top: 198px;
+        width: 580px;
+      }
+
+      .eyebrow {
+        margin: 0 0 22px;
+        font-family: "DM Mono", monospace;
+        font-size: 20px;
+        font-weight: 500;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--accent-ink);
+      }
+
+      .headline {
+        margin: 0;
+        font-size: 57px;
+        font-weight: 650;
+        line-height: 1.1;
+        letter-spacing: -0.025em;
+      }
+
+      .headline span {
+        display: block;
+      }
+
+      .headline .dim {
+        color: var(--secondary);
+      }
+
+      .domain {
+        position: absolute;
+        left: 72px;
+        bottom: 60px;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        font-family: "DM Mono", monospace;
+        font-size: 22px;
+        color: var(--ink-2);
+      }
+
+      .domain .spark {
+        width: 10px;
+        height: 10px;
+        border-radius: 2px;
+        background: var(--accent);
+        box-shadow: 0 0 18px rgb(247 147 26 / 0.7);
+      }
+
+      /* Console window bleeding off the corner, like the Matchbox OG card.
+         Content keeps --bleed clear of the right edge. */
+      .panel {
+        --bleed: 64px;
+        position: absolute;
+        left: 664px;
+        top: 150px;
+        width: calc(536px + var(--bleed));
+        height: calc(480px + var(--bleed));
+        overflow: hidden;
+        border: 1px solid var(--line-2);
+        border-radius: 18px;
+        background: linear-gradient(180deg, #1d1a17 0%, #181614 100%);
+        box-shadow:
+          0 30px 80px rgb(0 0 0 / 0.55),
+          inset 0 1px 0 rgb(255 255 255 / 0.05);
+        font-family: "DM Mono", monospace;
+      }
+
+      .panel-head {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 20px 26px;
+        border-bottom: 1px solid var(--line);
+        font-family: "Figtree", sans-serif;
+        font-size: 19px;
+        font-weight: 600;
+        color: var(--ink-2);
+      }
+
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 4px 11px;
+        border: 1px solid var(--line-2);
+        border-radius: 999px;
+        font-family: "DM Mono", monospace;
+        font-size: 15px;
+        font-weight: 500;
+        color: var(--secondary);
+      }
+
+      .chip .dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--pos);
+      }
+
+      .rows {
+        margin: 0;
+        padding: 10px 0 14px;
+        list-style: none;
+      }
+
+      .rows li {
+        display: grid;
+        grid-template-columns: 72px 1fr 64px;
+        align-items: center;
+        padding: 11px calc(26px + var(--bleed)) 11px 26px;
+        font-size: 21px;
+        border-bottom: 1px solid rgb(43 39 34 / 0.6);
+      }
+
+      .rows li:last-child {
+        border-bottom: 0;
+      }
+
+      .method {
+        font-size: 15px;
+        font-weight: 500;
+        letter-spacing: 0.06em;
+        color: var(--muted);
+      }
+
+      .path {
+        color: var(--ink);
+        white-space: nowrap;
+      }
+
+      .status {
+        text-align: right;
+        font-weight: 500;
+        color: var(--pos);
+      }
+
+      .status.cached {
+        color: var(--secondary);
+      }
+
+      .code {
+        margin: 0;
+        padding: 20px 26px 30px;
+        font-size: 17.5px;
+        line-height: 1.62;
+        white-space: pre;
+        color: var(--ink-2);
+      }
+
+      .code .prompt {
+        color: var(--accent);
+      }
+
+      .code .flag,
+      .code .punct {
+        color: var(--muted);
+      }
+
+      .code .key {
+        color: var(--secondary);
+      }
+
+      .code .str {
+        color: var(--ink);
+      }
+
+      .code .num {
+        color: var(--accent-ink);
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Default: home, sign-in and every non-docs route. -->
+    <main class="card" data-variant="default" hidden>
+      <div class="lockup">
+        <img
+          src="../../../../packages/ui/assets/matchbox-wordmark-dark.png"
+          alt="Matchbox"
+        />
+        <span class="rule"></span>
+        <span class="product">Developer</span>
+      </div>
+      <div class="copy">
+        <p class="eyebrow">Matchbox API · Mezo Earn</p>
+        <h1 class="headline">
+          <span>API keys.</span>
+          <span>Gauge data.</span>
+          <span class="dim">Sign in with Matchbox.</span>
+        </h1>
+      </div>
+      <div class="panel">
+        <div class="panel-head">
+          Requests
+          <span class="chip"><span class="dot"></span>live</span>
+        </div>
+        <ul class="rows">
+          <li>
+            <span class="method">GET</span><span class="path">/v1/gauges</span
+            ><span class="status">200</span>
+          </li>
+          <li>
+            <span class="method">GET</span
+            ><span class="path">/v1/incentives</span
+            ><span class="status">200</span>
+          </li>
+          <li>
+            <span class="method">GET</span
+            ><span class="path">/v1/epochs/current</span
+            ><span class="status">200</span>
+          </li>
+          <li>
+            <span class="method">GET</span
+            ><span class="path">/v1/gauge-profiles</span
+            ><span class="status cached">304</span>
+          </li>
+          <li>
+            <span class="method">POST</span
+            ><span class="path">/oauth/token</span
+            ><span class="status">200</span>
+          </li>
+          <li>
+            <span class="method">GET</span
+            ><span class="path">/oauth/userinfo</span
+            ><span class="status">200</span>
+          </li>
+          <li>
+            <span class="method">GET</span><span class="path">/v1/networks</span
+            ><span class="status">200</span>
+          </li>
+          <li>
+            <span class="method">GET</span><span class="path">/v1/health</span
+            ><span class="status">200</span>
+          </li>
+        </ul>
+      </div>
+      <div class="domain">
+        <span class="spark"></span>developer.matchbox.markets
+      </div>
+    </main>
+
+    <!-- Docs: /docs, /docs/reference and the guides. -->
+    <main class="card" data-variant="docs" hidden>
+      <div class="lockup">
+        <img
+          src="../../../../packages/ui/assets/matchbox-wordmark-dark.png"
+          alt="Matchbox"
+        />
+        <span class="rule"></span>
+        <span class="product">Developer</span>
+      </div>
+      <div class="copy">
+        <p class="eyebrow">Docs</p>
+        <h1 class="headline">
+          <span>Quickstart.</span>
+          <span>Guides.</span>
+          <span class="dim">API reference.</span>
+        </h1>
+      </div>
+      <div class="panel">
+        <div class="panel-head">
+          GET /v1/incentives
+          <span class="chip">OpenAPI 3.1</span>
+        </div>
+        <pre
+          class="code"
+        ><span class="prompt">$</span> curl api.matchbox.markets/v1/incentives \
+    <span class="flag">-H</span> "Authorization: Bearer $MATCHBOX_API_KEY"
+
+<span class="punct">{</span> <span class="key">"data"</span><span class="punct">: [{</span>
+    <span class="key">"network"</span><span class="punct">:</span> <span class="str">"mezo"</span><span class="punct">,</span>
+    <span class="key">"voter"</span><span class="punct">:</span> <span class="str">"pools"</span><span class="punct">,</span>
+    <span class="key">"gaugeAddress"</span><span class="punct">:</span> <span class="str">"0x5c2f…a91e"</span><span class="punct">,</span>
+    <span class="key">"totalUsd"</span><span class="punct">:</span> <span class="num">"1204.18"</span><span class="punct">,</span>
+    <span class="key">"aprPercent"</span><span class="punct">:</span> <span class="num">"38.2"</span>
+  <span class="punct">}, …],</span>
+  <span class="key">"meta"</span><span class="punct">: {</span> <span class="key">"network"</span><span class="punct">:</span> <span class="str">"mezo"</span><span class="punct">, … } }</span></pre>
+      </div>
+      <div class="domain">
+        <span class="spark"></span>developer.matchbox.markets/docs
+      </div>
+    </main>
+
+    <script>
+      const variant =
+        new URLSearchParams(location.search).get("variant") ?? "default";
+      for (const card of document.querySelectorAll(".card")) {
+        card.hidden = card.dataset.variant !== variant;
+      }
+    </script>
+  </body>
+</html>

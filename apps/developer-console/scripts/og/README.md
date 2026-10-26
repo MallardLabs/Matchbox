@@ -1,0 +1,1 @@
+Open Graph cards (`public/og/*.png`, 1200×630): edit `card.html`, then run `node scripts/og/render.mjs` from `apps/developer-console` (headless Chrome; set `CHROME` if it is not found). Not part of the build.

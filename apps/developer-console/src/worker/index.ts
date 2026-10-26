@@ -15,6 +15,7 @@ import { createGoogleTokenVerifier } from "./auth/google"
 import type { ConsoleEnv } from "./context"
 import { createBindingEmailSender, createLogEmailSender } from "./email/sender"
 import parseConfig, { type ConsoleConfig, type WorkerBindings } from "./env"
+import { withPageMeta } from "./meta"
 import { privacyRedirect } from "./privacy"
 import { withDocumentHeaders } from "./security"
 import type { ConsoleStore } from "./store/console-store"
@@ -187,9 +188,10 @@ export default {
     const redirect = privacyRedirect(url)
     if (redirect !== null) return redirect
     if (!isApiPath(url.pathname)) {
-      return withDocumentHeaders(await env.ASSETS.fetch(request), {
-        development: env.ENVIRONMENT === "development",
-      })
+      return withDocumentHeaders(
+        withPageMeta(await env.ASSETS.fetch(request), url),
+        { development: env.ENVIRONMENT === "development" },
+      )
     }
     const parsed = parseConfig(env)
     if (!parsed.ok) {
