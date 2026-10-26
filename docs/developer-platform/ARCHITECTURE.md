@@ -588,13 +588,21 @@ browser supports it, else Google's popup) and posts the ID token to the
 Worker. There is no other sign-in method, no email codes and no passkeys.
 
 1. `POST /api/auth/google/nonce {purpose}` (`sign-in` | `step-up`) returns
-   `{clientId, nonce}` and sets `__Host-mbx_dev_google`: HMAC-signed
-   (`SESSION_PEPPER`), 10 min, single-use, holding the nonce, the purpose and,
-   for step-up, the session id. The nonce is passed to GIS `initialize`.
+   `{clientId, nonce, expiresAt}` and sets or refreshes
+   `__Host-mbx_dev_google` (10 min): a random binding for this browser. The
+   nonce is the purpose, expiry (10 min) and a random id, HMAC-signed
+   (`SESSION_PEPPER`) together with the binding and, for step-up, the session
+   id. It is passed to GIS `initialize`. Issuing a nonce never invalidates
+   earlier ones, so other tabs, button re-renders and retries keep working.
 2. `POST /api/auth/google {credential, invitationToken?}` verifies the JWT
    against Google's JWKS (RS256, `iss` accounts.google.com, `aud` =
-   `GOOGLE_CLIENT_ID`, `exp`, `iat` ≤ 10 min), clears the nonce cookie and
-   requires `nonce` to match it and `email_verified`. Account lookup:
+   `GOOGLE_CLIENT_ID`, `exp`, `iat` ≤ 10 min), then requires its `nonce` to
+   verify against this browser's binding, purpose and session (`400`
+   "Expired" otherwise) and `email_verified`. An accepted nonce clears the
+   binding, so it and its token are single-use; a failed attempt leaves it.
+   The button re-arms after a failure, every 9 min, and when the page returns
+   after its nonce went stale (timers stall in background tabs and during
+   sleep). Account lookup:
    `google_sub` → else an account with the same email and no `google_sub`
    (linked) → else a new account (`display_name` from `name`) with its first
    organization (skipped when an invitation is accepted). A changed Google

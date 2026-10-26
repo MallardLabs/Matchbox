@@ -13,7 +13,11 @@ import {
   avatarUrlFrom,
   isStaffIdentity,
 } from "../auth/google"
-import { issueGoogleNonce, takeGoogleNonce } from "../auth/google-nonce"
+import {
+  hasGoogleNonceBinding,
+  issueGoogleNonce,
+  takeGoogleNonce,
+} from "../auth/google-nonce"
 import { limitByIp } from "../auth/limits"
 import { endSessionCookie, startSession } from "../auth/session"
 import {
@@ -52,9 +56,10 @@ function googleConfig(c: ConsoleContext) {
 }
 
 /**
- * Verifies the ID token and that it carries the nonce this browser was
- * issued for `purpose` (and, for step-up, this session). The nonce cookie is
- * single-use: it is cleared whether or not verification succeeds.
+ * Verifies the ID token and that it carries a nonce this browser was issued
+ * for `purpose` (and, for step-up, this session). Only an accepted nonce is
+ * consumed: a failed attempt leaves this browser's other nonces usable, so
+ * the button can simply be clicked again.
  */
 async function verifiedIdentity(
   c: ConsoleContext,
@@ -62,18 +67,12 @@ async function verifiedIdentity(
   expected: { purpose: "sign-in" | "step-up"; sessionId: string | null },
 ): Promise<GoogleIdentity> {
   const google = googleConfig(c)
-  const nonce = await takeGoogleNonce(c)
-  if (
-    nonce === null ||
-    nonce.purpose !== expected.purpose ||
-    nonce.sessionId !== expected.sessionId
-  ) {
-    throw nonceExpired()
-  }
+  if (!hasGoogleNonceBinding(c)) throw nonceExpired()
   const identity = await google.verifier.verify(credential)
-  if (identity === null || identity.nonce !== nonce.nonce) {
-    throw googleFailed()
-  }
+  if (identity === null) throw googleFailed()
+  const nonce = await takeGoogleNonce(c, identity.nonce, expected)
+  if (nonce === "foreign") throw googleFailed()
+  if (nonce === "stale") throw nonceExpired()
   if (!identity.emailVerified) {
     throw new PlatformError("forbidden", {
       message: "Use a Google account with a verified email.",

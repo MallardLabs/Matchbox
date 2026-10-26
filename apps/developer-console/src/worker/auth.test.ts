@@ -57,6 +57,78 @@ describe("Google nonce", () => {
     })
     expect(response.status).toBe(503)
   })
+
+  it("keeps earlier nonces valid when the button re-arms or another tab asks", async () => {
+    const harness = createHarness()
+    const first = await harness.googleNonce("sign-in")
+    const second = await harness.googleNonce("sign-in", first.cookie)
+    const response = await harness.request("POST", "/api/auth/google", {
+      cookie: second.cookie,
+      body: {
+        credential: harness.googleToken({
+          sub: "1001",
+          email: "dev@example.com",
+          nonce: first.nonce,
+        }),
+      },
+    })
+    expect(response.status).toBe(200)
+  })
+
+  it("keeps the nonce after a failed attempt", async () => {
+    const harness = createHarness()
+    const issued = await harness.googleNonce("sign-in")
+    const failed = await harness.request("POST", "/api/auth/google", {
+      cookie: issued.cookie,
+      body: { credential: "not-a-google-token" },
+    })
+    expect(failed.status).toBe(401)
+    const retry = await harness.request("POST", "/api/auth/google", {
+      cookie: cookiesFrom(failed, issued.cookie),
+      body: {
+        credential: harness.googleToken({
+          sub: "1001",
+          email: "dev@example.com",
+          nonce: issued.nonce,
+        }),
+      },
+    })
+    expect(retry.status).toBe(200)
+  })
+
+  it("refuses a nonce issued to another browser", async () => {
+    const harness = createHarness()
+    const victim = await harness.googleNonce("sign-in")
+    const attacker = await harness.googleNonce("sign-in")
+    const response = await harness.request("POST", "/api/auth/google", {
+      cookie: attacker.cookie,
+      body: {
+        credential: harness.googleToken({
+          sub: "1001",
+          email: "dev@example.com",
+          nonce: victim.nonce,
+        }),
+      },
+    })
+    expect(response.status).toBe(400)
+  })
+
+  it("refuses a tampered nonce", async () => {
+    const harness = createHarness()
+    const issued = await harness.googleNonce("sign-in")
+    const last = issued.nonce.slice(-1)
+    const response = await harness.request("POST", "/api/auth/google", {
+      cookie: issued.cookie,
+      body: {
+        credential: harness.googleToken({
+          sub: "1001",
+          email: "dev@example.com",
+          nonce: `${issued.nonce.slice(0, -1)}${last === "0" ? "1" : "0"}`,
+        }),
+      },
+    })
+    expect(response.status).toBe(400)
+  })
 })
 
 describe("Google sign-in", () => {

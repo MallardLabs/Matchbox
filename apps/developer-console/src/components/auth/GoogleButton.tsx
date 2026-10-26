@@ -1,3 +1,7 @@
+import type {
+  GoogleNoncePurpose,
+  GoogleNonceResponse,
+} from "@repo/platform-contracts/console"
 import * as Skeleton from "@repo/ui/skeleton"
 import { useTheme } from "@repo/ui/theme"
 import { type ReactElement, useEffect, useRef, useState } from "react"
@@ -8,8 +12,29 @@ import { type GoogleButtonText, renderGoogleButton } from "../../lib/google"
 /** Nonces live 10 minutes; refresh before the button goes stale. */
 const nonceRefreshMs = 9 * 60_000
 
+/**
+ * One nonce request per purpose at a time: an effect that re-runs while a
+ * request is in flight (StrictMode, theme change) reuses its nonce.
+ */
+const pendingNonces = new Map<
+  GoogleNoncePurpose,
+  Promise<GoogleNonceResponse>
+>()
+
+function requestNonce(
+  purpose: GoogleNoncePurpose,
+): Promise<GoogleNonceResponse> {
+  const pending = pendingNonces.get(purpose)
+  if (pending !== undefined) return pending
+  const request = api.auth.googleNonce(purpose).finally(() => {
+    pendingNonces.delete(purpose)
+  })
+  pendingNonces.set(purpose, request)
+  return request
+}
+
 export type GoogleButtonProps = {
-  purpose: "sign-in" | "step-up"
+  purpose: GoogleNoncePurpose
   text?: GoogleButtonText
   /** Receives the ID token; a rejection re-arms the button with a new nonce. */
   onCredential: (credential: string) => Promise<void>
@@ -18,8 +43,10 @@ export type GoogleButtonProps = {
 }
 
 /**
- * The GIS button. Each render asks the Worker for a fresh single-use nonce
- * (cookie-bound), so every credential is tied to this browser and purpose.
+ * The GIS button. Each render asks the Worker for a nonce bound to this
+ * browser and purpose, so every credential is tied to both. Timers stall in
+ * background tabs and during sleep, so the button also re-arms when the page
+ * comes back after the nonce has gone stale.
  */
 export default function GoogleButton({
   purpose,
@@ -39,10 +66,11 @@ export default function GoogleButton({
   // biome-ignore lint/correctness/useExhaustiveDependencies: `attempt` re-arms the button with a new nonce
   useEffect(() => {
     let active = true
+    const armedAt = Date.now()
     setStatus("loading")
     async function arm(): Promise<void> {
       try {
-        const { clientId, nonce } = await api.auth.googleNonce(purpose)
+        const { clientId, nonce } = await requestNonce(purpose)
         const parent = container.current
         if (!active || parent === null) return
         await renderGoogleButton(parent, {
@@ -67,13 +95,25 @@ export default function GoogleButton({
       }
     }
     void arm()
-    const refresh = window.setTimeout(
-      () => setAttempt((value) => value + 1),
-      nonceRefreshMs,
-    )
+    const rearm = () => setAttempt((value) => value + 1)
+    const refresh = window.setTimeout(rearm, nonceRefreshMs)
+    function rearmIfStale(): void {
+      if (
+        document.visibilityState === "visible" &&
+        Date.now() - armedAt >= nonceRefreshMs
+      ) {
+        rearm()
+      }
+    }
+    document.addEventListener("visibilitychange", rearmIfStale)
+    window.addEventListener("focus", rearmIfStale)
+    window.addEventListener("pageshow", rearmIfStale)
     return () => {
       active = false
       window.clearTimeout(refresh)
+      document.removeEventListener("visibilitychange", rearmIfStale)
+      window.removeEventListener("focus", rearmIfStale)
+      window.removeEventListener("pageshow", rearmIfStale)
     }
   }, [attempt, purpose, resolved, text])
 
