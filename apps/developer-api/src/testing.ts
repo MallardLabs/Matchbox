@@ -6,6 +6,7 @@ import {
 import type { EnvironmentKind } from "@repo/platform-contracts/network"
 import { createMemoryRateLimitClient } from "@repo/platform-server"
 import { type ApiApp, createApp } from "./app"
+import { type MarketStore, createMemoryMarketStore } from "./market/store"
 import type { RequestLogSink } from "./middleware/request-log"
 import { defaultMemorySeed } from "./store/memory-seed"
 import {
@@ -200,6 +201,7 @@ export type DataPoint = {
 export type TestHarness = {
   app: ApiApp
   store: MemoryApiStore
+  market: MarketStore
   clock: Clock
   dataPoints: DataPoint[]
   /** GET with a bearer key; `headers` override defaults. */
@@ -224,9 +226,13 @@ export async function createHarness(
     seed?: MemoryStoreSeed
     gaugeProfileApi?: boolean
     publishableQuotaShare?: number
+    /** Defaults to an empty memory store; `null` = no market database. */
+    market?: MarketStore | null
   } = {},
 ): Promise<TestHarness> {
   const clock = createClock()
+  const market =
+    options.market === undefined ? createMemoryMarketStore() : options.market
   const store = await createMemoryApiStore({
     pepper: testPepper,
     seed: options.seed ?? testSeed,
@@ -239,6 +245,7 @@ export async function createHarness(
   }
   const app = createApp({
     store,
+    market,
     rateLimits: createMemoryRateLimitClient(() => clock.now.getTime()),
     analytics: sink,
     now: () => clock.now,
@@ -257,6 +264,7 @@ export async function createHarness(
   return {
     app,
     store,
+    market: market ?? createMemoryMarketStore(),
     clock,
     dataPoints,
     get(path, requestOptions = {}) {

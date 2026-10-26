@@ -27,9 +27,21 @@
     { "binding": "REQUEST_LOG", "dataset": "mbx_api_requests" },
     { "binding": "HEALTH_LOG", "dataset": "mbx_platform_health" },
   ],
+  // MARKET_DB: gauge and incentive snapshots (src/market/store.ts), written by
+  // the */5 cron only. Schema: migrations/ (`wrangler d1 migrations apply
+  // matchbox-api-market --remote`).
+  "d1_databases": [
+    {
+      "binding": "MARKET_DB",
+      "database_name": "matchbox-api-market",
+      "database_id": "a8fbeb40-2ec0-4de3-8983-e09145ed11ba",
+      "migrations_dir": "migrations",
+    },
+  ],
   // "* * * * *": health probes (src/health/probes.ts).
   // "*/10 * * * *": chain-state reconciliation (mbx_api_gauge_chain_state).
-  "triggers": { "crons": ["* * * * *", "*/10 * * * *"] },
+  // "*/5 * * * *": market snapshot (src/market/sync.ts).
+  "triggers": { "crons": ["* * * * *", "*/10 * * * *", "*/5 * * * *"] },
   "observability": {
     "enabled": true,
     "head_sampling_rate": 1,
@@ -37,11 +49,12 @@
     "traces": { "enabled": true, "head_sampling_rate": 1 },
   },
   // Secrets (wrangler secret put): SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
-  // API_KEY_PEPPER, MEZO_MAINNET_RPC_URL, MEZO_TESTNET_RPC_URL.
+  // API_KEY_PEPPER, MEZO_MAINNET_RPC_URL, MEZO_TESTNET_RPC_URL; optional
+  // BASE_RPC_URL (MEZO/USD price; public Base RPCs are the fallback).
   "vars": {
     "ENVIRONMENT": "production",
     "GAUGE_PROFILE_API_ENABLED": "true",
-    "API_VERSION": "2.0.0",
+    "API_VERSION": "2.1.0",
     // Publishable keys' share of each environment's quota (0, 1].
     "PUBLISHABLE_QUOTA_SHARE": "0.5",
     // Health cron targets (blank = skip that probe).
@@ -64,11 +77,19 @@
         { "binding": "REQUEST_LOG", "dataset": "mbx_api_requests" },
         { "binding": "HEALTH_LOG", "dataset": "mbx_platform_health" },
       ],
-      "triggers": { "crons": ["* * * * *", "*/10 * * * *"] },
+      "d1_databases": [
+        {
+          "binding": "MARKET_DB",
+          "database_name": "matchbox-api-market-staging",
+          "database_id": "e8f8494a-daca-4863-a488-42fdb8d5b321",
+          "migrations_dir": "migrations",
+        },
+      ],
+      "triggers": { "crons": ["* * * * *", "*/10 * * * *", "*/5 * * * *"] },
       "vars": {
         "ENVIRONMENT": "preview",
         "GAUGE_PROFILE_API_ENABLED": "true",
-        "API_VERSION": "2.0.0",
+        "API_VERSION": "2.1.0",
         "PUBLISHABLE_QUOTA_SHARE": "0.5",
         "HEALTH_API_URL": "https://matchbox-developer-api-staging.mallard.workers.dev/v1/health",
         "HEALTH_ID_URL": "https://matchbox-id-staging.mallard.workers.dev/.well-known/openid-configuration",

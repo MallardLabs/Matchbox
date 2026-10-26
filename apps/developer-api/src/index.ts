@@ -9,6 +9,14 @@ import {
 import { type ApiApp, createApp } from "./app"
 import { type WorkerEnv, memoryModePepper, parseWorkerEnv } from "./env"
 import runHealthProbes from "./health/probes"
+import { readReferencePrices } from "./market/prices"
+import { type MarketReader, createViemMarketReader } from "./market/reader"
+import {
+  type MarketStore,
+  createD1MarketStore,
+  createMemoryMarketStore,
+} from "./market/store"
+import syncMarket from "./market/sync"
 import {
   type ChainReader,
   createViemChainReader,
@@ -26,7 +34,17 @@ function devKeyLines(): string[] {
   return Object.entries(devApiKeys).map(([name, value]) => `${name}=${value}`)
 }
 
-type Runtime = { env: WorkerEnv; store: ApiStore; app: ApiApp }
+type Runtime = {
+  env: WorkerEnv
+  store: ApiStore
+  market: MarketStore | null
+  app: ApiApp
+}
+
+function marketStoreFor(env: WorkerEnv): MarketStore | null {
+  if (env.MARKET_DB !== undefined) return createD1MarketStore(env.MARKET_DB)
+  return env.PLATFORM_STORE === "memory" ? createMemoryMarketStore() : null
+}
 
 type RuntimeResult = { ok: true; runtime: Runtime } | { ok: false }
 
@@ -60,8 +78,10 @@ async function buildRuntime(raw: unknown): Promise<RuntimeResult> {
       logger,
     })
   }
+  const market = marketStoreFor(env)
   const app = createApp({
     store,
+    market,
     rateLimits: createDurableRateLimitClient(env.RATE_LIMITER),
     analytics: env.REQUEST_LOG ?? null,
     now: () => new Date(),
@@ -77,7 +97,7 @@ async function buildRuntime(raw: unknown): Promise<RuntimeResult> {
 
     logger,
   })
-  return { ok: true, runtime: { env, store, app } }
+  return { ok: true, runtime: { env, store, market, app } }
 }
 
 /** Parses bindings once per isolate (rebuilt if the env object changes). */
@@ -112,9 +132,26 @@ function chainReaders(
   return readers
 }
 
+function marketReaders(
+  env: WorkerEnv,
+): Partial<Record<"mezo" | "mezo-testnet", MarketReader>> {
+  const readers: Partial<Record<"mezo" | "mezo-testnet", MarketReader>> = {}
+  if (env.MEZO_MAINNET_RPC_URL !== null) {
+    readers.mezo = createViemMarketReader("mezo", env.MEZO_MAINNET_RPC_URL)
+  }
+  if (env.MEZO_TESTNET_RPC_URL !== null) {
+    readers["mezo-testnet"] = createViemMarketReader(
+      "mezo-testnet",
+      env.MEZO_TESTNET_RPC_URL,
+    )
+  }
+  return readers
+}
+
 /** `triggers.crons` in wrangler.jsonc; each schedule runs one task. */
 export const healthProbeCron = "* * * * *"
 export const reconcileCron = "*/10 * * * *"
+export const marketCron = "*/5 * * * *"
 
 async function runHealthCheck(raw: unknown): Promise<void> {
   try {
@@ -156,6 +193,49 @@ async function runReconciliation(raw: unknown): Promise<void> {
   }
 }
 
+/** Boost gauge → veBTC token id from curated profiles on `network`. */
+async function profileBoostTokens(
+  store: ApiStore,
+  network: "mezo" | "mezo-testnet",
+): Promise<Map<string, string>> {
+  const targets = await store.listProfilesForReconciliation()
+  const tokens = new Map<string, string>()
+  for (const target of targets) {
+    if (
+      target.network === network &&
+      target.profileType === "boost-gauge" &&
+      target.vebtcTokenId !== null
+    ) {
+      tokens.set(target.gaugeAddress, target.vebtcTokenId)
+    }
+  }
+  return tokens
+}
+
+async function runMarketSync(raw: unknown): Promise<void> {
+  try {
+    const loaded = await loadRuntime(raw)
+    if (!loaded.ok) return
+    const { env, store, market } = loaded.runtime
+    if (market === null) return
+    await syncMarket({
+      store: market,
+      readers: marketReaders(env),
+      readPrices: () =>
+        readReferencePrices({
+          mezoMainnetRpcUrl: env.MEZO_MAINNET_RPC_URL,
+          baseRpcUrl: env.BASE_RPC_URL,
+          logger: logger.child({ task: "market-prices" }),
+        }),
+      profileBoostTokens: (network) => profileBoostTokens(store, network),
+      now: () => new Date(),
+      logger: logger.child({ task: "market-snapshot" }),
+    })
+  } catch (error) {
+    logger.error({ message: "Scheduled market snapshot crashed", error })
+  }
+}
+
 export default {
   async fetch(
     request: Request,
@@ -174,6 +254,10 @@ export default {
   ): Promise<void> {
     if (controller.cron === healthProbeCron) {
       ctx.waitUntil(runHealthCheck(env))
+      return
+    }
+    if (controller.cron === marketCron) {
+      ctx.waitUntil(runMarketSync(env))
       return
     }
     ctx.waitUntil(runReconciliation(env))

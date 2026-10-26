@@ -19,6 +19,10 @@ function isAnalyticsDataset(value: unknown): value is AnalyticsEngineDataset {
   return hasFunctions(value, ["writeDataPoint"])
 }
 
+function isD1Database(value: unknown): value is D1Database {
+  return hasFunctions(value, ["prepare", "batch"])
+}
+
 const optionalText = z
   .string()
   .trim()
@@ -51,7 +55,7 @@ export const memoryModePepper = "matchbox-local-memory-mode-pepper"
 export const workerEnvSchema = z
   .object({
     ENVIRONMENT: z.string().trim().min(1).default("production"),
-    API_VERSION: z.string().trim().min(1).default("2.0.0"),
+    API_VERSION: z.string().trim().min(1).default("2.1.0"),
     GAUGE_PROFILE_API_ENABLED: z.string().default("false"),
     PLATFORM_STORE: platformStoreSchema.default("supabase"),
     PUBLISHABLE_QUOTA_SHARE: quotaShareSchema,
@@ -61,6 +65,14 @@ export const workerEnvSchema = z
     API_KEY_PEPPER: optionalText,
     MEZO_MAINNET_RPC_URL: optionalText.pipe(z.url().nullable()),
     MEZO_TESTNET_RPC_URL: optionalText.pipe(z.url().nullable()),
+    /** Preferred Base RPC for the MEZO/USD price; public RPCs follow it. */
+    BASE_RPC_URL: optionalText.pipe(z.url().nullable()),
+    /** Market snapshots (gauges, incentives); absent → market routes 503. */
+    MARKET_DB: z
+      .custom<D1Database>(isD1Database, {
+        message: "MARKET_DB must be a D1 database",
+      })
+      .optional(),
     /** Health cron targets; blank skips that probe. */
     HEALTH_API_URL: optionalText.pipe(z.url().nullable()),
     HEALTH_ID_URL: optionalText.pipe(z.url().nullable()),

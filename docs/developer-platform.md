@@ -239,6 +239,7 @@ Use `pnpm run deploy` (`pnpm deploy` is a pnpm built-in command).
 ```sh
 pnpm lint && pnpm typecheck && pnpm test
 pnpm turbo run build --filter=@repo/developer-api...   # builds @repo/shared first
+pnpm --filter @repo/developer-api exec wrangler d1 migrations apply matchbox-api-market --remote
 pnpm --filter @repo/developer-api run deploy           # wrangler deploy
 pnpm --filter @repo/developer-console run deploy       # vite build && wrangler deploy
 pnpm --filter @repo/matchbox-id run deploy             # vite build && wrangler deploy
@@ -246,6 +247,11 @@ pnpm --filter @repo/matchbox-id run deploy             # vite build && wrangler 
 
 - The API's Durable Object migration `v2` deletes the beta `ApiQuotaLimiter`
   class and adds `RateLimiter`.
+- Market snapshots live in D1: `matchbox-api-market` (production) and
+  `matchbox-api-market-staging` (`--env staging`). Apply
+  `apps/developer-api/migrations` before deploying a version that needs
+  them. The first `*/5` cron after a deploy fills each network; until then
+  the market routes return 503.
 - Deploy the API before the console: the console's `API_RATE_LIMITER`
   binding points at the API Worker's `RateLimiter` class (`script_name`).
 - The API uses the `global_fetch_strictly_public` compatibility flag so its

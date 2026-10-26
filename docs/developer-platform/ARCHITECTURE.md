@@ -370,11 +370,26 @@ All `/v1` routes require `Authorization: Bearer mbx_{pk|sk}_{test|live}_…`.
 | `GET /v1/gauge-profiles` | `network` (required), `profileType`, `tag`, `updatedSince`, `address` (repeatable, ≤ 50), `limit` (≤ 100, default 50), `cursor` (opaque base64url of `(updated_at, gauge_address)`) |
 | `GET /v1/gauge-profiles/{network}/{gaugeAddress}` | 404 `not_found` |
 | `GET /v1/vebtc/{network}/{tokenId}/gauge-profile` | via chain state + profile |
+| `GET /v1/epochs/current` | current and next epoch (unix seconds, vote window) |
+| `GET /v1/gauges` | `network` (required), `voter`, `alive`, `gauge` (repeatable, ≤ 50); every gauge, no pagination |
+| `GET /v1/gauges/{network}/{gaugeAddress}` | 404 `not_found` |
+| `GET /v1/gauges/{network}/{gaugeAddress}/epochs` | `limit` (1–104, default 12); newest first |
+| `GET /v1/incentives` | `network`, `epoch` (`current`, `next` or a start), `voter`, `gauge`; rewarded gauges only |
+| `GET /v1/vebtc/{network}/{tokenId}/gauge` | boost gauge of a veBTC lock |
 
 Rules:
 
 - Every key reads `mezo` and `mezo-testnet`; any other network returns
   `403 network_not_allowed`.
+- Market routes (gauges, incentives, gauge epochs, veBTC gauge) read the
+  D1 database `MARKET_DB` only. A `*/5` cron (`src/market/sync.ts`) reads
+  all four voters over RPC, prices rewards (Skip BTC/USD on Mezo, MEZO/USD
+  from the Aerodrome pool on Base, registry stablecoins and BTC-pegged
+  tokens; unregistered tokens stay `usd: null`), and writes one row per
+  gauge per epoch, skipping rows whose hash is unchanged. The last snapshot
+  of each epoch stays as its history. No request touches RPC or Neon; 503
+  `service_disabled` until a network's first snapshot exists. Design and
+  later phases: `DATA-API-ROADMAP.md`.
 - Publishable keys: `Origin` must match a registered origin, else
   `403 origin_not_allowed`. Secret keys: rejected when an `Origin` header is
   present (browser use), optional CIDR allowlist on `CF-Connecting-IP`.

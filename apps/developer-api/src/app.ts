@@ -11,9 +11,7 @@ import {
   vebtcGaugeProfileParamsSchema,
 } from "@repo/platform-contracts/gauge-profiles"
 import {
-  type NetworkSlug,
   describeNetwork,
-  networkSlugSchema,
   readableNetworks,
 } from "@repo/platform-contracts/network"
 import openApiDocument from "@repo/platform-contracts/openapi.json"
@@ -27,9 +25,11 @@ import {
 } from "@repo/platform-server"
 import { Hono } from "hono"
 import { z } from "zod"
-import type { RequestAuth } from "./auth"
 import type { ApiContext, ApiEnv } from "./context"
+import { allowedNetwork, requireAuth } from "./guards"
 import { found, publicCacheControl, respondJson } from "./http"
+import registerMarketRoutes from "./market/routes"
+import type { MarketStore } from "./market/store"
 import { authenticate, createAuthState } from "./middleware/authenticate"
 import { cors } from "./middleware/cors"
 import {
@@ -42,6 +42,8 @@ import type { ApiStore } from "./store/api-store"
 
 export type AppDeps = {
   store: ApiStore
+  /** Gauge/incentive snapshots; null when no market database is bound. */
+  market: MarketStore | null
   rateLimits: RateLimitClient
   /** Analytics Engine dataset (`REQUEST_LOG`); null disables request logs. */
   analytics: RequestLogSink | null
@@ -70,23 +72,6 @@ function runInBackground(c: ApiContext, task: Promise<unknown>): void {
     // No ExecutionContext (e.g. `app.request()` in tests): the promise is
     // already running and handles its own errors.
   }
-}
-
-function requireAuth(c: ApiContext): RequestAuth {
-  const auth = c.get("auth")
-  if (auth === undefined) throw new PlatformError("internal_error")
-  return auth
-}
-
-/** 403 unless `network` is one the API serves. Every key reads all of them. */
-function allowedNetwork(network: string): NetworkSlug {
-  const parsed = networkSlugSchema.safeParse(network)
-  if (!parsed.success) {
-    throw new PlatformError("network_not_allowed", {
-      message: `Unknown network. Use one of: ${readableNetworks.join(", ")}.`,
-    })
-  }
-  return parsed.data
 }
 
 function detail(profile: GaugeProfile): GaugeProfileDetail {
@@ -220,6 +205,8 @@ export function createApp(deps: AppDeps) {
     )
     return respondJson(c, detail(profile))
   })
+
+  registerMarketRoutes(app, { market: deps.market, now: deps.now })
 
   return app
 }
