@@ -15,6 +15,10 @@
     "./contracts": {
       "types": "./dist/contracts/index.d.ts",
       "default": "./dist/contracts/index.js"
+    },
+    "./pricing": {
+      "types": "./dist/pricing/index.d.ts",
+      "default": "./dist/pricing/index.js"
     }
   },
   "scripts": {
