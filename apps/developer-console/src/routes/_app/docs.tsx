@@ -35,7 +35,7 @@ export const Route = createFileRoute("/_app/docs")({
   component: DocsLayout,
 })
 
-const sdkPackage = "@matchbox-markets/sdk"
+const sdkPackage = "matchbox-markets"
 
 function DocsLayout(): ReactElement {
   const session = useOptionalSession()

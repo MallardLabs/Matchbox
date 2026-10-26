@@ -16,7 +16,7 @@ export const changelog: ChangelogEntry[] = [
       "Gauges: /v1/gauges, per-gauge epoch history and veBTC lookup",
       "Incentives: /v1/incentives with USD values and APR per gauge",
       "Epochs: /v1/epochs/current",
-      "SDK on npm as @matchbox-markets/sdk",
+      "SDK on npm as matchbox-markets",
     ],
   },
   {

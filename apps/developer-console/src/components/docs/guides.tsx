@@ -174,7 +174,7 @@ function OidcGuide(): ReactElement {
               "  createState,",
               "  exchangeCode,",
               "  verifyIdToken,",
-              '} from "@matchbox-markets/sdk/oidc"',
+              '} from "matchbox-markets/oidc"',
               "",
               `const clientId = "${credentials.clientId}"`,
               'const redirectUri = "https://app.example.com/callback"',

@@ -19,7 +19,7 @@ of truth). Per-app detail: [matchbox-id](../apps/matchbox-id/README.md),
 | `packages/platform-contracts` | `@repo/platform-contracts` | —                            | —                            | Zod schemas, OpenAPI document, scopes, rate-limit policies                       |
 | `packages/platform-server`    | `@repo/platform-server`    | —                            | —                            | Worker helpers: Supabase admin, flags, crypto, middleware, `RateLimiter` DO      |
 | `packages/logger`             | `@repo/logger`             | —                            | —                            | Structured logger                                                                |
-| `packages/developer-sdk`      | `@matchbox-markets/sdk`    | —                            | —                            | API client + `./oidc` helpers (1.0.0-beta.1)                                     |
+| `packages/developer-sdk`      | `matchbox-markets`    | —                            | —                            | API client + `./oidc` helpers (1.0.0-beta.1)                                     |
 
 Migrations (apply in order; additive except 5, which drops the unused
 passkey tables):
@@ -436,7 +436,7 @@ prompt), rotate and revoke it, open `/admin`.
 4. Read gauge profiles:
 
    ```ts
-   import { createMatchboxClient } from "@matchbox-markets/sdk";
+   import { createMatchboxClient } from "matchbox-markets";
 
    const matchbox = createMatchboxClient({
      apiKey: process.env.MATCHBOX_API_KEY ?? "",
@@ -461,7 +461,7 @@ prompt), rotate and revoke it, open `/admin`.
 5. Sign in with Matchbox: register redirect URIs on the environment (test
    accepts `https://` and `http://localhost` / `http://127.0.0.1`; live
    `https://` only), take the client id (`mbx_test_…`), create a client secret
-   for confidential clients, then use `@matchbox-markets/sdk/oidc`:
+   for confidential clients, then use `matchbox-markets/oidc`:
    `createPkcePair`, `createState`, `createNonce`, `buildAuthorizeUrl`,
    `exchangeCode`, `verifyIdToken`, `fetchUserinfo`, `refreshTokens`,
    `revokeToken`. Scopes `openid`, `wallet`; `discord:id` and
@@ -564,5 +564,7 @@ Pepper rotation consequences (there is no dual-pepper overlap):
   `DEVELOPER_PLATFORM_ENABLED`, `DEVELOPER_PROFILE_API_ENABLED`,
   `NEXT_PUBLIC_ID_URL`, `NEXT_PUBLIC_DEVELOPER_URL`); nothing in `apps/` or
   `packages/` reads them.
-- No documented npm release step for `@matchbox-markets/sdk`.
+- SDK release (npm package `matchbox-markets`): bump the version, then
+  `pnpm --filter matchbox-markets build` and
+  `pnpm --filter matchbox-markets publish --access public --tag latest --no-git-checks`.
 - No Workers Builds configuration in the repo for the three Workers.
