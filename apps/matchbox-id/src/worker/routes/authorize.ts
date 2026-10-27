@@ -179,9 +179,10 @@ export default function authorizeRoutes(
     }
     const request = parsed.data
 
-    // Unknown scope values are ignored (OIDC Core §3.1.2.1). With the
-    // Discord kill switch on, optional Discord scopes are ignored the same
-    // way (they leave discovery); required ones cannot be granted.
+    // Unknown scope values are ignored (OIDC Core §3.1.2.1). An optional
+    // scope this client cannot have yet (still in review, or Discord behind
+    // the kill switch) is ignored the same way, so an app can ship its final
+    // scope list before approval; a required one cannot be granted.
     const requested = parseRequestedOidcScopes(request.scope)
     if (!requested.includes("openid")) {
       return fail("invalid_scope", "openid scope is required")
@@ -196,13 +197,18 @@ export default function authorizeRoutes(
     ) {
       return fail("invalid_scope", "Discord scopes are unavailable")
     }
-    const scopes = requested.filter((scope) => !discordOff(scope))
     const allowed = new Set(
       environmentOidcScopes(client.environment, deps.flags),
     )
-    if (scopes.some((scope) => !allowed.has(scope))) {
+    if (
+      requested.some(
+        (scope) =>
+          !allowed.has(scope) && !isOptionalScope(scope, optionalScopes),
+      )
+    ) {
       return fail("invalid_scope", "Scope not approved for this client")
     }
+    const scopes = requested.filter((scope) => allowed.has(scope))
 
     const now = deps.now()
     const prompt = request.prompt ?? null

@@ -397,6 +397,41 @@ describe("optional scopes", () => {
     })
   })
 
+  it("leaves out an optional scope still in review and asks once approved", async () => {
+    const harness = await createHarness()
+    const environmentId = memorySeed.testEnvironmentId
+    // The test environment requested discord:id but has no approval yet.
+    harness.store.admin.setOptionalScopes(environmentId, ["discord:id"])
+    const cookie = await signIn(harness)
+    const scope = "openid wallet discord:id"
+    const pending = await authorize(harness, cookie, {
+      pkce: await pkce(),
+      scope,
+    })
+    expect(pending.searchParams.get("error")).toBeNull()
+    const before = await consentView(harness, cookie, pending)
+    expect(before.view.scopes.map((entry) => entry.scope)).toEqual([
+      "openid",
+      "wallet",
+    ])
+
+    harness.store.admin.setApprovedScopes(environmentId, [
+      "openid",
+      "wallet",
+      "discord:id",
+    ])
+    const approved = await authorize(harness, cookie, {
+      pkce: await pkce(),
+      scope,
+    })
+    const after = await consentView(harness, cookie, approved)
+    expect(after.view.scopes.map((entry) => entry.scope)).toEqual([
+      "openid",
+      "wallet",
+      "discord:id",
+    ])
+  })
+
   it("ignores unknown scope values", async () => {
     const harness = await createHarness()
     const cookie = await signIn(harness)

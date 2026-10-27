@@ -56,8 +56,9 @@ Vars (`wrangler.jsonc`): `ENVIRONMENT`, `ISSUER`, `MATCHBOX_ID_ENABLED`,
 ## Scopes and consent
 
 - Unknown `scope` values are ignored (OIDC Core §3.1.2.1); `openid` is
-  required. Known scopes the environment is not approved for fail with
-  `invalid_scope`.
+  required. A known scope the environment is not approved for fails with
+  `invalid_scope` when it is required and is ignored when it is optional, so
+  an app can request its final scopes while a review is open.
 - Each environment marks some requested scopes optional
   (`optionalScopes`, developer console; `openid` is always required). The
   consent screen shows a switch for each optional scope; declining one still

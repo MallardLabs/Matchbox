@@ -474,7 +474,10 @@ function EnvironmentsGuide(): ReactElement {
         API keys from either environment read both networks; the environment
         sets rate limits and the Sign in with Matchbox network. Live access
         requires review: apps requesting only <C>gauge-profiles:read</C> are
-        approved automatically; Discord scopes are reviewed manually.
+        approved automatically; Discord scopes are reviewed manually. Mark a
+        scope optional to request it before approval: sign-in leaves it out
+        until it is approved, while a required one fails with{" "}
+        <C>invalid_scope</C>.
       </P>
     </Guide>
   )
