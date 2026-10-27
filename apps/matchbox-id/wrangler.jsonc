@@ -22,7 +22,7 @@
   "vars": {
     "ENVIRONMENT": "production",
     "MATCHBOX_ID_ENABLED": "true",
-    "DISCORD_CLAIMS_ENABLED": "false",
+    "DISCORD_CLAIMS_ENABLED": "true",
     "ISSUER": "https://id.matchbox.markets",
   },
   // Staging on workers.dev (no custom domain). Build + deploy with
@@ -40,7 +40,7 @@
       "vars": {
         "ENVIRONMENT": "preview",
         "MATCHBOX_ID_ENABLED": "true",
-        "DISCORD_CLAIMS_ENABLED": "false",
+        "DISCORD_CLAIMS_ENABLED": "true",
         "ISSUER": "https://matchbox-id-staging.mallard.workers.dev",
       },
     },

@@ -45,7 +45,7 @@ pnpm dev
 ## Configuration
 
 Vars (`wrangler.jsonc`): `ENVIRONMENT`, `ISSUER`, `MATCHBOX_ID_ENABLED`,
-`DISCORD_CLAIMS_ENABLED` (both default `"false"`).
+`DISCORD_CLAIMS_ENABLED` (both `"true"` in the checked-in config).
 
 - `MATCHBOX_ID_ENABLED=false`: `/api/*`, `/oauth/*`, `/.well-known/*` return
   503 `service_disabled`; config is not validated.

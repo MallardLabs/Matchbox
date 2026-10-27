@@ -86,8 +86,8 @@ api.matchbox.markets        → Worker matchbox-developer-api      Hono, DO Rate
 
 ## 3. Feature flags and rollout order
 
-Flags are Worker `vars` (`"true"`/`"false"`); all are `"false"` in the
-checked-in wrangler files.
+Flags are Worker `vars` (`"true"`/`"false"`); all are `"true"` in the
+checked-in wrangler files now that the rollout below is complete.
 
 | Flag                        | Worker                     | Off behaviour                                                                                                                                         |
 | --------------------------- | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |

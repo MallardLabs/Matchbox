@@ -65,7 +65,8 @@ Worker `vars` (string `"true"`/`"false"`), read through
 | `GAUGE_PROFILE_API_ENABLED` | developer-api | `/v1/*` except `/v1/health` and `/openapi.json` return 503 |
 | `DISCORD_CLAIMS_ENABLED` | matchbox-id | `discord:*` scopes are dropped from discovery and omitted from userinfo; at authorize, optional ones are ignored (like unknown scopes) and required ones fail with `invalid_scope` |
 
-All default to `"false"` in checked-in wrangler files.
+All are `"true"` in the checked-in wrangler files; set one to `"false"` to
+switch that product off.
 
 ## 3. Secrets (wrangler secret put, never vars)
 
