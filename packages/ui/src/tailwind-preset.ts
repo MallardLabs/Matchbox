@@ -110,11 +110,15 @@ const preset = {
         "pop-in": {
           from: { transform: "translateY(4px) scale(0.98)", opacity: "0" },
         },
+        "drawer-in": {
+          from: { transform: "translateX(24px)", opacity: "0" },
+        },
       },
       animation: {
         "fade-in": "fade-in 160ms ease-out",
         "sheet-in": "sheet-in 200ms cubic-bezier(0.2, 0.8, 0.2, 1)",
         "pop-in": "pop-in 160ms cubic-bezier(0.2, 0.8, 0.2, 1)",
+        "drawer-in": "drawer-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1)",
       },
     },
   },

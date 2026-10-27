@@ -80,6 +80,8 @@ export type ContentProps = ComponentPropsWithoutRef<
   /** Hide the built-in close button (the dialog still closes on Escape). */
   hideClose?: boolean
   overlayClassName?: string
+  /** Classes for the column that wraps the children. */
+  columnClassName?: string
 }
 
 export const Content = forwardRef<
@@ -91,6 +93,7 @@ export const Content = forwardRef<
     size = "sm",
     hideClose = false,
     overlayClassName,
+    columnClassName,
     className,
     children,
     onOpenAutoFocus,
@@ -123,7 +126,9 @@ export const Content = forwardRef<
                 )}
               />
             ) : null}
-            <div className={styles.column()}>{children}</div>
+            <div className={styles.column({ className: columnClassName })}>
+              {children}
+            </div>
             {hideClose ? null : (
               <DialogPrimitive.Close
                 aria-label="Close"
