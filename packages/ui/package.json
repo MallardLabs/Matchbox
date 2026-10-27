@@ -47,6 +47,7 @@
     "./toast": "./src/toast.tsx",
     "./token-mark": "./src/token-mark.tsx",
     "./tooltip": "./src/tooltip.tsx",
+    "./trellium-mark": "./src/trellium-mark.tsx",
     "./wallet-address": "./src/wallet-address.tsx",
     "./assets/*": "./assets/*"
   },

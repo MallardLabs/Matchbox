@@ -21,7 +21,9 @@ export const List = forwardRef<
     <TabsPrimitive.List
       ref={ref}
       className={cn(
-        "flex min-w-0 gap-5 overflow-x-auto border-b border-line",
+        // The active tab overlaps the border by 1px, which would otherwise
+        // give the list a scrollbar.
+        "flex min-w-0 gap-5 overflow-x-auto border-b border-line [scrollbar-width:none]",
         className,
       )}
       {...props}

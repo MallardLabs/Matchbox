@@ -1,5 +1,6 @@
 import * as AppShell from "@repo/ui/app-shell"
 import { cn } from "@repo/ui/cn"
+import * as TrelliumMark from "@repo/ui/trellium-mark"
 import { Outlet, createRootRoute, useRouterState } from "@tanstack/react-router"
 import type { ReactElement } from "react"
 import ErrorState from "../components/ErrorState"
@@ -44,9 +45,16 @@ function RootLayout(): ReactElement {
       >
         {disabled ? <ErrorState code="service_disabled" /> : <Outlet />}
       </main>
-      <footer className="flex items-center gap-3 px-4 pb-4 pt-3 text-caption text-secondary md:px-12 md:pb-7">
-        <span className="font-mono">{window.location.host}</span>
-        <span className="ml-auto font-500">Built by Trellium</span>
+      <footer className="flex items-center px-4 pb-4 pt-3 md:px-12 md:pb-7">
+        <a
+          href="https://trellium.org"
+          target="_blank"
+          rel="noreferrer noopener"
+          aria-label="Trellium (opens in a new tab)"
+          className="rounded-sm text-ink opacity-30 transition-opacity hover:opacity-60"
+        >
+          <TrelliumMark.Root title="" />
+        </a>
       </footer>
     </div>
   )

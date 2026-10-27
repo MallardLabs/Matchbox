@@ -321,7 +321,8 @@ export default function ConnectedApps(): ReactElement {
   return (
     <div className="flex flex-col">
       {active.length === 0 ? (
-        <EmptyState.Root className="py-6">
+        // The tab list above already draws the divider.
+        <EmptyState.Root className="border-t-0 pb-6 pt-1">
           <EmptyState.Title asChild>
             <p>No connected apps</p>
           </EmptyState.Title>
