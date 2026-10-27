@@ -7,12 +7,16 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 import {
+  type Address,
   type Hex,
+  createPublicClient,
   getAddress,
+  http,
   isAddress,
   verifyMessage,
 } from "https://esm.sh/viem@2"
 import { z } from "https://esm.sh/zod@3"
+import { getMezoNetworkConfigForChain } from "../_shared/contracts.ts"
 import { corsHeaders } from "../_shared/cors.ts"
 import { avatarUrl } from "../_shared/discord.ts"
 import {
@@ -45,6 +49,29 @@ function linkDomain(): string {
     }
   }
   return "Matchbox"
+}
+
+// Mezo Passport (Bitcoin) wallets sign as Mezo smart accounts, which an
+// ecrecover alone refuses. Plain keys keep the local check; anything else is
+// checked on Mezo mainnet, where the public client accepts ERC-1271 and
+// ERC-6492 signatures.
+async function walletSigned(args: {
+  address: Address
+  message: string
+  signature: Hex
+}): Promise<boolean> {
+  if (await verifyMessage(args).catch(() => false)) return true
+  try {
+    const network = getMezoNetworkConfigForChain(31612)
+    const client = createPublicClient({
+      chain: network.chain,
+      transport: http(network.rpcUrl),
+    })
+    return await client.verifyMessage(args)
+  } catch (err) {
+    console.error("contract signature check failed:", err)
+    return false
+  }
 }
 
 type LinkToken = {
@@ -177,7 +204,7 @@ Deno.serve(async (req) => {
     const address = getAddress(parsed.data.address)
     const walletLower = address.toLowerCase()
 
-    const validSig = await verifyMessage({
+    const validSig = await walletSigned({
       address,
       message: buildUnlinkMessage({ domain: linkDomain(), address }),
       signature: parsed.data.signature,
@@ -320,7 +347,7 @@ Deno.serve(async (req) => {
       expiresAt: tokenRow.expires_at,
     })
 
-    const validSig = await verifyMessage({
+    const validSig = await walletSigned({
       address,
       message,
       signature,
