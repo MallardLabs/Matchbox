@@ -26,6 +26,21 @@ describe("API key auth", () => {
     expect(lookup).not.toHaveBeenCalled()
   })
 
+  it("names a client ID or client secret sent as an API key", async () => {
+    const harness = await createHarness()
+    const cases = [
+      [`mbx_test_${"A".repeat(24)}`, "client ID"],
+      [`mbx_cs_${"B".repeat(12)}_${"c".repeat(43)}`, "client secret"],
+    ] as const
+    for (const [key, credential] of cases) {
+      const response = await harness.get(testnetList, { key })
+      expect(response.status).toBe(401)
+      const { error } = errorBodySchema.parse(await response.json())
+      expect(error.code).toBe("unauthorized")
+      expect(error.message).toContain(`That is a ${credential}, not an API key`)
+    }
+  })
+
   it("rejects a missing Authorization header with 401", async () => {
     const harness = await createHarness()
     const response = await harness.get(testnetList, { key: null })

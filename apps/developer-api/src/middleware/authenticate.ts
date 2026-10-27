@@ -1,5 +1,10 @@
 import type { Logger } from "@repo/logger"
-import { bearerToken, parseApiKey } from "@repo/platform-contracts/credentials"
+import {
+  bearerToken,
+  parseApiKey,
+  parseClientId,
+  parseClientSecret,
+} from "@repo/platform-contracts/credentials"
 import {
   type RateLimitPolicy,
   rateLimitPolicies,
@@ -35,6 +40,17 @@ export const keyLookupRateLimitPolicy = {
 } as const satisfies RateLimitPolicy
 
 const unauthenticatedPolicy = rateLimitPolicies.test.unauthenticated
+
+/** Names the credential when someone sends the wrong one as an API key. */
+function malformedKeyMessage(token: string): string {
+  if (parseClientId(token) !== null) {
+    return "That is a client ID, not an API key. Send an mbx_sk_ or mbx_pk_ key."
+  }
+  if (parseClientSecret(token) !== null) {
+    return "That is a client secret, not an API key. Send an mbx_sk_ or mbx_pk_ key."
+  }
+  return "Malformed API key."
+}
 
 export type AuthState = {
   /** Verified record (or null for unknown/wrong keys) by credential HMAC. */
@@ -108,7 +124,7 @@ export function authenticate(options: AuthenticateOptions): ApiMiddleware {
         message:
           token === null
             ? "Send Authorization: Bearer <API key>."
-            : "Malformed API key.",
+            : malformedKeyMessage(token),
       })
     }
 
