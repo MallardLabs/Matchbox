@@ -1,17 +1,15 @@
 import {
   type MezoChainId,
-  chainIdByNetwork,
   networkForChainId,
   networkNames,
 } from "@repo/platform-contracts/network"
 import * as Badge from "@repo/ui/badge"
 import * as Button from "@repo/ui/button"
 import { cn } from "@repo/ui/cn"
-import * as Skeleton from "@repo/ui/skeleton"
 import { shortenAddress } from "@repo/ui/wallet-address"
 import { createFileRoute, useRouter } from "@tanstack/react-router"
 import { Check, PenLine, Wallet } from "lucide-react"
-import { type ReactElement, type ReactNode, useEffect } from "react"
+import { type ReactElement, type ReactNode, useEffect, useRef } from "react"
 import { useAccount, useSwitchChain } from "wagmi"
 import AppMark from "../components/AppMark"
 import Identicon from "../components/Identicon"
@@ -23,8 +21,9 @@ import { usePageTitle } from "../lib/page-title"
 import { useAuthorizationRequestSummary, useSession } from "../lib/queries"
 import { authorizationRequestIdOf, safeReturnPath } from "../lib/return-path"
 import { signInSearchSchema } from "../lib/search"
-import { isSignInChain, useSiweSignIn } from "../lib/siwe"
+import { signInChainId, useSiweSignIn } from "../lib/siwe"
 import { isUserRejection } from "../lib/wallet-errors"
+import { walletName } from "../lib/wallet/wallets"
 
 export const Route = createFileRoute("/sign-in")({
   validateSearch: signInSearchSchema,
@@ -39,11 +38,6 @@ function SignInRoute(): ReactElement {
     </WalletBoundary>
   )
 }
-
-const signInChainIds: readonly MezoChainId[] = [
-  chainIdByNetwork.mezo,
-  chainIdByNetwork["mezo-testnet"],
-]
 
 function chainName(chainId: MezoChainId): string {
   const network = networkForChainId(chainId)
@@ -128,34 +122,6 @@ function signInErrorText(error: Error | null): string | null {
   return "Sign-in failed"
 }
 
-function MessagePreview({
-  message,
-}: {
-  message: string | undefined
-}): ReactElement {
-  if (message === undefined) {
-    return (
-      <div
-        aria-busy="true"
-        className="flex flex-col gap-2 rounded-lg border border-line bg-inset px-3.5 py-3"
-      >
-        <output className="sr-only">Preparing message</output>
-        <Skeleton.Root className="w-4/5 bg-inset-2" />
-        <Skeleton.Root className="w-3/5 bg-inset-2" />
-        <Skeleton.Root className="w-2/3 bg-inset-2" />
-      </div>
-    )
-  }
-  return (
-    <pre
-      aria-label="Message to sign"
-      className="m-0 whitespace-pre-wrap break-all rounded-lg border border-line bg-inset px-3.5 py-3 font-mono text-label leading-[18px] text-ink-2"
-    >
-      {message}
-    </pre>
-  )
-}
-
 function SignInPage(): ReactElement {
   const search = Route.useSearch()
   // `chain`: a contract-account session must sign in on the client's network.
@@ -170,8 +136,9 @@ function SignInPage(): ReactElement {
   const session = useSession()
   const { address, chainId, connector, isConnected } = useAccount()
   const { openConnect } = useWalletDialog()
-  const switchChain = useSwitchChain()
+  const { switchChain, isPending: switching } = useSwitchChain()
   const { preview, signIn } = useSiweSignIn(target)
+  const required = signInChainId(target)
 
   const sessionWallet = session.data?.account?.walletAddress ?? null
   const connected = address?.toLowerCase() ?? null
@@ -185,11 +152,22 @@ function SignInPage(): ReactElement {
     if (alreadySignedIn) router.history.replace(returnTo)
   }, [alreadySignedIn, returnTo, router])
 
-  const supported =
-    target === undefined ? isSignInChain(chainId) : chainId === target
+  const supported = chainId === required
   const walletReady = isConnected && address !== undefined && supported
-  const switchTargets = target === undefined ? signInChainIds : [target]
   const errorText = signInErrorText(signIn.error)
+
+  // Move the wallet to the sign-in chain as soon as it connects; the button
+  // below is for a declined or failed switch.
+  const wrongChain =
+    isConnected && address !== undefined && !supported
+      ? `${address}:${chainId}`
+      : null
+  const switchedFor = useRef<string | null>(null)
+  useEffect(() => {
+    if (wrongChain === null || switchedFor.current === wrongChain) return
+    switchedFor.current = wrongChain
+    switchChain({ chainId: required })
+  }, [wrongChain, required, switchChain])
 
   return (
     <section
@@ -226,7 +204,9 @@ function SignInPage(): ReactElement {
                 {shortenAddress(address)}
               </span>
               {connector === undefined ? null : (
-                <Badge.Root className="font-600">{connector.name}</Badge.Root>
+                <Badge.Root className="font-600">
+                  {walletName(connector)}
+                </Badge.Root>
               )}
               <span className="ml-auto">
                 <NetworkChip chainId={chainId} />
@@ -245,31 +225,20 @@ function SignInPage(): ReactElement {
             </div>
           )}
           {isConnected && !supported ? (
-            <fieldset className="m-0 flex flex-col gap-2 border-0 p-0 md:pl-9">
-              <legend className="mb-2 text-body-sm font-600 text-warn">
-                {target === undefined
-                  ? "Switch to a Mezo network"
-                  : `Switch to ${chainName(target)}`}
-              </legend>
-              <div className="flex flex-wrap gap-2">
-                {switchTargets.map((switchTo) => (
-                  <Button.Root
-                    key={switchTo}
-                    variant="secondary"
-                    size="sm"
-                    loading={
-                      switchChain.isPending &&
-                      switchChain.variables?.chainId === switchTo
-                    }
-                    onClick={() =>
-                      switchChain.switchChain({ chainId: switchTo })
-                    }
-                  >
-                    {chainName(switchTo)}
-                  </Button.Root>
-                ))}
-              </div>
-            </fieldset>
+            <div className="flex flex-wrap items-center gap-2 md:pl-9">
+              <span className="text-body-sm font-600 text-warn">
+                Wrong network
+              </span>
+              <Button.Root
+                variant="secondary"
+                size="sm"
+                className="ml-auto"
+                loading={switching}
+                onClick={() => switchChain({ chainId: required })}
+              >
+                Switch to {chainName(required)}
+              </Button.Root>
+            </div>
           ) : null}
         </Step>
 
@@ -280,23 +249,6 @@ function SignInPage(): ReactElement {
         >
           {walletReady ? (
             <div className="flex flex-col gap-3 md:pl-9">
-              <MessagePreview message={preview.data?.message} />
-              <ul
-                aria-label="Signature"
-                className="m-0 flex list-none flex-wrap gap-1.5 p-0"
-              >
-                <li>
-                  <Badge.Root tone="pos" className="font-600">
-                    Gasless
-                  </Badge.Root>
-                </li>
-                <li>
-                  <Badge.Root className="font-600">No transaction</Badge.Root>
-                </li>
-                <li>
-                  <Badge.Root mono>EIP-4361</Badge.Root>
-                </li>
-              </ul>
               {sessionWallet !== null &&
               connected !== null &&
               (connected !== sessionWallet || force) ? (

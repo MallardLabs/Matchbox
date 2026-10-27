@@ -573,7 +573,9 @@ is skipped (`prompt=none` → `login_required`), the consent view sets
 `/sign-in?chain=<chainId>&force=true` ("Sign in on <network>"), and an
 approve decision is refused. Connected apps and device lists are scoped the
 same way. `wallet_network` is the environment network, which the session is
-thereby verified for.
+thereby verified for. The SPA signs in on Mezo mainnet and switches the
+wallet there itself; only `chain` (a contract session on a test app) asks for
+another network. The Worker still accepts either Mezo network.
 
 
 SPA pages: `/` (account: wallet, linked Discord, connected apps, sessions),

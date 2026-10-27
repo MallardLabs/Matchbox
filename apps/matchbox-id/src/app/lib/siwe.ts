@@ -1,4 +1,7 @@
-import { chainIdByNetwork } from "@repo/platform-contracts/network"
+import {
+  type MezoChainId,
+  chainIdByNetwork,
+} from "@repo/platform-contracts/network"
 import {
   type UseMutationResult,
   type UseQueryResult,
@@ -15,14 +18,15 @@ import { queryKeys } from "./queries"
 export const signInStatement = "Sign in to Matchbox ID."
 
 const messageLifetimeMs = 5 * 60_000
-/** The previewed message is re-issued well before it expires. */
+/** The prepared message is re-issued well before it expires. */
 const previewLifetimeMs = 4 * 60_000
 
-export function isSignInChain(chainId: number | undefined): boolean {
-  return (
-    chainId === chainIdByNetwork.mezo ||
-    chainId === chainIdByNetwork["mezo-testnet"]
-  )
+/**
+ * The chain a sign-in message names: Mezo mainnet, unless the client needs a
+ * contract account verified on its own network (`target`).
+ */
+export function signInChainId(target?: MezoChainId): MezoChainId {
+  return target ?? chainIdByNetwork.mezo
 }
 
 /** The exact EIP-4361 message the wallet is asked to sign. */
@@ -38,26 +42,24 @@ function isFresh(preview: SiwePreview): boolean {
 }
 
 export type SiweSignIn = {
-  /** Present once a wallet on a supported chain is connected. */
+  /** The message to sign, prepared once the wallet is on the sign-in chain. */
   preview: UseQueryResult<SiwePreview, Error>
   signIn: UseMutationResult<SiweVerifyViewResponse, Error, void>
 }
 
 /**
  * EIP-4361 sign-in: nonce → wallet signature (gasless) → session cookie.
- * The message is built before signing so the page shows what the wallet
- * will sign. With `targetChainId`, the message must name that chain (the
+ * The message is built ahead of the click, so signing opens the wallet
+ * straight away. It names Mezo mainnet, or `targetChainId` when given (the
  * wallet has to be on it), so contract accounts are verified on the
  * client's network.
  */
-export function useSiweSignIn(targetChainId?: number): SiweSignIn {
+export function useSiweSignIn(targetChainId?: MezoChainId): SiweSignIn {
   const { address, chainId } = useAccount()
   const { signMessageAsync } = useSignMessage()
   const client = useQueryClient()
   const supported =
-    chainId !== undefined &&
-    isSignInChain(chainId) &&
-    (targetChainId === undefined || chainId === targetChainId)
+    chainId !== undefined && chainId === signInChainId(targetChainId)
 
   const preview = useQuery<SiwePreview, Error>({
     queryKey: [...siweMessageKey, address, chainId],
