@@ -1,16 +1,10 @@
 import { useQuery } from "@tanstack/react-query"
 
-// Discord link status for a wallet, served by the discord-link edge function's
-// `action=profile` lookup. The link table is service-role only, so the webapp
-// reads it through the function rather than supabase-js directly.
-export type DiscordLinkStatus =
-  | { linked: false }
-  | {
-      linked: true
-      discordUsername: string | null
-      discordGlobalName: string | null
-      avatarUrl: string
-    }
+// Whether a wallet has a Discord link, served by the discord-link edge
+// function's `action=profile` lookup. The link table is service-role only, so
+// the webapp reads it through the function rather than supabase-js directly.
+// The lookup is unauthenticated and never names the Discord account.
+export type DiscordLinkStatus = { linked: boolean }
 
 const FUNCTIONS_URL = `${process.env.NEXT_PUBLIC_SUPABASE_URL ?? ""}/functions/v1/discord-link`
 const ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? ""
@@ -27,13 +21,7 @@ export function useDiscordLink(address?: string) {
       })
       const data = await res.json()
       if (!data?.success) throw new Error("Discord link lookup failed")
-      if (!data.linked) return { linked: false }
-      return {
-        linked: true,
-        discordUsername: data.discordUsername ?? null,
-        discordGlobalName: data.discordGlobalName ?? null,
-        avatarUrl: data.avatarUrl,
-      }
+      return { linked: data.linked === true }
     },
   })
 }

@@ -128,8 +128,9 @@ Deno.serve(async (req) => {
     })
   }
 
-  // --- Look up an existing link by wallet address (for the /academy card). ---
-  // Read-only, keyed by a single address; returns only display name + avatar.
+  // --- Whether a wallet has a link (for the /academy card). ---
+  // Unauthenticated, so it never says which Discord account: that goes only to
+  // apps the user approves in Matchbox ID.
   if (req.method === "GET" && action === "profile") {
     const address = url.searchParams.get("address") ?? ""
     if (!isAddress(address)) {
@@ -137,19 +138,10 @@ Deno.serve(async (req) => {
     }
     const { data } = await supabase
       .from("discord_wallet_links")
-      .select(
-        "discord_user_id, discord_username, discord_global_name, discord_avatar",
-      )
+      .select("wallet_address")
       .eq("wallet_address", address.toLowerCase())
       .maybeSingle()
-    if (!data) return json({ success: true, linked: false })
-    return json({
-      success: true,
-      linked: true,
-      discordUsername: data.discord_username,
-      discordGlobalName: data.discord_global_name,
-      avatarUrl: avatarUrl(data.discord_user_id, data.discord_avatar),
-    })
+    return json({ success: true, linked: data !== null })
   }
 
   // --- Return the message a wallet signs to unlink itself. ---
@@ -378,6 +370,14 @@ Deno.serve(async (req) => {
       .from("discord_link_tokens")
       .update({ status: "completed" })
       .eq("token", token)
+
+    // Expired link sessions still hold a Discord profile but are never read
+    // again, so clear them out whenever a link completes.
+    const { error: purgeError } = await supabase
+      .from("discord_link_tokens")
+      .delete()
+      .lt("expires_at", new Date().toISOString())
+    if (purgeError) console.error("link token purge error:", purgeError)
 
     // Reconcile semester (+ optional live) roles. If points are momentarily
     // unavailable, keep the link and report it; a later run will reconcile.

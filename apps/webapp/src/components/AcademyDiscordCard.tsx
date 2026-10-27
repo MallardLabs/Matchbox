@@ -185,21 +185,12 @@ export default function AcademyDiscordCard({
     if (data?.linked) {
       return (
         <div className="flex items-center gap-2">
-          <img
-            src={data.avatarUrl}
-            alt=""
-            width={24}
-            height={24}
-            className="h-6 w-6 rounded-full"
-          />
-          <span className="text-sm font-medium text-[var(--content-primary)]">
-            {data.discordGlobalName ?? data.discordUsername ?? "Discord user"}
+          <span className="text-[var(--content-secondary)]">
+            <DiscordIcon />
           </span>
-          {data.discordUsername && data.discordGlobalName && (
-            <span className="text-xs text-[var(--content-muted)]">
-              @{data.discordUsername}
-            </span>
-          )}
+          <span className="text-sm font-medium text-[var(--content-primary)]">
+            Linked
+          </span>
           <span className="group relative">
             <button
               type="button"
@@ -247,25 +238,12 @@ export default function AcademyDiscordCard({
       ) : data?.linked ? (
         <div>
           <div className="flex items-center gap-3">
-            <img
-              src={data.avatarUrl}
-              alt=""
-              width={40}
-              height={40}
-              className="h-10 w-10 rounded-full"
-            />
-            <div className="min-w-0 flex-1">
-              <p className="truncate font-semibold text-[var(--content-primary)]">
-                {data.discordGlobalName ??
-                  data.discordUsername ??
-                  "Discord user"}
-              </p>
-              {data.discordUsername && (
-                <p className="truncate text-sm text-[var(--content-secondary)]">
-                  @{data.discordUsername}
-                </p>
-              )}
-            </div>
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--surface-secondary)] text-[var(--content-secondary)]">
+              <DiscordIcon />
+            </span>
+            <p className="min-w-0 flex-1 truncate font-semibold text-[var(--content-primary)]">
+              Linked
+            </p>
             <span className="group relative shrink-0">
               <button
                 type="button"

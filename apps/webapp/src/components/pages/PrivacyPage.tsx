@@ -6,7 +6,7 @@ import type { ReactNode } from "react"
  * #matchbox-id) that the other apps link to.
  */
 
-const updated = "October 24, 2026"
+const updated = "October 27, 2026"
 const contact = "contact@trellium.org"
 
 const products = [
@@ -209,17 +209,17 @@ export default function PrivacyPage(): JSX.Element {
             When you use the bot, we receive your Discord user ID, username,
             display name, avatar and server ID. To link a wallet, you sign a
             message with it on the Matchbox app. We store the link and the
-            server roles we granted. Unused link requests expire after 15
-            minutes.
+            server roles we granted. Link requests expire after 15 minutes and
+            are deleted afterwards.
           </li>
           <li>
             We use the link to add or remove server roles, which means checking
             your wallet's activity on the Matchbox app.
           </li>
           <li>
-            Linking is public: anyone can look up the Discord username, display
-            name and avatar linked to a wallet address through Matchbox. Do not
-            link if you do not want that connection to be visible.
+            Anyone can check whether a wallet address is linked, but not which
+            Discord account. We share the linked account only with apps you
+            approve in Matchbox ID.
           </li>
           <li>
             You can unlink at any time from the bot or the Matchbox app. That
@@ -359,10 +359,11 @@ export default function PrivacyPage(): JSX.Element {
 
       <Section title="Sharing">
         <P>
-          Profiles and Discord links are public by design. Apps you approve in
-          Matchbox ID receive what you approved. Members of a Developer
-          organization see each other as described above. Otherwise we share
-          data only with the providers above or when required by law.
+          Profiles are public by design, as is whether a wallet has a Discord
+          link (but not which account). Apps you approve in Matchbox ID receive
+          what you approved. Members of a Developer organization see each other
+          as described above. Otherwise we share data only with the providers
+          above or when required by law.
         </P>
       </Section>
 
