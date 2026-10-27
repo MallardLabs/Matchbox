@@ -214,7 +214,8 @@ export default function PrivacyPage(): JSX.Element {
           </li>
           <li>
             We use the link to add or remove server roles, which means checking
-            your wallet's activity on the Matchbox app.
+            your wallet's activity on the Matchbox app and which of our roles
+            you already hold.
           </li>
           <li>
             Anyone can check whether a wallet address is linked, but not which
@@ -223,8 +224,8 @@ export default function PrivacyPage(): JSX.Element {
           </li>
           <li>
             You can unlink at any time from the bot or the Matchbox app. That
-            deletes the link and removes the roles. Discord processes your data
-            under its own privacy policy.
+            deletes the link and, while Mezo Academy points are running, removes
+            the roles. Discord processes your data under its own privacy policy.
           </li>
         </List>
       </Section>

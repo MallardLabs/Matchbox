@@ -59,6 +59,14 @@ role for each qualifying semester. Re-running `/matchbox` shows per-semester poi
 an Unlink button. Members with Manage Roles can run `/poke-roles` to reconcile all
 linked members immediately.
 
+**Academy off (the default):** the webapp's Academy scoring routes answer 410, so
+points, roles and share cards only run when the `ACADEMY_ENABLED` secret is `true`.
+Without it, `/matchbox` links, unlinks and relinks wallets and points members to
+id.matchbox.markets for app access; `/poke-roles` and `discord-reconcile-roles`
+skip, and roles already granted are left in place. Unlinking keeps them too, since
+nothing could grant them back, and the next link adopts any bot-managed role the
+member holds into `granted_roles` so syncs can manage it again.
+
 #### Setup
 
 1. **Create the Discord app/bot** in the
@@ -80,6 +88,8 @@ linked members immediately.
      ACADEMY_NETWORK=mainnet
    # optional: also grant a live "current points" role
    # DISCORD_ROLE_ID=...
+   # optional: points + roles, once the webapp's Academy routes are back
+   # ACADEMY_ENABLED=true
    ```
    `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` are auto-provided.
 4. **Deploy:**

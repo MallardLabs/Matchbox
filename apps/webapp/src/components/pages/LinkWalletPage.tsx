@@ -26,6 +26,8 @@ type Session =
       discordUsername: string | null
       discordGlobalName: string | null
       avatarUrl: string
+      // Whether linking also scores Academy points and grants Discord roles.
+      academy: boolean
     }
 
 type SemesterResult = {
@@ -182,6 +184,10 @@ function SmallCheckIcon() {
 
 const PERMISSIONS = [
   { Icon: ShieldIcon, label: "Verify you own this wallet address" },
+  { Icon: WalletIcon, label: "Link it to this Discord account" },
+] as const
+
+const ACADEMY_PERMISSIONS = [
   { Icon: ActivityIcon, label: "Read your Mezo Academy activity" },
   { Icon: BadgeIcon, label: "Assign your Discord roles automatically" },
 ] as const
@@ -223,6 +229,7 @@ export default function LinkWalletPage(): JSX.Element {
           discordUsername: data.discordUsername,
           discordGlobalName: data.discordGlobalName,
           avatarUrl: data.avatarUrl,
+          academy: data.academy === true,
         })
       } catch (_err) {
         if (!cancelled) setSession({ status: "invalid", reason: "not_found" })
@@ -287,6 +294,10 @@ export default function LinkWalletPage(): JSX.Element {
       : null
   const discordHandle =
     session.status === "ready" ? session.discordUsername : null
+  const academy = session.status === "ready" && session.academy
+  const permissions = academy
+    ? [...PERMISSIONS, ...ACADEMY_PERMISSIONS]
+    : PERMISSIONS
 
   return (
     <div className="flex min-h-[70vh] items-center justify-center px-4 py-12">
@@ -381,7 +392,7 @@ export default function LinkWalletPage(): JSX.Element {
                   This will allow Matchbox to
                 </p>
                 <ul className="space-y-2.5">
-                  {PERMISSIONS.map(({ Icon, label }) => (
+                  {permissions.map(({ Icon, label }) => (
                     <li key={label} className="flex items-center gap-3">
                       <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md bg-brand/10 text-brand">
                         <Icon />
@@ -511,7 +522,7 @@ export default function LinkWalletPage(): JSX.Element {
                 </div>
               )}
 
-              {!result.pointsAvailable && (
+              {academy && !result.pointsAvailable && (
                 <p className="mt-4 text-sm text-[var(--content-secondary)]">
                   Your role will be synced shortly.
                 </p>

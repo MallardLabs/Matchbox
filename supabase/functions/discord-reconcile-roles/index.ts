@@ -10,6 +10,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 import { corsHeaders, handleCors } from "../_shared/cors.ts"
 import {
+  academyEnabled,
   buildSetQualifier,
   getActiveSemesters,
   reconcileRoles,
@@ -20,6 +21,14 @@ const JSON_HEADERS = { ...corsHeaders, "Content-Type": "application/json" }
 Deno.serve(async (req) => {
   const cors = handleCors(req)
   if (cors) return cors
+
+  // Nothing to score while Academy points are off; granted roles stay put.
+  if (!academyEnabled()) {
+    return new Response(
+      JSON.stringify({ success: true, skipped: "academy_off" }),
+      { headers: JSON_HEADERS },
+    )
+  }
 
   try {
     const supabase = createClient(

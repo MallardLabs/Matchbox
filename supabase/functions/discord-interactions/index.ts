@@ -16,6 +16,7 @@ import {
   verifyDiscordSignature,
 } from "../_shared/discord.ts"
 import {
+  academyEnabled,
   buildSetQualifier,
   type DiscordWalletLink,
   getActiveSemesters,
@@ -51,6 +52,9 @@ const JSON_HEADERS = { ...corsHeaders, "Content-Type": "application/json" }
 const EMBED_COLOR = 0xf7931a
 const EMBED_COLOR_SUCCESS = 0x22c55e
 const EMBED_COLOR_NEUTRAL = 0x44403c
+
+// Where a member sees and revokes the apps that can read their Discord link.
+const MATCHBOX_ID_URL = "https://id.matchbox.markets"
 
 function jsonResponse(body: unknown): Response {
   return new Response(JSON.stringify(body), { headers: JSON_HEADERS })
@@ -99,15 +103,19 @@ function linkButtonRow(url: string, label = "Link wallet"): unknown {
 }
 
 function manageButtonsRow(): unknown {
+  // The share card is rendered from Academy points.
+  const share = academyEnabled()
+    ? [{
+      type: 2,
+      style: ButtonStyle.PRIMARY,
+      label: "Share card",
+      custom_id: "mb_share",
+    }]
+    : []
   return {
     type: 1,
     components: [
-      {
-        type: 2,
-        style: ButtonStyle.PRIMARY,
-        label: "Share card",
-        custom_id: "mb_share",
-      },
+      ...share,
       {
         type: 2,
         style: ButtonStyle.DANGER,
@@ -122,6 +130,13 @@ function manageButtonsRow(): unknown {
       },
     ],
   }
+}
+
+function linkedDescription(walletAddress: string): string {
+  return [
+    `Wallet: \`${truncateAddress(walletAddress)}\``,
+    `App access: [id.matchbox.markets](${MATCHBOX_ID_URL})`,
+  ].join("\n")
 }
 
 // Format a unix timestamp as "MMM D, YYYY" (e.g. "Apr 2, 2026").
@@ -214,7 +229,7 @@ async function followupLinkedStatus(args: {
 
     embed = {
       color: EMBED_COLOR,
-      description: `Wallet: \`${truncateAddress(link.wallet_address)}\``,
+      description: linkedDescription(link.wallet_address),
       fields: fields.length > 0
         ? fields
         : [{ name: "No seasons configured", value: "Check back soon.", inline: false }],
@@ -224,7 +239,7 @@ async function followupLinkedStatus(args: {
     console.error("followupLinkedStatus error:", err)
     embed = {
       color: EMBED_COLOR_NEUTRAL,
-      description: `Wallet: \`${truncateAddress(link.wallet_address)}\`\n\nCouldn't fetch your Academy points right now — please try again shortly.`,
+      description: `${linkedDescription(link.wallet_address)}\n\nCouldn't fetch your Academy points right now — please try again shortly.`,
     }
   }
 
@@ -249,7 +264,9 @@ async function followupUnlink(args: {
     .eq("discord_user_id", user.id)
     .maybeSingle()
 
-  if (link) {
+  // With Academy points off nothing could grant the roles back, so they stay.
+  const keepRoles = !academyEnabled()
+  if (link && !keepRoles) {
     const semesters = await getActiveSemesters(supabase)
     await revokeAllRoles({ supabase, link, semesters })
   }
@@ -267,7 +284,9 @@ async function followupUnlink(args: {
       content: null,
       embeds: [{
         color: EMBED_COLOR_SUCCESS,
-        description: "Your wallet has been unlinked and any Matchbox roles removed.\nLink a new wallet below whenever you're ready.",
+        description: keepRoles
+          ? "Your wallet has been unlinked. Your Discord roles stay.\nLink a new wallet below whenever you're ready."
+          : "Your wallet has been unlinked and any Matchbox roles removed.\nLink a new wallet below whenever you're ready.",
       }],
       components: [linkButtonRow(url)],
     },
@@ -511,6 +530,14 @@ Deno.serve(async (req) => {
           }),
         )
       }
+      if (!academyEnabled()) {
+        return jsonResponse(
+          ephemeralEmbed({
+            color: EMBED_COLOR_NEUTRAL,
+            description: "Role sync is off while Mezo Academy points are paused.",
+          }),
+        )
+      }
 
       runBackground(followupPokeRoles({ supabase, appId, interactionToken }))
       return jsonResponse({
@@ -537,9 +564,21 @@ Deno.serve(async (req) => {
         ephemeralEmbed(
           {
             color: EMBED_COLOR,
-            description: "Link your wallet to Matchbox to track your Mezo Academy points and earn the **Class of 2026** Discord role.",
+            description: academyEnabled()
+              ? "Link your wallet to Matchbox to track your Mezo Academy points and earn the **Class of 2026** Discord role."
+              : `Link your wallet to Matchbox. Apps see this Discord account only if you approve them at [id.matchbox.markets](${MATCHBOX_ID_URL}).`,
           },
           [linkButtonRow(url)],
+        ),
+      )
+    }
+
+    // Linked, with no points to fetch: answer straight away.
+    if (!academyEnabled()) {
+      return jsonResponse(
+        ephemeralEmbed(
+          { color: EMBED_COLOR, description: linkedDescription(link.wallet_address) },
+          [manageButtonsRow()],
         ),
       )
     }

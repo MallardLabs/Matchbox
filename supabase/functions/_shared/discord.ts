@@ -119,6 +119,22 @@ export async function removeGuildRole(args: {
   return res.ok || res.status === 404
 }
 
+// Role IDs a member holds in a guild.
+export async function getMemberRoles(args: {
+  guildId: string
+  userId: string
+}): Promise<string[]> {
+  const res = await discordRequest(
+    "GET",
+    `/guilds/${args.guildId}/members/${args.userId}`,
+  )
+  if (!res.ok) {
+    throw new Error(`getMemberRoles failed (${res.status}): ${await res.text()}`)
+  }
+  const member = await res.json()
+  return Array.isArray(member?.roles) ? member.roles : []
+}
+
 // Edit the original (deferred) interaction reply via the interaction webhook.
 export async function editOriginalInteraction(args: {
   appId: string

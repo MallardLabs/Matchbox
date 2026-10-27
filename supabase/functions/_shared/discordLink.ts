@@ -5,7 +5,7 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 import { getAddress } from "https://esm.sh/viem@2"
-import { addGuildRole, removeGuildRole } from "./discord.ts"
+import { addGuildRole, getMemberRoles, removeGuildRole } from "./discord.ts"
 
 // Concrete client type matching a default createClient(url, key) call. The bare
 // SupabaseClient generic defaults to a `never` schema that isn't assignable from
@@ -101,6 +101,14 @@ function webappBaseUrl(): string {
   const baseUrl = Deno.env.get("MATCHBOX_WEBAPP_URL")
   if (!baseUrl) throw new Error("Missing MATCHBOX_WEBAPP_URL")
   return baseUrl.replace(/\/$/, "")
+}
+
+// The webapp's Academy scoring routes are off (they answer 410), so points,
+// share cards and role syncs wait until ACADEMY_ENABLED is "true". Roles already
+// granted stay where they are, unlinking included, since nothing could grant
+// them again.
+export function academyEnabled(): boolean {
+  return Deno.env.get("ACADEMY_ENABLED") === "true"
 }
 
 export type RoleQualification = {
@@ -391,5 +399,27 @@ export async function revokeAllRoles(args: {
     if (managed.has(role)) {
       await removeGuildRole({ guildId, userId: link.discord_user_id, roleId: role })
     }
+  }
+}
+
+// Bot-managed roles a member already holds. Unlinking while Academy points are
+// off keeps the member's roles, so a relink adopts them back into granted_roles
+// instead of leaving them where no sync can reach. Empty if Discord can't say.
+export async function heldManagedRoles(args: {
+  guildId: string | null
+  userId: string
+  semesters: Semester[]
+}): Promise<string[]> {
+  const guildId = args.guildId ?? Deno.env.get("DISCORD_GUILD_ID")
+  if (!guildId) return []
+  const managed = new Set<string>(args.semesters.map((s) => s.role_id))
+  const roleId = Deno.env.get("DISCORD_ROLE_ID")
+  if (roleId) managed.add(roleId)
+  try {
+    const held = await getMemberRoles({ guildId, userId: args.userId })
+    return held.filter((role) => managed.has(role))
+  } catch (err) {
+    console.warn("heldManagedRoles:", err)
+    return []
   }
 }

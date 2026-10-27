@@ -3,8 +3,7 @@ import Head from "next/head"
 
 export default function Link() {
   const title = "Link your wallet | Matchbox"
-  const description =
-    "Verify ownership of your wallet to link it to your Discord account and track your Mezo Academy points."
+  const description = "Verify your wallet to link it to your Discord account."
 
   return (
     <>

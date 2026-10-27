@@ -22,7 +22,7 @@ if (!appId || !botToken || !guildId) {
 const commands = [
   {
     name: "matchbox",
-    description: "Link your wallet and view your Mezo Academy points",
+    description: "Link or manage the wallet on your Discord account",
     type: 1, // CHAT_INPUT
   },
   {

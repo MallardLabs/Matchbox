@@ -17,9 +17,11 @@ import { corsHeaders } from "../_shared/cors.ts"
 import { avatarUrl } from "../_shared/discord.ts"
 import {
   type SupabaseClient,
+  academyEnabled,
   buildLinkMessage,
   buildUnlinkMessage,
   getActiveSemesters,
+  heldManagedRoles,
   pointsFromWad,
   reconcileRoles,
   revokeAllRoles,
@@ -125,6 +127,7 @@ Deno.serve(async (req) => {
       discordGlobalName: row.discord_global_name,
       avatarUrl: avatarUrl(row.discord_user_id, row.discord_avatar),
       expiresAt: row.expires_at,
+      academy: academyEnabled(),
     })
   }
 
@@ -156,7 +159,7 @@ Deno.serve(async (req) => {
     })
   }
 
-  // --- Verify a wallet signature, then remove its Discord link + roles. ---
+  // --- Verify a wallet signature, then remove its Discord link (+ roles). ---
   if (req.method === "POST" && action === "unlink") {
     let body: unknown
     try {
@@ -189,8 +192,11 @@ Deno.serve(async (req) => {
       .eq("wallet_address", walletLower)
       .maybeSingle()
     if (link) {
-      const semesters = await getActiveSemesters(supabase)
-      await revokeAllRoles({ supabase, link, semesters })
+      // With Academy points off nothing could grant the roles back, so they stay.
+      if (academyEnabled()) {
+        const semesters = await getActiveSemesters(supabase)
+        await revokeAllRoles({ supabase, link, semesters })
+      }
       await supabase
         .from("discord_wallet_links")
         .delete()
@@ -336,14 +342,22 @@ Deno.serve(async (req) => {
       return json({ success: false, reason: "wallet_taken" }, 409)
     }
 
-    // Preserve currently-granted roles so reconcile can revoke any the new wallet
-    // no longer qualifies for.
+    // Carry over the member's roles (from the old link, or kept through an unlink
+    // while Academy was off) so reconcile can revoke any the new wallet no longer
+    // qualifies for.
     const { data: existingByUser } = await supabase
       .from("discord_wallet_links")
       .select("granted_roles")
       .eq("discord_user_id", tokenRow.discord_user_id)
       .maybeSingle()
-    const priorGrantedRoles: string[] = existingByUser?.granted_roles ?? []
+    const heldRoles = await heldManagedRoles({
+      guildId: tokenRow.guild_id,
+      userId: tokenRow.discord_user_id,
+      semesters: await getActiveSemesters(supabase),
+    })
+    const priorGrantedRoles: string[] = [
+      ...new Set([...(existingByUser?.granted_roles ?? []), ...heldRoles]),
+    ]
 
     const { error: upsertError } = await supabase
       .from("discord_wallet_links")
@@ -378,6 +392,16 @@ Deno.serve(async (req) => {
       .delete()
       .lt("expires_at", new Date().toISOString())
     if (purgeError) console.error("link token purge error:", purgeError)
+
+    // While Academy points are off there is nothing to score or grant.
+    if (!academyEnabled()) {
+      return json({
+        success: true,
+        wallet: address,
+        semesters: [],
+        pointsAvailable: false,
+      })
+    }
 
     // Reconcile semester (+ optional live) roles. If points are momentarily
     // unavailable, keep the link and report it; a later run will reconcile.
