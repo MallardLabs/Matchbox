@@ -3,7 +3,6 @@ import {
   networkForChainId,
   networkNames,
 } from "@repo/platform-contracts/network"
-import * as Badge from "@repo/ui/badge"
 import * as Button from "@repo/ui/button"
 import { cn } from "@repo/ui/cn"
 import { shortenAddress } from "@repo/ui/wallet-address"
@@ -13,7 +12,6 @@ import { type ReactElement, type ReactNode, useEffect, useRef } from "react"
 import { useAccount, useSwitchChain } from "wagmi"
 import AppMark from "../components/AppMark"
 import Identicon from "../components/Identicon"
-import NetworkChip from "../components/NetworkChip"
 import WalletBoundary from "../components/wallet/WalletBoundary"
 import { useWalletDialog } from "../components/wallet/WalletDialogContext"
 import { isApiError } from "../lib/api"
@@ -204,13 +202,10 @@ function SignInPage(): ReactElement {
                 {shortenAddress(address)}
               </span>
               {connector === undefined ? null : (
-                <Badge.Root className="font-600">
+                <span className="text-label text-secondary">
                   {walletName(connector)}
-                </Badge.Root>
+                </span>
               )}
-              <span className="ml-auto">
-                <NetworkChip chainId={chainId} />
-              </span>
             </div>
           ) : (
             <div className="md:pl-9">

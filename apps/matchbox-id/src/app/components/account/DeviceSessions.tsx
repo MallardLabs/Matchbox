@@ -1,5 +1,4 @@
 import type { DeviceSession } from "@repo/platform-contracts/identity"
-import * as Badge from "@repo/ui/badge"
 import * as Button from "@repo/ui/button"
 import { cn } from "@repo/ui/cn"
 import * as Skeleton from "@repo/ui/skeleton"
@@ -26,9 +25,9 @@ function SessionRow({ session }: { session: DeviceSession }): ReactElement {
       <p className="flex min-w-0 flex-wrap items-center gap-2 text-body font-600 text-ink">
         <span className="truncate">{device}</span>
         {session.current ? (
-          <Badge.Root tone="pos" dot>
+          <span className="text-label font-500 text-secondary">
             This device
-          </Badge.Root>
+          </span>
         ) : null}
       </p>
       <div className="col-span-2 row-start-2 flex flex-wrap gap-x-3 text-label text-secondary md:contents">

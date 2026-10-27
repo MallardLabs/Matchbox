@@ -4,10 +4,9 @@ import {
   networkNames,
 } from "@repo/platform-contracts/network"
 import * as Badge from "@repo/ui/badge"
-import { cn } from "@repo/ui/cn"
 import type { ReactElement } from "react"
 
-/** "Live · Mezo" (green dot) or "Test" / "Test · Mezo Testnet" (grey dot). */
+/** "Test" / "Test · Mezo Testnet" for test environments; live ones need none. */
 export default function EnvChip({
   kind,
   network,
@@ -17,16 +16,12 @@ export default function EnvChip({
   network: NetworkSlug
   /** Test environments drop the network name (connected-apps table). */
   compact?: boolean
-}): ReactElement {
-  const live = kind === "live"
+}): ReactElement | null {
+  if (kind === "live") return null
   return (
     <Badge.Root className="font-600">
-      <span
-        aria-hidden="true"
-        className={cn("size-1.5 rounded-full", live ? "bg-pos" : "bg-faint")}
-      />
-      {live ? "Live" : "Test"}
-      {compact && !live ? null : ` · ${networkNames[network]}`}
+      Test
+      {compact ? null : ` · ${networkNames[network]}`}
     </Badge.Root>
   )
 }

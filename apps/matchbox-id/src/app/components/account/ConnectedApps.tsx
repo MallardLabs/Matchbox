@@ -2,6 +2,10 @@ import type {
   EndedGrant,
   GrantRevokedReason,
 } from "@repo/platform-contracts/identity"
+import type {
+  EnvironmentKind,
+  NetworkSlug,
+} from "@repo/platform-contracts/network"
 import {
   type OidcScope,
   scopeDefinitions,
@@ -41,7 +45,7 @@ function endedReason(reason: GrantRevokedReason | null): string {
 
 /** Shared column layout: one grid, stacked below md. */
 const rowGrid =
-  "grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 md:grid-cols-[minmax(0,1fr)_110px_300px_80px_80px]"
+  "grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 md:grid-cols-[minmax(0,1fr)_300px_80px_80px]"
 
 function ScopeChips({
   scopes,
@@ -70,10 +74,14 @@ function AppName({
   name,
   logoUrl,
   verified,
+  environmentKind,
+  network,
 }: {
   name: string
   logoUrl: string | null
   verified: boolean
+  environmentKind: EnvironmentKind
+  network: NetworkSlug
 }): ReactElement {
   return (
     <div className="flex min-w-0 items-center gap-3">
@@ -89,6 +97,7 @@ function AppName({
             className="shrink-0 text-pos"
           />
         ) : null}
+        <EnvChip kind={environmentKind} network={network} compact />
       </span>
     </div>
   )
@@ -146,26 +155,21 @@ function AppRow({
           name={grant.app.name}
           logoUrl={grant.app.logoUrl}
           verified={grant.verified}
+          environmentKind={grant.environmentKind}
+          network={grant.network}
         />
         <div className="col-span-2 flex min-w-0 flex-wrap items-center gap-1.5 md:contents">
-          <div className="md:col-start-2 md:row-start-1">
-            <EnvChip
-              kind={grant.environmentKind}
-              network={grant.network}
-              compact
-            />
-          </div>
-          <div className="min-w-0 md:col-start-3 md:row-start-1">
+          <div className="min-w-0 md:col-start-2 md:row-start-1">
             <ScopeChips scopes={grant.scopes} label="Access" />
           </div>
-          <p className="ml-auto text-label text-secondary md:col-start-4 md:row-start-1 md:ml-0">
+          <p className="ml-auto text-label text-secondary md:col-start-3 md:row-start-1 md:ml-0">
             <span className="sr-only md:hidden">Granted </span>
             <time dateTime={grant.createdAt} className="tabular-nums">
               {formatShortDate(grant.createdAt)}
             </time>
           </p>
         </div>
-        <div className="col-start-2 row-start-1 flex justify-end md:col-start-5">
+        <div className="col-start-2 row-start-1 flex justify-end md:col-start-4">
           {confirming ? null : (
             <Button.Root
               ref={triggerRef}
@@ -269,20 +273,15 @@ function EndedGrants({
                 name={grant.app.name}
                 logoUrl={grant.app.logoUrl}
                 verified={false}
+                environmentKind={grant.environmentKind}
+                network={grant.network}
               />
             </div>
             <div className="col-span-2 flex min-w-0 flex-wrap items-center gap-1.5 md:contents">
-              <div className="md:col-start-2 md:row-start-1">
-                <EnvChip
-                  kind={grant.environmentKind}
-                  network={grant.network}
-                  compact
-                />
-              </div>
-              <div className="min-w-0 md:col-start-3 md:row-start-1">
+              <div className="min-w-0 md:col-start-2 md:row-start-1">
                 <ScopeChips scopes={grant.scopes} label="Had access" />
               </div>
-              <p className="ml-auto text-label md:col-span-2 md:col-start-4 md:row-start-1 md:ml-0 md:text-right">
+              <p className="ml-auto text-label md:col-span-2 md:col-start-3 md:row-start-1 md:ml-0 md:text-right">
                 {endedReason(grant.revokedReason)} ·{" "}
                 <time dateTime={grant.revokedAt} className="tabular-nums">
                   {formatShortDate(grant.revokedAt)}
@@ -337,7 +336,6 @@ export default function ConnectedApps(): ReactElement {
             )}
           >
             <span>App</span>
-            <span>Env</span>
             <span>Access</span>
             <span>Granted</span>
             <span />

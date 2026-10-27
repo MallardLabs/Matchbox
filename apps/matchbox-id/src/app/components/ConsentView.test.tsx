@@ -137,7 +137,8 @@ describe("ConsentView", () => {
       screen.getByRole("heading", { level: 1, name: /Gauge Scout/ }),
     ).toBeInTheDocument()
     expect(screen.getByText("Verified")).toBeInTheDocument()
-    expect(screen.getByText(/Live/)).toBeInTheDocument()
+    // Live apps carry no environment chip; test apps say so.
+    expect(screen.queryByText(/Live|Test/)).not.toBeInTheDocument()
     expect(screen.getByRole("link", { name: /Privacy/ })).toHaveAttribute(
       "href",
       "https://scout.example/privacy",
