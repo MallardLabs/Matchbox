@@ -29,7 +29,7 @@ import { http, type Config } from "wagmi"
 
 const WALLET_CONNECT_PROJECT_ID =
   import.meta.env.VITE_WALLET_CONNECT_PROJECT_ID ?? ""
-const hasWalletConnect = WALLET_CONNECT_PROJECT_ID.length >= 32
+export const hasWalletConnect = WALLET_CONNECT_PROJECT_ID.length >= 32
 
 const MAINNET_RPC = "https://rpc-internal.mezo.org"
 const TESTNET_RPC =
@@ -106,6 +106,3 @@ export const wagmiConfig: Config = getDefaultConfig({
   multiInjectedProviderDiscovery: true,
   ssr: false,
 })
-
-/** Chains a Matchbox ID sign-in message may name. */
-export const signInChains = [mezoMainnet, mezoTestnet] as const

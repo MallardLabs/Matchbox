@@ -2,7 +2,7 @@ import { RainbowKitProvider } from "@rainbow-me/rainbowkit"
 import { type ReactElement, type ReactNode, useCallback, useState } from "react"
 import { WagmiProvider } from "wagmi"
 import { mezoMainnet, wagmiConfig } from "../../lib/wallet/config"
-import ConnectModal from "./ConnectModal"
+import ConnectDrawer from "./ConnectDrawer"
 import { WalletDialogProvider } from "./WalletDialogContext"
 import "@rainbow-me/rainbowkit/styles.css"
 
@@ -23,7 +23,7 @@ export default function WalletProviders({
       <RainbowKitProvider initialChain={mezoMainnet}>
         <WalletDialogProvider onOpenConnect={openConnect}>
           {children}
-          <ConnectModal open={connectOpen} onOpenChange={setConnectOpen} />
+          <ConnectDrawer open={connectOpen} onOpenChange={setConnectOpen} />
         </WalletDialogProvider>
       </RainbowKitProvider>
     </WagmiProvider>
