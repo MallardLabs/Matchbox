@@ -167,6 +167,13 @@ function EnvironmentSummary({
   const activeKeys = apiKeys.data?.data.filter((key) => key.status === "active")
   return (
     <>
+      {/* Partners have sent this as an API key; say what it is. */}
+      <p className="flex items-center gap-3 pb-1.5 text-body-sm">
+        <span className="text-secondary">Client ID</span>
+        <span className="ml-auto text-label text-muted">
+          Sign-in only, not an API key
+        </span>
+      </p>
       <CopyField.Root
         value={environment.clientId}
         label={`${environment.kind} client ID`}
