@@ -1,4 +1,5 @@
 import * as Logo from "@repo/ui/logo"
+import * as TrelliumMark from "@repo/ui/trellium-mark"
 import { useQuery } from "@tanstack/react-query"
 import { Link, Outlet, createFileRoute } from "@tanstack/react-router"
 import type { ReactElement } from "react"
@@ -66,9 +67,15 @@ function AuthLayout(): ReactElement {
             Privacy
           </a>
         </nav>
-        <span className="text-caption font-500 text-faint">
-          Built by Trellium
-        </span>
+        <a
+          href="https://trellium.org"
+          target="_blank"
+          rel="noreferrer noopener"
+          aria-label="Trellium (opens in a new tab)"
+          className="rounded-sm text-ink opacity-30 transition-opacity hover:opacity-60"
+        >
+          <TrelliumMark.Root title="" />
+        </a>
       </footer>
     </div>
   )

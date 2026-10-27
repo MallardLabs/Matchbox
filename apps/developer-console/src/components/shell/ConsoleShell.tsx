@@ -2,6 +2,7 @@ import * as AppShell from "@repo/ui/app-shell"
 import * as Logo from "@repo/ui/logo"
 import { useTheme } from "@repo/ui/theme"
 import * as ThemeToggle from "@repo/ui/theme-toggle"
+import * as TrelliumMark from "@repo/ui/trellium-mark"
 import { Link, useRouterState } from "@tanstack/react-router"
 import { Moon, Sun } from "lucide-react"
 import type { ReactElement, ReactNode } from "react"
@@ -126,9 +127,15 @@ export default function ConsoleShell({
               ) : (
                 <div className="flex items-center gap-2 border-t border-line pt-2.5">
                   <ThemeToggle.Root />
-                  <span className="ml-auto text-caption font-500 text-faint">
-                    Built by Trellium
-                  </span>
+                  <a
+                    href="https://trellium.org"
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    aria-label="Trellium (opens in a new tab)"
+                    className="ml-auto rounded-sm text-ink opacity-30 transition-opacity hover:opacity-60"
+                  >
+                    <TrelliumMark.Root title="" />
+                  </a>
                 </div>
               )}
             </AppShell.SidebarFooter>
