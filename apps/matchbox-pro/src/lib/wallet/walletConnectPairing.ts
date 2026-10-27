@@ -1,4 +1,4 @@
-// WalletConnect pairing helpers for our own connect dialog: the QR code (via
+// WalletConnect pairing helpers for the connect drawer: the QR code (via
 // `uqr`, imported only once WalletConnect is picked) and phone deep links.
 
 export type QrCode = {
@@ -49,11 +49,15 @@ export type WalletLink = { name: string; href: string }
 /**
  * Wallet apps that accept a WalletConnect URI through a universal link
  * (the same links RainbowKit uses on mobile), plus the bare `wc:` URI that
- * any installed WalletConnect wallet can claim.
+ * any installed WalletConnect wallet can claim. The picked wallet's own
+ * link, when it has one, goes first in place of any namesake.
  */
-export function walletConnectLinks(uri: string): WalletLink[] {
+export function walletConnectLinks(
+  uri: string,
+  own?: WalletLink,
+): WalletLink[] {
   const encoded = encodeURIComponent(uri)
-  return [
+  const links: WalletLink[] = [
     {
       name: "MetaMask",
       href: `https://metamask.app.link/wc?uri=${encoded}`,
@@ -66,4 +70,5 @@ export function walletConnectLinks(uri: string): WalletLink[] {
     { name: "Zerion", href: `https://wallet.zerion.io/wc?uri=${encoded}` },
     { name: "Other wallet", href: uri },
   ]
+  return own ? [own, ...links.filter((link) => link.name !== own.name)] : links
 }

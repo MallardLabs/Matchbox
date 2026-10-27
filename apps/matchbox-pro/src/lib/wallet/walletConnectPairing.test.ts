@@ -52,4 +52,24 @@ describe("WalletConnect pairing", () => {
     )
     expect(links.at(-1)?.href).toBe(URI)
   })
+
+  it("puts the picked wallet's own link first, replacing its namesake", () => {
+    const trust = { name: "Trust Wallet", href: "trust://wc?uri=x" }
+    expect(walletConnectLinks(URI, trust).map((link) => link.href)).toEqual([
+      "trust://wc?uri=x",
+      `https://metamask.app.link/wc?uri=${encodeURIComponent(URI)}`,
+      `https://rnbwapp.com/wc?uri=${encodeURIComponent(URI)}`,
+      `https://wallet.zerion.io/wc?uri=${encodeURIComponent(URI)}`,
+      URI,
+    ])
+    const okx = { name: "OKX Wallet", href: "okex://main/wc?uri=x" }
+    expect(walletConnectLinks(URI, okx).map((link) => link.name)).toEqual([
+      "OKX Wallet",
+      "MetaMask",
+      "Trust Wallet",
+      "Rainbow",
+      "Zerion",
+      "Other wallet",
+    ])
+  })
 })
