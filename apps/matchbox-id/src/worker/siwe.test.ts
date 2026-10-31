@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest"
 import { z } from "zod"
+import { signInMessage } from "../shared/siwe-message"
+import { checkSiweMessage } from "./siwe"
 import {
   url,
   apiHeaders,
   createHarness,
   devAccount,
+  host,
+  origin,
   otherAccount,
   sessionCookieFrom,
   siweMessage,
@@ -143,6 +147,88 @@ describe("SIWE sign-in", () => {
       headers: { Cookie: first },
     })
     expect(await old.json()).toEqual({ account: null })
+  })
+
+  it("accepts the SPA's message on both networks", () => {
+    const now = new Date("2026-09-30T12:00:00.000Z")
+    for (const chainId of [31612, 31611]) {
+      const message = signInMessage({
+        host,
+        origin,
+        address: devAccount.address,
+        chainId,
+        nonce: "abcdefgh12345678",
+        issuedAt: now,
+      })
+      expect(checkSiweMessage(message, { host, origin, now })).toMatchObject({
+        ok: true,
+        chainId,
+      })
+    }
+  })
+
+  // ID-07: wallets skip their SIWE domain warning for text that is not
+  // EIP-4361, so only the SPA's canonical form may sign in.
+  it("rejects messages that are not the canonical EIP-4361 form", async () => {
+    const variants: Array<[string, (message: string) => string, string]> = [
+      [
+        "trailing text",
+        (message) => `${message}\n\nReward claim ref #48213.`,
+        "non-canonical",
+      ],
+      [
+        "a line before URI",
+        (message) =>
+          message.replace("\nURI:", "\nThis does not move funds.\nURI:"),
+        "non-canonical",
+      ],
+      [
+        "a foreign statement",
+        (message) =>
+          message.replace("Sign in to Matchbox ID.", "Claim your rewards."),
+        "non-canonical",
+      ],
+      [
+        "a lowercase address",
+        (message) =>
+          message.replace(
+            otherAccount.address,
+            otherAccount.address.toLowerCase(),
+          ),
+        "non-canonical",
+      ],
+      ["a scheme", (message) => `https://${message}`, "non-canonical"],
+      [
+        "resources",
+        (message) => `${message}\nResources:\n- https://evil.example`,
+        "non-canonical",
+      ],
+      [
+        "a non-ISO date",
+        (message) => message.replace(/(Issued At: \S+)\.000Z/, "$1Z"),
+        "non-canonical",
+      ],
+      [
+        "an unparseable Issued At",
+        (message) => message.replace(/Issued At: \S+/, "Issued At: today"),
+        "malformed",
+      ],
+      [
+        "an unparseable Expiration Time",
+        (message) =>
+          message.replace(/Expiration Time: \S+/, "Expiration Time: never"),
+        "malformed",
+      ],
+    ]
+    const harness = await createHarness()
+    for (const [name, mutate, reason] of variants) {
+      const message = mutate(await siweMessage(harness, otherAccount))
+      const response = await verifySiwe(harness, message, otherAccount)
+      expect({ name, status: response.status }).toEqual({ name, status: 401 })
+      expect(await errorMessage(response)).toContain(reason)
+    }
+    expect(harness.verifySpy.calls).toBe(0)
+    expect(harness.store.admin.sessions()).toHaveLength(0)
   })
 
   it("rate limits nonce requests per IP prefix", async () => {

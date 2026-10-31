@@ -9,15 +9,12 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query"
-import { createSiweMessage } from "viem/siwe"
 import { useAccount, useSignMessage } from "wagmi"
 import type { SiweVerifyViewResponse } from "../../shared/contracts"
+import { signInMessage } from "../../shared/siwe-message"
 import { api } from "./api"
 import { queryKeys } from "./queries"
 
-export const signInStatement = "Sign in to Matchbox ID."
-
-const messageLifetimeMs = 5 * 60_000
 /** The prepared message is re-issued well before it expires. */
 const previewLifetimeMs = 4 * 60_000
 
@@ -74,16 +71,13 @@ export function useSiweSignIn(targetChainId?: MezoChainId): SiweSignIn {
       }
       const { nonce } = await api.siweNonce()
       const issuedAt = new Date()
-      const message = createSiweMessage({
-        domain: window.location.host,
+      const message = signInMessage({
+        host: window.location.host,
+        origin: window.location.origin,
         address,
-        statement: signInStatement,
-        uri: window.location.origin,
-        version: "1",
         chainId,
         nonce,
         issuedAt,
-        expirationTime: new Date(issuedAt.getTime() + messageLifetimeMs),
       })
       return { message, issuedAt }
     },

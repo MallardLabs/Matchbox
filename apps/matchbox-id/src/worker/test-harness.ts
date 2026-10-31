@@ -13,6 +13,7 @@ import { verifyMessage } from "viem"
 import { type PrivateKeyAccount, privateKeyToAccount } from "viem/accounts"
 import { createSiweMessage } from "viem/siwe"
 import { z } from "zod"
+import { siweStatement } from "../shared/siwe-message"
 import { createApp } from "./app"
 import type { IdFlags } from "./config"
 import type { AppDeps, SiwePublicClient } from "./deps"
@@ -136,7 +137,7 @@ export async function siweMessage(
   return createSiweMessage({
     domain: host,
     address: account.address,
-    statement: "Sign in to Matchbox ID.",
+    statement: siweStatement,
     uri: origin,
     version: "1",
     chainId: 31612,

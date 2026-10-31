@@ -4,13 +4,20 @@ import {
 } from "@repo/platform-contracts/network"
 import { oidcLifetimes } from "@repo/platform-contracts/oidc"
 import { isAddress, isAddressEqual, recoverMessageAddress } from "viem"
-import { parseSiweMessage, validateSiweMessage } from "viem/siwe"
+import {
+  type SiweMessage,
+  createSiweMessage,
+  parseSiweMessage,
+  validateSiweMessage,
+} from "viem/siwe"
+import { siweStatement } from "../shared/siwe-message"
 import type { SignerKind } from "./store/id-store"
 
 /**
- * EIP-4361 checks before the (RPC-backed) signature verification: domain is
- * this host, URI is this origin, Mezo chain, fresh `issuedAt`, and an
- * `expirationTime` no more than 10 minutes out.
+ * EIP-4361 checks before the (RPC-backed) signature verification: the
+ * canonical message the SPA builds, domain is this host, URI is this origin,
+ * Mezo chain, fresh `issuedAt`, and an `expirationTime` no more than 10
+ * minutes out.
  */
 
 const maxAgeMs = oidcLifetimes.siweNonce * 1000
@@ -18,6 +25,7 @@ const clockSkewMs = 60_000
 
 export type SiweRejection =
   | "malformed"
+  | "non-canonical"
   | "domain-mismatch"
   | "uri-mismatch"
   | "unsupported-chain"
@@ -43,6 +51,24 @@ function originOf(value: string): string | null {
   }
 }
 
+function isValidDate(value: Date | undefined): value is Date {
+  return value !== undefined && Number.isFinite(value.getTime())
+}
+
+/**
+ * viem's parser is lax (unanchored suffix, any address case, `new Date` on
+ * any text), so the message must re-serialise to itself. Wallets only run
+ * their SIWE domain check on EIP-4361 conforming text.
+ */
+function isCanonical(message: string, fields: SiweMessage): boolean {
+  try {
+    return createSiweMessage(fields) === message
+  } catch {
+    // Fields it refuses (domain, nonce or URI syntax) throw.
+    return false
+  }
+}
+
 export function checkSiweMessage(
   message: string,
   expected: { host: string; origin: string; now: Date },
@@ -62,9 +88,30 @@ export function checkSiweMessage(
     nonce === undefined ||
     uri === undefined ||
     version !== "1" ||
-    issuedAt === undefined
+    !isValidDate(issuedAt) ||
+    (parsed.expirationTime !== undefined &&
+      !isValidDate(parsed.expirationTime)) ||
+    (parsed.notBefore !== undefined && !isValidDate(parsed.notBefore))
   ) {
     return { ok: false, reason: "malformed" }
+  }
+  // The SPA's exact form: pinned statement; no scheme, request id or
+  // resources.
+  if (
+    !isCanonical(message, {
+      address,
+      chainId,
+      domain,
+      nonce,
+      uri,
+      version,
+      statement: siweStatement,
+      issuedAt,
+      expirationTime: parsed.expirationTime,
+      notBefore: parsed.notBefore,
+    })
+  ) {
+    return { ok: false, reason: "non-canonical" }
   }
   if (domain !== expected.host) return { ok: false, reason: "domain-mismatch" }
   if (originOf(uri) !== expected.origin) {
