@@ -305,10 +305,17 @@ pnpm --filter @repo/matchbox-indexer exec wrangler tail matchbox-indexer --forma
 ```
 
 `/health` must show `lag` and `projection.lag` under about 300 (15 minutes
-of blocks), `decoderVersion: 2`, `builtWithDecoderVersion: 2`,
+of blocks), `stale: false`, `decoderVersion: 2`, `builtWithDecoderVersion: 2`,
 `replayRequired: false` and `database.writable: true`. The tail shows
 "Ingested logs", "Projected activity" and, once raw is old enough, "Pruned raw
 history" every 15 minutes.
+
+"INGEST FAILED: logs checkpoint not advancing" in the tail (and `stale: true`
+once the lag passes 700 blocks) means a window no RPC endpoint would serve.
+Ingest never skips it, so it repeats every tick until the cause in `error`
+is fixed. "No endpoint serves the logs of X in block N" means one contract
+returned more logs in one block than the provider's result cap.
+Projection keeps up with the windows committed before it.
 
 Rollback: stop the cron with an empty trigger list
 (`pnpm exec wrangler triggers deploy` after setting `"crons": []`, or remove

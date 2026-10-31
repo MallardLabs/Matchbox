@@ -6,7 +6,12 @@ import {
   projectionStatus,
   runProjection,
 } from "./decode/index"
-import { type IngestDeps, headStatus, ingestToHead } from "./ingest/ingest"
+import {
+  type HeadStatus,
+  type IngestDeps,
+  headStatus,
+  ingestToHead,
+} from "./ingest/ingest"
 import { networkConfig } from "./ingest/networks"
 import type { Network } from "./ingest/networks"
 import { RpcClient } from "./ingest/rpc"
@@ -26,6 +31,13 @@ const MAX_PROJECTION_BLOCKS_PER_TICK = 50_000n
 // runProjection never passes the 'logs' checkpoint, so it needs no other
 // upper bound.
 const THROUGH_INGEST_CHECKPOINT = 2n ** 63n - 1n
+// Three ticks of blocks: the webapp and Pro show warehouse data as stale
+// after 45 minutes.
+const STALE_LAG_BLOCKS = 700n
+
+function isStale(status: HeadStatus): boolean {
+  return status.lag === null || status.lag > STALE_LAG_BLOCKS
+}
 
 function usageJson(usage: DatabaseUsage) {
   return {
@@ -81,6 +93,7 @@ export default {
             head: status.head.toString(),
             lastBlock: status.lastBlock?.toString() ?? null,
             lag: status.lag?.toString() ?? null,
+            stale: isStale(status),
             projection: {
               lastBlock: projection.projectedBlock?.toString() ?? null,
               // Blocks ingested but not yet projected.
@@ -131,21 +144,39 @@ export default {
         return
       }
 
-      const summary = await ingestToHead(deps, MAX_BLOCKS_PER_TICK)
-      logger.info({
-        message: summary ? "Ingested logs" : "Ingest already at head",
-        cron: controller.cron,
-        network: NETWORK,
-        ...(summary
-          ? {
-              from: summary.from.toString(),
-              to: summary.to.toString(),
-              logs: summary.logs,
-              transactions: summary.transactions,
-              contracts: summary.contracts,
-            }
-          : {}),
-      })
+      // A window that can't be fetched is never skipped, so the checkpoint
+      // stops there until someone fixes the cause the error names. Every tick
+      // says so loudly, and projection below still catches up to the windows
+      // committed before it.
+      let ingestError: Error | null = null
+      try {
+        const summary = await ingestToHead(deps, MAX_BLOCKS_PER_TICK)
+        logger.info({
+          message: summary ? "Ingested logs" : "Ingest already at head",
+          cron: controller.cron,
+          network: NETWORK,
+          ...(summary
+            ? {
+                from: summary.from.toString(),
+                to: summary.to.toString(),
+                logs: summary.logs,
+                transactions: summary.transactions,
+                contracts: summary.contracts,
+              }
+            : {}),
+        })
+      } catch (error) {
+        ingestError = error instanceof Error ? error : new Error(String(error))
+        const status = await headStatus(deps).catch(() => null)
+        logger.error({
+          message: "INGEST FAILED: logs checkpoint not advancing",
+          network: NETWORK,
+          lastBlock: status?.lastBlock?.toString() ?? null,
+          lag: status?.lag?.toString() ?? null,
+          stale: status === null ? null : isStale(status),
+          error: ingestError.message,
+        })
+      }
 
       // Project whatever ingest has checkpointed. runProjection issues its own
       // BEGIN/COMMIT, so it gets a dedicated client, and never projects past
@@ -183,24 +214,24 @@ export default {
           })
         }
       } catch (error) {
-        if (error instanceof ProjectionReplayRequiredError) {
-          // Retrying cannot fix this: the tables were built by another
-          // decoder version. Ingest keeps running; activity stops advancing
-          // until someone runs scripts/rebuild.ts --replay (raw is pruned,
-          // so the replay re-ingests history from RPC).
-          logger.error({
-            message:
-              "PROJECTION HALTED: decoder version changed, replay required",
-            network: NETWORK,
-            decoderVersion: DECODER_VERSION,
-            error: error.message,
-          })
-          return
-        }
-        throw error
+        if (!(error instanceof ProjectionReplayRequiredError)) throw error
+        // Retrying cannot fix this: the tables were built by another
+        // decoder version. Ingest keeps running; activity stops advancing
+        // until someone runs scripts/rebuild.ts --replay (raw is pruned,
+        // so the replay re-ingests history from RPC).
+        logger.error({
+          message:
+            "PROJECTION HALTED: decoder version changed, replay required",
+          network: NETWORK,
+          decoderVersion: DECODER_VERSION,
+          error: error.message,
+        })
       } finally {
         client.release()
       }
+
+      // Thrown last, so Cloudflare still records the tick as failed.
+      if (ingestError !== null) throw ingestError
     })
   },
 } satisfies ExportedHandler<Env>
