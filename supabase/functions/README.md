@@ -33,6 +33,22 @@ Anything else, including the public anon key, gets `401`. The check does not
 depend on `verify_jwt`, so a redeploy with the wrong flag cannot open these
 jobs up. Keep the default `verify_jwt` anyway.
 
+### `transfer-gauge-profile`
+
+Signed moves of a gauge profile to another gauge, once per source gauge per
+epoch. The webapp asks for a `nonce` message naming the chain, both gauges and
+both veBTC token ids; the wallet that controls both NFTs signs it; `transfer`
+checks that each token maps to its gauge in the boost voter, verifies the
+signature (EOA or ERC-1271/6492), consumes the nonce in
+`gauge_profile_transfer_nonces`, claims the epoch in `profile_transfers` and
+moves the profile with the service role. Delegated profile editors cannot
+transfer. Apply `20261030000001_sign_gauge_profile_transfers.sql` first, then
+deploy with the default `verify_jwt` (the webapp sends the anon key):
+
+```bash
+supabase functions deploy transfer-gauge-profile --project-ref <ref> --use-api
+```
+
 ### Matchbox Discord bot (`discord-interactions`, `discord-link`, `discord-reconcile-roles`)
 
 These functions implement the Matchbox Discord bot, which links a Discord account to
