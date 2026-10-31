@@ -237,34 +237,29 @@ export function TransferProfileModal({
   }, [step])
 
   const handleTransfer = useCallback(async () => {
-    if (
-      !sourceGaugeAddress ||
-      !destGaugeAddress ||
-      !address ||
-      !destGauge?.tokenId
-    ) {
+    if (!address || !sourceGauge || !destGauge) {
       return
     }
 
     setTransferError(null)
 
     const result = await transferProfile({
-      fromGaugeAddress: sourceGaugeAddress,
-      toGaugeAddress: destGaugeAddress,
-      ownerAddress: address,
+      fromGaugeAddress: sourceGauge.gaugeAddress,
+      fromVeBTCTokenId: sourceGauge.tokenId,
+      toGaugeAddress: destGauge.gaugeAddress,
       toVeBTCTokenId: destGauge.tokenId,
+      signerAddress: address,
     })
 
     if (result.success) {
       onTransferComplete?.()
       handleClose()
     } else {
-      setTransferError(result.error || "Transfer failed")
+      setTransferError(result.error)
     }
   }, [
-    sourceGaugeAddress,
-    destGaugeAddress,
     address,
+    sourceGauge,
     destGauge,
     transferProfile,
     onTransferComplete,
