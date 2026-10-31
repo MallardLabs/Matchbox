@@ -93,7 +93,7 @@ export function useAddValidatorIncentive(): ValidatorWriteState & {
   const { address } = useAccount()
   const contracts = getContractConfig(chainId)
   const send = useSendTransaction()
-  const receipt = useWaitForTransactionReceipt({ hash: send.data })
+  const receipt = useWaitForTransactionReceipt({ hash: send.data, chainId })
   return {
     addIncentive: (gauge: Address, token: Address, amount: bigint) => {
       if (!address) return
@@ -123,11 +123,12 @@ export function useClaimValidatorRewards(): ValidatorWriteState & {
   const { chainId } = useNetwork()
   const contracts = getContractConfig(chainId)
   const write = useWriteContract()
-  const receipt = useWaitForTransactionReceipt({ hash: write.data })
+  const receipt = useWaitForTransactionReceipt({ hash: write.data, chainId })
   return {
     claim: (gauge: Address) =>
       write.writeContract({
         ...contracts.validatorsVoter,
+        chainId,
         functionName: "claimRewards",
         args: [[gauge]],
       }),
@@ -148,7 +149,7 @@ export function useSwitchValidatorBeneficiary(gauge: Address | undefined): Omit<
 } {
   const { chainId } = useNetwork()
   const write = useWriteContract()
-  const receipt = useWaitForTransactionReceipt({ hash: write.data })
+  const receipt = useWaitForTransactionReceipt({ hash: write.data, chainId })
   return {
     switchBeneficiary: (next: Address) => {
       if (!gauge) return

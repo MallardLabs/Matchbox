@@ -315,6 +315,7 @@ export function useMultiLockVoting(): UseMultiLockVotingReturn {
         return writeContractAsync({
           address,
           abi,
+          chainId,
           functionName: "vote",
           args: [tokenId, gaugeAddresses, weights],
         })
@@ -426,6 +427,7 @@ export function useMultiLockVoting(): UseMultiLockVotingReturn {
         return writeContractAsync({
           address,
           abi,
+          chainId,
           functionName: "reset",
           args: [tokenId],
         })

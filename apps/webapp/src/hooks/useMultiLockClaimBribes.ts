@@ -148,6 +148,7 @@ export function useMultiLockClaimBribes(
           const hash = await writeContractAsync({
             address,
             abi,
+            chainId,
             functionName: "claimBribes",
             args: [
               claim.bribes.map((bribe) => bribe.bribeAddress),
@@ -189,7 +190,7 @@ export function useMultiLockClaimBribes(
 
       setStatus("done")
     },
-    [voterContract, publicClient, updateLockState, writeContractAsync],
+    [chainId, voterContract, publicClient, updateLockState, writeContractAsync],
   )
 
   const executeBatched = useCallback(

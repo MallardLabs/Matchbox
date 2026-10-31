@@ -45,7 +45,7 @@ export function useAddMezoGaugeIncentive(): {
   const { address } = useAccount()
   const contracts = getContractConfig(chainId)
   const send = useSendTransaction()
-  const receipt = useWaitForTransactionReceipt({ hash: send.data })
+  const receipt = useWaitForTransactionReceipt({ hash: send.data, chainId })
   return {
     addIncentive: (gauge, token, amount) => {
       if (!address) return

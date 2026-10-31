@@ -272,6 +272,7 @@ export function useCreateBoostGauge(): CreateBoostGaugeResult {
 
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
     hash,
+    chainId,
   })
 
   const createGauge = (
@@ -289,6 +290,7 @@ export function useCreateBoostGauge(): CreateBoostGaugeResult {
     writeContract({
       address,
       abi,
+      chainId,
       functionName: "createBoostGauge",
       args: [gaugeFactoryAddress, veBTCTokenId, bribeTokens, bribeAmounts],
     })
@@ -319,6 +321,7 @@ export function useVoteOnGauge(): VoteOnGaugeResult {
 
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
     hash,
+    chainId,
   })
 
   const vote = (
@@ -332,6 +335,7 @@ export function useVoteOnGauge(): VoteOnGaugeResult {
     writeContract({
       address,
       abi,
+      chainId,
       functionName: "vote",
       args: [veMEZOTokenId, gaugeAddresses, weights],
     })
@@ -358,6 +362,7 @@ export function useResetVote(): ResetVoteResult {
 
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
     hash,
+    chainId,
   })
 
   const reset = (veMEZOTokenId: bigint) => {
@@ -367,6 +372,7 @@ export function useResetVote(): ResetVoteResult {
     writeContract({
       address,
       abi,
+      chainId,
       functionName: "reset",
       args: [veMEZOTokenId],
     })
@@ -393,6 +399,7 @@ export function usePokeBoost(): PokeBoostResult {
 
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
     hash,
+    chainId,
   })
 
   const pokeBoost = (veBTCTokenId: bigint) => {
@@ -402,6 +409,7 @@ export function usePokeBoost(): PokeBoostResult {
     writeContract({
       address,
       abi,
+      chainId,
       functionName: "pokeBoost",
       args: [veBTCTokenId],
     })
@@ -664,6 +672,7 @@ export function useApproveToken(): {
 
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
     hash,
+    chainId,
   })
 
   const approve = (
@@ -903,6 +912,7 @@ export function useAddIncentives(): AddIncentivesResult {
 
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
     hash,
+    chainId,
   })
 
   const addIncentives = (
@@ -916,6 +926,7 @@ export function useAddIncentives(): AddIncentivesResult {
     writeContract({
       address,
       abi,
+      chainId,
       functionName: "addBribes",
       args: [gaugeAddress, tokens, amounts],
     })
@@ -1237,6 +1248,7 @@ export function useClaimBribes(
 
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
     hash,
+    chainId,
   })
 
   const claimBribes = (
@@ -1253,6 +1265,7 @@ export function useClaimBribes(
     writeContract({
       address,
       abi,
+      chainId,
       functionName: "claimBribes",
       args: [bribeAddresses, tokens, tokenId],
     })

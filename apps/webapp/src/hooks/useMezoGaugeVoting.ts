@@ -104,6 +104,7 @@ export default function useMezoGaugeVoting() {
         try {
           const hash = await sendTransactionAsync({
             account,
+            chainId,
             to: call.to,
             data: call.data,
             value: call.value,

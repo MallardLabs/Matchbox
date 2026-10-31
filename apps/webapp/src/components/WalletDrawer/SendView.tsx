@@ -179,6 +179,7 @@ export function SendView({ onBack, onClose }: SendViewProps): JSX.Element {
   const { isLoading: isConfirming, isSuccess: isConfirmed } =
     useWaitForTransactionReceipt({
       hash: txHash,
+      chainId,
     })
 
   useEffect(() => {
@@ -241,6 +242,7 @@ export function SendView({ onBack, onClose }: SendViewProps): JSX.Element {
         to,
         value: parsedAmount,
         data: "0x" as `0x${string}`,
+        chainId,
       })
     } else {
       writeContract({

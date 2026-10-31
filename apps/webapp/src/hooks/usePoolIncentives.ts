@@ -275,6 +275,7 @@ export function useAddPoolIncentive(): AddPoolIncentiveResult {
   const { writeContract, data: hash, isPending, error } = useWriteContract()
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
     hash,
+    chainId,
   })
 
   const addIncentive = (
@@ -286,6 +287,7 @@ export function useAddPoolIncentive(): AddPoolIncentiveResult {
     writeContract({
       address: bribeAddress,
       abi: contracts.bribe.abi,
+      chainId,
       functionName: "notifyRewardAmount",
       args: [tokenAddress, amount],
     })

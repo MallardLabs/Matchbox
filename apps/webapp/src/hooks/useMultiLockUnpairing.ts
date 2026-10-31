@@ -341,6 +341,7 @@ export function useMultiLockUnpairing(): UseMultiLockUnpairingReturn {
           const hash = await writeContractAsync({
             address,
             abi,
+            chainId,
             functionName: "reset",
             args: [request.veMEZOTokenId],
           })
@@ -372,6 +373,7 @@ export function useMultiLockUnpairing(): UseMultiLockUnpairingReturn {
             const hash = await writeContractAsync({
               address,
               abi,
+              chainId,
               functionName: "pokeBoosts",
               args: [
                 Array.from(uniqueSuccessfulVeBTCTokens, (tokenId) =>

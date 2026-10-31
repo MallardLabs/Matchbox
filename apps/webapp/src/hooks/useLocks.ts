@@ -278,12 +278,14 @@ export function useApproveMEZO(): {
 
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
     hash,
+    chainId,
   })
 
   const approve = (amount: bigint) => {
     if (!contracts.veMEZO.address) return
     writeContract({
       ...contracts.mezoToken,
+      chainId,
       functionName: "approve",
       args: [contracts.veMEZO.address, amount],
     })
@@ -331,6 +333,7 @@ export function useCreateVeMEZOLock(): {
 
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
     hash,
+    chainId,
   })
 
   useEffect(() => {
@@ -345,6 +348,7 @@ export function useCreateVeMEZOLock(): {
     writeContract({
       address: veMEZOAddress,
       abi: contracts.veMEZO.abi,
+      chainId,
       functionName: "createLock",
       args: [amount, BigInt(lockDuration)],
     })

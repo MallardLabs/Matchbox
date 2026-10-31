@@ -104,6 +104,7 @@ export default function useMultiValidatorVoting() {
         try {
           const hash = await sendTransactionAsync({
             account,
+            chainId,
             to: call.to,
             data: call.data,
             value: call.value,
