@@ -8,6 +8,7 @@ import type {
   GrantRecord,
 } from "../store/id-store"
 import { claimsSnapshot } from "./claims"
+import { pairwiseSubject } from "./tokens"
 
 export type AuditContext = {
   ipPrefix: string | null
@@ -54,15 +55,33 @@ export async function upsertGrant(
     claimsSnapshot: claimsSnapshot(scopes),
     discordUserId,
   }
-  const auditBase = {
-    actorType: "wallet" as const,
-    actorId: account.id,
-    organizationId: client.app.organizationId,
-    appId: client.app.id,
-    environmentId: client.environment.id,
-    targetType: "grant",
-    ipPrefix: input.audit.ipPrefix,
-    requestId: input.audit.requestId,
+  /**
+   * The row is tagged with the app's organization. `actorId` (the account id
+   * every app shares) and `ipPrefix` are for staff only; the organization
+   * sees `metadata.subject`, the environment's pairwise `sub`, instead.
+   */
+  async function recordGrantAudit(
+    action: "grant-created" | "grant-updated",
+    grantId: string,
+  ): Promise<void> {
+    await deps.store.recordAudit({
+      actorType: "wallet",
+      actorId: account.id,
+      organizationId: client.app.organizationId,
+      appId: client.app.id,
+      environmentId: client.environment.id,
+      action,
+      targetType: "grant",
+      targetId: grantId,
+      metadata: {
+        scopes,
+        declinedScopes,
+        scopeVersion: update.scopeVersion,
+        subject: await pairwiseSubject(deps, account, client),
+      },
+      ipPrefix: input.audit.ipPrefix,
+      requestId: input.audit.requestId,
+    })
   }
 
   if (existing !== null) {
@@ -73,12 +92,7 @@ export async function upsertGrant(
       existing.declinedScopes.join(" ") === declinedScopes.join(" ")
     if (unchanged) return existing
     const grant = await deps.store.updateGrant(existing.id, update, now)
-    await deps.store.recordAudit({
-      ...auditBase,
-      action: "grant-updated",
-      targetId: grant.id,
-      metadata: { scopes, declinedScopes, scopeVersion: update.scopeVersion },
-    })
+    await recordGrantAudit("grant-updated", grant.id)
     return grant
   }
 
@@ -91,11 +105,6 @@ export async function upsertGrant(
     },
     now,
   )
-  await deps.store.recordAudit({
-    ...auditBase,
-    action: "grant-created",
-    targetId: grant.id,
-    metadata: { scopes, declinedScopes, scopeVersion: update.scopeVersion },
-  })
+  await recordGrantAudit("grant-created", grant.id)
   return grant
 }

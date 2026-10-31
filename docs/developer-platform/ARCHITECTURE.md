@@ -192,7 +192,13 @@ grants that contain a `discord:*` scope for the old wallet, reason
   (`developer | staff | wallet | system`), `actor_id`, `organization_id
   null`, `app_id null`, `environment_id null`, `action` (kebab-case, e.g.
   `api-key-created`), `target_type`, `target_id`, `metadata jsonb`,
-  `ip_prefix`. UPDATE/DELETE blocked by trigger (immutable).
+  `ip_prefix`. UPDATE/DELETE blocked by trigger (immutable). Matchbox ID
+  grant rows keep the account id and IP prefix for staff and add the
+  environment's pairwise `sub` as `metadata.subject`. Organization feeds
+  (`/api/orgs/{id}/audit`, `/api/apps/{id}/audit`) show a wallet actor as
+  that `sub` (null on older rows), drop the actor id and IP prefix of
+  wallet, staff and system rows, and accept `actorId` only for developers;
+  `/api/admin/audit` returns rows as stored.
 
 ### 4.3 Gauge Profile read model
 

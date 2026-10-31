@@ -481,6 +481,6 @@ export default function registerAdminRoutes(app: ConsoleApp): void {
 
   app.get("/api/admin/audit", async (c) => {
     await requireStaff(c, "reviewer")
-    return auditSearch(c, queryParams(c, auditSearchQuerySchema))
+    return auditSearch(c, queryParams(c, auditSearchQuerySchema), "staff")
   })
 }

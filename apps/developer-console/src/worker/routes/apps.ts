@@ -236,10 +236,10 @@ export default function registerAppRoutes(app: ConsoleApp): void {
     const { appId } = pathParams(c, consolePaths.appId)
     const access = await appAccess(c, appId, "admin")
     const query = queryParams(c, auditSearchQuerySchema)
-    return auditSearch(c, {
-      ...query,
-      organizationId: access.app.organizationId,
-      appId,
-    })
+    return auditSearch(
+      c,
+      { ...query, organizationId: access.app.organizationId, appId },
+      "organization",
+    )
   })
 }
