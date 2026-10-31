@@ -22,14 +22,20 @@ import { avatarUrl } from "../_shared/discord.ts"
 import {
   type SupabaseClient,
   academyEnabled,
-  buildLinkMessage,
-  buildUnlinkMessage,
   getActiveSemesters,
   heldManagedRoles,
   pointsFromWad,
+  randomNonce,
   reconcileRoles,
   revokeAllRoles,
+  unlinkChallengeExpiry,
+  webappBaseUrl,
 } from "../_shared/discordLink.ts"
+import {
+  buildLinkMessage,
+  buildUnlinkMessage,
+} from "../_shared/discordLinkMessage.ts"
+import { sha256 } from "../_shared/gaugeProfileAuthorization.ts"
 
 const JSON_HEADERS = { ...corsHeaders, "Content-Type": "application/json" }
 
@@ -119,13 +125,25 @@ const verifySchema = z.object({
   ),
 })
 
+const unlinkMessageSchema = z.object({
+  address: z.string().min(1),
+})
+
 const unlinkSchema = z.object({
   address: z.string().min(1),
+  nonce: z.string().regex(/^[0-9a-f]{32}$/),
   signature: z.custom<Hex>(
     (v) => typeof v === "string" && /^0x[0-9a-fA-F]+$/.test(v),
     "invalid signature",
   ),
 })
+
+type UnlinkChallenge = {
+  discord_user_id: string
+  issued_at: string
+  expires_at: string
+  consumed_at: string | null
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -174,19 +192,72 @@ Deno.serve(async (req) => {
     return json({ success: true, linked: data !== null })
   }
 
-  // --- Return the message a wallet signs to unlink itself. ---
-  if (req.method === "GET" && action === "unlink-message") {
-    const address = url.searchParams.get("address") ?? ""
-    if (!isAddress(address)) {
+  // --- Issue a single-use challenge a wallet signs to unlink itself. ---
+  // It is bound to the wallet and the Discord account linked right now, so a
+  // signature can't be replayed later or against a relink.
+  if (req.method === "POST" && action === "unlink-message") {
+    let body: unknown
+    try {
+      body = await req.json()
+    } catch (_err) {
+      return json({ success: false, reason: "bad_request" }, 400)
+    }
+    const parsed = unlinkMessageSchema.safeParse(body)
+    if (!parsed.success) {
+      return json({ success: false, reason: "bad_request" }, 400)
+    }
+    if (!isAddress(parsed.data.address)) {
       return json({ success: false, reason: "bad_address" }, 400)
     }
+    const address = getAddress(parsed.data.address)
+    const walletLower = address.toLowerCase()
+
+    const { data: link } = await supabase
+      .from("discord_wallet_links")
+      .select("discord_user_id")
+      .eq("wallet_address", walletLower)
+      .maybeSingle()
+    if (!link) return json({ success: false, reason: "not_linked" }, 404)
+
+    const nowMs = Date.now()
+    const nonce = randomNonce()
+    const issuedAt = new Date(nowMs).toISOString()
+    const expiresAt = unlinkChallengeExpiry(nowMs)
+
+    const { error: purgeError } = await supabase
+      .from("discord_unlink_challenges")
+      .delete()
+      .lt("expires_at", issuedAt)
+    if (purgeError) console.error("unlink challenge purge error:", purgeError)
+
+    const { error: insertError } = await supabase
+      .from("discord_unlink_challenges")
+      .insert({
+        nonce_hash: await sha256(nonce),
+        wallet_address: walletLower,
+        discord_user_id: link.discord_user_id,
+        issued_at: issuedAt,
+        expires_at: expiresAt,
+      })
+    if (insertError) {
+      console.error("unlink challenge insert error:", insertError)
+      return json({ success: false, reason: "server_error" }, 500)
+    }
+
     return json({
       success: true,
-      message: buildUnlinkMessage({ domain: linkDomain(), address }),
+      nonce,
+      message: buildUnlinkMessage({
+        webappUrl: webappBaseUrl(),
+        address,
+        nonce,
+        issuedAt,
+        expiresAt,
+      }),
     })
   }
 
-  // --- Verify a wallet signature, then remove its Discord link (+ roles). ---
+  // --- Consume a signed challenge, then remove that Discord link (+ roles). ---
   if (req.method === "POST" && action === "unlink") {
     let body: unknown
     try {
@@ -203,31 +274,74 @@ Deno.serve(async (req) => {
     }
     const address = getAddress(parsed.data.address)
     const walletLower = address.toLowerCase()
+    const nonceHash = await sha256(parsed.data.nonce)
+
+    const { data } = await supabase
+      .from("discord_unlink_challenges")
+      .select("discord_user_id, issued_at, expires_at, consumed_at")
+      .eq("nonce_hash", nonceHash)
+      .eq("wallet_address", walletLower)
+      .maybeSingle()
+    const challenge: UnlinkChallenge | null = data
+    if (
+      !challenge ||
+      challenge.consumed_at !== null ||
+      new Date(challenge.expires_at).getTime() <= Date.now()
+    ) {
+      return json({ success: false, reason: "expired" }, 401)
+    }
 
     const validSig = await walletSigned({
       address,
-      message: buildUnlinkMessage({ domain: linkDomain(), address }),
+      message: buildUnlinkMessage({
+        webappUrl: webappBaseUrl(),
+        address,
+        nonce: parsed.data.nonce,
+        issuedAt: challenge.issued_at,
+        expiresAt: challenge.expires_at,
+      }),
       signature: parsed.data.signature,
     })
     if (!validSig) {
       return json({ success: false, reason: "bad_signature" }, 401)
     }
 
+    // Consume the challenge in one conditional update so concurrent replays
+    // of the same signature can't both pass.
+    const now = new Date().toISOString()
+    const { data: consumed } = await supabase
+      .from("discord_unlink_challenges")
+      .update({ consumed_at: now })
+      .eq("nonce_hash", nonceHash)
+      .is("consumed_at", null)
+      .gt("expires_at", now)
+      .select("nonce_hash")
+      .maybeSingle()
+    if (!consumed) return json({ success: false, reason: "expired" }, 401)
+
     const { data: link } = await supabase
       .from("discord_wallet_links")
       .select("discord_user_id, wallet_address, guild_id, granted_roles")
       .eq("wallet_address", walletLower)
       .maybeSingle()
-    if (link) {
-      // With Academy points off nothing could grant the roles back, so they stay.
-      if (academyEnabled()) {
-        const semesters = await getActiveSemesters(supabase)
-        await revokeAllRoles({ supabase, link, semesters })
-      }
-      await supabase
-        .from("discord_wallet_links")
-        .delete()
-        .eq("wallet_address", walletLower)
+    if (!link) return json({ success: true })
+    if (link.discord_user_id !== challenge.discord_user_id) {
+      return json({ success: false, reason: "link_changed" }, 409)
+    }
+
+    // With Academy points off nothing could grant the roles back, so they stay.
+    if (academyEnabled()) {
+      const semesters = await getActiveSemesters(supabase)
+      await revokeAllRoles({ supabase, link, semesters })
+    }
+    const { error: deleteError } = await supabase
+      .from("discord_wallet_links")
+      .delete()
+      .eq("wallet_address", walletLower)
+      .eq("discord_user_id", challenge.discord_user_id)
+    if (deleteError) {
+      console.error("unlink delete error:", deleteError)
+      return json({ success: false, reason: "server_error" }, 500)
     }
     return json({ success: true })
   }

@@ -2,11 +2,19 @@ import { useDiscordLink } from "@/hooks/useDiscordLink"
 import { useQueryClient } from "@tanstack/react-query"
 import { useEffect, useRef, useState } from "react"
 import { useSignMessage } from "wagmi"
+import { z } from "zod"
 
 // Invite to the Mezo Discord server, where the Matchbox bot lives.
 const MEZO_DISCORD_INVITE = "https://discord.mezo.org"
 const FUNCTIONS_URL = `${process.env.NEXT_PUBLIC_SUPABASE_URL ?? ""}/functions/v1/discord-link`
 const ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? ""
+
+// A single-use unlink challenge: the nonce goes back with the signature.
+const unlinkChallengeSchema = z.object({
+  success: z.literal(true),
+  nonce: z.string(),
+  message: z.string(),
+})
 
 function headers(): HeadersInit {
   return { apikey: ANON_KEY, Authorization: `Bearer ${ANON_KEY}` }
@@ -139,20 +147,22 @@ export default function AcademyDiscordCard({
     setError(null)
     setUnlinking(true)
     try {
-      const msgRes = await fetch(
-        `${FUNCTIONS_URL}?action=unlink-message&address=${walletAddress}`,
-        { headers: headers() },
-      )
-      const msgData = await msgRes.json()
-      if (!msgData.success) {
+      const msgRes = await fetch(`${FUNCTIONS_URL}?action=unlink-message`, {
+        method: "POST",
+        headers: { ...headers(), "Content-Type": "application/json" },
+        body: JSON.stringify({ address: walletAddress }),
+      })
+      const challenge = unlinkChallengeSchema.safeParse(await msgRes.json())
+      if (!challenge.success) {
         setError("Couldn't start unlinking. Please try again.")
         return
       }
-      const signature = await signMessageAsync({ message: msgData.message })
+      const { nonce, message } = challenge.data
+      const signature = await signMessageAsync({ message })
       const res = await fetch(`${FUNCTIONS_URL}?action=unlink`, {
         method: "POST",
         headers: { ...headers(), "Content-Type": "application/json" },
-        body: JSON.stringify({ address: walletAddress, signature }),
+        body: JSON.stringify({ address: walletAddress, nonce, signature }),
       })
       const resData = await res.json()
       if (!resData.success) {
