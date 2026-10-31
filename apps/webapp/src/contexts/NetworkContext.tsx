@@ -1,3 +1,4 @@
+import { getChainLabel } from "@/utils/walletNetwork"
 import { CHAIN_ID, type SupportedChainId } from "@repo/shared/contracts"
 import {
   type ReactNode,
@@ -5,6 +6,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
 } from "react"
 import { useAccount, useChainId, useSwitchChain } from "wagmi"
@@ -14,6 +16,8 @@ type NetworkContextType = {
   isMainnet: boolean
   isNetworkReady: boolean
   switchNetwork: () => void
+  // Sets the UI network without asking the wallet to switch.
+  selectNetwork: (chainId: SupportedChainId) => void
   networkName: string
 }
 
@@ -47,12 +51,13 @@ function writeSavedNetwork(chainId: SupportedChainId) {
 
 export function NetworkProvider({ children }: { children: ReactNode }) {
   const wagmiChainId = useChainId()
-  const { isConnected } = useAccount()
+  const { isConnected, chainId: walletChainId } = useAccount()
   const [chainId, setChainId] = useState<SupportedChainId>(() =>
     readSavedNetwork(),
   )
   const [isNetworkReady, setIsNetworkReady] = useState(false)
   const { switchChainAsync } = useSwitchChain()
+  const lastWalletChainId = useRef(walletChainId)
 
   useEffect(() => {
     // Saved preference is the source of truth for the UI's selected network.
@@ -92,6 +97,39 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
     }
   }, [wagmiChainId, chainId, isConnected, isNetworkReady])
 
+  useEffect(() => {
+    // Follow a network change made inside the wallet, so the UI does not keep
+    // showing one Mezo network while the wallet signs on the other. A fresh
+    // connection (no previous chain) keeps the saved preference, a non-Mezo
+    // chain is left to the wrong-network gate, and nothing here asks the
+    // wallet to switch, so this cannot loop with switchNetwork.
+    const previousWalletChainId = lastWalletChainId.current
+    lastWalletChainId.current = walletChainId
+
+    if (
+      !isNetworkReady ||
+      previousWalletChainId === undefined ||
+      walletChainId === undefined ||
+      walletChainId === previousWalletChainId ||
+      walletChainId === chainId ||
+      !isSupportedMezoChainId(walletChainId)
+    ) {
+      return
+    }
+
+    setChainId(walletChainId)
+    writeSavedNetwork(walletChainId)
+    console.info("[Network] Followed wallet chain change", {
+      fromChainId: previousWalletChainId,
+      toChainId: walletChainId,
+    })
+  }, [chainId, isNetworkReady, walletChainId])
+
+  const selectNetwork = useCallback((nextChainId: SupportedChainId) => {
+    setChainId(nextChainId)
+    writeSavedNetwork(nextChainId)
+  }, [])
+
   const switchNetwork = useCallback(() => {
     if (!isNetworkReady) return
 
@@ -113,7 +151,8 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
     // right away. The wallet chain switch is fired best-effort; if the user
     // rejects or the wallet hangs, the UI still reflects the chosen network
     // (on-chain reads via wagmi will simply no-op until the wallet catches up
-    // or the user connects a wallet on the chosen chain).
+    // or the user connects a wallet on the chosen chain). Writes stay behind
+    // useWalletNetworkGate until the wallet is on it.
     setChainId(newChainId)
     writeSavedNetwork(newChainId)
 
@@ -150,7 +189,7 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
   }, [chainId, isConnected, isNetworkReady, switchChainAsync])
 
   const isMainnet = chainId === CHAIN_ID.mainnet
-  const networkName = isMainnet ? "Mezo Mainnet" : "Mezo Testnet"
+  const networkName = getChainLabel(chainId)
 
   return (
     <NetworkContext.Provider
@@ -159,6 +198,7 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
         isMainnet,
         isNetworkReady,
         switchNetwork,
+        selectNetwork,
         networkName,
       }}
     >

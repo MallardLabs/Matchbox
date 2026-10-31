@@ -48,27 +48,14 @@ const EIP6963_WALLET_IDS = new Set([
   "com.okex.wallet",
 ])
 
-const NETWORK_STORAGE_KEY = "mezo-network"
-
 function isSupportedMezoChainId(chainId: number): chainId is SupportedChainId {
   return chainId === CHAIN_ID.mainnet || chainId === CHAIN_ID.testnet
-}
-
-function writeSavedNetwork(chainId: SupportedChainId) {
-  if (typeof window === "undefined") {
-    return
-  }
-
-  window.localStorage.setItem(
-    NETWORK_STORAGE_KEY,
-    chainId === CHAIN_ID.mainnet ? "mainnet" : "testnet",
-  )
 }
 
 export function useWalletList(onConnected?: () => void) {
   const { connectors, connect, isPending } = useConnect()
   const { switchChainAsync } = useSwitchChain()
-  const { chainId: selectedChainId } = useNetwork()
+  const { chainId: selectedChainId, selectNetwork } = useNetwork()
   const { isConnected } = useAccount()
   const [pendingConnectorId, setPendingConnectorId] = useState<string | null>(
     null,
@@ -273,7 +260,7 @@ export function useWalletList(onConnected?: () => void) {
             )
 
             if (!switchChainAsync) {
-              writeSavedNetwork(connectedChainId)
+              selectNetwork(connectedChainId)
               console.warn(
                 "[Network] Auto-switch unavailable; persisted connected chain",
                 { connectedChainId },
@@ -283,12 +270,12 @@ export function useWalletList(onConnected?: () => void) {
 
             try {
               await switchChainAsync({ chainId: selectedChainId })
-              writeSavedNetwork(selectedChainId)
+              selectNetwork(selectedChainId)
               console.info("[Network] Auto-switch after connect succeeded", {
                 targetChainId: selectedChainId,
               })
             } catch (error) {
-              writeSavedNetwork(connectedChainId)
+              selectNetwork(connectedChainId)
               console.warn(
                 "[Network] Auto-switch after connect failed; falling back to connected chain",
                 {
@@ -313,7 +300,7 @@ export function useWalletList(onConnected?: () => void) {
         },
       )
     },
-    [connectors, connect, selectedChainId, switchChainAsync],
+    [connectors, connect, selectNetwork, selectedChainId, switchChainAsync],
   )
 
   const cancelConnect = useCallback(() => {
