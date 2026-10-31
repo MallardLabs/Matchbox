@@ -32,16 +32,13 @@ import { identityAccount } from "./account"
 
 const maxUserAgentLength = 512
 
-async function enforceSiweLimit(
-  c: Context,
-  deps: AppDeps,
-  extraKeys: string[] = [],
-): Promise<void> {
-  const prefix = ipPrefix(c.req.raw) ?? "unknown"
-  const policy = rateLimitPolicies.live.siwe
+function ipLimitKey(c: Context): string {
+  return `siwe:ip:${ipPrefix(c.req.raw) ?? "unknown"}`
+}
+
+async function enforceSiweLimit(deps: AppDeps, key: string): Promise<void> {
   const rejected = await firstRateLimitRejection(deps, [
-    { key: `siwe:ip:${prefix}`, policy },
-    ...extraKeys.map((key) => ({ key, policy })),
+    { key, policy: rateLimitPolicies.live.siwe },
   ])
   if (rejected !== null) {
     throw new PlatformError("rate_limited", {
@@ -54,7 +51,7 @@ export default function siweRoutes(deps: AppDeps): Hono {
   const app = new Hono()
 
   app.post("/api/siwe/nonce", async (c) => {
-    await enforceSiweLimit(c, deps)
+    await enforceSiweLimit(deps, ipLimitKey(c))
     const nonce = generateSiweNonce()
     await deps.store.createSiweNonce(
       nonce,
@@ -82,7 +79,7 @@ export default function siweRoutes(deps: AppDeps): Hono {
     const signature = body.signature
     if (!isHex(signature)) throw new PlatformError("invalid_request")
     const walletAddress = checked.address.toLowerCase()
-    await enforceSiweLimit(c, deps, [`siwe:wallet:${walletAddress}`])
+    await enforceSiweLimit(deps, ipLimitKey(c))
     if (!(await deps.store.consumeSiweNonce(checked.nonce, now))) {
       throw new PlatformError("unauthorized", {
         message: "Sign-in message rejected: nonce.",
@@ -120,6 +117,11 @@ export default function siweRoutes(deps: AppDeps): Hono {
       signature,
       address: checked.address,
     })
+    // Only proven sign-ins spend the wallet's bucket: the address in the
+    // message is unauthenticated until here, so charging it earlier let
+    // anyone lock a wallet out. Failed attempts are bounded by the IP
+    // bucket and the single-use nonce.
+    await enforceSiweLimit(deps, `siwe:wallet:${walletAddress}`)
 
     const account = await deps.store.upsertAccountForSignIn(walletAddress, now)
     if (account.disabledAt !== null) throw new PlatformError("forbidden")
