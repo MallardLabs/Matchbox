@@ -1,6 +1,8 @@
 import IncentiveWarningModal from "@/components/IncentiveWarningModal"
 import { TokenIcon } from "@/components/TokenIcon"
 import { TokenSelector } from "@/components/TokenSelector"
+import { formatWalletWriteError } from "@/config/mezoRpcWrite"
+import { useNetwork } from "@/contexts/NetworkContext"
 import type { Token } from "@/hooks/useTokenList"
 import {
   useAddIncentives,
@@ -9,6 +11,7 @@ import {
   useIsAllowlistedToken,
   useTokenAllowance,
 } from "@/hooks/useVoting"
+import { useWalletNetworkGate } from "@/hooks/useWalletNetworkGate"
 import {
   Button,
   Input,
@@ -48,6 +51,9 @@ export function AddGaugeIncentiveModal({
 }: AddGaugeIncentiveModalProps) {
   const router = useRouter()
   const { address: walletAddress } = useAccount()
+  const { chainId, networkName } = useNetwork()
+  const { isWrongNetwork, isSwitching, switchWalletNetwork } =
+    useWalletNetworkGate()
   const boostVoterAddress = useBoostVoterAddress()
 
   const [incentiveToken, setIncentiveToken] = useState<Token | undefined>()
@@ -88,6 +94,7 @@ export function AddGaugeIncentiveModal({
           type: "function",
         },
       ] as const,
+      chainId,
       functionName: "balanceOf",
       args: walletAddress ? [walletAddress] : undefined,
       query: {
@@ -195,6 +202,7 @@ export function AddGaugeIncentiveModal({
 
   const isSubmitting = isApproving || isConfirmingApproval
   const isFunding = isAddingIncentives || isConfirmingIncentives
+  const writeError = addIncentivesError ?? approvalError
 
   return (
     <>
@@ -328,12 +336,10 @@ export function AddGaugeIncentiveModal({
               </div>
             )}
 
-            {(approvalError || addIncentivesError) && (
+            {writeError && (
               <div className="rounded-xl border border-[var(--negative)] bg-[rgba(239,68,68,0.1)] p-3">
                 <p className="text-sm text-[var(--negative)]">
-                  Error:{" "}
-                  {(addIncentivesError ?? approvalError)?.message ??
-                    "Transaction failed"}
+                  Error: {formatWalletWriteError(writeError)}
                 </p>
               </div>
             )}
@@ -346,6 +352,14 @@ export function AddGaugeIncentiveModal({
               {!walletAddress ? (
                 <Button kind="primary" disabled>
                   Connect Wallet to Continue
+                </Button>
+              ) : isWrongNetwork ? (
+                <Button
+                  kind="primary"
+                  onClick={switchWalletNetwork}
+                  isLoading={isSwitching}
+                >
+                  {`Switch wallet to ${networkName}`}
                 </Button>
               ) : needsApproval ? (
                 <Button

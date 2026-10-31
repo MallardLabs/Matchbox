@@ -12,6 +12,7 @@ import {
   useWalletClient,
 } from "wagmi"
 import { useSafeBatchExport } from "./useSafeBatchExport"
+import { useWalletNetworkGate } from "./useWalletNetworkGate"
 
 export type MezoGaugeLockTxState = {
   tokenId: bigint
@@ -33,6 +34,7 @@ export default function useMezoGaugeVoting() {
   const publicClient = usePublicClient({ chainId })
   const voter = getContractConfig(chainId).thirdPartyVoter
   const safeBatch = useSafeBatchExport("mezo-gauge-vote")
+  const { assertWalletNetwork } = useWalletNetworkGate()
   const [lockStates, setLockStates] = useState<MezoGaugeLockTxState[]>([])
   const [isInProgress, setIsInProgress] = useState(false)
   const [executionMode, setExecutionMode] = useState<
@@ -61,6 +63,7 @@ export default function useMezoGaugeVoting() {
           tokenIds.map((tokenId) => ({ tokenId, status: "signing" })),
         )
         try {
+          await assertWalletNetwork()
           const { id } = await sendCalls(walletClient, {
             account,
             calls,
@@ -102,6 +105,7 @@ export default function useMezoGaugeVoting() {
           ),
         )
         try {
+          await assertWalletNetwork()
           const hash = await sendTransactionAsync({
             account,
             chainId,
@@ -144,7 +148,14 @@ export default function useMezoGaugeVoting() {
       setIsInProgress(false)
       return { successCount, errorCount: tokenIds.length - successCount }
     },
-    [account, chainId, publicClient, sendTransactionAsync, walletClient],
+    [
+      account,
+      assertWalletNetwork,
+      chainId,
+      publicClient,
+      sendTransactionAsync,
+      walletClient,
+    ],
   )
 
   const voteAll = useCallback(

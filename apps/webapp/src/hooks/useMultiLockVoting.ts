@@ -12,6 +12,7 @@ import {
   useWriteContract,
 } from "wagmi"
 import { useSafeBatchExport } from "./useSafeBatchExport"
+import { useWalletNetworkGate } from "./useWalletNetworkGate"
 
 export type LockTxStatus =
   | "pending"
@@ -82,6 +83,7 @@ export function useMultiLockVoting(): UseMultiLockVotingReturn {
   const { data: walletClient } = useWalletClient({ chainId })
   const { writeContractAsync } = useWriteContract()
   const safeBatch = useSafeBatchExport("vote")
+  const { assertWalletNetwork } = useWalletNetworkGate()
 
   const [status, setStatus] = useState<MultiLockVoteStatus>("idle")
   const [executionMode, setExecutionMode] =
@@ -181,6 +183,7 @@ export function useMultiLockVoting(): UseMultiLockVotingReturn {
         if (tokenId === undefined) continue
 
         try {
+          await assertWalletNetwork()
           const hash = await executeFn(tokenId)
           updateLockState(i, { status: "confirming", hash })
 
@@ -211,7 +214,13 @@ export function useMultiLockVoting(): UseMultiLockVotingReturn {
 
       return buildExecutionResult(lockStatesRef.current)
     },
-    [buildExecutionResult, publicClient, replaceLockStates, updateLockState],
+    [
+      assertWalletNetwork,
+      buildExecutionResult,
+      publicClient,
+      replaceLockStates,
+      updateLockState,
+    ],
   )
 
   const executeBatched = useCallback(
@@ -239,6 +248,7 @@ export function useMultiLockVoting(): UseMultiLockVotingReturn {
       setStatus("voting")
 
       try {
+        await assertWalletNetwork()
         const { id } = await sendCalls(walletClient, {
           account: accountAddress,
           calls,
@@ -280,7 +290,13 @@ export function useMultiLockVoting(): UseMultiLockVotingReturn {
 
       return buildExecutionResult(lockStatesRef.current)
     },
-    [accountAddress, buildExecutionResult, replaceLockStates, walletClient],
+    [
+      accountAddress,
+      assertWalletNetwork,
+      buildExecutionResult,
+      replaceLockStates,
+      walletClient,
+    ],
   )
 
   const voteAll = useCallback(

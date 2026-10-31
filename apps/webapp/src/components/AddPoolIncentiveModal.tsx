@@ -1,6 +1,8 @@
 import { TokenPairIcon } from "@/components/PoolCard"
 import { TokenSelector } from "@/components/TokenSelector"
 import Tooltip from "@/components/Tooltip"
+import { formatWalletWriteError } from "@/config/mezoRpcWrite"
+import { useNetwork } from "@/contexts/NetworkContext"
 import { useBtcPrice } from "@/hooks/useBtcPrice"
 import { useMezoPrice } from "@/hooks/useMezoPrice"
 import {
@@ -12,6 +14,7 @@ import type { Pool } from "@/hooks/usePools"
 import type { Token } from "@/hooks/useTokenList"
 import { useVotables } from "@/hooks/useVotables"
 import { useApproveToken, useTokenAllowance } from "@/hooks/useVoting"
+import { useWalletNetworkGate } from "@/hooks/useWalletNetworkGate"
 import {
   Button,
   Input,
@@ -48,6 +51,9 @@ export default function AddPoolIncentiveModal({
   prefetchedBribeAddress,
 }: AddPoolIncentiveModalProps): JSX.Element {
   const { address: walletAddress } = useAccount()
+  const { chainId, networkName } = useNetwork()
+  const { isWrongNetwork, isSwitching, switchWalletNetwork } =
+    useWalletNetworkGate()
   const gaugeAddress = pool.gauge ?? undefined
   // Only fire the on-demand lookup if the caller didn't pre-fetch. This makes
   // the modal feel instant when opened from the Pools page (the common case)
@@ -104,6 +110,7 @@ export default function AddPoolIncentiveModal({
         type: "function",
       },
     ] as const,
+    chainId,
     functionName: "balanceOf",
     args: walletAddress ? [walletAddress] : undefined,
     query: {
@@ -184,6 +191,7 @@ export default function AddPoolIncentiveModal({
 
   const isSubmittingApproval = isApproving || isConfirmingApproval
   const isFunding = isAdding || isConfirmingAdd
+  const writeError = addError ?? approvalError
 
   // Live vAPR preview: proportionally scale the pool's current voting APR by
   // the new total voter-incentive USD (current voterFees + bribes + delta).
@@ -677,11 +685,10 @@ export default function AddPoolIncentiveModal({
             </div>
           )}
 
-          {(approvalError || addError) && (
+          {writeError && (
             <div className="rounded-xl border border-[var(--negative)] bg-[rgba(239,68,68,0.1)] p-3">
               <p className="text-sm text-[var(--negative)]">
-                Error:{" "}
-                {(addError ?? approvalError)?.message ?? "Transaction failed"}
+                Error: {formatWalletWriteError(writeError)}
               </p>
             </div>
           )}
@@ -693,6 +700,14 @@ export default function AddPoolIncentiveModal({
             {!walletAddress ? (
               <Button kind="primary" disabled>
                 Connect Wallet to Continue
+              </Button>
+            ) : isWrongNetwork ? (
+              <Button
+                kind="primary"
+                onClick={switchWalletNetwork}
+                isLoading={isSwitching}
+              >
+                {`Switch wallet to ${networkName}`}
               </Button>
             ) : needsApproval ? (
               <Button

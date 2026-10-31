@@ -1,3 +1,4 @@
+import { formatWrongNetwork } from "@/utils/walletNetwork"
 import type { Address, Hex, JsonRpcAccount } from "viem"
 
 export const MUTATION_RPC_METHODS = new Set([
@@ -12,6 +13,10 @@ export const MUTATION_RPC_METHODS = new Set([
 ])
 
 const HEX_STRING = /^0x[0-9a-fA-F]+$/
+// viem's ChainMismatchError, raised when a write pinned to the UI network's
+// chainId meets a wallet on another chain.
+const CHAIN_MISMATCH =
+  /current chain of the wallet \(id: (\d+)\) does not match the target chain for the transaction \(id: (\d+)/
 const EMPTY_RAW_TX_MESSAGE =
   "The wallet produced an empty signed transaction. Bitcoin and smart-account wallets often fail when Matchbox broadcasts via eth_sendRawTransaction. Approve the token in the explorer, then retry, or reconnect with MetaMask or Rabby."
 
@@ -77,6 +82,11 @@ export function formatWalletWriteError(error: Error): string {
     )
   ) {
     return EMPTY_RAW_TX_MESSAGE
+  }
+
+  const mismatch = CHAIN_MISMATCH.exec(error.message)
+  if (mismatch?.[1] && mismatch[2]) {
+    return formatWrongNetwork(Number(mismatch[1]), Number(mismatch[2]))
   }
 
   return error.message

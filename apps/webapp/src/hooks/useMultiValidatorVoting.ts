@@ -12,6 +12,7 @@ import {
   useWalletClient,
 } from "wagmi"
 import { useSafeBatchExport } from "./useSafeBatchExport"
+import { useWalletNetworkGate } from "./useWalletNetworkGate"
 
 export type ValidatorLockTxState = {
   tokenId: bigint
@@ -33,6 +34,7 @@ export default function useMultiValidatorVoting() {
   const publicClient = usePublicClient({ chainId })
   const voter = getContractConfig(chainId).validatorsVoter
   const safeBatch = useSafeBatchExport("validator-vote")
+  const { assertWalletNetwork } = useWalletNetworkGate()
   const [lockStates, setLockStates] = useState<ValidatorLockTxState[]>([])
   const [isInProgress, setIsInProgress] = useState(false)
   const [executionMode, setExecutionMode] = useState<
@@ -61,6 +63,7 @@ export default function useMultiValidatorVoting() {
           tokenIds.map((tokenId) => ({ tokenId, status: "signing" })),
         )
         try {
+          await assertWalletNetwork()
           const { id } = await sendCalls(walletClient, {
             account,
             calls,
@@ -102,6 +105,7 @@ export default function useMultiValidatorVoting() {
           ),
         )
         try {
+          await assertWalletNetwork()
           const hash = await sendTransactionAsync({
             account,
             chainId,
@@ -144,7 +148,14 @@ export default function useMultiValidatorVoting() {
       setIsInProgress(false)
       return { successCount, errorCount: tokenIds.length - successCount }
     },
-    [account, chainId, publicClient, sendTransactionAsync, walletClient],
+    [
+      account,
+      assertWalletNetwork,
+      chainId,
+      publicClient,
+      sendTransactionAsync,
+      walletClient,
+    ],
   )
 
   const voteAll = useCallback(

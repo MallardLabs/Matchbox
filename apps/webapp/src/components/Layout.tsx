@@ -1,6 +1,7 @@
 import type { ReactNode } from "react"
 import { Footer } from "./Footer"
 import { Header } from "./Header"
+import { WrongNetworkBanner } from "./WrongNetworkBanner"
 
 type LayoutProps = {
   children: ReactNode
@@ -11,6 +12,7 @@ export function Layout({ children }: LayoutProps): JSX.Element {
     <div className="relative z-10 flex min-h-screen flex-col bg-transparent">
       <Header />
       <main className="mx-auto w-full max-w-7xl flex-1 px-3 py-4 sm:px-4 sm:py-6 md:px-6 md:py-8 lg:px-8">
+        <WrongNetworkBanner />
         {children}
       </main>
       <Footer />

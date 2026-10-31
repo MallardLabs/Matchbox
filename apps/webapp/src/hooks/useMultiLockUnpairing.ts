@@ -13,6 +13,7 @@ import {
 } from "wagmi"
 import type { LockTxStatus, MultiLockExecutionMode } from "./useMultiLockVoting"
 import { useSafeBatchExport } from "./useSafeBatchExport"
+import { useWalletNetworkGate } from "./useWalletNetworkGate"
 
 export type UnpairBoostRequest = {
   veMEZOTokenId: bigint
@@ -83,6 +84,7 @@ export function useMultiLockUnpairing(): UseMultiLockUnpairingReturn {
   const { data: walletClient } = useWalletClient({ chainId })
   const { writeContractAsync } = useWriteContract()
   const safeBatch = useSafeBatchExport("unpair")
+  const { assertWalletNetwork } = useWalletNetworkGate()
 
   const [status, setStatus] = useState<MultiLockUnpairStatus>("idle")
   const [executionMode, setExecutionMode] =
@@ -248,6 +250,7 @@ export function useMultiLockUnpairing(): UseMultiLockUnpairingReturn {
       ]
 
       try {
+        await assertWalletNetwork()
         const { id } = await sendCalls(walletClient, {
           account: accountAddress,
           calls,
@@ -291,6 +294,7 @@ export function useMultiLockUnpairing(): UseMultiLockUnpairingReturn {
     },
     [
       accountAddress,
+      assertWalletNetwork,
       buildExecutionResult,
       buildInitialStates,
       replaceTxStates,
@@ -338,6 +342,7 @@ export function useMultiLockUnpairing(): UseMultiLockUnpairingReturn {
         updateTxState(i, { status: "signing" })
 
         try {
+          await assertWalletNetwork()
           const hash = await writeContractAsync({
             address,
             abi,
@@ -370,6 +375,7 @@ export function useMultiLockUnpairing(): UseMultiLockUnpairingReturn {
           updateTxState(pokeStateIndex, { status: "signing" })
 
           try {
+            await assertWalletNetwork()
             const hash = await writeContractAsync({
               address,
               abi,
@@ -399,6 +405,7 @@ export function useMultiLockUnpairing(): UseMultiLockUnpairingReturn {
     },
     [
       accountAddress,
+      assertWalletNetwork,
       buildExecutionResult,
       buildInitialStates,
       chainId,

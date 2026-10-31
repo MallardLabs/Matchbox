@@ -1,7 +1,9 @@
 import { TokenIcon } from "@/components/TokenIcon"
 import { getExplorerTransactionUrl } from "@/config/explorer"
+import { formatWalletWriteError } from "@/config/mezoRpcWrite"
 import { useNetwork } from "@/contexts/NetworkContext"
 import { type Token, useTokenList } from "@/hooks/useTokenList"
+import { useWalletNetworkGate } from "@/hooks/useWalletNetworkGate"
 import { useWalletAccount } from "@mezo-org/passport"
 import { ERC20_ABI } from "@repo/shared/contracts"
 import { useCallback, useEffect, useMemo, useState } from "react"
@@ -111,7 +113,9 @@ type SendViewProps = {
 
 export function SendView({ onBack, onClose }: SendViewProps): JSX.Element {
   const { accountAddress } = useWalletAccount()
-  const { chainId, isMainnet } = useNetwork()
+  const { chainId, isMainnet, networkName } = useNetwork()
+  const { isWrongNetwork, isSwitching, switchWalletNetwork } =
+    useWalletNetworkGate()
   const { tokens } = useTokenList()
 
   const [selectedToken, setSelectedToken] = useState<Token | undefined>()
@@ -194,7 +198,7 @@ export function SendView({ onBack, onClose }: SendViewProps): JSX.Element {
   useEffect(() => {
     const error = writeError || sendError
     if (error) {
-      setErrorMessage(error.message || "Transaction failed")
+      setErrorMessage(formatWalletWriteError(error) || "Transaction failed")
       setStep("error")
     }
   }, [writeError, sendError])
@@ -507,21 +511,27 @@ export function SendView({ onBack, onClose }: SendViewProps): JSX.Element {
       {/* Send Button */}
       <button
         type="button"
-        onClick={handleSend}
-        disabled={!canSend || isWritePending || isSendPending}
+        onClick={isWrongNetwork ? switchWalletNetwork : handleSend}
+        disabled={
+          isWrongNetwork
+            ? isSwitching
+            : !canSend || isWritePending || isSendPending
+        }
         className="mt-auto w-full rounded-2xl bg-[var(--accent)] py-4 text-lg font-semibold text-white transition-all hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
       >
-        {!selectedToken
-          ? "Select a token"
-          : !amount || !parsedAmount
-            ? "Enter amount"
-            : !recipientAddress
-              ? "Enter recipient"
-              : !isValidRecipient
-                ? "Invalid address"
-                : hasInsufficientBalance
-                  ? "Insufficient balance"
-                  : "Send"}
+        {isWrongNetwork
+          ? `Switch wallet to ${networkName}`
+          : !selectedToken
+            ? "Select a token"
+            : !amount || !parsedAmount
+              ? "Enter amount"
+              : !recipientAddress
+                ? "Enter recipient"
+                : !isValidRecipient
+                  ? "Invalid address"
+                  : hasInsufficientBalance
+                    ? "Insufficient balance"
+                    : "Send"}
       </button>
     </div>
   )
