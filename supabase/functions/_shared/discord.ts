@@ -39,8 +39,21 @@ function hexToBytes(hex: string): Uint8Array<ArrayBuffer> {
   return bytes
 }
 
+// Discord signs the request timestamp along with the body. Refusing stale (or
+// far-future) timestamps stops a captured request being replayed later.
+const MAX_INTERACTION_AGE_SECONDS = 5 * 60
+
+export function freshInteractionTimestamp(
+  timestamp: string,
+  nowMs: number,
+): boolean {
+  if (!/^\d{1,12}$/.test(timestamp)) return false
+  const ageSeconds = nowMs / 1000 - Number(timestamp)
+  return Math.abs(ageSeconds) <= MAX_INTERACTION_AGE_SECONDS
+}
+
 // Verify the Ed25519 signature Discord attaches to every interaction request.
-// Returns false on any malformed input rather than throwing.
+// Returns false on any malformed or stale input rather than throwing.
 export async function verifyDiscordSignature(args: {
   rawBody: string
   signature: string | null
@@ -49,6 +62,7 @@ export async function verifyDiscordSignature(args: {
 }): Promise<boolean> {
   const { rawBody, signature, timestamp, publicKey } = args
   if (!signature || !timestamp) return false
+  if (!freshInteractionTimestamp(timestamp, Date.now())) return false
   try {
     const key = await crypto.subtle.importKey(
       "raw",
