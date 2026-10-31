@@ -35,6 +35,9 @@ export type FakeChainOptions = {
   // Overrides for specific blocks, e.g. to simulate a hash mismatch.
   headerOverrides?: Map<number, { hash?: Hex; timestamp?: bigint }>
   maxAddresses?: number
+  // mezod's json-rpc logs-cap: a query matching more logs fails, counting
+  // every emitter when the filter names no addresses.
+  logsCap?: number
 }
 
 export function blockHash(block: number): Hex {
@@ -151,26 +154,29 @@ export class FakeChain {
     const from = Number(BigInt(filter.fromBlock))
     const to = Number(BigInt(filter.toBlock))
     const topic0s = filter.topics?.[0]
-    return this.options.logs
-      .filter(
-        (log) =>
-          log.block >= from &&
-          log.block <= to &&
-          (addresses === null || addresses.has(log.address.toLowerCase())) &&
-          (!topic0s || topic0s.includes(log.topics[0] as Hex)),
-      )
-      .map((log) => ({
-        address: log.address,
-        topics: log.topics,
-        data: log.data ?? "0x",
-        blockNumber: toHex(log.block),
-        blockHash: blockHash(log.block),
-        blockTimestamp: "0x0",
-        transactionHash: txHash(log),
-        transactionIndex: toHex(log.txIndex ?? 0),
-        logIndex: toHex(log.logIndex),
-        removed: false,
-      }))
+    const matched = this.options.logs.filter(
+      (log) =>
+        log.block >= from &&
+        log.block <= to &&
+        (addresses === null || addresses.has(log.address.toLowerCase())) &&
+        (!topic0s || topic0s.includes(log.topics[0] as Hex)),
+    )
+    const cap = this.options.logsCap
+    if (cap !== undefined && matched.length > cap) {
+      throw new Error(`query returned more than ${cap} results`)
+    }
+    return matched.map((log) => ({
+      address: log.address,
+      topics: log.topics,
+      data: log.data ?? "0x",
+      blockNumber: toHex(log.block),
+      blockHash: blockHash(log.block),
+      blockTimestamp: "0x0",
+      transactionHash: txHash(log),
+      transactionIndex: toHex(log.txIndex ?? 0),
+      logIndex: toHex(log.logIndex),
+      removed: false,
+    }))
   }
 }
 

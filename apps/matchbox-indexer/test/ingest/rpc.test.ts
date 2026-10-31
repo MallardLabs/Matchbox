@@ -146,31 +146,115 @@ describe("RpcClient.getLogsForFilters", () => {
     expect(chain.callsTo("eth_getBlockByNumber")).toHaveLength(1)
   })
 
-  it("scans by topic when the set outgrows one call, keeping the set", async () => {
+  // Audit MBX-02: an address-less topic scan counted every emitter on chain
+  // toward the provider's result cap, so one block of look-alikes stalled it.
+  it("names its addresses, so other contracts' logs never reach the cap", async () => {
     const watched = addresses(3)
     const [stranger] = addresses(4).slice(3) as [Address]
+    const lookAlikes = Array.from({ length: 6 }, (_, index) =>
+      eventLog({
+        block: 2,
+        logIndex: 10 + index,
+        address: stranger,
+        signature: "Foo()",
+      }),
+    )
     const chain = new FakeChain({
       head: 100,
-      logs: [...watched, stranger].map((address, index) =>
-        eventLog({ block: 2, logIndex: index, address, signature: "Foo()" }),
-      ),
+      logsCap: 5,
+      logs: [
+        ...watched.map((address, index) =>
+          eventLog({ block: 2, logIndex: index, address, signature: "Foo()" }),
+        ),
+        ...lookAlikes,
+      ],
     })
-    const topic0 = toEventSelector("Foo()")
     const logs = await client(chain, 2).getLogsForFilters(1n, 10n, [
-      { addresses: watched, topic0s: [topic0], scanByTopic: true },
+      { addresses: watched, topic0s: [toEventSelector("Foo()")] },
     ])
 
     expect(logs.map((log) => log.address)).toEqual(watched)
     const calls = chain.callsTo("eth_getLogs")
-    expect(calls).toHaveLength(1)
-    expect(calls[0]?.params[0]).not.toHaveProperty("address")
+    expect(calls).toHaveLength(2)
+    for (const call of calls) {
+      const filter = call.params[0] as { address?: Address[] }
+      expect(filter.address).toBeDefined()
+      expect(filter.address).not.toContain(stranger)
+    }
+  })
 
-    // Within one call's limit the address filter is used as before.
-    const small = new FakeChain({ head: 100, logs: [] })
-    await client(small, 2).getLogsForFilters(1n, 10n, [
-      { addresses: watched.slice(0, 2), topic0s: [topic0], scanByTopic: true },
-    ])
-    expect(small.callsTo("eth_getLogs")[0]?.params[0]).toHaveProperty("address")
+  it("splits a block over the cap by address", async () => {
+    const [first, second] = addresses(2) as [Address, Address]
+    const busy = [first, second].flatMap((address, offset) =>
+      Array.from({ length: 3 }, (_, index) =>
+        eventLog({
+          block: 4,
+          logIndex: offset * 3 + index,
+          address,
+          signature: "Foo()",
+        }),
+      ),
+    )
+    const chain = new FakeChain({ head: 100, logsCap: 4, logs: busy })
+    const logs = await client(chain).getLogs(1n, 10n, [first, second])
+
+    expect(logs.map((log) => log.logIndex)).toEqual([0, 1, 2, 3, 4, 5])
+    const single = chain
+      .callsTo("eth_getLogs")
+      .map((call) => (call.params[0] as { address: Address[] }).address)
+      .filter((filter) => filter.length === 1)
+    expect(single).toContainEqual([first])
+    expect(single).toContainEqual([second])
+  })
+
+  it("splits only the address chunk that is over the cap", async () => {
+    const watched = addresses(4)
+    const [quiet, , , hot] = watched as [Address, Address, Address, Address]
+    const chain = new FakeChain({
+      head: 100,
+      logsCap: 4,
+      logs: [
+        eventLog({ block: 3, logIndex: 0, address: quiet, signature: "Foo()" }),
+        ...Array.from({ length: 5 }, (_, index) =>
+          eventLog({
+            block: 6 + index,
+            logIndex: 0,
+            address: hot,
+            signature: "Foo()",
+          }),
+        ),
+      ],
+    })
+    const rpc = new RpcClient({
+      network: "mezo",
+      fetch: chain.fetch,
+      sleep: async () => {},
+      endpoints: [{ url: PRIMARY, maxAddresses: 2, maxBlockRange: 10 }],
+    })
+    const logs = await rpc.getLogs(1n, 10n, watched)
+
+    expect(logs).toHaveLength(6)
+    const quietCalls = chain
+      .callsTo("eth_getLogs")
+      .filter((call) =>
+        (call.params[0] as { address: Address[] }).address.includes(quiet),
+      )
+    expect(quietCalls).toHaveLength(1)
+  })
+
+  it("fails, naming the block, when one contract alone fills it past the cap", async () => {
+    const [address] = addresses(1) as [Address]
+    const chain = new FakeChain({
+      head: 100,
+      logsCap: 4,
+      logs: Array.from({ length: 5 }, (_, index) =>
+        eventLog({ block: 4, logIndex: index, address, signature: "Foo()" }),
+      ),
+    })
+
+    await expect(client(chain).getLogs(1n, 10n, [address])).rejects.toThrow(
+      `No endpoint serves the logs of ${address} in block 4`,
+    )
   })
 })
 
@@ -209,6 +293,27 @@ describe("RpcClient failover", () => {
     const logs = await client(chain).getLogs(1n, 20n, [address])
 
     expect(logs.map((log) => log.blockNumber)).toEqual([2n, 18n])
+  })
+
+  it("stops splitting a query that keeps failing after maxLogSplits", async () => {
+    const [address] = addresses(1) as [Address]
+    let requests = 0
+    const rpc = new RpcClient({
+      network: "mezo",
+      sleep: async () => {},
+      maxLogSplits: 3,
+      endpoints: [{ url: PRIMARY, maxAddresses: 100, maxBlockRange: 10 }],
+      fetch: (async () => {
+        requests++
+        return new Response("bad request", { status: 400 })
+      }) as typeof fetch,
+    })
+
+    await expect(rpc.getLogs(1n, 10n, [address])).rejects.toThrow(
+      /still failing after 3 splits/,
+    )
+    // The query and three of its halves, one attempt each.
+    expect(requests).toBe(4)
   })
 })
 

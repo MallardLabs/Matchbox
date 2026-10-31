@@ -114,20 +114,19 @@ export const HANDLED_EVENTS: Record<ContractKind, string[]> = {
 
 export type FilterGroup = {
   kinds: ContractKind[]
-  // Fetched by topic0 alone and kept to the registered addresses when the
-  // group outgrows one filter call (RpcClient LogFilter.scanByTopic).
-  scanByTopic: boolean
 }
 
 // eth_getLogs ANDs addresses with topics, so kinds share a filter only when no
 // kind in the group emits another kind's topic it doesn't handle. Escrows
 // (Transfer) and pools (LP Transfer, Swap) get their own filters; the rest
 // share one, which over-includes nothing the probe found. The ~750 voter
-// bribe contracts would add eight address chunks to every window, so they
-// are scanned by their two reward topics instead.
+// bribe contracts get their own too: eight address chunks a window. Scanning
+// their two reward topics without addresses was cheaper, but any contract can
+// emit those topics, and enough look-alikes in one block failed the scan for
+// good (audit MBX-02).
 export const FILTER_GROUPS: FilterGroup[] = [
-  { kinds: ["votingEscrow"], scanByTopic: false },
-  { kinds: ["pool"], scanByTopic: false },
+  { kinds: ["votingEscrow"] },
+  { kinds: ["pool"] },
   {
     kinds: [
       "boostVoter",
@@ -147,9 +146,8 @@ export const FILTER_GROUPS: FilterGroup[] = [
       "musdBorrowerOperations",
       "musdTroveManager",
     ],
-    scanByTopic: false,
   },
-  { kinds: ["voterBribeReward"], scanByTopic: true },
+  { kinds: ["voterBribeReward"] },
 ]
 
 export function topic0sFor(kinds: ContractKind[]): Hex[] {

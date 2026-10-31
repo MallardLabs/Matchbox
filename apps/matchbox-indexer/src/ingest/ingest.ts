@@ -119,7 +119,6 @@ export async function fetchLogs(
     groups.map((addresses, index) => ({
       addresses: [...new Set(addresses)].sort(),
       topic0s: GROUP_TOPIC0S[index],
-      scanByTopic: FILTER_GROUPS[index]?.scanByTopic ?? false,
     })),
   )
 }

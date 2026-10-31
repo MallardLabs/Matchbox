@@ -123,21 +123,26 @@ export type RpcClientOptions = {
   attemptsPerEndpoint?: number
   baseDelayMs?: number
   timeoutMs?: number
-  // Splits a failing eth_getLogs range in half this many times before giving
-  // up. Covers "too many results" without parsing provider error strings.
-  maxRangeSplits?: number
+  // A failing eth_getLogs query is split in half, by block range down to one
+  // block and then by address, which covers "too many results" without
+  // parsing provider error strings. This many splits per call end the search,
+  // so an outage fails about as fast as it did with a fixed split depth.
+  maxLogSplits?: number
   // Header and transaction batches in flight at once, per call.
   batchConcurrency?: number
 }
 
+// Every query names its addresses: a provider caps results per query, and
+// an address-less topic scan let any contract's look-alike logs push a
+// window over that cap for good (audit MBX-02).
 export type LogFilter = {
   addresses: Address[]
   topic0s?: Hex[] | undefined
-  // When the set needs more than one call on an endpoint, query by topic0
-  // alone and keep the logs from `addresses`: one call instead of one per
-  // address chunk. Only for topics the rest of the chain rarely emits.
-  scanByTopic?: boolean
 }
+
+type LogQuery = { fromBlock: bigint; toBlock: bigint; addresses: Address[] }
+
+type SplitBudget = { splitsLeft: number }
 
 const TX_BATCH_SIZE = 50
 const HEADER_BATCH_SIZE = 50
@@ -157,6 +162,22 @@ function chunk<T>(items: T[], size: number): T[][] {
     chunks.push(items.slice(index, index + size))
   }
   return chunks
+}
+
+// Halves a query by block range, or by address once it covers one block.
+function splitQuery({ fromBlock, toBlock, addresses }: LogQuery): LogQuery[] {
+  if (fromBlock < toBlock) {
+    const middle = fromBlock + (toBlock - fromBlock) / 2n
+    return [
+      { fromBlock, toBlock: middle, addresses },
+      { fromBlock: middle + 1n, toBlock, addresses },
+    ]
+  }
+  const middle = Math.ceil(addresses.length / 2)
+  return [
+    { fromBlock, toBlock, addresses: addresses.slice(0, middle) },
+    { fromBlock, toBlock, addresses: addresses.slice(middle) },
+  ]
 }
 
 // Runs `work` over `items` with at most `limit` in flight, keeping order.
@@ -187,7 +208,8 @@ export class RpcClient {
   private readonly attemptsPerEndpoint: number
   private readonly baseDelayMs: number
   private readonly timeoutMs: number
-  private readonly maxRangeSplits: number
+  private readonly maxLogSplits: number
+  private readonly maxAddresses: number
   private readonly batchConcurrency: number
   private nextId = 1
 
@@ -204,7 +226,14 @@ export class RpcClient {
     this.attemptsPerEndpoint = options.attemptsPerEndpoint ?? 3
     this.baseDelayMs = options.baseDelayMs ?? 500
     this.timeoutMs = options.timeoutMs ?? 30_000
-    this.maxRangeSplits = options.maxRangeSplits ?? 4
+    // Four groups at four splits deep each made about this many queries
+    // before an outage failed the window.
+    this.maxLogSplits = options.maxLogSplits ?? 128
+    // Queries are chunked for the most generous endpoint; a stricter one
+    // chunks again (getLogsOnEndpoint).
+    this.maxAddresses = Math.max(
+      ...options.endpoints.map((endpoint) => endpoint.maxAddresses),
+    )
     this.batchConcurrency = options.batchConcurrency ?? 4
   }
 
@@ -226,19 +255,31 @@ export class RpcClient {
     return this.getLogsForFilters(fromBlock, toBlock, [{ addresses, topic0s }])
   }
 
-  // Several filters over one range. Fetched in parallel, then normalized
-  // together so each block header is fetched once per range.
+  // Several filters over one range. Filters are fetched in parallel, each one
+  // address chunk at a time, then normalized together so each block header
+  // is fetched once per range.
   async getLogsForFilters(
     fromBlock: bigint,
     toBlock: bigint,
     filters: LogFilter[],
   ): Promise<RawLog[]> {
     if (fromBlock > toBlock) return []
+    const budget: SplitBudget = { splitsLeft: this.maxLogSplits }
     const active = filters.filter((filter) => filter.addresses.length > 0)
     const batches = await Promise.all(
-      active.map((filter) =>
-        this.getLogsSplitting(fromBlock, toBlock, filter, this.maxRangeSplits),
-      ),
+      active.map(async ({ addresses, topic0s }) => {
+        const logs: RpcLog[] = []
+        for (const addressChunk of chunk(addresses, this.maxAddresses)) {
+          logs.push(
+            ...(await this.getLogsSplitting(
+              { fromBlock, toBlock, addresses: addressChunk },
+              topic0s,
+              budget,
+            )),
+          )
+        }
+        return logs
+      }),
     )
     const normalized = await this.normalizeLogs(batches.flat())
     return normalized.sort(compareLogs)
@@ -280,66 +321,54 @@ export class RpcClient {
     return transactions
   }
 
+  // A query no endpoint serves (over a result cap or a block range limit) is
+  // split (splitQuery) until every part is served. One contract's logs in one
+  // block can't be split further: that fails the call rather than dropping
+  // logs, and Mezo's block gas limit keeps any registered contract well under
+  // a 10,000-result cap in one block.
   private async getLogsSplitting(
-    fromBlock: bigint,
-    toBlock: bigint,
-    filter: LogFilter,
-    splitsLeft: number,
+    query: LogQuery,
+    topic0s: Hex[] | undefined,
+    budget: SplitBudget,
   ): Promise<RpcLog[]> {
     try {
       return await this.withFailover((endpoint) =>
-        this.getLogsOnEndpoint(endpoint, fromBlock, toBlock, filter),
+        this.getLogsOnEndpoint(endpoint, query, topic0s),
       )
     } catch (error) {
-      if (splitsLeft <= 0 || fromBlock === toBlock) throw error
-      const middle = fromBlock + (toBlock - fromBlock) / 2n
-      const left = await this.getLogsSplitting(
-        fromBlock,
-        middle,
-        filter,
-        splitsLeft - 1,
-      )
-      const right = await this.getLogsSplitting(
-        middle + 1n,
-        toBlock,
-        filter,
-        splitsLeft - 1,
-      )
-      return [...left, ...right]
+      const { fromBlock, toBlock, addresses } = query
+      const message = error instanceof Error ? error.message : String(error)
+      if (fromBlock === toBlock && addresses.length === 1) {
+        throw new RpcError(
+          `No endpoint serves the logs of ${addresses[0]} in block ${fromBlock}: ${message}`,
+          false,
+        )
+      }
+      if (budget.splitsLeft <= 0) {
+        throw new RpcError(
+          `eth_getLogs ${fromBlock}-${toBlock} for ${addresses.length} addresses still failing after ${this.maxLogSplits} splits: ${message}`,
+          false,
+        )
+      }
+      budget.splitsLeft--
+      const logs: RpcLog[] = []
+      for (const part of splitQuery(query)) {
+        logs.push(...(await this.getLogsSplitting(part, topic0s, budget)))
+      }
+      return logs
     }
   }
 
   private async getLogsOnEndpoint(
     endpoint: RpcEndpoint,
-    fromBlock: bigint,
-    toBlock: bigint,
-    { addresses, topic0s, scanByTopic }: LogFilter,
+    { fromBlock, toBlock, addresses }: LogQuery,
+    topic0s: Hex[] | undefined,
   ): Promise<RpcLog[]> {
     if (toBlock - fromBlock + 1n > BigInt(endpoint.maxBlockRange)) {
       throw new RpcError(
         `Range ${fromBlock}-${toBlock} exceeds ${endpoint.url} limit`,
         false,
       )
-    }
-    if (
-      scanByTopic === true &&
-      topic0s !== undefined &&
-      addresses.length > endpoint.maxAddresses
-    ) {
-      const wanted = new Set(addresses)
-      const scanned = await this.call(
-        endpoint,
-        "eth_getLogs",
-        [
-          {
-            fromBlock: toHex(fromBlock),
-            toBlock: toHex(toBlock),
-            topics: [topic0s],
-          },
-        ],
-        z.array(rpcLogSchema),
-      )
-      return scanned.filter((log) => wanted.has(log.address))
     }
     const logs: RpcLog[] = []
     for (const addressChunk of chunk(addresses, endpoint.maxAddresses)) {

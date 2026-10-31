@@ -22,9 +22,10 @@ Neon. There is no Goldsky pipeline. Go-live steps are in `GO-LIVE.md`.
   - Only the events a handler reads are stored, per contract kind
     (`src/ingest/topics.ts`), as one `eth_getLogs` filter per topic group.
   - Pools' `Sync`/`Fees`/LP `Transfer`/`Approval` alone would double the raw table.
-  - The ~750 voter bribe contracts are not listed by address: their group is
-    fetched with one address-less filter on the two reward topics
-    (`NotifyReward`, `ClaimRewards`) and kept to the registered set.
+  - Every filter lists its addresses, including the ~750 voter bribe
+    contracts (their own group, eight address chunks a window). An
+    address-less scan of their reward topics let any contract's look-alike
+    logs fill a provider's result cap and stall ingest (audit MBX-02).
   - Widening a set is a config change plus a re-backfill.
   - `test/ingest/manifest.test.ts` fails if the explorer contracts or topics
     drift from `apps/activity-subgraph/subgraph.yaml`.
@@ -32,7 +33,9 @@ Neon. There is no Goldsky pipeline. Go-live steps are in `GO-LIVE.md`.
   - Logs are fetched in 10,000-block windows, at most 100 addresses per filter
     on `rpc-internal.mezo.org`. ValidationCloud (30) and Boar are fallbacks.
   - Failures retry with backoff, then fail over to the next endpoint.
-  - A range no endpoint serves is split.
+  - A query no endpoint serves is split by block range, then within one block
+    by address, and only that address chunk. One contract's logs in one block
+    can't be split; that fails the window rather than drop logs.
   - A child created mid-window has its logs from that same window fetched
     before the window commits.
 - **Timestamps.**

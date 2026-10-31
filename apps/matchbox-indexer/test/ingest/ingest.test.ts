@@ -368,15 +368,14 @@ describe("voter bribe rewards", () => {
     }),
   ]
 
-  function bribeSetup() {
-    // One address per filter call, so two bribes already need a topic scan.
+  function bribeSetup(chain = new FakeChain({ head: 100, logs: BRIBE_CHAIN })) {
+    // One address per filter call, so two bribes already need two calls.
     const config: NetworkConfig = {
       ...CONFIG,
       endpoints: [
         { url: "https://rpc.test", maxAddresses: 1, maxBlockRange: 10 },
       ],
     }
-    const chain = new FakeChain({ head: 100, logs: BRIBE_CHAIN })
     const store = new MemoryIngestStore()
     const deps: IngestDeps = {
       config,
@@ -398,7 +397,7 @@ describe("voter bribe rewards", () => {
     return { chain, store, deps }
   }
 
-  it("registers bribes from GaugeCreated and scans their reward topics", async () => {
+  it("registers bribes from GaugeCreated and fetches their reward topics", async () => {
     const { chain, store, deps } = bribeSetup()
     await ingestRange(deps, { from: 1n, to: 20n })
 
@@ -426,13 +425,39 @@ describe("voter bribe rewards", () => {
     expect(stored).not.toContainEqual([STRANGER, 15n])
     expect(stored).not.toContainEqual([B1, 16n])
 
-    const scans = chain
-      .callsTo("eth_getLogs")
-      .filter(
-        (call) =>
-          (call.params[0] as { address?: unknown }).address === undefined,
-      )
-    expect(scans.length).toBeGreaterThan(0)
+    for (const call of chain.callsTo("eth_getLogs")) {
+      expect(call.params[0]).toHaveProperty("address")
+    }
+  })
+
+  // Audit MBX-02: more look-alike reward logs in one block than a provider
+  // returns per query used to fail every tick and freeze the checkpoint.
+  it("ingests past a block of look-alike reward logs over the cap", async () => {
+    const flood = Array.from({ length: 6 }, (_, index) =>
+      eventLog({
+        block: 15,
+        logIndex: 10 + index,
+        address: STRANGER,
+        signature: CLAIM,
+      }),
+    )
+    const { store, deps } = bribeSetup(
+      new FakeChain({
+        head: 100,
+        logsCap: 5,
+        logs: [...BRIBE_CHAIN, ...flood],
+      }),
+    )
+
+    expect(await ingestToHead(deps, 20n)).toMatchObject({ from: 1n, to: 20n })
+    expect(await store.getCheckpoint("mezo", "logs")).toBe(20n)
+    const stored = [...store.logs.values()].map((log) => [
+      log.address,
+      log.blockNumber,
+    ])
+    expect(stored).toContainEqual([B1, 15n])
+    expect(stored).toContainEqual([B2, 15n])
+    expect(stored).not.toContainEqual([STRANGER, 15n])
   })
 
   it("keeps the full input of claim calls sent to a voter", async () => {

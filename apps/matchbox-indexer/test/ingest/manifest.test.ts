@@ -117,12 +117,7 @@ describe("handled topics", () => {
     )
   })
 
-  it("scans only the voter bribe rewards by topic", () => {
-    expect(
-      FILTER_GROUPS.filter((group) => group.scanByTopic).map(
-        (group) => group.kinds,
-      ),
-    ).toEqual([["voterBribeReward"]])
+  it("reads voter bribe rewards like pool bribe rewards", () => {
     expect(HANDLED_EVENTS.voterBribeReward).toEqual(
       HANDLED_EVENTS.bribeVotingReward,
     )
