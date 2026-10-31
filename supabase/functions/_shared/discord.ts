@@ -1,6 +1,8 @@
 // Discord REST + interaction helpers shared by the Matchbox edge functions.
 // Docs: https://discord.com/developers/docs/interactions/receiving-and-responding
 
+import { z } from "https://esm.sh/zod@3"
+
 const DISCORD_API = "https://discord.com/api/v10"
 
 // Interaction response types.
@@ -81,6 +83,30 @@ export async function verifyDiscordSignature(args: {
   } catch (_err) {
     return false
   }
+}
+
+const oauthAuthorizationSchema = z.object({
+  application: z.object({ id: z.string() }),
+  user: z.object({ id: z.string() }).optional(),
+})
+
+// The Discord account behind an OAuth2 access token, or null when Discord
+// rejects the token or it was issued to an app other than appId. Throws when
+// Discord can't answer, so callers can tell an outage from a mismatch.
+// Docs: https://discord.com/developers/docs/topics/oauth2#get-current-authorization-information
+export async function discordOAuthUserId(args: {
+  accessToken: string
+  appId: string
+}): Promise<string | null> {
+  const res = await fetch(`${DISCORD_API}/oauth2/@me`, {
+    headers: { Authorization: `Bearer ${args.accessToken}` },
+  })
+  if (res.status === 401 || res.status === 403) return null
+  if (!res.ok) throw new Error(`Discord oauth2/@me returned ${res.status}`)
+  const parsed = oauthAuthorizationSchema.safeParse(await res.json())
+  if (!parsed.success) throw new Error("Unexpected Discord oauth2/@me response")
+  if (parsed.data.application.id !== args.appId) return null
+  return parsed.data.user?.id ?? null
 }
 
 async function discordRequest(

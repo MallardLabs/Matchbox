@@ -1,7 +1,13 @@
+import {
+  type DiscordSignIn,
+  startDiscordSignIn,
+  takeDiscordSignIn,
+} from "@/lib/discordSignIn"
 import dynamic from "next/dynamic"
 import { useRouter } from "next/router"
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { useAccount, useSignMessage } from "wagmi"
+import { z } from "zod"
 
 const ConnectWalletDrawer = dynamic(
   () =>
@@ -18,6 +24,27 @@ function functionHeaders(): HeadersInit {
   return { apikey: ANON_KEY, Authorization: `Bearer ${ANON_KEY}` }
 }
 
+const sessionSchema = z.object({
+  success: z.literal(true),
+  discordUsername: z.string().nullable(),
+  discordGlobalName: z.string().nullable(),
+  avatarUrl: z.string(),
+  academy: z.boolean(),
+  discordClientId: z.string(),
+  discordRedirectUri: z.string(),
+})
+
+const messageSchema = z.object({
+  success: z.literal(true),
+  message: z.string(),
+})
+
+const failureSchema = z.object({ reason: z.string() })
+
+function failureReason(data: unknown): string | undefined {
+  return failureSchema.safeParse(data).data?.reason
+}
+
 type Session =
   | { status: "loading" }
   | { status: "invalid"; reason: string }
@@ -28,6 +55,9 @@ type Session =
       avatarUrl: string
       // Whether linking also scores Academy points and grants Discord roles.
       academy: boolean
+      // The OAuth2 app and redirect URI the page signs in to Discord with.
+      discordClientId: string
+      discordRedirectUri: string
     }
 
 type SemesterResult = {
@@ -59,6 +89,10 @@ function reasonToMessage(reason: string | undefined): string {
       return "We couldn't verify the signature. Please try again."
     case "bad_address":
       return "Something's wrong with that wallet address."
+    case "discord_auth":
+      return "This link is for a different Discord account."
+    case "discord_sign_in":
+      return "Discord sign-in failed. Please try again."
     default:
       return "Something went wrong. Please try again."
   }
@@ -194,11 +228,18 @@ const ACADEMY_PERMISSIONS = [
 
 export default function LinkWalletPage(): JSX.Element {
   const router = useRouter()
-  const token = typeof router.query.token === "string" ? router.query.token : ""
 
   const { address, isConnected } = useAccount()
   const { signMessageAsync } = useSignMessage()
 
+  // The link token: from the query, or carried through a Discord sign-in.
+  const [token, setToken] = useState<string | null>(null)
+  const [discordAccessToken, setDiscordAccessToken] = useState<string | null>(
+    null,
+  )
+  // A sign-in return can be read only once; keep it across Strict Mode's
+  // repeated effects.
+  const signIn = useRef<DiscordSignIn | null | undefined>(undefined)
   const [session, setSession] = useState<Session>({ status: "loading" })
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [phase, setPhase] = useState<Phase>("idle")
@@ -206,7 +247,30 @@ export default function LinkWalletPage(): JSX.Element {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!router.isReady) return
+    if (!router.isReady || token !== null) return
+    if (signIn.current === undefined) signIn.current = takeDiscordSignIn()
+    const returned = signIn.current
+    if (returned === null) {
+      setToken(typeof router.query.token === "string" ? router.query.token : "")
+      return
+    }
+    setToken(returned.linkToken ?? "")
+    if (returned.status === "signed-in") {
+      setDiscordAccessToken(returned.accessToken)
+    } else {
+      setError(reasonToMessage("discord_sign_in"))
+    }
+    if (returned.linkToken !== null) {
+      router.replace(
+        { pathname: "/link", query: { token: returned.linkToken } },
+        undefined,
+        { shallow: true },
+      )
+    }
+  }, [router, token])
+
+  useEffect(() => {
+    if (token === null) return
     if (!token) {
       setSession({ status: "invalid", reason: "not_found" })
       return
@@ -218,19 +282,18 @@ export default function LinkWalletPage(): JSX.Element {
           `${FUNCTIONS_URL}?action=session&token=${encodeURIComponent(token)}`,
           { headers: functionHeaders() },
         )
-        const data = await res.json()
+        const data: unknown = await res.json()
         if (cancelled) return
-        if (!data.success) {
-          setSession({ status: "invalid", reason: data.reason })
+        const parsed = sessionSchema.safeParse(data)
+        if (!parsed.success) {
+          setSession({
+            status: "invalid",
+            reason: failureReason(data) ?? "not_found",
+          })
           return
         }
-        setSession({
-          status: "ready",
-          discordUsername: data.discordUsername,
-          discordGlobalName: data.discordGlobalName,
-          avatarUrl: data.avatarUrl,
-          academy: data.academy === true,
-        })
+        const { success: _success, ...ready } = parsed.data
+        setSession({ status: "ready", ...ready })
       } catch (_err) {
         if (!cancelled) setSession({ status: "invalid", reason: "not_found" })
       }
@@ -238,31 +301,61 @@ export default function LinkWalletPage(): JSX.Element {
     return () => {
       cancelled = true
     }
-  }, [router.isReady, token])
+  }, [token])
+
+  const handleDiscordSignIn = useCallback(() => {
+    if (session.status !== "ready" || !token) return
+    setError(null)
+    try {
+      startDiscordSignIn({
+        clientId: session.discordClientId,
+        redirectUri: session.discordRedirectUri,
+        linkToken: token,
+      })
+    } catch (_err) {
+      setError(reasonToMessage("discord_sign_in"))
+    }
+  }, [session, token])
 
   const handleVerify = useCallback(async () => {
-    if (!address) return
+    if (!address || !token || !discordAccessToken) return
     setError(null)
     setPhase("signing")
     try {
-      const msgRes = await fetch(
-        `${FUNCTIONS_URL}?action=message&token=${encodeURIComponent(token)}&address=${address}`,
-        { headers: functionHeaders() },
-      )
-      const msgData = await msgRes.json()
-      if (!msgData.success) {
-        setError(reasonToMessage(msgData.reason))
+      const msgRes = await fetch(`${FUNCTIONS_URL}?action=message`, {
+        method: "POST",
+        headers: { ...functionHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({
+          token,
+          address,
+          accessToken: discordAccessToken,
+        }),
+      })
+      const msgData: unknown = await msgRes.json()
+      const parsedMessage = messageSchema.safeParse(msgData)
+      if (!parsedMessage.success) {
+        const reason = failureReason(msgData)
+        // Signed in as someone else: let them sign in again.
+        if (reason === "discord_auth") setDiscordAccessToken(null)
+        setError(reasonToMessage(reason))
         setPhase("idle")
         return
       }
 
-      const signature = await signMessageAsync({ message: msgData.message })
+      const signature = await signMessageAsync({
+        message: parsedMessage.data.message,
+      })
 
       setPhase("verifying")
       const verifyRes = await fetch(`${FUNCTIONS_URL}?action=verify`, {
         method: "POST",
         headers: { ...functionHeaders(), "Content-Type": "application/json" },
-        body: JSON.stringify({ token, address, signature }),
+        body: JSON.stringify({
+          token,
+          address,
+          signature,
+          accessToken: discordAccessToken,
+        }),
       })
       const verifyData = await verifyRes.json()
       if (!verifyData.success) {
@@ -284,7 +377,7 @@ export default function LinkWalletPage(): JSX.Element {
       setError(message)
       setPhase("idle")
     }
-  }, [address, token, signMessageAsync])
+  }, [address, token, discordAccessToken, signMessageAsync])
 
   const inFlight = phase !== "idle"
 
@@ -370,12 +463,12 @@ export default function LinkWalletPage(): JSX.Element {
                         Authorizing as
                       </p>
                       <p className="mt-0.5 truncate text-xs font-semibold leading-none text-[var(--content-primary)]">
-                        {displayName ?? discordHandle}
+                        {discordHandle ? `@${discordHandle}` : displayName}
                         {discordHandle &&
                           displayName &&
                           displayName !== discordHandle && (
                             <span className="ml-1 font-normal text-[var(--content-tertiary)]">
-                              @{discordHandle}
+                              {displayName}
                             </span>
                           )}
                       </p>
@@ -430,14 +523,18 @@ export default function LinkWalletPage(): JSX.Element {
                 <button
                   type="button"
                   onClick={
-                    isConnected && address
-                      ? handleVerify
-                      : () => setDrawerOpen(true)
+                    !discordAccessToken
+                      ? handleDiscordSignIn
+                      : isConnected && address
+                        ? handleVerify
+                        : () => setDrawerOpen(true)
                   }
                   disabled={inFlight}
                   className="flex w-full items-center justify-center gap-2 rounded-lg bg-brand px-4 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {!isConnected || !address ? (
+                  {!discordAccessToken ? (
+                    "Continue with Discord"
+                  ) : !isConnected || !address ? (
                     "Connect a wallet"
                   ) : phase === "signing" ? (
                     <>

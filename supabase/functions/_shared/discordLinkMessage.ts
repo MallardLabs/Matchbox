@@ -1,6 +1,6 @@
-// The messages a wallet signs to link itself to, or unlink itself from, a
-// Discord account. Each is deterministic given its inputs so the verifier can
-// rebuild it from stored rows and compare it byte-for-byte.
+// The EIP-4361 messages a wallet signs to link itself to, or unlink itself
+// from, a Discord account. Each is deterministic given its inputs so the
+// verifier can rebuild it from stored rows and compare it byte-for-byte.
 
 import { getAddress } from "https://esm.sh/viem@2"
 import { createSiweMessage } from "https://esm.sh/viem@2/siwe"
@@ -9,31 +9,57 @@ import { createSiweMessage } from "https://esm.sh/viem@2/siwe"
 // messages name that chain.
 const SIGNING_CHAIN_ID = 31612
 
-// The exact human-readable message the wallet signs to link.
-export function buildLinkMessage(args: {
-  domain: string
+// Discord's current username rules, which also keep the EIP-4361 statement
+// within its allowed characters. Older usernames that don't fit are left out
+// and the account is named by its ID alone.
+const DISCORD_USERNAME = /^[A-Za-z0-9_.]{2,32}$/
+
+function discordAccount(args: {
   discordUserId: string
-  address: string
-  nonce: string
-  expiresAt: string
+  discordUsername: string | null
 }): string {
-  const checksummed = getAddress(args.address)
-  return [
-    `${args.domain} wants you to link your wallet to your Discord account.`,
-    "",
-    `Wallet: ${checksummed}`,
-    `Discord User ID: ${args.discordUserId}`,
-    `Nonce: ${args.nonce}`,
-    `Expires: ${args.expiresAt}`,
-    "",
-    "Signing this message proves you own this wallet. It does not create a",
-    "transaction or cost any gas.",
-  ].join("\n")
+  if (!/^\d{1,20}$/.test(args.discordUserId)) {
+    throw new Error("Invalid Discord user ID")
+  }
+  return args.discordUsername !== null &&
+      DISCORD_USERNAME.test(args.discordUsername)
+    ? `@${args.discordUsername} (ID ${args.discordUserId})`
+    : `ID ${args.discordUserId}`
 }
 
-// The EIP-4361 message a wallet signs to answer one unlink challenge. It names
-// the webapp as its domain so wallets warn when another site asks for it, and
-// carries the challenge's nonce and expiry so a signature works once, briefly.
+// The EIP-4361 message a wallet signs to link itself to the Discord account a
+// link token was minted for. The webapp is its domain, so wallets warn when
+// another site asks for it, and it names that Discord account so the signer
+// can tell whose it is. The token's nonce and expiry keep it to one use.
+export function buildLinkMessage(args: {
+  webappUrl: string
+  discordUserId: string
+  discordUsername: string | null
+  address: string
+  nonce: string
+  issuedAt: string
+  expiresAt: string
+}): string {
+  const account = discordAccount(args)
+  return createSiweMessage({
+    domain: new URL(args.webappUrl).host,
+    address: getAddress(args.address),
+    statement:
+      `Link this wallet to Discord account ${account}. ` +
+      "Only sign if that Discord account is yours.",
+    uri: `${args.webappUrl}/link`,
+    version: "1",
+    chainId: SIGNING_CHAIN_ID,
+    nonce: args.nonce,
+    issuedAt: new Date(args.issuedAt),
+    expirationTime: new Date(args.expiresAt),
+    resources: [`https://discord.com/users/${args.discordUserId}`],
+  })
+}
+
+// The message a wallet signs to answer one unlink challenge. Like the link
+// message it names the webapp as its domain, and it carries the challenge's
+// nonce and expiry so a signature works once, briefly.
 // The Discord account stays out of the text: anyone can request a challenge
 // for any wallet, and which Discord account a wallet belongs to is shown only
 // to apps the member approves. The challenge row binds it instead.

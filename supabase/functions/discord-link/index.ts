@@ -2,8 +2,9 @@
 // Backs the web /link page. Resolves a link token to the Discord profile shown on
 // the page, hands back the exact message to sign, and verifies the signature to
 // store the wallet <-> Discord link + reconcile Academy allocation roles.
-// Deploy with --no-verify-jwt: the link token is the capability and the wallet
-// signature is the proof; no Supabase JWT is involved.
+// Deploy with --no-verify-jwt: the link token is the capability, a Discord OAuth2
+// sign-in proves the browser belongs to the token's member, and the wallet
+// signature proves the wallet; no Supabase JWT is involved.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 import {
@@ -18,7 +19,7 @@ import {
 import { z } from "https://esm.sh/zod@3"
 import { getMezoNetworkConfigForChain } from "../_shared/contracts.ts"
 import { corsHeaders } from "../_shared/cors.ts"
-import { avatarUrl } from "../_shared/discord.ts"
+import { avatarUrl, discordOAuthUserId } from "../_shared/discord.ts"
 import {
   type SupabaseClient,
   academyEnabled,
@@ -41,20 +42,6 @@ const JSON_HEADERS = { ...corsHeaders, "Content-Type": "application/json" }
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: JSON_HEADERS })
-}
-
-function linkDomain(): string {
-  const explicit = Deno.env.get("LINK_MESSAGE_DOMAIN")
-  if (explicit) return explicit
-  const webappUrl = Deno.env.get("MATCHBOX_WEBAPP_URL")
-  if (webappUrl) {
-    try {
-      return new URL(webappUrl).host
-    } catch (_err) {
-      // fall through
-    }
-  }
-  return "Matchbox"
 }
 
 // Mezo Passport (Bitcoin) wallets sign as Mezo smart accounts, which an
@@ -90,6 +77,44 @@ type LinkToken = {
   nonce: string
   status: string
   expires_at: string
+  created_at: string | null
+}
+
+// The message the wallet signs for a link token, rebuilt from the row each time.
+function linkMessage(row: LinkToken, address: string): string {
+  return buildLinkMessage({
+    webappUrl: webappBaseUrl(),
+    discordUserId: row.discord_user_id,
+    discordUsername: row.discord_username,
+    address,
+    nonce: row.nonce,
+    // The database stamps created_at when the bot mints the token.
+    issuedAt: row.created_at ?? row.expires_at,
+    expiresAt: row.expires_at,
+  })
+}
+
+// Refuses (with the response to send) unless the browser finishing /link is
+// signed in to Discord, through this app's OAuth2, as the member the link token
+// was minted for. Without it a token handed to someone else would bind their
+// wallet to that member's Discord account.
+async function discordMemberRefusal(
+  accessToken: string,
+  discordUserId: string,
+): Promise<Response | null> {
+  const appId = Deno.env.get("DISCORD_APP_ID")
+  if (!appId) {
+    console.error("Missing DISCORD_APP_ID")
+    return json({ success: false, reason: "server_error" }, 500)
+  }
+  try {
+    const userId = await discordOAuthUserId({ accessToken, appId })
+    if (userId === discordUserId) return null
+  } catch (err) {
+    console.error("Discord OAuth check failed:", err)
+    return json({ success: false, reason: "server_error" }, 502)
+  }
+  return json({ success: false, reason: "discord_auth" }, 403)
 }
 
 // Load a token and check it is still usable. Returns a discriminated result so
@@ -116,9 +141,19 @@ async function loadToken(
   return { ok: true, row }
 }
 
+// A Discord OAuth2 access token from the /link page's implicit-grant sign-in.
+const accessTokenSchema = z.string().min(1).max(512)
+
+const messageSchema = z.object({
+  token: z.string().min(1),
+  address: z.string().min(1),
+  accessToken: accessTokenSchema,
+})
+
 const verifySchema = z.object({
   token: z.string().min(1),
   address: z.string().min(1),
+  accessToken: accessTokenSchema,
   signature: z.custom<Hex>(
     (v) => typeof v === "string" && /^0x[0-9a-fA-F]+$/.test(v),
     "invalid signature",
@@ -160,10 +195,17 @@ Deno.serve(async (req) => {
   const action = url.searchParams.get("action")
 
   // --- Resolve token -> Discord profile for the link screen. ---
+  // Also hands the page the OAuth2 client ID and the one redirect URI it signs
+  // in with, so the webapp needs no Discord configuration of its own.
   if (req.method === "GET" && action === "session") {
     const token = url.searchParams.get("token") ?? ""
     const result = await loadToken(supabase, token)
     if (!result.ok) return json({ success: false, reason: result.reason }, 404)
+    const appId = Deno.env.get("DISCORD_APP_ID")
+    if (!appId) {
+      console.error("Missing DISCORD_APP_ID")
+      return json({ success: false, reason: "server_error" }, 500)
+    }
     const { row } = result
     return json({
       success: true,
@@ -173,6 +215,8 @@ Deno.serve(async (req) => {
       avatarUrl: avatarUrl(row.discord_user_id, row.discord_avatar),
       expiresAt: row.expires_at,
       academy: academyEnabled(),
+      discordClientId: appId,
+      discordRedirectUri: `${webappBaseUrl()}/link`,
     })
   }
 
@@ -412,22 +456,33 @@ Deno.serve(async (req) => {
   }
 
   // --- Return the exact message the connected wallet should sign. ---
-  if (req.method === "GET" && action === "message") {
-    const token = url.searchParams.get("token") ?? ""
-    const address = url.searchParams.get("address") ?? ""
-    if (!isAddress(address)) {
+  // Checked against the Discord sign-in first, so a member who opens someone
+  // else's link is stopped before their wallet is asked to sign anything.
+  if (req.method === "POST" && action === "message") {
+    let body: unknown
+    try {
+      body = await req.json()
+    } catch (_err) {
+      return json({ success: false, reason: "bad_request" }, 400)
+    }
+    const parsed = messageSchema.safeParse(body)
+    if (!parsed.success) {
+      return json({ success: false, reason: "bad_request" }, 400)
+    }
+    if (!isAddress(parsed.data.address)) {
       return json({ success: false, reason: "bad_address" }, 400)
     }
-    const result = await loadToken(supabase, token)
+    const result = await loadToken(supabase, parsed.data.token)
     if (!result.ok) return json({ success: false, reason: result.reason }, 404)
-    const message = buildLinkMessage({
-      domain: linkDomain(),
-      discordUserId: result.row.discord_user_id,
-      address,
-      nonce: result.row.nonce,
-      expiresAt: result.row.expires_at,
+    const refusal = await discordMemberRefusal(
+      parsed.data.accessToken,
+      result.row.discord_user_id,
+    )
+    if (refusal) return refusal
+    return json({
+      success: true,
+      message: linkMessage(result.row, parsed.data.address),
     })
-    return json({ success: true, message })
   }
 
   // --- Verify signature, store the link, reconcile the role. ---
@@ -453,17 +508,15 @@ Deno.serve(async (req) => {
     if (!result.ok) return json({ success: false, reason: result.reason }, 404)
     const tokenRow = result.row
 
-    const message = buildLinkMessage({
-      domain: linkDomain(),
-      discordUserId: tokenRow.discord_user_id,
-      address,
-      nonce: tokenRow.nonce,
-      expiresAt: tokenRow.expires_at,
-    })
+    const refusal = await discordMemberRefusal(
+      parsed.data.accessToken,
+      tokenRow.discord_user_id,
+    )
+    if (refusal) return refusal
 
     const validSig = await walletSigned({
       address,
-      message,
+      message: linkMessage(tokenRow, address),
       signature,
     })
     if (!validSig) {
@@ -482,6 +535,18 @@ Deno.serve(async (req) => {
     ) {
       return json({ success: false, reason: "wallet_taken" }, 409)
     }
+
+    // Use the token up in one conditional update, so concurrent verifies of
+    // the same token can't both link.
+    const { data: claimed } = await supabase
+      .from("discord_link_tokens")
+      .update({ status: "completed" })
+      .eq("token", token)
+      .eq("status", "pending")
+      .gt("expires_at", new Date().toISOString())
+      .select("token")
+      .maybeSingle()
+    if (!claimed) return json({ success: false, reason: "used" }, 404)
 
     // Carry over the member's roles (from the old link, or kept through an unlink
     // while Academy was off) so reconcile can revoke any the new wallet no longer
@@ -516,15 +581,13 @@ Deno.serve(async (req) => {
         { onConflict: "discord_user_id" },
       )
     if (upsertError) {
+      // 23505: the wallet was linked to another account since the check above.
+      if (upsertError.code === "23505") {
+        return json({ success: false, reason: "wallet_taken" }, 409)
+      }
       console.error("link upsert error:", upsertError)
       return json({ success: false, reason: "server_error" }, 500)
     }
-
-    // Mark the token used so it can't be replayed.
-    await supabase
-      .from("discord_link_tokens")
-      .update({ status: "completed" })
-      .eq("token", token)
 
     // Expired link sessions still hold a Discord profile but are never read
     // again, so clear them out whenever a link completes.
