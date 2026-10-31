@@ -279,6 +279,12 @@ export type IdStore = {
     sessionId: string,
     now: Date,
   ): Promise<boolean>
+  /**
+   * Whether the wallet's account ever signed in with the wallet's own key
+   * (an `eoa` session, live or ended). Relies on sessions never being
+   * purged; record it on the account before purging them.
+   */
+  walletHasEoaSession(walletAddress: string): Promise<boolean>
 
   // Identity data -----------------------------------------------------------
   getOrCreatePairwiseSubject(

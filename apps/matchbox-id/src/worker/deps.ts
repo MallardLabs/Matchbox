@@ -5,16 +5,19 @@ import type { IdFlags } from "./config"
 import type { SigningKeys } from "./oidc/keys"
 import type { IdStore } from "./store/id-store"
 
-/** The subset of a viem public client SIWE verification needs. */
+export type SiweVerifyArgs = {
+  message: string
+  signature: `0x${string}`
+  address: `0x${string}`
+  domain: string
+  nonce: string
+  time: Date
+}
+
+/** The subset of a viem public client contract-signature checks need. */
 export type SiwePublicClient = {
-  verifySiweMessage(args: {
-    message: string
-    signature: `0x${string}`
-    address: `0x${string}`
-    domain: string
-    nonce: string
-    time: Date
-  }): Promise<boolean>
+  getChainId(): Promise<number>
+  verifySiweMessage(args: SiweVerifyArgs): Promise<boolean>
 }
 
 export type IdConfig = {
@@ -32,6 +35,7 @@ export type AppDeps = {
   now: () => Date
   flags: IdFlags
   config: IdConfig
-  publicClientFactory: (network: NetworkSlug) => SiwePublicClient
+  /** One client per independent RPC of the network, primary first. */
+  publicClientsFor: (network: NetworkSlug) => SiwePublicClient[]
   logger?: Logger
 }

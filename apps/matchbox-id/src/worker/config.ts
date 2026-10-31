@@ -1,4 +1,5 @@
 import { parseJson } from "@repo/platform-contracts/encoding"
+import type { NetworkSlug } from "@repo/platform-contracts/network"
 import {
   type SigningJwk,
   signingJwksSchema,
@@ -26,6 +27,8 @@ export type WorkerEnv = {
   OIDC_SIGNING_KEYS?: string
   MEZO_MAINNET_RPC_URL?: string
   MEZO_TESTNET_RPC_URL?: string
+  MEZO_MAINNET_CONFIRMING_RPC_URLS?: string
+  MEZO_TESTNET_CONFIRMING_RPC_URLS?: string
 }
 
 export const deploymentEnvironmentSchema = z.enum([
@@ -53,6 +56,17 @@ const signingKeysSchema = z
     return parsed.data
   })
 
+/** Comma-separated URLs. */
+const rpcUrlListSchema = z
+  .string()
+  .transform((value) =>
+    value
+      .split(",")
+      .map((url) => url.trim())
+      .filter((url) => url.length > 0),
+  )
+  .pipe(z.array(z.url()))
+
 const baseEnvSchema = z.object({
   ENVIRONMENT: deploymentEnvironmentSchema,
   ISSUER: z.url(),
@@ -61,6 +75,13 @@ const baseEnvSchema = z.object({
   OIDC_SIGNING_KEYS: signingKeysSchema,
   MEZO_MAINNET_RPC_URL: z.url().default("https://rpc-internal.mezo.org"),
   MEZO_TESTNET_RPC_URL: z.url().default("https://rpc.test.mezo.org"),
+  // RPCs from other operators that must back the primary's answer on a
+  // contract-account signature (see verifyContractSignature).
+  MEZO_MAINNET_CONFIRMING_RPC_URLS: rpcUrlListSchema.default([
+    "https://rpc-http.mezo.boar.network",
+    "https://mainnet.mezo.public.validationcloud.io",
+  ]),
+  MEZO_TESTNET_CONFIRMING_RPC_URLS: rpcUrlListSchema.default([]),
 })
 
 const workerConfigSchema = z
@@ -89,7 +110,9 @@ function blankToUndefined(value: string | undefined): string | undefined {
 }
 
 /** Validates the env for an enabled Worker; secrets are never echoed. */
-export function parseWorkerConfig(env: WorkerEnv): ConfigResult {
+export function parseWorkerConfig(
+  env: Omit<WorkerEnv, "ASSETS" | "RATE_LIMITER">,
+): ConfigResult {
   const parsed = workerConfigSchema.safeParse({
     ENVIRONMENT: blankToUndefined(env.ENVIRONMENT) ?? "production",
     ISSUER: blankToUndefined(env.ISSUER),
@@ -101,6 +124,12 @@ export function parseWorkerConfig(env: WorkerEnv): ConfigResult {
     OIDC_SIGNING_KEYS: blankToUndefined(env.OIDC_SIGNING_KEYS),
     MEZO_MAINNET_RPC_URL: blankToUndefined(env.MEZO_MAINNET_RPC_URL),
     MEZO_TESTNET_RPC_URL: blankToUndefined(env.MEZO_TESTNET_RPC_URL),
+    MEZO_MAINNET_CONFIRMING_RPC_URLS: blankToUndefined(
+      env.MEZO_MAINNET_CONFIRMING_RPC_URLS,
+    ),
+    MEZO_TESTNET_CONFIRMING_RPC_URLS: blankToUndefined(
+      env.MEZO_TESTNET_CONFIRMING_RPC_URLS,
+    ),
   })
   if (parsed.success) return { ok: true, config: parsed.data }
   return {
@@ -109,6 +138,33 @@ export function parseWorkerConfig(env: WorkerEnv): ConfigResult {
       (issue) => `${issue.path.join(".") || "env"}: ${issue.message}`,
     ),
   }
+}
+
+/**
+ * The network's RPCs for contract-signature checks, primary first, one per
+ * host (two URLs on one host are still one operator's word).
+ */
+export function siweRpcUrls(
+  config: WorkerConfig,
+  network: NetworkSlug,
+): string[] {
+  const urls =
+    network === "mezo"
+      ? [
+          config.MEZO_MAINNET_RPC_URL,
+          ...config.MEZO_MAINNET_CONFIRMING_RPC_URLS,
+        ]
+      : [
+          config.MEZO_TESTNET_RPC_URL,
+          ...config.MEZO_TESTNET_CONFIRMING_RPC_URLS,
+        ]
+  const hosts = new Set<string>()
+  return urls.filter((url) => {
+    const host = new URL(url).host
+    if (hosts.has(host)) return false
+    hosts.add(host)
+    return true
+  })
 }
 
 export type IdFlags = Pick<PlatformFlags, "matchboxId" | "discordClaims">

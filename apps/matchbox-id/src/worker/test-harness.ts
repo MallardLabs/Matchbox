@@ -1,3 +1,4 @@
+import { chainIdForNetwork } from "@repo/platform-contracts/network"
 import {
   type SigningJwk,
   tokenResponseSchema,
@@ -56,7 +57,12 @@ async function testSigningKey(): Promise<SigningJwk> {
   return cachedKey
 }
 
-export const verifyingPublicClient: SiwePublicClient = {
+/** A fake RPC; without `getChainId` it serves the network's chain. */
+export type TestRpc =
+  | SiwePublicClient
+  | Pick<SiwePublicClient, "verifySiweMessage">
+
+export const verifyingPublicClient: TestRpc = {
   verifySiweMessage({ message, signature, address }) {
     return verifyMessage({ address, message, signature })
   },
@@ -67,13 +73,15 @@ export type Harness = {
   store: MemoryIdStore
   deps: AppDeps
   clock: { now: Date; advance(ms: number): void }
+  /** Contract-signature questions asked of the RPCs. */
   verifySpy: { calls: number }
 }
 
 export async function createHarness(
   options: {
     flags?: Partial<IdFlags>
-    publicClient?: SiwePublicClient
+    /** The network's RPCs, primary first. */
+    publicClients?: TestRpc[]
     /** Wraps the memory store the app sees (e.g. to interleave requests). */
     wrapStore?: (store: MemoryIdStore) => IdStore
   } = {},
@@ -87,7 +95,7 @@ export async function createHarness(
   const clientSecretPepper = "test-client-secret-pepper"
   const store = await createMemoryIdStore({ clientSecretPepper })
   const verifySpy = { calls: 0 }
-  const publicClient = options.publicClient ?? verifyingPublicClient
+  const publicClients = options.publicClients ?? [verifyingPublicClient]
   const deps: AppDeps = {
     store: options.wrapStore?.(store) ?? store,
 
@@ -100,12 +108,17 @@ export async function createHarness(
       sessionPepper: "test-session-pepper-0000",
       clientSecretPepper,
     },
-    publicClientFactory: () => ({
-      verifySiweMessage(args) {
-        verifySpy.calls += 1
-        return publicClient.verifySiweMessage(args)
-      },
-    }),
+    publicClientsFor: (network) =>
+      publicClients.map((client) => ({
+        getChainId:
+          "getChainId" in client
+            ? () => client.getChainId()
+            : async () => chainIdForNetwork(network),
+        verifySiweMessage(args) {
+          verifySpy.calls += 1
+          return client.verifySiweMessage(args)
+        },
+      })),
   }
   return { app: createApp(deps), store, deps, clock, verifySpy }
 }

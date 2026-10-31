@@ -25,7 +25,13 @@ import {
   sessionTokenHash,
   setSessionCookie,
 } from "../session"
-import { checkSiweMessage, siweSignerKind } from "../siwe"
+import {
+  type SiweCheckResult,
+  checkSiweMessage,
+  recoversToAddress,
+  verifyContractSignature,
+} from "../siwe"
+import type { SignerKind } from "../store/id-store"
 import { identityAccount } from "./account"
 
 /** Sign-In with Ethereum: nonce issuance and signed-message verification. */
@@ -45,6 +51,66 @@ async function enforceSiweLimit(deps: AppDeps, key: string): Promise<void> {
       headers: rateLimitHeaders(rejected, deps.now().getTime()),
     })
   }
+}
+
+/**
+ * How the signature proves the wallet, or null when it does not. ECDSA is
+ * checked locally first, so a key-holding wallet never depends on an RPC.
+ * The RPC-backed ERC-1271 / ERC-6492 path comes second and is closed to a
+ * wallet that has signed in with its key before: an RPC must not be able
+ * to vouch for an address whose owner holds that key.
+ */
+async function provenSignerKind(
+  c: Context,
+  deps: AppDeps,
+  proof: {
+    message: string
+    signature: `0x${string}`
+    checked: Extract<SiweCheckResult, { ok: true }>
+    domain: string
+    now: Date
+  },
+): Promise<SignerKind | null> {
+  const { message, signature, checked } = proof
+  const { address, network } = checked
+  if (await recoversToAddress({ message, signature, address })) return "eoa"
+
+  const log = requestLogger(c)
+  if (await deps.store.walletHasEoaSession(address.toLowerCase())) {
+    log.warn({
+      message: "Contract signature refused for a wallet proven by its key",
+      network,
+    })
+    return null
+  }
+  const check = await verifyContractSignature(
+    deps.publicClientsFor(network),
+    {
+      message,
+      signature,
+      address,
+      domain: proof.domain,
+      nonce: checked.nonce,
+      time: proof.now,
+    },
+    checked.chainId,
+  )
+  if (check.status === "unavailable") {
+    log.error({
+      message: "SIWE contract signature verification failed",
+      network,
+      errors: check.errors,
+    })
+    throw new PlatformError("internal_error")
+  }
+  if (check.errors.length > 0) {
+    log.warn({
+      message: "RPCs gave no SIWE contract signature answer",
+      network,
+      errors: check.errors,
+    })
+  }
+  return check.status === "valid" ? "contract" : null
 }
 
 export default function siweRoutes(deps: AppDeps): Hono {
@@ -86,37 +152,19 @@ export default function siweRoutes(deps: AppDeps): Hono {
       })
     }
 
-    let verified = false
-    try {
-      verified = await deps
-        .publicClientFactory(checked.network)
-        .verifySiweMessage({
-          message: body.message,
-          signature,
-          address: checked.address,
-          domain: url.host,
-          nonce: checked.nonce,
-          time: now,
-        })
-    } catch (error) {
-      requestLogger(c).error({
-        message: "SIWE signature verification failed",
-        network: checked.network,
-        error,
-      })
-      throw new PlatformError("internal_error")
-    }
-    if (!verified) {
+    // Contract accounts are bound to the SIWE chain (see sessionVerifiedFor).
+    const signerKind = await provenSignerKind(c, deps, {
+      message: body.message,
+      signature,
+      checked,
+      domain: url.host,
+      now,
+    })
+    if (signerKind === null) {
       throw new PlatformError("unauthorized", {
         message: "Sign-in message rejected: signature.",
       })
     }
-    // Contract accounts are bound to the SIWE chain (see sessionVerifiedFor).
-    const signerKind = await siweSignerKind({
-      message: body.message,
-      signature,
-      address: checked.address,
-    })
     // Only proven sign-ins spend the wallet's bucket: the address in the
     // message is unauthenticated until here, so charging it earlier let
     // anyone lock a wallet out. Failed attempts are bounded by the IP

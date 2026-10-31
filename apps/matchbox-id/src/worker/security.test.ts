@@ -9,16 +9,23 @@ import {
   tokenResponseSchema,
 } from "@repo/platform-contracts/oidc"
 import { decodeJwt } from "jose"
-import { getAddress, verifyMessage } from "viem"
+import {
+  createPublicClient,
+  custom,
+  defineChain,
+  getAddress,
+  verifyMessage,
+} from "viem"
 import { describe, expect, it } from "vitest"
 import { z } from "zod"
 import { purgeExpiredRows } from "./cleanup"
-import type { SiwePublicClient } from "./deps"
 import { familyIdForCodeHash, opaqueTokenHash } from "./oidc/tokens"
+import { verifyContractSignature } from "./siwe"
 import { type MemoryIdStore, memorySeed } from "./store/memory-store"
 import {
   url,
   type Harness,
+  type TestRpc,
   apiHeaders,
   authorize,
   basicAuth,
@@ -27,6 +34,7 @@ import {
   devAccount,
   exchangeCode,
   obtainCode,
+  otherAccount,
   pkce,
   sessionCookieFrom,
   signIn,
@@ -51,7 +59,7 @@ const silentLogger = createLogger({ sink: () => undefined, level: "error" })
 /** A smart-contract wallet: ERC-1271 accepts the dev key's signatures. */
 const contractWallet = getAddress("0x000000000000000000000000000000000000c0de")
 
-const contractAwareClient: SiwePublicClient = {
+const contractAwareClient: TestRpc = {
   verifySiweMessage({ message, signature, address }) {
     if (address.toLowerCase() === contractWallet.toLowerCase()) {
       return verifyMessage({ address: devAccount.address, message, signature })
@@ -95,7 +103,9 @@ function liveAuthorize(harness: Harness, cookie: string, prompt?: string) {
 
 describe("SIWE network binding", () => {
   it("records the SIWE chain and signer kind on the session", async () => {
-    const harness = await createHarness({ publicClient: contractAwareClient })
+    const harness = await createHarness({
+      publicClients: [contractAwareClient],
+    })
     await signIn(harness)
     await signInContract(harness, 31611)
     const sessions = harness.store.admin.sessions()
@@ -111,7 +121,9 @@ describe("SIWE network binding", () => {
   })
 
   it("makes a testnet contract session sign in on mainnet for a live client", async () => {
-    const harness = await createHarness({ publicClient: contractAwareClient })
+    const harness = await createHarness({
+      publicClients: [contractAwareClient],
+    })
     const cookie = await signInContract(harness, 31611)
 
     const location = await liveAuthorize(harness, cookie)
@@ -148,7 +160,9 @@ describe("SIWE network binding", () => {
   })
 
   it("lets a mainnet contract session consent and releases the verified network", async () => {
-    const harness = await createHarness({ publicClient: contractAwareClient })
+    const harness = await createHarness({
+      publicClients: [contractAwareClient],
+    })
     const cookie = await signInContract(harness, 31612)
     const challenge = await pkce()
     const code = await obtainCode(harness, cookie, {
@@ -179,7 +193,9 @@ describe("SIWE network binding", () => {
   })
 
   it("never silently approves for a contract session from another network", async () => {
-    const harness = await createHarness({ publicClient: contractAwareClient })
+    const harness = await createHarness({
+      publicClients: [contractAwareClient],
+    })
     const mainnet = await signInContract(harness, 31612)
     await obtainCode(harness, mainnet, {
       pkce: await pkce(),
@@ -213,7 +229,9 @@ describe("SIWE network binding", () => {
   })
 
   it("scopes connected apps and devices to a contract session's network", async () => {
-    const harness = await createHarness({ publicClient: contractAwareClient })
+    const harness = await createHarness({
+      publicClients: [contractAwareClient],
+    })
     const mainnet = await signInContract(harness, 31612)
     await obtainCode(harness, mainnet, {
       pkce: await pkce(),
@@ -245,6 +263,143 @@ describe("SIWE network binding", () => {
     const listed = sessionListResponseSchema.parse(await devices.json()).data
     expect(listed).toHaveLength(1)
     expect(listed[0]?.current).toBe(true)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// ID-02: no single RPC answer signs a wallet in
+// ---------------------------------------------------------------------------
+
+/** 65 bytes nobody signed. */
+const junkSignature = `0x${"11".repeat(65)}` as const
+
+type RpcAnswer = "valid" | "invalid" | "down"
+
+/**
+ * A real viem client over a fake RPC that answers the deployless ERC-6492
+ * validator's `eth_call` with `rpc.answer` (a lying RPC says "valid").
+ */
+function fakeRpc(rpc: { answer: RpcAnswer }, chainId = 31612): TestRpc {
+  return createPublicClient({
+    chain: defineChain({
+      id: chainId,
+      name: "Mezo",
+      nativeCurrency: { name: "Bitcoin", symbol: "BTC", decimals: 18 },
+      rpcUrls: { default: { http: ["https://rpc.invalid"] } },
+    }),
+    transport: custom(
+      {
+        async request({ method }: { method: string }) {
+          if (rpc.answer === "down") throw new Error("RPC unavailable")
+          if (method === "eth_chainId") return `0x${chainId.toString(16)}`
+          if (method === "eth_call") {
+            return `0x${"00".repeat(31)}${rpc.answer === "valid" ? "01" : "00"}`
+          }
+          throw new Error(`Unexpected RPC ${method}`)
+        },
+      },
+      { retryCount: 0 },
+    ),
+  })
+}
+
+async function junkSignIn(
+  harness: Harness,
+  address: `0x${string}`,
+): Promise<Response> {
+  const message = await siweMessage(harness, devAccount, { address })
+  return harness.app.request(url("/api/siwe/verify"), {
+    method: "POST",
+    headers: apiHeaders(),
+    body: JSON.stringify({ message, signature: junkSignature }),
+  })
+}
+
+describe("SIWE signature proof", () => {
+  it("verifies a key's signature locally, without asking an RPC", async () => {
+    const harness = await createHarness({
+      publicClients: [fakeRpc({ answer: "down" })],
+    })
+    const response = await verifySiwe(
+      harness,
+      await siweMessage(harness, devAccount),
+      devAccount,
+    )
+    expect(response.status).toBe(200)
+    expect(harness.store.admin.sessions()[0]?.signerKind).toBe("eoa")
+    expect(harness.verifySpy.calls).toBe(0)
+  })
+
+  it("never lets RPCs vouch for a wallet that signed in with its key", async () => {
+    const rpc = { answer: "invalid" as RpcAnswer }
+    const harness = await createHarness({
+      publicClients: [fakeRpc(rpc), fakeRpc(rpc), fakeRpc(rpc)],
+    })
+    const victim = await signIn(harness)
+    await obtainCode(harness, victim, {
+      pkce: await pkce(),
+      clientId: memorySeed.liveClientId,
+      redirectUri: memorySeed.liveRedirectUris[0],
+    })
+
+    // Every configured RPC now lies.
+    rpc.answer = "valid"
+    const forged = await junkSignIn(harness, devAccount.address)
+    expect(forged.status).toBe(401)
+    expect(harness.verifySpy.calls).toBe(0)
+    expect(harness.store.admin.sessions()).toHaveLength(1)
+  })
+
+  it("needs two RPCs to confirm a contract signature and none to deny it", async () => {
+    const lying = { answer: "valid" as const }
+    const honest = { answer: "invalid" as const }
+    const down = { answer: "down" as const }
+    // A wallet that never signed in, so only the RPCs can be asked.
+    const target = otherAccount.address
+
+    const outvoted = await createHarness({
+      publicClients: [fakeRpc(lying), fakeRpc(honest), fakeRpc(honest)],
+    })
+    expect((await junkSignIn(outvoted, target)).status).toBe(401)
+
+    const alone = await createHarness({
+      publicClients: [fakeRpc(lying), fakeRpc(down), fakeRpc(down)],
+    })
+    expect((await junkSignIn(alone, target)).status).toBe(500)
+    expect(alone.store.admin.sessions()).toHaveLength(0)
+
+    // A real contract wallet still signs in with one RPC down.
+    const contract = await createHarness({
+      publicClients: [contractAwareClient, contractAwareClient, fakeRpc(down)],
+    })
+    await signInContract(contract, 31612)
+    expect(contract.store.admin.sessions()[0]?.signerKind).toBe("contract")
+  })
+
+  it("ignores an RPC that serves another chain", async () => {
+    const args = {
+      message: "",
+      signature: junkSignature,
+      address: contractWallet,
+      domain: "id.test",
+      nonce: "abcdefgh12345678",
+      time: new Date(),
+    } as const
+    function rpc(chainId: number) {
+      return {
+        getChainId: async () => chainId,
+        verifySiweMessage: async () => true,
+      }
+    }
+    expect(
+      await verifyContractSignature([rpc(1), rpc(31612)], args, 31612),
+    ).toMatchObject({ status: "unavailable", errors: [expect.any(Error)] })
+    expect(
+      await verifyContractSignature([rpc(31612), rpc(31612)], args, 31612),
+    ).toEqual({ status: "valid", errors: [] })
+    expect(await verifyContractSignature([], args, 31612)).toMatchObject({
+      status: "unavailable",
+    })
   })
 })
 

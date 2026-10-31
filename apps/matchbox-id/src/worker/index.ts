@@ -13,6 +13,7 @@ import {
   type WorkerEnv,
   idFlags,
   parseWorkerConfig,
+  siweRpcUrls,
 } from "./config"
 import type { SiwePublicClient } from "./deps"
 import { createSigningKeys } from "./oidc/keys"
@@ -29,25 +30,30 @@ const mezoChains = {
   "mezo-testnet": { id: 31611, name: "Mezo Testnet" },
 } as const satisfies Record<NetworkSlug, { id: number; name: string }>
 
-function publicClientFactory(
+// Every RPC is asked at once and sign-in waits for the slowest, so a dead
+// one must fail fast.
+const rpcTimeoutMs = 5_000
+
+function publicClientsFactory(
   config: WorkerConfig,
-): (network: NetworkSlug) => SiwePublicClient {
-  const clients = new Map<NetworkSlug, SiwePublicClient>()
-  return function publicClientFor(network) {
+): (network: NetworkSlug) => SiwePublicClient[] {
+  const clients = new Map<NetworkSlug, SiwePublicClient[]>()
+  return function publicClientsFor(network) {
     const cached = clients.get(network)
     if (cached !== undefined) return cached
-    const rpcUrl =
-      network === "mezo"
-        ? config.MEZO_MAINNET_RPC_URL
-        : config.MEZO_TESTNET_RPC_URL
-    const chain = defineChain({
-      ...mezoChains[network],
-      nativeCurrency: { name: "Bitcoin", symbol: "BTC", decimals: 18 },
-      rpcUrls: { default: { http: [rpcUrl] } },
+    const created = siweRpcUrls(config, network).map((rpcUrl) => {
+      const chain = defineChain({
+        ...mezoChains[network],
+        nativeCurrency: { name: "Bitcoin", symbol: "BTC", decimals: 18 },
+        rpcUrls: { default: { http: [rpcUrl] } },
+      })
+      return createPublicClient({
+        chain,
+        transport: http(rpcUrl, { timeout: rpcTimeoutMs, retryCount: 1 }),
+      })
     })
-    const client = createPublicClient({ chain, transport: http(rpcUrl) })
-    clients.set(network, client)
-    return client
+    clients.set(network, created)
+    return created
   }
 }
 
@@ -99,7 +105,7 @@ async function buildApp(env: WorkerEnv): Promise<Hono> {
       sessionPepper: config.SESSION_PEPPER,
       clientSecretPepper: config.CLIENT_SECRET_PEPPER,
     },
-    publicClientFactory: publicClientFactory(config),
+    publicClientsFor: publicClientsFactory(config),
     logger,
   })
 }

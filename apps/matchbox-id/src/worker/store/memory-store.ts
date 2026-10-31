@@ -393,6 +393,15 @@ export async function createMemoryIdStore(options: {
       session.revokedAt = now
       return true
     },
+    async walletHasEoaSession(walletAddress) {
+      const account = [...accounts.values()].find(
+        (candidate) => candidate.walletAddress === walletAddress,
+      )
+      return [...sessions.values()].some(
+        (session) =>
+          session.accountId === account?.id && session.signerKind === "eoa",
+      )
+    },
 
     async getOrCreatePairwiseSubject(accountId, sectorId, generate) {
       const key = `${accountId}:${sectorId}`

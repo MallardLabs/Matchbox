@@ -79,6 +79,7 @@ switch that product off.
 | `OIDC_SIGNING_KEYS` | matchbox-id — JSON array of private ES256 JWKs, each with `kid`; index 0 signs, all publish in JWKS |
 | `CF_ACCOUNT_ID`, `CF_ANALYTICS_TOKEN` | developer-console (Analytics Engine SQL API, read-only token: `mbx_api_requests` usage and `mbx_platform_health`) |
 | `MEZO_MAINNET_RPC_URL`, `MEZO_TESTNET_RPC_URL` | matchbox-id (ERC-1271/6492 SIWE verification), developer-api (reconciliation cron) |
+| `MEZO_MAINNET_CONFIRMING_RPC_URLS`, `MEZO_TESTNET_CONFIRMING_RPC_URLS` | matchbox-id — comma-separated RPCs of other operators that must confirm contract-account SIWE signatures (mainnet defaults to Boar and Validation Cloud) |
 
 Rotation of `OIDC_SIGNING_KEYS`: prepend new key, deploy, wait > max token
 lifetime, remove the old key.
@@ -505,7 +506,7 @@ Issuer: `https://id.matchbox.markets`.
 | `GET/POST /oauth/userinfo` | bearer access token; claims per granted scopes |
 | `POST /oauth/revoke` | RFC 7009; refresh tokens revoke the family, access tokens by jti |
 | `POST /api/siwe/nonce` | `{ nonce }` |
-| `POST /api/siwe/verify` | `{ message, signature }` → verifies domain = ID host, URI, chain id ∈ Mezo networks, nonce single-use, expiry ≤ 10 min; uses viem `verifySiweMessage` with a Mezo public client (EOA + ERC-1271 + ERC-6492); sets `__Host-mbx_id` cookie |
+| `POST /api/siwe/verify` | `{ message, signature }` → requires the SPA's canonical EIP-4361 message (pinned statement); verifies domain = ID host, URI, chain id ∈ Mezo networks, nonce single-use, expiry ≤ 10 min; ecrecover locally first, else viem `verifySiweMessage` (ERC-1271 + ERC-6492) on the network's RPCs, two of which must agree when more than one is configured, never for a wallet that has signed in with its key; sets `__Host-mbx_id` cookie |
 | `POST /api/session/sign-out` | |
 | `GET /api/session` | `{ account: { walletAddress, discord: {...} | null } | null }` |
 | `GET /api/authorization-requests/{id}` | app, env kind, scopes with labels, claim preview with **the signed-in user's own** values, existing grant diff |
@@ -548,7 +549,8 @@ hide the session from the cross-site top-level redirect into
 `/oauth/authorize`, breaking `prompt=none` and consent skipping); CSRF on
 `/api/*` is the `Origin` check on every non-GET request
 (`requireSameOrigin`); CSP with `frame-ancestors 'none'`; no iframe bridge;
-per-IP-prefix + per-account limits on `/api/siwe/*`; per-IP-prefix +
+per-IP-prefix limits on `/api/siwe/*`, plus a per-wallet limit charged
+only once the signature verifies; per-IP-prefix +
 per-client limits on `/oauth/token`, `/oauth/userinfo` and
 `/oauth/authorize` (authorize: 60/min, 2 000/day per IP prefix before any
 lookup, then the client's `oidc-token` policy before a request row is
@@ -576,6 +578,15 @@ same way. `wallet_network` is the environment network, which the session is
 thereby verified for. The SPA signs in on Mezo mainnet and switches the
 wallet there itself; only `chain` (a contract session on a test app) asks for
 another network. The Worker still accepts either Mezo network.
+
+RPC trust: a `contract` signature is only as good as the RPC answering the
+ERC-1271 / ERC-6492 `eth_call`, so the Worker never asks an RPC about a
+signature that ecrecovers, refuses the contract path for a wallet with any
+`eoa` session (sessions are never purged), and with more than one RPC host
+configured for the network needs two to confirm (each on the right chain
+id) and none to deny. Mainnet confirms with Boar and Validation Cloud by
+default; testnet relies on its one RPC unless
+`MEZO_TESTNET_CONFIRMING_RPC_URLS` is set.
 
 
 SPA pages: `/` (account: wallet, linked Discord, connected apps, sessions),

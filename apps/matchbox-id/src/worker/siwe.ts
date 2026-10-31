@@ -11,7 +11,7 @@ import {
   validateSiweMessage,
 } from "viem/siwe"
 import { siweStatement } from "../shared/siwe-message"
-import type { SignerKind } from "./store/id-store"
+import type { SiwePublicClient, SiweVerifyArgs } from "./deps"
 
 /**
  * EIP-4361 checks before the (RPC-backed) signature verification: the
@@ -150,24 +150,63 @@ export function checkSiweMessage(
 }
 
 /**
- * Classifies a signature that already verified for `address` on the SIWE
- * chain. If it ecrecovers to the address, whoever signed holds the key and
- * controls the address on every chain (`eoa`). Otherwise it verified through
- * ERC-1271 / ERC-6492 against that chain's contract state only (`contract`).
+ * Local ECDSA check, no RPC. If the signature ecrecovers to `address`,
+ * whoever signed holds the key and controls the address on every chain.
  */
-export async function siweSignerKind(input: {
+export async function recoversToAddress(input: {
   message: string
   signature: `0x${string}`
   address: `0x${string}`
-}): Promise<SignerKind> {
+}): Promise<boolean> {
   try {
     const recovered = await recoverMessageAddress({
       message: input.message,
       signature: input.signature,
     })
-    return isAddressEqual(recovered, input.address) ? "eoa" : "contract"
+    return isAddressEqual(recovered, input.address)
   } catch {
     // Not a 65-byte ECDSA signature (e.g. ERC-6492 wrapped, multisig).
-    return "contract"
+    return false
   }
+}
+
+export type ContractSignatureCheck = {
+  status: "valid" | "invalid" | "unavailable"
+  /** RPCs that gave no answer: failed, timed out or serve another chain. */
+  errors: unknown[]
+}
+
+/**
+ * ERC-1271 / ERC-6492 validity is an RPC's word about one chain's contract
+ * state. When more than one RPC is configured, two must confirm it and none
+ * may deny it.
+ */
+export async function verifyContractSignature(
+  clients: readonly SiwePublicClient[],
+  args: SiweVerifyArgs,
+  chainId: number,
+): Promise<ContractSignatureCheck> {
+  const answers = await Promise.allSettled(
+    clients.map(async (client) => {
+      const [servedChainId, valid] = await Promise.all([
+        client.getChainId(),
+        client.verifySiweMessage(args),
+      ])
+      if (servedChainId !== chainId) {
+        throw new Error(`RPC serves chain ${servedChainId}, not ${chainId}`)
+      }
+      return valid
+    }),
+  )
+  const errors: unknown[] = []
+  let confirmed = 0
+  let denied = false
+  for (const answer of answers) {
+    if (answer.status === "rejected") errors.push(answer.reason)
+    else if (answer.value) confirmed += 1
+    else denied = true
+  }
+  if (denied) return { status: "invalid", errors }
+  const required = clients.length > 1 ? 2 : 1
+  return { status: confirmed >= required ? "valid" : "unavailable", errors }
 }
