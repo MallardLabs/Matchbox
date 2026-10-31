@@ -940,8 +940,11 @@ export function useGaugeOwnershipCheck(
   const { chainId, isNetworkReady } = useNetwork()
   const contracts = getContractConfig(chainId)
 
+  // Stored ids are text; a malformed one must not throw during render.
   const tokenIdBigInt =
-    veBTCTokenId !== undefined ? BigInt(veBTCTokenId) : undefined
+    veBTCTokenId !== undefined && /^\d+$/.test(veBTCTokenId)
+      ? BigInt(veBTCTokenId)
+      : undefined
 
   const { data, isLoading } = useReadContract({
     ...contracts.veBTC,

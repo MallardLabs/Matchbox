@@ -198,6 +198,14 @@ Deno.serve(async (req) => {
     let skippedUnverifiable = 0
 
     for (const profile of profilesWithContent) {
+      // A malformed stored id skips its row instead of aborting the run.
+      if (!/^\d+$/.test(profile.vebtc_token_id)) {
+        console.warn(
+          `Skipping reset for gauge ${profile.gauge_address}: invalid token id`,
+        )
+        skippedUnverifiable++
+        continue
+      }
       const tokenId = BigInt(profile.vebtc_token_id)
 
       try {
