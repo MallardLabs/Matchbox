@@ -20,6 +20,7 @@ import {
   getMezoNetworkConfig,
 } from "../_shared/contracts.ts"
 import { corsHeaders, handleCors } from "../_shared/cors.ts"
+import { requireServiceRole } from "../_shared/serviceRoleAuth.ts"
 
 // Constants
 const EPOCH_DURATION = 7 * 24 * 60 * 60 // 7 days in seconds
@@ -374,6 +375,8 @@ Deno.serve(async (req) => {
   // Handle CORS preflight
   const corsResponse = handleCors(req)
   if (corsResponse) return corsResponse
+  const unauthorized = await requireServiceRole(req)
+  if (unauthorized) return unauthorized
 
   try {
     console.log("Starting gauge history snapshot (optimized)...")

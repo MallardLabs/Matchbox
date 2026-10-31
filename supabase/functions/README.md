@@ -15,6 +15,24 @@ Records daily snapshots of gauge performance metrics into the `gauge_history` ta
 - Total incentives (USD)
 - Calculated APY
 
+### Scheduled jobs: caller authorization
+
+`record-gauge-history`, `verify-gauge-ownership`, `backfill-gauge-history-prices`
+and `discord-reconcile-roles` write with the service role, so each one checks
+its caller before doing anything (`_shared/serviceRoleAuth.ts`). A request is
+accepted only if either:
+
+- `Authorization: Bearer <service role key>` matches the function's
+  `SUPABASE_SERVICE_ROLE_KEY` (what the pg_cron jobs below send), or
+- the `x-matchbox-job-secret` header matches the optional `MATCHBOX_JOB_SECRET`
+  function secret. Use this if the scheduler holds a different key, for example
+  a new `sb_secret_…` API key. The gateway still needs a valid JWT in
+  `Authorization` when `verify_jwt` is on, so send the anon key there.
+
+Anything else, including the public anon key, gets `401`. The check does not
+depend on `verify_jwt`, so a redeploy with the wrong flag cannot open these
+jobs up. Keep the default `verify_jwt` anyway.
+
 ### Matchbox Discord bot (`discord-interactions`, `discord-link`, `discord-reconcile-roles`)
 
 These functions implement the Matchbox Discord bot, which links a Discord account to
@@ -33,7 +51,8 @@ reward-floor cull for that semester's window.
 - **`discord-reconcile-roles`** — scheduled job that re-checks every linked member's
   points per semester and adds/removes roles so they stay correct between `/matchbox`
   runs. **Not public** — schedule with pg_cron using the service-role key (default
-  `verify_jwt`). Fetches each window's leaderboard once for efficiency.
+  `verify_jwt`); other callers get `401` (see "Scheduled jobs" above). Fetches each
+  window's leaderboard once for efficiency.
 
 Shared helpers live in `_shared/discord.ts` (Ed25519 verify, REST, role add/remove,
 avatar URL) and `_shared/discordLink.ts` (signed-message format, token/nonce, points
@@ -174,8 +193,8 @@ supabase functions deploy record-gauge-history
 3. Find `record-gauge-history` in the list
 4. Click the **...** menu → **Schedule**
 5. Set the cron expression: `0 0 * * *` (daily at midnight UTC)
-
-This method automatically handles authentication - no service key needed!
+6. Set the `Authorization` header to `Bearer <service role key>`. A schedule
+   that sends the anon key gets `401`.
 
 #### Option 2: Using pg_cron with Vault (Advanced)
 
@@ -225,7 +244,7 @@ You can manually invoke the function via HTTP:
 ```bash
 curl -X POST \
   'https://YOUR_PROJECT_REF.supabase.co/functions/v1/record-gauge-history' \
-  -H 'Authorization: Bearer YOUR_ANON_KEY' \
+  -H 'Authorization: Bearer YOUR_SERVICE_ROLE_KEY' \
   -H 'Content-Type: application/json'
 ```
 
@@ -251,7 +270,8 @@ supabase functions serve record-gauge-history --env-file .env.local
 
 3. Test with curl:
    ```bash
-   curl -X POST http://localhost:54321/functions/v1/record-gauge-history
+   curl -X POST http://localhost:54321/functions/v1/record-gauge-history \
+     -H 'Authorization: Bearer your-service-role-key'
    ```
 
 ## Troubleshooting

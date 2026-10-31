@@ -18,6 +18,7 @@ import {
   getMezoNetworkConfig,
 } from "../_shared/contracts.ts"
 import { corsHeaders, handleCors } from "../_shared/cors.ts"
+import { requireServiceRole } from "../_shared/serviceRoleAuth.ts"
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
 
@@ -152,6 +153,8 @@ async function recordReset(
 Deno.serve(async (req) => {
   const corsResponse = handleCors(req)
   if (corsResponse) return corsResponse
+  const unauthorized = await requireServiceRole(req)
+  if (unauthorized) return unauthorized
 
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")

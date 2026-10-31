@@ -15,12 +15,15 @@ import {
   getActiveSemesters,
   reconcileRoles,
 } from "../_shared/discordLink.ts"
+import { requireServiceRole } from "../_shared/serviceRoleAuth.ts"
 
 const JSON_HEADERS = { ...corsHeaders, "Content-Type": "application/json" }
 
 Deno.serve(async (req) => {
   const cors = handleCors(req)
   if (cors) return cors
+  const unauthorized = await requireServiceRole(req)
+  if (unauthorized) return unauthorized
 
   // Nothing to score while Academy points are off; granted roles stay put.
   if (!academyEnabled()) {
