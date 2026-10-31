@@ -144,6 +144,26 @@ export async function resolveGaugeController(
   }
 }
 
+/**
+ * Whether `signerAddress` controls the gauge's profile outright: the veBTC NFT
+ * owner always does, and the Ownable controller of a contract-owned NFT does
+ * once managed editors are enabled (the same rule as upsert-gauge-profile).
+ * Delegated editors are never controllers.
+ */
+export function isGaugeController(
+  controller: GaugeController,
+  signerAddress: string,
+  managedEditorsEnabled: boolean,
+): boolean {
+  const signer = signerAddress.toLowerCase()
+  if (signer === controller.nftOwnerAddress.toLowerCase()) return true
+  return (
+    managedEditorsEnabled &&
+    controller.controllerKind !== "direct-eoa" &&
+    signer === controller.controllerAddress.toLowerCase()
+  )
+}
+
 export async function sha256(value: string): Promise<string> {
   const digest = await crypto.subtle.digest(
     "SHA-256",
@@ -174,6 +194,50 @@ export function profileWriteAuthorizationMessage(input: {
     `Expires at: ${input.expiresAt}`,
     "This signature is gasless and cannot submit a transaction.",
   ].join("\n")
+}
+
+/** Message the controller of both gauges signs to move a profile. */
+export function profileTransferAuthorizationMessage(input: {
+  chainId: 31611 | 31612
+  fromGaugeAddress: string
+  fromVeBtcTokenId: string
+  toGaugeAddress: string
+  toVeBtcTokenId: string
+  signerAddress: string
+  nonce: string
+  expiresAt: string
+}): string {
+  return [
+    "Matchbox gauge profile transfer authorization",
+    "Action: transfer-profile",
+    `Chain: ${input.chainId}`,
+    `From gauge: ${input.fromGaugeAddress.toLowerCase()}`,
+    `From veBTC token: ${input.fromVeBtcTokenId}`,
+    `To gauge: ${input.toGaugeAddress.toLowerCase()}`,
+    `To veBTC token: ${input.toVeBtcTokenId}`,
+    `Signer: ${input.signerAddress.toLowerCase()}`,
+    `Nonce: ${input.nonce}`,
+    `Expires at: ${input.expiresAt}`,
+    "The source gauge profile is cleared after the move.",
+    "This signature is gasless and cannot submit a transaction.",
+  ].join("\n")
+}
+
+/** Reads the nonce and expiry back out of a signed authorization message. */
+export function parseAuthorizationNonce(
+  message: string,
+): { nonce: string; expiresAt: string } | null {
+  const lines = message.split("\n")
+  const nonce = lines
+    .find((line) => line.startsWith("Nonce: "))
+    ?.slice("Nonce: ".length)
+  const expiresAt = lines
+    .find((line) => line.startsWith("Expires at: "))
+    ?.slice("Expires at: ".length)
+  if (!nonce || !expiresAt || !Number.isFinite(Date.parse(expiresAt))) {
+    return null
+  }
+  return { nonce, expiresAt }
 }
 
 export function editorAuthorizationMessage(input: {
