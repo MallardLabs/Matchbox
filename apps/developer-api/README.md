@@ -66,8 +66,9 @@ Durable Object `RATE_LIMITER` → `RateLimiter` from
 - Keys verified by prefix lookup + HMAC(`API_KEY_PEPPER`), cached per isolate
   for 15 s (revocation latency ≤ 15 s). Unknown keys are negatively cached.
 - Missing/malformed keys and failed verification consume `ip:<prefix>`
-  (`unauthenticated` policy). Cache misses consume `lookup:<prefix>`
-  (120/min) before the DB read.
+  (`unauthenticated` policy). Verified keys never touch an IP bucket, so
+  callers sharing an egress (all Cloudflare Workers) cannot lock each other
+  out.
 - Per environment: `env:<environmentId>:secret` with `rateLimitPolicies` +
   `mbx_dev_quota_overrides` (cached 60 s), and `env:<environmentId>:publishable`
   scaled by `PUBLISHABLE_QUOTA_SHARE`. Publishable keys also use

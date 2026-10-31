@@ -70,6 +70,81 @@ describe("API key auth", () => {
     expect(lookup).toHaveBeenCalledTimes(2)
   })
 
+  describe("IP buckets behind a shared egress", () => {
+    // Cloudflare's cross-zone Worker egress: every Worker caller shares it.
+    const workerIp = "2a06:98c0:3600::103"
+    let junkCount = 0
+    function junkKey(): string {
+      junkCount += 1
+      const prefix = `Junk${String(junkCount).padStart(8, "0")}`
+      return `mbx_sk_live_${prefix}_${"x".repeat(43)}`
+    }
+
+    it("never charges a verified key, even with a cold cache", async () => {
+      const harness = await createHarness()
+      const statuses = new Map<number, number>()
+      for (let index = 0; index < 200; index++) {
+        const response = await harness.get(mainnetList, {
+          key: junkKey(),
+          ip: workerIp,
+        })
+        statuses.set(response.status, (statuses.get(response.status) ?? 0) + 1)
+      }
+      expect(statuses.get(401)).toBe(30)
+      expect(statuses.get(429)).toBe(170)
+      for (let index = 0; index < 3; index++) {
+        harness.clock.advance(15_001)
+        const valid = await harness.get(mainnetList, {
+          key: keys.skLive,
+          ip: workerIp,
+        })
+        expect(valid.status).toBe(200)
+      }
+    })
+
+    it(
+      "keeps a verified key working after junk spends the daily bucket",
+      {
+        timeout: 60_000,
+      },
+      async () => {
+        const harness = await createHarness()
+        for (let minute = 0; minute < 34; minute++) {
+          for (let index = 0; index < 30; index++) {
+            await harness.get(mainnetList, { key: junkKey(), ip: workerIp })
+          }
+          harness.clock.advance(60_000)
+        }
+        const junk = await harness.get(mainnetList, {
+          key: junkKey(),
+          ip: workerIp,
+        })
+        expect(junk.status).toBe(429)
+        expect(Number(junk.headers.get("Retry-After"))).toBeGreaterThan(3_600)
+        const valid = await harness.get(mainnetList, {
+          key: keys.skLive,
+          ip: workerIp,
+        })
+        expect(valid.status).toBe(200)
+      },
+    )
+
+    it("still limits unknown and wrong keys per IP prefix", async () => {
+      const harness = await createHarness()
+      const wrongSecret = `${keys.skTest.slice(0, -3)}zzz`
+      for (let index = 0; index < 30; index++) {
+        const response = await harness.get(testnetList, {
+          key: index % 2 === 0 ? junkKey() : wrongSecret,
+        })
+        expect(response.status).toBe(401)
+      }
+      const limited = await harness.get(testnetList, { key: junkKey() })
+      expect(limited.status).toBe(429)
+      expect(await errorCode(limited)).toBe("rate_limited")
+      expect((await harness.get(testnetList)).status).toBe(200)
+    })
+  })
+
   type Case = {
     name: string
     key: string

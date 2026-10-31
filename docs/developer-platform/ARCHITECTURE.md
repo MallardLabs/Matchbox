@@ -447,11 +447,13 @@ Rules:
   overrides), `env:<environmentId>:publishable` (the same policy scaled by
   `PUBLISHABLE_QUOTA_SHARE`, default `0.5`, floored, min 1 — anyone holding
   the public key can spend it, so it cannot drain the secret-key quota),
-  `pk:<keyId>:<ipPrefix>` (publishable), `ip:<ipPrefix>`
-  (missing/malformed/failed keys, `unauthenticated` policy) and
-  `lookup:<ipPrefix>` (120/min, 20 000/day) consumed before each key-cache
-  miss reaches the DB. The limiter fails open when the Durable Object is
-  unavailable (logged).
+  `pk:<keyId>:<ipPrefix>` (publishable) and `ip:<ipPrefix>`
+  (missing/malformed/unknown/wrong keys, `unauthenticated` policy). `ip:` is
+  charged only after a key fails verification, never for a verified key:
+  every Cloudflare Worker caller shares one egress /48, so a pre-lookup IP
+  bucket would let junk keys lock out valid integrators. The limiter fails
+  open when the Durable Object is unavailable (logged); for `ip:` that only
+  turns a 429 into the 401 the request gets anyway.
 - `tag` must be a lower-case slug (`^[a-z0-9][a-z0-9-]{0,39}$`, contract
   `gaugeProfileTagFilterSchema`); the store re-checks it before it reaches
   PostgREST's `cs.{…}` filter. Stored tags are free text today, so tags such

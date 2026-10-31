@@ -31,14 +31,11 @@ import type { ApiKeyRecord, ApiStore } from "../store/api-store"
 export const lastUsedThrottleMs = 5 * 60_000
 
 /**
- * Guards the key lookup itself: every cache miss costs one DB read, so a
- * client IP prefix gets a generous but bounded number of them.
+ * `ip:<prefix>` counts rejected requests only (missing, malformed, unknown
+ * or wrong keys). A verified key is never charged to an IP bucket: callers
+ * behind one egress (every Cloudflare Worker shares a /48) must not be able
+ * to lock each other out.
  */
-export const keyLookupRateLimitPolicy = {
-  perMinute: 120,
-  perDay: 20_000,
-} as const satisfies RateLimitPolicy
-
 const unauthenticatedPolicy = rateLimitPolicies.test.unauthenticated
 
 /** Names the credential when someone sends the wrong one as an API key. */
@@ -78,7 +75,11 @@ export type AuthenticateOptions = {
 export function authenticate(options: AuthenticateOptions): ApiMiddleware {
   const { store, rateLimits, pepper, now, logger, state } = options
 
-  /** Consumes a pre-auth bucket; throws 429 when exhausted, fails open. */
+  /**
+   * Charges a rejected request to its IP bucket; 429 once it is spent. The
+   * request is refused either way, so an unavailable limiter (logged) only
+   * turns that 429 into the caller's 401.
+   */
   async function limitByIp(
     bucket: string,
     policy: RateLimitPolicy,
@@ -131,7 +132,6 @@ export function authenticate(options: AuthenticateOptions): ApiMiddleware {
     const hash = await hmacHex(pepper, token)
     let cached = state.keys.get(hash)
     if (cached === undefined) {
-      await limitByIp(`lookup:${prefix}`, keyLookupRateLimitPolicy)
       const record = await store.findApiKeyByPrefix(parsed.prefix)
       const verified =
         record !== null && timingSafeEqualHex(hash, record.key.secretHash)
