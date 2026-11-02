@@ -13,6 +13,7 @@ import {
 } from "../_shared/gaugeProfileAuthorization.ts"
 import { getMezoNetworkConfigForChain } from "../_shared/contracts.ts"
 import { corsHeaders } from "../_shared/cors.ts"
+import { purgeExpiredNonces } from "../_shared/expiredNonces.ts"
 import { structuredLogger } from "../_shared/structuredLogger.ts"
 
 const addressSchema = z.string().regex(/^0x[0-9a-fA-F]{40}$/)
@@ -122,9 +123,8 @@ Deno.serve(async (request) => {
     if (parsed.data.action === "nonce") {
       const nonce = crypto.randomUUID().replaceAll("-", "")
       const expiresAt = new Date(Date.now() + 5 * 60_000).toISOString()
-      const { error } = await supabase
-        .from("gauge_profile_write_nonces")
-        .insert({
+      const [{ error }] = await Promise.all([
+        supabase.from("gauge_profile_write_nonces").insert({
           nonce_hash: await sha256(nonce),
           chain_id: parsed.data.chainId,
           gauge_address: parsed.data.gaugeAddress.toLowerCase(),
@@ -132,7 +132,9 @@ Deno.serve(async (request) => {
           owner_address: parsed.data.ownerAddress.toLowerCase(),
           action: parsed.data.operation,
           expires_at: expiresAt,
-        })
+        }),
+        purgeExpiredNonces(supabase, "gauge_profile_write_nonces"),
+      ])
       if (error) throw new Error("Unable to issue write nonce")
       return json({
         message: profileWriteAuthorizationMessage({

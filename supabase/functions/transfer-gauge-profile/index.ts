@@ -20,6 +20,7 @@ import {
 import { z } from "https://esm.sh/zod@4.1.12"
 import { getMezoNetworkConfigForChain } from "../_shared/contracts.ts"
 import { corsHeaders } from "../_shared/cors.ts"
+import { purgeExpiredNonces } from "../_shared/expiredNonces.ts"
 import {
   isGaugeController,
   parseAuthorizationNonce,
@@ -154,9 +155,8 @@ Deno.serve(async (request) => {
       }
       const nonce = crypto.randomUUID().replaceAll("-", "")
       const expiresAt = new Date(Date.now() + nonceLifetimeMs).toISOString()
-      const { error } = await supabase
-        .from("gauge_profile_transfer_nonces")
-        .insert({
+      const [{ error }] = await Promise.all([
+        supabase.from("gauge_profile_transfer_nonces").insert({
           nonce_hash: await sha256(nonce),
           chain_id: authorization.chainId,
           from_gauge_address: fromGauge,
@@ -165,7 +165,9 @@ Deno.serve(async (request) => {
           to_vebtc_token_id: authorization.toVeBtcTokenId,
           signer_address: signer,
           expires_at: expiresAt,
-        })
+        }),
+        purgeExpiredNonces(supabase, "gauge_profile_transfer_nonces"),
+      ])
       if (error) throw new Error("Unable to issue transfer nonce")
       return json({
         message: profileTransferAuthorizationMessage({
