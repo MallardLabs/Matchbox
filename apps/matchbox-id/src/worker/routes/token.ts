@@ -53,6 +53,15 @@ const failedTokenRateLimitPolicy = {
   perDay: 1_000,
 } as const satisfies RateLimitPolicy
 
+/**
+ * Issued tokens per public-client environment and IP prefix, spent before
+ * the environment's own bucket.
+ */
+const publicClientIpRateLimitPolicy = {
+  perMinute: 30,
+  perDay: 5_000,
+} as const satisfies RateLimitPolicy
+
 type TokenContext = {
   c: Context
   deps: AppDeps
@@ -291,7 +300,18 @@ async function tokenResponse(
     })
   }
   async function chargeEnvironment(): Promise<Response | null> {
+    const prefix = ipPrefix(c.req.raw) ?? "unknown"
     const limited = await firstRateLimitRejection(deps, [
+      // Anyone can get valid tokens for a public client by signing in with a
+      // throwaway wallet, so one IP prefix only gets a share of the quota.
+      ...(client.environment.clientType === "public"
+        ? [
+            {
+              key: `oidc-token:env-ip:${client.environment.id}:${prefix}`,
+              policy: publicClientIpRateLimitPolicy,
+            },
+          ]
+        : []),
       {
         key: `oidc-token:env:${client.environment.id}`,
         policy: resolveRateLimitPolicy({

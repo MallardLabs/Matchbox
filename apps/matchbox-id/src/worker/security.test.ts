@@ -733,6 +733,55 @@ describe("authorize hardening", () => {
     expect(exchange.status).toBe(200)
   })
 
+  it("gives one IP prefix only a share of a public client's quota", async () => {
+    const harness = await createHarness()
+    harness.store.admin.setClientType(memorySeed.liveEnvironmentId, "public")
+    const live = {
+      clientId: memorySeed.liveClientId,
+      redirectUri: memorySeed.liveRedirectUris[0],
+    }
+    async function redeemFrom(ip: string): Promise<Response> {
+      const challenge = await pkce()
+      const code = await obtainCode(harness, await signIn(harness), {
+        pkce: challenge,
+        ...live,
+      })
+      return tokenRequest(
+        harness,
+        {
+          grant_type: "authorization_code",
+          code,
+          code_verifier: challenge.verifier,
+          redirect_uri: live.redirectUri,
+          client_id: live.clientId,
+        },
+        { "CF-Connecting-IP": ip },
+      )
+    }
+    // Valid tokens from a throwaway sign-in, refreshed in a loop.
+    let tokens = tokenResponseSchema.parse(
+      await (await redeemFrom("203.0.113.7")).json(),
+    )
+    const statuses: Record<number, number> = {}
+    for (let index = 0; index < 40; index++) {
+      const response = await tokenRequest(
+        harness,
+        {
+          grant_type: "refresh_token",
+          refresh_token: tokens.refresh_token ?? "",
+          client_id: live.clientId,
+        },
+        { "CF-Connecting-IP": "203.0.113.7" },
+      )
+      statuses[response.status] = (statuses[response.status] ?? 0) + 1
+      if (response.status === 200) {
+        tokens = tokenResponseSchema.parse(await response.json())
+      }
+    }
+    expect(statuses).toEqual({ 200: 29, 429: 11 })
+    expect((await redeemFrom("198.51.100.9")).status).toBe(200)
+  })
+
   // ID-L06: the code used to be consumed before it was checked.
   it("keeps a code redeemable after wrong or rate-limited requests", async () => {
     const harness = await createHarness()
