@@ -47,6 +47,8 @@ export type EnvironmentRecord = {
   optionalScopes: OidcScope[]
   scopeVersion: number
   sectorId: string
+  /** Staff verification written by the console: the consent badge. */
+  verifiedAt: Date | null
 }
 
 export type ClientRecord = {

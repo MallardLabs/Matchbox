@@ -144,6 +144,8 @@ export type EnvironmentRecord = {
   optionalScopes: OidcScope[]
   scopeVersion: number
   sectorId: string
+  /** Staff verification behind the consent badge (`verification.ts`). */
+  verifiedAt: string | null
   createdAt: string
   updatedAt: string
 }
@@ -156,6 +158,7 @@ export type EnvironmentPatch = {
   /** Written in the same update as `requestedScopes` (DB subset CHECK). */
   optionalScopes?: OidcScope[]
   scopeVersion?: number
+  verifiedAt?: string | null
 }
 
 export type ReviewRecord = {

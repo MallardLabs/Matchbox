@@ -87,6 +87,7 @@ describe("app marks", () => {
     clientId: `mbx_${kind}_AbCdEfGhIjKlMnOpQrStUvWx`,
     reviewState,
     approvedScopes: [],
+    verifiedAt: null,
   })
 
   it("derives initials", () => {

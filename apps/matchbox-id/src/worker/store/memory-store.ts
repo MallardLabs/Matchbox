@@ -78,6 +78,7 @@ export type MemoryIdStore = IdStore & {
       environmentId: string,
       scopes: EnvironmentRecord["optionalScopes"],
     ): void
+    setVerifiedAt(environmentId: string, verifiedAt: Date | null): void
     /** Replaces (or removes) a wallet's Discord link like the DB trigger. */
     setDiscordLink(
       walletAddress: string,
@@ -163,6 +164,7 @@ export async function createMemoryIdStore(options: {
     optionalScopes: ["discord:id", "discord:profile"],
     scopeVersion: 1,
     sectorId: memorySeed.liveEnvironmentId,
+    verifiedAt: new Date("2026-09-30T00:00:00.000Z"),
   })
   environments.set(memorySeed.testEnvironmentId, {
     id: memorySeed.testEnvironmentId,
@@ -177,6 +179,7 @@ export async function createMemoryIdStore(options: {
     optionalScopes: [],
     scopeVersion: 1,
     sectorId: memorySeed.testEnvironmentId,
+    verifiedAt: null,
   })
   redirectUris.set(memorySeed.liveEnvironmentId, [
     ...memorySeed.liveRedirectUris,
@@ -707,6 +710,10 @@ export async function createMemoryIdStore(options: {
       setOptionalScopes(environmentId, scopes) {
         const environment = environments.get(environmentId)
         if (environment !== undefined) environment.optionalScopes = [...scopes]
+      },
+      setVerifiedAt(environmentId, verifiedAt) {
+        const environment = environments.get(environmentId)
+        if (environment !== undefined) environment.verifiedAt = verifiedAt
       },
       setDiscordLink(walletAddress, link, now) {
         const previous = discordLinks.get(walletAddress)

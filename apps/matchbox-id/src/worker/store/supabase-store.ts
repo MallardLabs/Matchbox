@@ -74,6 +74,8 @@ const environmentColumns = {
   optional_scopes: z.array(oidcScopeSchema).default([]),
   scope_version: z.number().int(),
   sector_id: z.string(),
+  // Absent until the verified-at migration: nothing is verified.
+  verified_at: nullableDateSchema.optional(),
 }
 
 function environmentFromRow(
@@ -92,6 +94,7 @@ function environmentFromRow(
     optionalScopes: row.optional_scopes,
     scopeVersion: row.scope_version,
     sectorId: row.sector_id,
+    verifiedAt: row.verified_at ?? null,
   }
 }
 

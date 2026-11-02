@@ -35,6 +35,11 @@ import {
   type EnvironmentRecord,
   StoreConflictError,
 } from "../store/console-store"
+import {
+  assertNoOpenLiveReview,
+  consentProfileChanged,
+  withdrawAppVerification,
+} from "../verification"
 import { auditSearch } from "./audit-search"
 
 /** Creates an environment with a fresh client id (retries a collision). */
@@ -179,6 +184,11 @@ export default function registerAppRoutes(app: ConsoleApp): void {
       }
     }
     const patch = profilePatch(body)
+    if (consentProfileChanged(access.app, patch)) {
+      const live = await store.getEnvironmentByKind(appId, "live")
+      if (live !== null) await assertNoOpenLiveReview(c, live, "the profile")
+      await withdrawAppVerification(c, appId)
+    }
     const updated = await store.updateApp(appId, patch)
     await audit(c, {
       action: "app-updated",

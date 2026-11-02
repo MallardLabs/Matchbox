@@ -120,7 +120,7 @@ export default function ConsentPreview({
 }: {
   request: AuthorizationRequestDetail
   audience: ConsentAudience
-  /** Live environment approved: show the Verified chip. */
+  /** Live environment verified by staff: show the Verified chip. */
   verified: boolean
 }): ReactElement {
   const titleId = useId()

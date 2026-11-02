@@ -135,7 +135,7 @@ export default function accountRoutes(deps: AppDeps): Hono {
           },
           environmentKind: environment.kind,
           network: environment.network,
-          verified: consentVerified(environment),
+          verified: consentVerified(grantApp, environment),
           scopes: oidcScopesOf(grant.scopes),
           declinedScopes: grant.declinedScopes,
           createdAt: grant.createdAt.toISOString(),

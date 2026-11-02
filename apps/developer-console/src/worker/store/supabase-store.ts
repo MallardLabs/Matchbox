@@ -246,6 +246,8 @@ const environmentFields = {
   optional_scopes: z.array(oidcScopeSchema).optional(),
   scope_version: z.number().int(),
   sector_id: z.string(),
+  /** Absent until the verified-at migration is applied: reads as null. */
+  verified_at: nullableTimestamp.optional(),
   created_at: timestampSchema,
   updated_at: timestampSchema,
 }
@@ -266,6 +268,7 @@ function mapEnvironment(row: EnvironmentRowInput) {
     optionalScopes: row.optional_scopes ?? [],
     scopeVersion: row.scope_version,
     sectorId: row.sector_id,
+    verifiedAt: row.verified_at ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -554,7 +557,7 @@ function appPatchRow(patch: AppProfilePatch) {
 }
 
 function environmentPatchRow(patch: EnvironmentPatch) {
-  const row: Record<string, string | number | string[]> = {}
+  const row: Record<string, string | number | string[] | null> = {}
   if (patch.clientType !== undefined) row.client_type = patch.clientType
   if (patch.reviewState !== undefined) row.review_state = patch.reviewState
   if (patch.requestedScopes !== undefined) {
@@ -567,6 +570,7 @@ function environmentPatchRow(patch: EnvironmentPatch) {
     row.optional_scopes = patch.optionalScopes
   }
   if (patch.scopeVersion !== undefined) row.scope_version = patch.scopeVersion
+  if (patch.verifiedAt !== undefined) row.verified_at = patch.verifiedAt
   return row
 }
 

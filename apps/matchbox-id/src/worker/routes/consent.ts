@@ -42,6 +42,7 @@ import {
   sessionVerifiedFor,
 } from "../session"
 import type {
+  AppRecord,
   AuthorizationRequestRecord,
   ClientRecord,
   DiscordLinkRecord,
@@ -64,13 +65,23 @@ type LoadedRequest = OpenRequest & {
 }
 
 /**
- * The consent screen's "verified" badge: only a live environment whose
- * review is approved, for confidential and public clients alike. Nothing
- * carries over from grants made under another client type (a
+ * The consent screen's "verified" badge: a live environment of an active app
+ * that staff verified (`verifiedAt`), for confidential and public clients
+ * alike. `reviewState` is not enough: auto-approved API scopes make it
+ * `approved`. The console withdraws `verifiedAt` whenever the app's consent
+ * profile, redirect URIs, origins, requested scopes or status change.
+ * Nothing carries over from grants made under another client type (a
  * confidential→public flip bumps `scope_version`, which forces consent).
  */
-export function consentVerified(environment: EnvironmentRecord): boolean {
-  return environment.kind === "live" && environment.reviewState === "approved"
+export function consentVerified(
+  app: AppRecord,
+  environment: EnvironmentRecord,
+): boolean {
+  return (
+    environment.kind === "live" &&
+    environment.verifiedAt !== null &&
+    app.status === "active"
+  )
 }
 
 function isAppUnavailable(client: ClientRecord): boolean {
@@ -163,7 +174,7 @@ export default function consentRoutes(deps: AppDeps): Hono {
       app: {
         name: clientApp.name,
         logoUrl: clientApp.logoUrl,
-        verified: consentVerified(environment),
+        verified: consentVerified(clientApp, environment),
       },
       environmentKind: environment.kind,
       network: environment.network,
@@ -196,7 +207,7 @@ export default function consentRoutes(deps: AppDeps): Hono {
         privacyUrl: clientApp.privacyUrl,
         termsUrl: clientApp.termsUrl,
         status: clientApp.status,
-        verified: consentVerified(environment),
+        verified: consentVerified(clientApp, environment),
       },
       environmentKind: environment.kind,
       network: environment.network,

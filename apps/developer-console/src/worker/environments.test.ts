@@ -444,3 +444,206 @@ describe("staff review decisions", () => {
     })
   })
 })
+
+describe("staff verification", () => {
+  async function verifiedAt(context: Awaited<ReturnType<typeof ownerContext>>) {
+    return (await context.harness.store.getEnvironment(context.live.id))
+      ?.verifiedAt
+  }
+
+  async function staff(context: Awaited<ReturnType<typeof ownerContext>>) {
+    const reviewer = await context.harness.account("staff@matchbox.local")
+    context.harness.store.seedStaff(reviewer.id, "reviewer")
+    const operator = await context.harness.account("ops@matchbox.local")
+    context.harness.store.seedStaff(operator.id, "operator")
+    return {
+      reviewerCookie: await context.harness.signIn(reviewer, {
+        steppedUp: true,
+      }),
+      operatorCookie: await context.harness.signIn(operator, {
+        steppedUp: true,
+      }),
+    }
+  }
+
+  async function decide(
+    context: Awaited<ReturnType<typeof ownerContext>>,
+    cookie: string,
+    decision: "approve" | "reject" | "request-changes",
+  ) {
+    const submitted = await context.harness.json(
+      await submit(context, context.live.id),
+      submitReviewResponseSchema,
+    )
+    expect(submitted.autoApproved).toBe(false)
+    const response = await context.harness.request(
+      "POST",
+      `/api/admin/reviews/${submitted.review?.id}/decision`,
+      { cookie, body: { decision } },
+    )
+    expect(response.status).toBe(200)
+  }
+
+  /** A live consent screen (openid wallet) that staff approved. */
+  async function verifiedLive() {
+    const context = await ownerContext()
+    const cookies = await staff(context)
+    await requestScopes(context, context.live.id, ["openid", "wallet"])
+    await decide(context, cookies.reviewerCookie, "approve")
+    expect(await verifiedAt(context)).not.toBeNull()
+    return { ...context, ...cookies }
+  }
+
+  it("is never granted by the gauge-profiles:read auto-approval", async () => {
+    const context = await ownerContext()
+    await requestScopes(context, context.live.id, ["gauge-profiles:read"])
+    const body = await context.harness.json(
+      await submit(context, context.live.id),
+      submitReviewResponseSchema,
+    )
+    expect(body.autoApproved).toBe(true)
+    expect(body.environment.reviewState).toBe("approved")
+    expect(body.environment.verifiedAt).toBeNull()
+    await requestScopes(context, context.live.id, [
+      "gauge-profiles:read",
+      "openid",
+      "wallet",
+    ])
+    const stored = await context.harness.store.getEnvironment(context.live.id)
+    expect(stored?.reviewState).toBe("approved")
+    expect(stored?.verifiedAt).toBeNull()
+  })
+
+  it("is granted by a staff approval", async () => {
+    const context = await verifiedLive()
+    const response = await context.harness.request(
+      "GET",
+      `/api/environments/${context.live.id}`,
+      { cookie: context.cookie },
+    )
+    const environment = await context.harness.json(response, environmentSchema)
+    expect(environment.verifiedAt).not.toBeNull()
+  })
+
+  it("is withdrawn by consent profile changes, not by other fields", async () => {
+    const context = await verifiedLive()
+    const patch = (body: Record<string, unknown>) =>
+      context.harness.request("PATCH", `/api/apps/${context.app.id}`, {
+        cookie: context.cookie,
+        body,
+      })
+    expect((await patch({ supportEmail: "help@example.com" })).status).toBe(200)
+    expect(await verifiedAt(context)).not.toBeNull()
+    expect((await patch({ name: "Matchbox" })).status).toBe(200)
+    expect(await verifiedAt(context)).toBeNull()
+
+    // Re-verified, then a logo swap withdraws it again.
+    await decide(context, context.reviewerCookie, "approve")
+    expect(await verifiedAt(context)).not.toBeNull()
+    await patch({ logoUrl: "https://evil.example/logo.png" })
+    expect(await verifiedAt(context)).toBeNull()
+  })
+
+  it("is withdrawn by a new redirect URI or origin, not by removing one", async () => {
+    const context = await verifiedLive()
+    const put = (path: string, body: Record<string, unknown>) =>
+      context.harness.request(
+        "PUT",
+        `/api/environments/${context.live.id}/${path}`,
+        { cookie: context.cookie, body },
+      )
+    expect((await put("redirect-uris", { uris: [] })).status).toBe(200)
+    expect(await verifiedAt(context)).not.toBeNull()
+    const added = await put("redirect-uris", {
+      uris: ["https://evil.example/cb"],
+    })
+    expect(added.status).toBe(200)
+    expect(
+      (await context.harness.json(added, environmentSchema)).verifiedAt,
+    ).toBeNull()
+
+    await decide(context, context.reviewerCookie, "approve")
+    await put("origins", { origins: ["https://evil.example"] })
+    expect(await verifiedAt(context)).toBeNull()
+  })
+
+  it("is withdrawn by a requested scope change", async () => {
+    const context = await verifiedLive()
+    await requestScopes(context, context.live.id, ["openid", "wallet"])
+    expect(await verifiedAt(context)).not.toBeNull()
+    await requestScopes(context, context.live.id, ["openid"])
+    expect(await verifiedAt(context)).toBeNull()
+  })
+
+  it("freezes the reviewed attributes while a live review is open", async () => {
+    const context = await verifiedLive()
+    await context.harness.request("PATCH", `/api/apps/${context.app.id}`, {
+      cookie: context.cookie,
+      body: { name: "Renamed" },
+    })
+    // Everything is approved; the screen can still go back to staff.
+    const submitted = await submit(context, context.live.id)
+    expect(submitted.status).toBe(200)
+    const rename = await context.harness.request(
+      "PATCH",
+      `/api/apps/${context.app.id}`,
+      { cookie: context.cookie, body: { name: "Matchbox" } },
+    )
+    expect(rename.status).toBe(409)
+    const redirect = await context.harness.request(
+      "PUT",
+      `/api/environments/${context.live.id}/redirect-uris`,
+      { cookie: context.cookie, body: { uris: ["https://evil.example/cb"] } },
+    )
+    expect(redirect.status).toBe(409)
+    const origin = await context.harness.request(
+      "PUT",
+      `/api/environments/${context.live.id}/origins`,
+      { cookie: context.cookie, body: { origins: ["https://evil.example"] } },
+    )
+    expect(origin.status).toBe(409)
+    expect((await context.harness.store.getApp(context.app.id))?.name).toBe(
+      "Renamed",
+    )
+  })
+
+  it("is withdrawn by reject and request-changes decisions", async () => {
+    for (const decision of ["reject", "request-changes"] as const) {
+      const context = await verifiedLive()
+      await requestScopes(context, context.live.id, [
+        "openid",
+        "wallet",
+        "discord:id",
+      ])
+      expect(await verifiedAt(context)).toBeNull()
+      // The API never leaves it set under an open review; the decision
+      // clears it regardless.
+      await context.harness.store.updateEnvironment(context.live.id, {
+        verifiedAt: "2026-11-01T00:00:00.000Z",
+      })
+      await decide(context, context.reviewerCookie, decision)
+      expect(await verifiedAt(context)).toBeNull()
+    }
+  })
+
+  it("is not restored when a suspended app is reactivated", async () => {
+    const context = await verifiedLive()
+    const status = (value: string) =>
+      context.harness.request(
+        "POST",
+        `/api/admin/apps/${context.app.id}/status`,
+        {
+          cookie: context.operatorCookie,
+          body: { status: value, reason: "Abuse report 42" },
+        },
+      )
+    expect((await status("suspended")).status).toBe(200)
+    expect(await verifiedAt(context)).toBeNull()
+    expect((await status("active")).status).toBe(200)
+    expect(await verifiedAt(context)).toBeNull()
+    const environment = await context.harness.store.getEnvironment(
+      context.live.id,
+    )
+    expect(environment?.approvedScopes).toEqual(["openid", "wallet"])
+  })
+})

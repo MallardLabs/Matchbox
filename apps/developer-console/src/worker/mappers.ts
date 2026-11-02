@@ -120,6 +120,7 @@ export function toEnvironmentSummary(
     reviewState: environment.reviewState,
     approvedScopes: environment.approvedScopes,
     requestedScopes: environment.requestedScopes,
+    verifiedAt: environment.verifiedAt,
   }
 }
 
@@ -212,6 +213,7 @@ export async function loadEnvironment(
     approvedScopes: environment.approvedScopes,
     optionalScopes: environment.optionalScopes,
     scopeVersion: environment.scopeVersion,
+    verifiedAt: environment.verifiedAt,
     redirectUris,
     origins,
     openReview: openReview === null ? null : toReview(openReview),

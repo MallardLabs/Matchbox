@@ -534,6 +534,7 @@ export default function createMemoryStore(
         optionalScopes: [],
         scopeVersion: 1,
         sectorId: id,
+        verifiedAt: null,
         createdAt: at,
         updatedAt: at,
       }

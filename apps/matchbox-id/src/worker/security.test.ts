@@ -12,6 +12,7 @@ import { decodeJwt } from "jose"
 import { getAddress, verifyMessage } from "viem"
 import { describe, expect, it } from "vitest"
 import { z } from "zod"
+import { grantListViewResponseSchema } from "../shared/contracts"
 import { purgeExpiredRows } from "./cleanup"
 import type { SiwePublicClient } from "./deps"
 import { familyIdForCodeHash, opaqueTokenHash } from "./oidc/tokens"
@@ -470,6 +471,58 @@ describe("client type changes", () => {
     )
     expect(view.environmentKind).toBe("test")
     expect(view.app.verified).toBe(false)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// ID-03: the badge needs staff verification and an active app
+// ---------------------------------------------------------------------------
+
+describe("consent verified badge", () => {
+  async function liveView(harness: Harness, cookie: string) {
+    const location = await liveAuthorize(harness, cookie, "consent")
+    return requestView(
+      harness,
+      cookie,
+      location.searchParams.get("request") ?? "",
+    )
+  }
+
+  async function grantsVerified(harness: Harness, cookie: string) {
+    const response = await harness.app.request(url("/api/grants"), {
+      headers: { Cookie: cookie },
+    })
+    return grantListViewResponseSchema
+      .parse(await response.json())
+      .data.map((grant) => grant.verified)
+  }
+
+  it("is not granted by an approved review state alone", async () => {
+    const harness = await createHarness()
+    const cookie = await signIn(harness)
+    harness.store.admin.setVerifiedAt(memorySeed.liveEnvironmentId, null)
+    const view = await liveView(harness, cookie)
+    expect(view.environmentKind).toBe("live")
+    expect(view.app.verified).toBe(false)
+  })
+
+  it("is withheld from restricted and suspended apps", async () => {
+    const harness = await createHarness()
+    const cookie = await signIn(harness)
+    await obtainCode(harness, cookie, {
+      pkce: await pkce(),
+      clientId: memorySeed.liveClientId,
+      redirectUri: memorySeed.liveRedirectUris[0],
+    })
+    expect((await liveView(harness, cookie)).app.verified).toBe(true)
+    expect(await grantsVerified(harness, cookie)).toEqual([true])
+
+    harness.store.admin.setAppStatus(memorySeed.appId, "restricted")
+    expect((await liveView(harness, cookie)).app.verified).toBe(false)
+    expect(await grantsVerified(harness, cookie)).toEqual([false])
+
+    harness.store.admin.setAppStatus(memorySeed.appId, "suspended")
+    expect(await grantsVerified(harness, cookie)).toEqual([false])
   })
 })
 

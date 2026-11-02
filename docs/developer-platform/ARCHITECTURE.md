@@ -674,6 +674,15 @@ scopes keep working meanwhile; approval bumps `scope_version`, which forces
 re-consent (grants with a lower version are treated as not covering new
 scopes).
 
+Consent "Verified" badge: `mbx_dev_environments.verified_at`, set only by a
+staff approval (never by auto-approval). Matchbox ID shows it for a live
+environment of an `active` app. The console clears it when the app's name,
+logo, website, privacy or terms URL, the environment's requested scopes, or
+the app's status change, when a redirect URI or origin is added, and on a
+reject / request-changes decision. Those attributes cannot change while a live
+review is open. A live environment with OIDC scopes and no verification can
+submit for review with nothing new to approve.
+
 SPA sections: Overview, Apps (list, create), App detail (Settings,
 Environments [test/live tabs: credentials, redirect URIs, origins, scopes,
 review], API keys, OAuth, Usage), Organization (members, invitations),

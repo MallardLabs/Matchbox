@@ -43,6 +43,7 @@ import { type ReviewOutcome, reviewDecisionEmail } from "../email/templates"
 import { respond, toApp, toQuotaOverride, toReview } from "../mappers"
 import { approvalOutcome, environmentReviewState } from "../review-policy"
 import type { AdminAppRecord, AdminReviewRecord } from "../store/console-store"
+import { withdrawAppVerification } from "../verification"
 import { auditSearch } from "./audit-search"
 
 /** Staff writes: the role plus a fresh Google step-up. */
@@ -258,6 +259,8 @@ export default function registerAdminRoutes(app: ConsoleApp): void {
         })
       }
       const outcome = approvalOutcome({ environment, approve })
+      // The only place staff verification (the consent badge) is granted.
+      const verifiedAt = outcome.approvedScopes.length > 0 ? at : null
       await store.updateEnvironment(environment.id, {
         approvedScopes: outcome.approvedScopes,
         scopeVersion: outcome.scopeVersion,
@@ -265,12 +268,14 @@ export default function registerAdminRoutes(app: ConsoleApp): void {
           outcome.approvedScopes,
           "development",
         ),
+        verifiedAt,
       })
       metadata = {
         ...metadata,
         approvedScopes: outcome.approvedScopes,
         added: outcome.added,
         scopeVersion: outcome.scopeVersion,
+        verified: verifiedAt !== null,
       }
     } else {
       await store.updateEnvironment(environment.id, {
@@ -278,6 +283,7 @@ export default function registerAdminRoutes(app: ConsoleApp): void {
           environment.approvedScopes,
           body.decision === "reject" ? "rejected" : "changes-requested",
         ),
+        verifiedAt: null,
       })
     }
     await store.updateReview(reviewId, {
@@ -349,7 +355,11 @@ export default function registerAdminRoutes(app: ConsoleApp): void {
     const organization = await store.getOrganization(current.organizationId)
     if (organization === null) throw new PlatformError("not_found")
     // Suspension revokes nothing; the API and Matchbox ID refuse suspended
-    // apps while the status holds.
+    // apps while the status holds. Any status change withdraws staff
+    // verification, so reactivation does not restore the consent badge.
+    if (current.status !== body.status) {
+      await withdrawAppVerification(c, appId)
+    }
     const updated =
       current.status === body.status
         ? current

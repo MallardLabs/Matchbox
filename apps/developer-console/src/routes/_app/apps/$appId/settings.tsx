@@ -67,6 +67,15 @@ function draftFrom(app: App): Draft {
   }
 }
 
+/** Saving a change to any of these withdraws staff verification. */
+const consentFields = [
+  "name",
+  "logoUrl",
+  "websiteUrl",
+  "privacyUrl",
+  "termsUrl",
+] as const satisfies readonly (keyof Draft)[]
+
 function nullable(value: string): string | null {
   const trimmed = value.trim()
   return trimmed === "" ? null : trimmed
@@ -386,9 +395,13 @@ function RetireApp({ app }: { app: App }): ReactElement {
 
 function ConsentCard({ app, draft }: { app: App; draft: Draft }): ReactElement {
   const { org } = useSession()
-  const verified = app.environments.some(
-    (env) => env.kind === "live" && env.reviewState === "approved",
-  )
+  const saved = draftFrom(app)
+  const verified =
+    app.status === "active" &&
+    app.environments.some(
+      (env) => env.kind === "live" && env.verifiedAt !== null,
+    ) &&
+    consentFields.every((field) => draft[field].trim() === saved[field])
   const website = nullable(draft.websiteUrl)
   const description = nullable(draft.description)
   return (
