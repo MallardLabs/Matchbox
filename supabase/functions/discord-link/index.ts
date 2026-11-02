@@ -188,6 +188,20 @@ type UnlinkChallenge = {
   expires_at: string
 }
 
+// Spends a wallet's open unlink challenges once its link is gone or replaced,
+// so one signed earlier can't remove a later link to the same Discord account.
+async function retireUnlinkChallenges(
+  supabase: SupabaseClient,
+  walletLower: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from("discord_unlink_challenges")
+    .update({ consumed_at: new Date().toISOString() })
+    .eq("wallet_address", walletLower)
+    .is("consumed_at", null)
+  if (error) console.error("unlink challenge retire error:", error)
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: corsHeaders })
@@ -370,7 +384,10 @@ Deno.serve(async (req) => {
       .select("discord_user_id, wallet_address, guild_id, granted_roles")
       .eq("wallet_address", walletLower)
       .maybeSingle()
-    if (!link) return json({ success: true })
+    if (!link) {
+      await retireUnlinkChallenges(supabase, walletLower)
+      return json({ success: true })
+    }
     if (link.discord_user_id !== challenge.discord_user_id) {
       return json({ success: false, reason: "link_changed" }, 409)
     }
@@ -389,6 +406,7 @@ Deno.serve(async (req) => {
       console.error("unlink delete error:", deleteError)
       return json({ success: false, reason: "server_error" }, 500)
     }
+    await retireUnlinkChallenges(supabase, walletLower)
     return json({ success: true })
   }
 
@@ -592,6 +610,9 @@ Deno.serve(async (req) => {
       console.error("link upsert error:", upsertError)
       return json({ success: false, reason: "server_error" }, 500)
     }
+    // Challenges issued before this link (it may have been unlinked in Discord
+    // meanwhile) can't unlink it.
+    await retireUnlinkChallenges(supabase, walletLower)
 
     // Expired link sessions still hold a Discord profile but are never read
     // again, so clear them out whenever a link completes.
