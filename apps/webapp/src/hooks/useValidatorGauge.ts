@@ -2,6 +2,10 @@ import { getContractConfig } from "@/config/contracts"
 import { toJsonRpcAccount } from "@/config/mezoRpcWrite"
 import { QUERY_PROFILES } from "@/config/queryProfiles"
 import { useNetwork } from "@/contexts/NetworkContext"
+import {
+  useGatedSendTransaction,
+  useGatedWriteContract,
+} from "@/hooks/useGatedWalletWrites"
 import { useInfiniteQuery } from "@tanstack/react-query"
 import { useCallback, useMemo } from "react"
 import type { Address, Hex } from "viem"
@@ -9,9 +13,7 @@ import { encodeFunctionData } from "viem"
 import {
   useAccount,
   useReadContract,
-  useSendTransaction,
   useWaitForTransactionReceipt,
-  useWriteContract,
 } from "wagmi"
 import { z } from "zod"
 
@@ -92,7 +94,7 @@ export function useAddValidatorIncentive(): ValidatorWriteState & {
   const { chainId } = useNetwork()
   const { address } = useAccount()
   const contracts = getContractConfig(chainId)
-  const send = useSendTransaction()
+  const send = useGatedSendTransaction()
   const receipt = useWaitForTransactionReceipt({ hash: send.data, chainId })
   return {
     addIncentive: (gauge: Address, token: Address, amount: bigint) => {
@@ -122,7 +124,7 @@ export function useClaimValidatorRewards(): ValidatorWriteState & {
 } {
   const { chainId } = useNetwork()
   const contracts = getContractConfig(chainId)
-  const write = useWriteContract()
+  const write = useGatedWriteContract()
   const receipt = useWaitForTransactionReceipt({ hash: write.data, chainId })
   return {
     claim: (gauge: Address) =>
@@ -148,7 +150,7 @@ export function useSwitchValidatorBeneficiary(gauge: Address | undefined): Omit<
   switchBeneficiary: (next: Address) => void
 } {
   const { chainId } = useNetwork()
-  const write = useWriteContract()
+  const write = useGatedWriteContract()
   const receipt = useWaitForTransactionReceipt({ hash: write.data, chainId })
   return {
     switchBeneficiary: (next: Address) => {

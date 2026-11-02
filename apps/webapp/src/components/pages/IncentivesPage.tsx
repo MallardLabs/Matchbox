@@ -7,8 +7,10 @@ import OnboardingCard from "@/components/OnboardingCard"
 import { SpringIn } from "@/components/SpringIn"
 import { TokenIcon } from "@/components/TokenIcon"
 import { TokenSelector } from "@/components/TokenSelector"
+import { formatWalletWriteError } from "@/config/mezoRpcWrite"
 import type { SocialLinks } from "@/config/supabase"
 import type { SavedProfile } from "@/config/supabase"
+import { useNetwork } from "@/contexts/NetworkContext"
 import { formatAPY, useGaugeAPY } from "@/hooks/useAPY"
 import { useBtcPrice } from "@/hooks/useBtcPrice"
 import {
@@ -41,6 +43,7 @@ import {
   useIsAllowlistedToken,
   useTokenAllowance,
 } from "@/hooks/useVoting"
+import useWalletNetworkGate from "@/hooks/useWalletNetworkGate"
 import {
   Button,
   Card,
@@ -163,6 +166,9 @@ export default function IncentivesPage(): JSX.Element {
   const router = useRouter()
   const { isConnected, address: walletAddress } = useAccount()
   const { locks: veBTCLocks, isLoading: isLoadingLocks } = useVeBTCLocks()
+  const { chainId, networkName } = useNetwork()
+  const { isWrongNetwork, isSwitching, switchWalletNetwork } =
+    useWalletNetworkGate()
 
   const [selectedLockIndex, setSelectedLockIndex] = useState<
     number | undefined
@@ -375,6 +381,7 @@ export default function IncentivesPage(): JSX.Element {
   const { data: tokenBalanceData, refetch: refetchTokenBalance } =
     useReadContract({
       address: incentiveToken?.address,
+      chainId,
       abi: [
         {
           inputs: [{ name: "account", type: "address" }],
@@ -402,8 +409,20 @@ export default function IncentivesPage(): JSX.Element {
     isPending: isApproving,
     isConfirming: isConfirmingApproval,
     isSuccess: isApprovalSuccess,
+    error: approvalError,
     reset: resetApproval,
   } = useApproveToken()
+  const incentiveWriteError = addIncentivesError ?? approvalError
+
+  const switchWalletButton = (
+    <Button
+      kind="primary"
+      onClick={switchWalletNetwork}
+      isLoading={isSwitching}
+    >
+      {`Switch wallet to ${networkName}`}
+    </Button>
+  )
 
   useEffect(() => {
     if (isCreateSuccess) {
@@ -763,19 +782,23 @@ export default function IncentivesPage(): JSX.Element {
                       Create a boost gauge for this veBTC lock to start
                       receiving veMEZO votes and boost your voting power.
                     </ParagraphMedium>
-                    <Button
-                      kind="primary"
-                      onClick={handleCreateGauge}
-                      isLoading={isCreating || isConfirmingCreate}
-                    >
-                      Create Boost Gauge
-                    </Button>
+                    {isWrongNetwork ? (
+                      switchWalletButton
+                    ) : (
+                      <Button
+                        kind="primary"
+                        onClick={handleCreateGauge}
+                        isLoading={isCreating || isConfirmingCreate}
+                      >
+                        Create Boost Gauge
+                      </Button>
+                    )}
                     {createError && (
                       <ParagraphSmall
                         color="var(--negative)"
                         marginTop="scale300"
                       >
-                        Error: {createError.message}
+                        Error: {formatWalletWriteError(createError)}
                       </ParagraphSmall>
                     )}
                   </div>
@@ -1438,7 +1461,9 @@ export default function IncentivesPage(): JSX.Element {
                               type="number"
                             />
                           </div>
-                          {needsApproval ? (
+                          {isWrongNetwork ? (
+                            switchWalletButton
+                          ) : needsApproval ? (
                             <Button
                               kind="primary"
                               onClick={handleApprove}
@@ -1469,12 +1494,13 @@ export default function IncentivesPage(): JSX.Element {
                               Add Incentives
                             </Button>
                           )}
-                          {addIncentivesError && (
+                          {incentiveWriteError && (
                             <ParagraphSmall
                               color="var(--negative)"
                               marginTop="scale300"
                             >
-                              Error: {addIncentivesError.message}
+                              Error:{" "}
+                              {formatWalletWriteError(incentiveWriteError)}
                             </ParagraphSmall>
                           )}
                         </div>

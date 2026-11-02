@@ -14,7 +14,9 @@ export type WalletNetworkGate = {
   isSwitching: boolean
   switchError: Error | null
   switchWalletNetwork: () => void
-  assertWalletNetwork: () => Promise<void>
+  assertWalletNetwork: (write?: {
+    chainId?: number | undefined
+  }) => Promise<void>
 }
 
 /**
@@ -22,7 +24,8 @@ export type WalletNetworkGate = {
  * on the network the UI shows? `isWrongNetwork` drives the global banner and
  * gated buttons. `assertWalletNetwork` asks the connector for its chain right
  * before a signing request, because React state and the cached wallet client
- * can lag a switch made inside the wallet.
+ * can lag a switch made inside the wallet. Given a write's variables, it checks
+ * against that write's own chainId.
  */
 export default function useWalletNetworkGate(): WalletNetworkGate {
   const { chainId } = useNetwork()
@@ -34,10 +37,16 @@ export default function useWalletNetworkGate(): WalletNetworkGate {
     switchChain({ chainId })
   }, [chainId, switchChain])
 
-  const assertWalletNetwork = useCallback(async () => {
-    const { connector } = getAccount(config)
-    assertWalletChain(await connector?.getChainId(), chainId)
-  }, [chainId, config])
+  const assertWalletNetwork = useCallback(
+    async (write?: { chainId?: number | undefined }) => {
+      const { connector } = getAccount(config)
+      assertWalletChain(
+        await connector?.getChainId(),
+        write?.chainId ?? chainId,
+      )
+    },
+    [chainId, config],
+  )
 
   return {
     isWrongNetwork: isConnected && isWrongWalletNetwork(walletChainId, chainId),

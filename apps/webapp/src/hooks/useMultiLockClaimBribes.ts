@@ -1,16 +1,12 @@
 import { getContractConfig } from "@/config/contracts"
 import { useNetwork } from "@/contexts/NetworkContext"
+import { useGatedWriteContract } from "@/hooks/useGatedWalletWrites"
 import { type AtomicBatchSupport, getAtomicBatchSupport } from "@/utils/eip5792"
 import { encodeSafeBatchCall } from "@/utils/safeBatch"
 import { useCallback, useEffect, useState } from "react"
 import type { Address, Hex } from "viem"
 import { sendCalls, waitForCallsStatus } from "viem/actions"
-import {
-  useAccount,
-  usePublicClient,
-  useWalletClient,
-  useWriteContract,
-} from "wagmi"
+import { useAccount, usePublicClient, useWalletClient } from "wagmi"
 import type { MultiLockExecutionMode } from "./useMultiLockVoting"
 import { useSafeBatchExport } from "./useSafeBatchExport"
 import type { BribeVoterKind } from "./useVoting"
@@ -69,7 +65,7 @@ export function useMultiLockClaimBribes(
   const lockLabel = voter === "validators" ? "veBTC" : "veMEZO"
   const publicClient = usePublicClient({ chainId })
   const { data: walletClient } = useWalletClient({ chainId })
-  const { writeContractAsync } = useWriteContract()
+  const { writeContractAsync } = useGatedWriteContract()
   const safeBatch = useSafeBatchExport(
     voter === "validators" ? "claim-validator-bribes" : "claim-bribes",
   )

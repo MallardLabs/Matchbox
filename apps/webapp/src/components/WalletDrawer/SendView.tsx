@@ -2,6 +2,10 @@ import { TokenIcon } from "@/components/TokenIcon"
 import { getExplorerTransactionUrl } from "@/config/explorer"
 import { formatWalletWriteError } from "@/config/mezoRpcWrite"
 import { useNetwork } from "@/contexts/NetworkContext"
+import {
+  useGatedSendTransaction,
+  useGatedWriteContract,
+} from "@/hooks/useGatedWalletWrites"
 import { type Token, useTokenList } from "@/hooks/useTokenList"
 import useWalletNetworkGate from "@/hooks/useWalletNetworkGate"
 import { useWalletAccount } from "@mezo-org/passport"
@@ -11,9 +15,7 @@ import { type Address, formatUnits, isAddress, parseUnits } from "viem"
 import {
   useBalance,
   useReadContract,
-  useSendTransaction,
   useWaitForTransactionReceipt,
-  useWriteContract,
 } from "wagmi"
 
 type SendStep = "form" | "confirming" | "success" | "error"
@@ -170,7 +172,7 @@ export function SendView({ onBack, onClose }: SendViewProps): JSX.Element {
     isPending: isWritePending,
     error: writeError,
     reset: resetWrite,
-  } = useWriteContract()
+  } = useGatedWriteContract()
 
   const {
     sendTransaction,
@@ -178,7 +180,7 @@ export function SendView({ onBack, onClose }: SendViewProps): JSX.Element {
     isPending: isSendPending,
     error: sendError,
     reset: resetSend,
-  } = useSendTransaction()
+  } = useGatedSendTransaction()
 
   const { isLoading: isConfirming, isSuccess: isConfirmed } =
     useWaitForTransactionReceipt({

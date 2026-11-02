@@ -1,12 +1,12 @@
 import { getContractConfig } from "@/config/contracts"
 import { QUERY_PROFILES } from "@/config/queryProfiles"
 import { useNetwork } from "@/contexts/NetworkContext"
+import { useGatedWriteContract } from "@/hooks/useGatedWalletWrites"
 import { useEffect } from "react"
 import {
   useAccount,
   useReadContracts,
   useWaitForTransactionReceipt,
-  useWriteContract,
 } from "wagmi"
 
 type Lock = {
@@ -274,7 +274,7 @@ export function useApproveMEZO(): {
     isPending,
     error,
     reset,
-  } = useWriteContract()
+  } = useGatedWriteContract()
 
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
     hash,
@@ -329,7 +329,7 @@ export function useCreateVeMEZOLock(): {
     isPending,
     error,
     reset,
-  } = useWriteContract()
+  } = useGatedWriteContract()
 
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
     hash,

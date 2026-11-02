@@ -1,16 +1,12 @@
 import { getContractConfig } from "@/config/contracts"
 import { useNetwork } from "@/contexts/NetworkContext"
+import { useGatedSendTransaction } from "@/hooks/useGatedWalletWrites"
 import { getAtomicBatchSupport } from "@/utils/eip5792"
 import { type SafeBatchCall, encodeSafeBatchCall } from "@/utils/safeBatch"
 import { useCallback, useState } from "react"
 import type { Address, Hex } from "viem"
 import { sendCalls, waitForCallsStatus } from "viem/actions"
-import {
-  useAccount,
-  usePublicClient,
-  useSendTransaction,
-  useWalletClient,
-} from "wagmi"
+import { useAccount, usePublicClient, useWalletClient } from "wagmi"
 import { useSafeBatchExport } from "./useSafeBatchExport"
 import useWalletNetworkGate from "./useWalletNetworkGate"
 
@@ -30,7 +26,7 @@ export default function useMezoGaugeVoting() {
   const { chainId } = useNetwork()
   const { address: account } = useAccount()
   const { data: walletClient } = useWalletClient({ chainId })
-  const { sendTransactionAsync } = useSendTransaction()
+  const { sendTransactionAsync } = useGatedSendTransaction()
   const publicClient = usePublicClient({ chainId })
   const voter = getContractConfig(chainId).thirdPartyVoter
   const safeBatch = useSafeBatchExport("mezo-gauge-vote")
