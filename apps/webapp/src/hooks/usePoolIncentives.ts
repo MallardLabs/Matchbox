@@ -275,12 +275,13 @@ export function useAddPoolIncentive(): AddPoolIncentiveResult {
   const {
     writeContract,
     data: hash,
+    variables,
     isPending,
     error,
   } = useGatedWriteContract()
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
     hash,
-    chainId,
+    chainId: variables?.chainId ?? chainId,
   })
 
   const addIncentive = (

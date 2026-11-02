@@ -128,6 +128,9 @@ export function SendView({ onBack, onClose }: SendViewProps): JSX.Element {
   const [txHash, setTxHash] = useState<`0x${string}` | undefined>()
   const [isTokenDropdownOpen, setIsTokenDropdownOpen] = useState(false)
   const [formChainId, setFormChainId] = useState(chainId)
+  // The receipt and explorer link stay on the chain the transfer was signed
+  // for, even if the wallet and the UI move on while it is pending.
+  const [txChainId, setTxChainId] = useState(chainId)
 
   const isNativeToken = useMemo(
     () =>
@@ -186,7 +189,7 @@ export function SendView({ onBack, onClose }: SendViewProps): JSX.Element {
   const { isLoading: isConfirming, isSuccess: isConfirmed } =
     useWaitForTransactionReceipt({
       hash: txHash,
-      chainId,
+      chainId: txChainId,
     })
 
   useEffect(() => {
@@ -256,6 +259,7 @@ export function SendView({ onBack, onClose }: SendViewProps): JSX.Element {
     if (!canSend || !selectedToken || !parsedAmount) return
 
     setStep("confirming")
+    setTxChainId(chainId)
     setErrorMessage(null)
 
     const to = recipientAddress as Address
@@ -330,7 +334,7 @@ export function SendView({ onBack, onClose }: SendViewProps): JSX.Element {
         </p>
         {txHash && (
           <a
-            href={getExplorerTransactionUrl(chainId, txHash)}
+            href={getExplorerTransactionUrl(txChainId, txHash)}
             target="_blank"
             rel="noopener noreferrer"
             className="mb-8 text-sm text-[var(--accent)] hover:underline"

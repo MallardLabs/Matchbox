@@ -273,13 +273,14 @@ export function useCreateBoostGauge(): CreateBoostGaugeResult {
   const {
     writeContract,
     data: hash,
+    variables,
     isPending,
     error,
   } = useGatedWriteContract()
 
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
     hash,
-    chainId,
+    chainId: variables?.chainId ?? chainId,
   })
 
   const createGauge = (
@@ -327,13 +328,14 @@ export function useVoteOnGauge(): VoteOnGaugeResult {
   const {
     writeContract,
     data: hash,
+    variables,
     isPending,
     error,
   } = useGatedWriteContract()
 
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
     hash,
-    chainId,
+    chainId: variables?.chainId ?? chainId,
   })
 
   const vote = (
@@ -373,13 +375,14 @@ export function useResetVote(): ResetVoteResult {
   const {
     writeContract,
     data: hash,
+    variables,
     isPending,
     error,
   } = useGatedWriteContract()
 
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
     hash,
-    chainId,
+    chainId: variables?.chainId ?? chainId,
   })
 
   const reset = (veMEZOTokenId: bigint) => {
@@ -415,13 +418,14 @@ export function usePokeBoost(): PokeBoostResult {
   const {
     writeContract,
     data: hash,
+    variables,
     isPending,
     error,
   } = useGatedWriteContract()
 
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
     hash,
-    chainId,
+    chainId: variables?.chainId ?? chainId,
   })
 
   const pokeBoost = (veBTCTokenId: bigint) => {
@@ -687,6 +691,7 @@ export function useApproveToken(): {
   const {
     sendTransaction,
     data: hash,
+    variables,
     isPending,
     error,
     reset,
@@ -694,7 +699,7 @@ export function useApproveToken(): {
 
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
     hash,
-    chainId,
+    chainId: variables?.chainId ?? chainId,
   })
 
   const approve = (
@@ -933,13 +938,14 @@ export function useAddIncentives(): AddIncentivesResult {
   const {
     writeContract,
     data: hash,
+    variables,
     isPending,
     error,
   } = useGatedWriteContract()
 
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
     hash,
-    chainId,
+    chainId: variables?.chainId ?? chainId,
   })
 
   const addIncentives = (
@@ -1274,13 +1280,14 @@ export function useClaimBribes(
   const {
     writeContract,
     data: hash,
+    variables,
     isPending,
     error,
   } = useGatedWriteContract()
 
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
     hash,
-    chainId,
+    chainId: variables?.chainId ?? chainId,
   })
 
   const claimBribes = (

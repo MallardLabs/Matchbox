@@ -14,6 +14,10 @@ import {
 // went out on Mezo Mainnet. These wrappers run assertWalletNetwork as the
 // mutation's onMutate: every signing request first asks the connector for its
 // chain, and a mismatch fails the write and surfaces as its `error`.
+//
+// Wait for receipts on `variables.chainId`, the chain the write was signed
+// for: the UI follows a wallet-side switch, and a wait on the new network would
+// never find the transaction.
 
 export function useGatedWriteContract(): UseWriteContractReturnType<
   Config,

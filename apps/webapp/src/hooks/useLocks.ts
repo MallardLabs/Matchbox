@@ -271,6 +271,7 @@ export function useApproveMEZO(): {
   const {
     writeContract,
     data: hash,
+    variables,
     isPending,
     error,
     reset,
@@ -278,7 +279,7 @@ export function useApproveMEZO(): {
 
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
     hash,
-    chainId,
+    chainId: variables?.chainId ?? chainId,
   })
 
   const approve = (amount: bigint) => {
@@ -326,6 +327,7 @@ export function useCreateVeMEZOLock(): {
   const {
     writeContract,
     data: hash,
+    variables,
     isPending,
     error,
     reset,
@@ -333,7 +335,7 @@ export function useCreateVeMEZOLock(): {
 
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
     hash,
-    chainId,
+    chainId: variables?.chainId ?? chainId,
   })
 
   useEffect(() => {
