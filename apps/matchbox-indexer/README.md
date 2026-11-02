@@ -122,15 +122,19 @@ the Neon compute, and Neon Free has 100 CU-hours a month). Each tick:
    a window it can't fetch is never skipped: it logs "INGEST FAILED" with the
    lag and the cause, and the checkpoint waits there until someone fixes it;
 3. projects what it ingested;
-4. prunes raw past the retention window, at most 250,000 blocks per tick.
+4. prunes raw past the retention window, at most 250,000 blocks per tick;
+5. pings `HEARTBEAT_URL`, if set, while the checkpoint isn't stale and
+   projection isn't halted.
 
 `GET /health` reports head, last block, lag, `stale` (lag over 700 blocks,
 about 45 minutes), projection state and `database` (`bytes`, `capBytes`,
-`usedPercent`, `writable`). It queries the database, so it wakes the compute:
-check it by hand, not from a monitor.
+`usedPercent`, `writable`), with status 503 when stale. It queries the
+database, so it wakes the compute: check it by hand, not from a monitor.
+Alerts come from a dead man's switch on the heartbeat (GO-LIVE.md, step 6).
 
 - `DATABASE_URL` is a secret: `wrangler secret put DATABASE_URL`. Use the
   direct URL for a login granted `matchbox_indexer`.
+- `HEARTBEAT_URL` is an optional secret: a heartbeat monitor's ping URL.
 - On an empty `logs` checkpoint the cron starts at the network start, so the
   mUSD history before it only arrives through `rebuild:history`.
 
