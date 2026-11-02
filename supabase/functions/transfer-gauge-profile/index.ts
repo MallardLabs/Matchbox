@@ -3,11 +3,12 @@
 // clears the source. Limited to once per epoch per source gauge.
 //
 // `nonce` issues a single-use message naming the chain, both gauges and both
-// veBTC token ids; `transfer` verifies the signature (EOA or ERC-1271/6492
-// contract wallet), consumes the nonce and moves the profile with the service
-// role. Each token must map to its gauge in the boost voter, and one signer
-// must control both NFTs. Delegated profile editors cannot transfer: a
-// transfer clears the source, which only its controller may authorize.
+// veBTC token ids; `transfer` verifies the signature (ECDSA locally, or
+// ERC-1271/6492 for a contract signer), consumes the nonce and moves the
+// profile with the service role. Each token must map to its gauge in the boost
+// voter, and one signer must control both NFTs. Delegated profile editors
+// cannot transfer: a transfer clears the source, which only its controller may
+// authorize.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 import {
@@ -25,6 +26,8 @@ import {
   profileTransferAuthorizationMessage,
   resolveGaugeController,
   sha256,
+  signedBy,
+  signerIsContract,
 } from "../_shared/gaugeProfileAuthorization.ts"
 import { structuredLogger } from "../_shared/structuredLogger.ts"
 
@@ -93,55 +96,62 @@ Deno.serve(async (request) => {
     const signer = body.signerAddress.toLowerCase()
     if (fromGauge === toGauge) return json({ error: "same-gauge" }, 400)
 
+    const authorization = {
+      chainId: body.chainId,
+      fromGaugeAddress: fromGauge,
+      fromVeBtcTokenId: BigInt(body.fromVeBtcTokenId).toString(),
+      toGaugeAddress: toGauge,
+      toVeBtcTokenId: BigInt(body.toVeBtcTokenId).toString(),
+      signerAddress: signer,
+    }
     const network = getMezoNetworkConfigForChain(body.chainId)
     const publicClient = createPublicClient({
       chain: network.chain,
       transport: http(network.rpcUrl),
     })
-    const veBtcAddress = getAddress(network.contracts.veBTC)
-    const boostVoterAddress = getAddress(network.contracts.boostVoter)
-    // Each lookup throws unless boostableTokenIdToGauge(token) is that gauge,
-    // so neither side can be an arbitrary contract.
-    const [fromController, toController] = await Promise.all([
-      resolveGaugeController(publicClient, {
-        chainId: body.chainId,
-        gaugeAddress: fromGauge,
-        veBtcTokenId: body.fromVeBtcTokenId,
-        veBtcAddress,
-        boostVoterAddress,
-      }),
-      resolveGaugeController(publicClient, {
-        chainId: body.chainId,
-        gaugeAddress: toGauge,
-        veBtcTokenId: body.toVeBtcTokenId,
-        veBtcAddress,
-        boostVoterAddress,
-      }),
-    ])
-    const managedEditorsEnabled =
-      Deno.env.get("ENABLE_MANAGED_GAUGE_EDITORS") === "true"
-    if (
-      !isGaugeController(fromController, signer, managedEditorsEnabled) ||
-      !isGaugeController(toController, signer, managedEditorsEnabled)
-    ) {
-      return json({ error: "transfer-authorization-failed" }, 403)
-    }
-
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
       { auth: { autoRefreshToken: false, persistSession: false } },
     )
-    const authorization = {
-      chainId: body.chainId,
-      fromGaugeAddress: fromGauge,
-      fromVeBtcTokenId: fromController.veBtcTokenId.toString(),
-      toGaugeAddress: toGauge,
-      toVeBtcTokenId: toController.veBtcTokenId.toString(),
-      signerAddress: signer,
+
+    // Each lookup throws unless boostableTokenIdToGauge(token) is that gauge,
+    // so neither side can be an arbitrary contract. Null when the signer does
+    // not control both NFTs.
+    const resolveControllers = async () => {
+      const veBtcAddress = getAddress(network.contracts.veBTC)
+      const boostVoterAddress = getAddress(network.contracts.boostVoter)
+      const [fromController, toController] = await Promise.all([
+        resolveGaugeController(publicClient, {
+          chainId: body.chainId,
+          gaugeAddress: fromGauge,
+          veBtcTokenId: authorization.fromVeBtcTokenId,
+          veBtcAddress,
+          boostVoterAddress,
+        }),
+        resolveGaugeController(publicClient, {
+          chainId: body.chainId,
+          gaugeAddress: toGauge,
+          veBtcTokenId: authorization.toVeBtcTokenId,
+          veBtcAddress,
+          boostVoterAddress,
+        }),
+      ])
+      const managedEditorsEnabled =
+        Deno.env.get("ENABLE_MANAGED_GAUGE_EDITORS") === "true"
+      if (
+        !isGaugeController(fromController, signer, managedEditorsEnabled) ||
+        !isGaugeController(toController, signer, managedEditorsEnabled)
+      ) {
+        return null
+      }
+      return { fromController, toController }
     }
 
     if (body.action === "nonce") {
+      if (!(await resolveControllers())) {
+        return json({ error: "transfer-authorization-failed" }, 403)
+      }
       const nonce = crypto.randomUUID().replaceAll("-", "")
       const expiresAt = new Date(Date.now() + nonceLifetimeMs).toISOString()
       const { error } = await supabase
@@ -166,6 +176,7 @@ Deno.serve(async (request) => {
       })
     }
 
+    // A malformed or mismatched proof is refused before any RPC read.
     const fields = parseAuthorizationNonce(body.proof.message)
     if (fields === null || !isHex(body.proof.signature)) {
       return json({ error: "invalid-proof" }, 401)
@@ -178,10 +189,19 @@ Deno.serve(async (request) => {
     if (expected !== body.proof.message) {
       return json({ error: "invalid-proof" }, 401)
     }
-    const signatureValid = await publicClient.verifyMessage({
+
+    const controllers = await resolveControllers()
+    if (!controllers) {
+      return json({ error: "transfer-authorization-failed" }, 403)
+    }
+    const { toController } = controllers
+    const signatureValid = await signedBy(publicClient, {
       address: getAddress(signer),
       message: body.proof.message,
       signature: body.proof.signature,
+      contractSigner:
+        signerIsContract(controllers.fromController, signer) ||
+        signerIsContract(toController, signer),
     })
     if (!signatureValid) {
       return json({ error: "transfer-authorization-failed" }, 403)

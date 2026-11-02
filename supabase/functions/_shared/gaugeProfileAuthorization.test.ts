@@ -1,3 +1,4 @@
+import { privateKeyToAccount } from "https://esm.sh/viem@2/accounts"
 import {
   editorAuthorizationMessage,
   type GaugeController,
@@ -6,6 +7,8 @@ import {
   profileTransferAuthorizationMessage,
   profileWriteAuthorizationMessage,
   sha256,
+  signedBy,
+  signerIsContract,
 } from "./gaugeProfileAuthorization.ts"
 
 function assertEquals(actual: string, expected: string): void {
@@ -211,4 +214,61 @@ Deno.test("only the NFT owner or its live controller controls a gauge", () => {
       String(expected),
     )
   }
+})
+
+Deno.test("only contract owners or contract controllers count as contract signers", () => {
+  const base: GaugeController = {
+    chainId: 31612,
+    gaugeAddress: "0x5893a3Fbb51DD117C08Cf0407103ce0809aaC406",
+    veBtcTokenId: 1226n,
+    nftOwnerAddress: "0x920b1c573F503554E113e4c47A92cd289a3d1625",
+    controllerAddress: "0xCBdBCAf764881138DeFf673143cEAaAe9c714b00",
+    controllerKind: "ownable-eoa",
+  }
+  const cases: [GaugeController["controllerKind"], string, boolean][] = [
+    ["direct-eoa", identity.nftOwnerAddress, false],
+    ["direct-contract", identity.nftOwnerAddress.toLowerCase(), true],
+    ["ownable-eoa", identity.nftOwnerAddress, true],
+    ["ownable-eoa", identity.controllerAddress, false],
+    ["ownable-contract", identity.controllerAddress, true],
+    ["ownable-contract", identity.editorAddress, false],
+  ]
+  for (const [controllerKind, signer, expected] of cases) {
+    assertEquals(
+      String(signerIsContract({ ...base, controllerKind }, signer)),
+      String(expected),
+    )
+  }
+})
+
+Deno.test("signatures recover locally and reach the RPC only for contract signers", async () => {
+  const account = privateKeyToAccount(`0x${"11".repeat(32)}`)
+  const other = privateKeyToAccount(`0x${"22".repeat(32)}`)
+  const message = "Matchbox gauge profile transfer authorization"
+  const signature = await account.signMessage({ message })
+  let rpcCalls = 0
+  // Models a hostile RPC that vouches for every signature it is asked about.
+  const client = {
+    verifyMessage: () => {
+      rpcCalls += 1
+      return Promise.resolve(true)
+    },
+  } as unknown as Parameters<typeof signedBy>[0]
+
+  const check = (
+    address: `0x${string}`,
+    signature: `0x${string}`,
+    contractSigner: boolean,
+  ) => signedBy(client, { address, message, signature, contractSigner })
+
+  assertEquals(String(await check(account.address, signature, false)), "true")
+  assertEquals(String(await check(account.address, signature, true)), "true")
+  assertEquals(String(rpcCalls), "0")
+  // A forged signature for a plain key never reaches the RPC.
+  assertEquals(String(await check(other.address, signature, false)), "false")
+  assertEquals(String(await check(other.address, "0xdeadbeef", false)), "false")
+  assertEquals(String(rpcCalls), "0")
+  // A contract signer is checked through ERC-1271/6492.
+  assertEquals(String(await check(other.address, "0xdeadbeef", true)), "true")
+  assertEquals(String(rpcCalls), "1")
 })

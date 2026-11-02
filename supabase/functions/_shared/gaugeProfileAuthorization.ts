@@ -1,6 +1,8 @@
 import {
   getAddress,
+  recoverMessageAddress,
   type Address,
+  type Hex,
   type PublicClient,
 } from "https://esm.sh/viem@2"
 
@@ -162,6 +164,48 @@ export function isGaugeController(
     controller.controllerKind !== "direct-eoa" &&
     signer === controller.controllerAddress.toLowerCase()
   )
+}
+
+/** Whether the controller resolution found contract code at `signerAddress`. */
+export function signerIsContract(
+  controller: GaugeController,
+  signerAddress: string,
+): boolean {
+  const signer = signerAddress.toLowerCase()
+  if (signer === controller.nftOwnerAddress.toLowerCase()) {
+    return controller.controllerKind !== "direct-eoa"
+  }
+  return (
+    signer === controller.controllerAddress.toLowerCase() &&
+    controller.controllerKind === "ownable-contract"
+  )
+}
+
+/**
+ * Checks `signature` over `message` by `address`. ECDSA is recovered locally
+ * first; the RPC's ERC-1271/6492 check runs only for a contract signer, so a
+ * faulty or hostile RPC cannot vouch for a plain key's forged signature.
+ */
+export async function signedBy(
+  client: Pick<PublicClient, "verifyMessage">,
+  input: {
+    address: Address
+    message: string
+    signature: Hex
+    contractSigner: boolean
+  },
+): Promise<boolean> {
+  const recovered = await recoverMessageAddress({
+    message: input.message,
+    signature: input.signature,
+  }).catch(() => null)
+  if (recovered?.toLowerCase() === input.address.toLowerCase()) return true
+  if (!input.contractSigner) return false
+  return await client.verifyMessage({
+    address: input.address,
+    message: input.message,
+    signature: input.signature,
+  })
 }
 
 export async function sha256(value: string): Promise<string> {
