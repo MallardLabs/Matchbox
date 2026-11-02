@@ -233,15 +233,23 @@ export default function registerAdminRoutes(app: ConsoleApp): void {
     const logo = await store.getReviewLogo(reviewId)
     return respond(c, adminReviewLogoResponseSchema, {
       logo:
-        logo === null
-          ? null
-          : {
+        logo?.status === "pinned"
+          ? {
               contentType: logo.contentType,
               dataBase64: logo.dataBase64,
               sha256: logo.sha256,
               sourceUrl: logo.sourceUrl,
               pinnedAt: new Date(logo.pinnedAt).toISOString(),
-            },
+            }
+          : null,
+      notPinned:
+        logo?.status === "refused"
+          ? {
+              reason: logo.reason,
+              sourceUrl: logo.sourceUrl,
+              pinnedAt: new Date(logo.pinnedAt).toISOString(),
+            }
+          : null,
     })
   })
 
@@ -296,7 +304,9 @@ export default function registerAdminRoutes(app: ConsoleApp): void {
     // Staff saw the copy pinned at submission (`GET .../logo`): the approval
     // must name its sha256, and the app's logoUrl must still be the pinned
     // one (only live reviews freeze it).
-    const logo = approval === null ? null : await store.getReviewLogo(reviewId)
+    const reviewLogo =
+      approval === null ? null : await store.getReviewLogo(reviewId)
+    const logo = reviewLogo?.status === "pinned" ? reviewLogo : null
     if (approval !== null) {
       if ((body.logoSha256 ?? null) !== (logo?.sha256 ?? null)) {
         throw new PlatformError("conflict", {
@@ -310,22 +320,18 @@ export default function registerAdminRoutes(app: ConsoleApp): void {
       }
     }
     // Written before the review closes, so a failure here leaves the review
-    // open and nothing granted. The row only shows while the environment's
-    // verifiedAt equals this one, so an approval that then loses the close
-    // (or an earlier approval's row) never puts it beside the badge.
-    if (verifiedAt !== null) {
-      await store.putVerifiedLogo(
-        environment.id,
-        logo === null
-          ? null
-          : {
-              contentType: logo.contentType,
-              dataBase64: logo.dataBase64,
-              sha256: logo.sha256,
-              sourceUrl: logo.sourceUrl,
-              verifiedAt,
-            },
-      )
+    // open and nothing granted. Rows are keyed by verifiedAt and only shown
+    // while the environment's equals theirs, so an approval that then loses
+    // the close adds a row that never shows and overwrites none: not the
+    // winner's (two staff approving at once), nor an earlier approval's.
+    if (verifiedAt !== null && logo !== null) {
+      await store.putVerifiedLogo(environment.id, {
+        contentType: logo.contentType,
+        dataBase64: logo.dataBase64,
+        sha256: logo.sha256,
+        sourceUrl: logo.sourceUrl,
+        verifiedAt,
+      })
     }
     // Close the review, conditionally: a withdraw that got there first wins,
     // and once it is closed nothing else can decide or withdraw it.
@@ -358,6 +364,14 @@ export default function registerAdminRoutes(app: ConsoleApp): void {
       ) {
         await store.updateEnvironment(environment.id, { verifiedAt: null })
         verified = false
+      }
+      if (verifiedAt !== null) {
+        // Rows from earlier approvals, or ones that lost a close, are dead.
+        try {
+          await store.pruneVerifiedLogos(environment.id, verifiedAt)
+        } catch (error) {
+          logger(c).warn({ message: "Verified logos not pruned", error })
+        }
       }
       metadata = {
         ...metadata,

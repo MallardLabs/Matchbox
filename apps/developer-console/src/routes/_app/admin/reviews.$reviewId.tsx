@@ -180,19 +180,34 @@ function ExternalLink({ href }: { href: string | null }): ReactElement {
  */
 function PinnedLogo({
   name,
-  logo,
+  pin,
 }: {
   name: string
-  logo: AdminReviewLogoResponse["logo"] | undefined
+  pin: AdminReviewLogoResponse | undefined
 }): ReactElement {
-  if (logo === undefined) return <Skeleton.Root className="h-7 w-28" />
+  if (pin === undefined) return <Skeleton.Root className="h-12 w-28" />
+  const { logo, notPinned } = pin
+  if (logo === null && notPinned !== null) {
+    return (
+      <span className="flex min-w-0 flex-col items-end">
+        <span className="text-neg">{`Not pinned · ${notPinned.reason}`}</span>
+        <span
+          className="max-w-full truncate font-mono text-caption text-muted"
+          title={notPinned.sourceUrl}
+        >
+          {notPinned.sourceUrl}
+        </span>
+      </span>
+    )
+  }
   if (logo === null) return <span className="text-muted">None</span>
   return (
     <span className="inline-flex items-center gap-2">
+      {/* The consent screen's size, so staff judge what users will see. */}
       <AppMark
         name={name}
         logoUrl={`data:${logo.contentType};base64,${logo.dataBase64}`}
-        size="sm"
+        size="lg"
       />
       <span className="font-mono text-caption text-muted" title={logo.sha256}>
         {`sha256 ${logo.sha256.slice(0, 8)}…`}
@@ -259,7 +274,7 @@ function ReviewDetail({ review }: { review: AdminReview }): ReactElement {
                 {logo.isError ? (
                   <span className="text-neg">Unavailable</span>
                 ) : (
-                  <PinnedLogo name={review.app.name} logo={logo.data?.logo} />
+                  <PinnedLogo name={review.app.name} pin={logo.data} />
                 )}
               </Fact>
             </dl>

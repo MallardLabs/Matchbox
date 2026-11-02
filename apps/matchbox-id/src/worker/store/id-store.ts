@@ -271,8 +271,14 @@ export type IdStore = {
   findClient(clientId: string): Promise<ClientRecord | null>
   findEnvironment(environmentId: string): Promise<ClientRecord | null>
   listClientSecrets(environmentId: string): Promise<ClientSecretRecord[]>
-  /** `mbx_dev_verified_logos`: the logo shown beside the Verified badge. */
-  findVerifiedLogo(environmentId: string): Promise<VerifiedLogoRecord | null>
+  /**
+   * `mbx_dev_verified_logos`: the logo shown beside the Verified badge, from
+   * the approval that set this `verifiedAt` (one row per approval).
+   */
+  findVerifiedLogo(
+    environmentId: string,
+    verifiedAt: Date,
+  ): Promise<VerifiedLogoRecord | null>
 
   // Accounts, nonces and sessions ------------------------------------------
   upsertAccountForSignIn(

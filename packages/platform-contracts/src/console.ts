@@ -1109,9 +1109,9 @@ const sha256HexSchema = z.string().regex(/^[0-9a-f]{64}$/)
 /**
  * GET /api/admin/reviews/{reviewId}/logo: the app logo as the console
  * fetched it when the review was submitted. Staff see these bytes, never
- * the developer's live URL, and an approval names their `sha256`. Null when
- * the app had no logo or it could not be pinned (Matchbox ID then shows the
- * initial).
+ * the developer's live URL, and an approval names their `sha256`. `logo` is
+ * null when the app had no logo or it could not be pinned (Matchbox ID then
+ * shows the initial); `notPinned` then says why, when the app had one.
  */
 export const adminReviewLogoResponseSchema = z.object({
   logo: z
@@ -1128,6 +1128,15 @@ export const adminReviewLogoResponseSchema = z.object({
       pinnedAt: isoDateTimeSchema,
     })
     .nullable(),
+  /** e.g. "animated", "too-large", "status-404", "timeout", "not-stored". */
+  notPinned: z
+    .object({
+      reason: z.string(),
+      sourceUrl: z.string(),
+      pinnedAt: isoDateTimeSchema,
+    })
+    .nullable()
+    .default(null),
 })
 
 export type AdminReviewLogoResponse = z.infer<

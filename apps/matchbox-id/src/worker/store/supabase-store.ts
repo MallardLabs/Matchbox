@@ -500,11 +500,12 @@ export default function createSupabaseIdStore(
       if (error !== null) fail("find environment", error)
       return parseRow("environment", clientRowSchema, data)
     },
-    async findVerifiedLogo(environmentId) {
+    async findVerifiedLogo(environmentId, verifiedAt) {
       const { data, error } = await supabase
         .from("mbx_dev_verified_logos")
         .select("content_type, data_base64, source_url, verified_at")
         .eq("environment_id", environmentId)
+        .eq("verified_at", iso(verifiedAt))
         .maybeSingle()
       if (error !== null) fail("find verified logo", error)
       const row = parseRow("verified logo", verifiedLogoRowSchema, data)

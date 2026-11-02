@@ -50,7 +50,7 @@ import {
   nowIso,
   requireStepUp,
 } from "../context"
-import { pinLogo } from "../logo-pin"
+import { type PinLogoResult, pinLogo } from "../logo-pin"
 import {
   loadEnvironment,
   respond,
@@ -182,6 +182,48 @@ async function environmentResponse(
   environment: EnvironmentRecord,
 ) {
   return loadEnvironment(c, environment)
+}
+
+/**
+ * Stores the submission's logo pin, or why there is none, for the staff
+ * review page; the pinned sha256, or null.
+ */
+async function storeReviewLogo(
+  c: ConsoleContext,
+  reviewId: string,
+  sourceUrl: string,
+  pinned: PinLogoResult,
+  pinnedAt: string,
+): Promise<string | null> {
+  const { store } = deps(c)
+  if (!pinned.ok) {
+    logger(c).warn({ message: "Review logo not pinned", reason: pinned.reason })
+  }
+  try {
+    await store.putReviewLogo(
+      reviewId,
+      pinned.ok
+        ? { status: "pinned", ...pinned.logo, pinnedAt }
+        : { status: "refused", reason: pinned.reason, sourceUrl, pinnedAt },
+    )
+    return pinned.ok ? pinned.logo.sha256 : null
+  } catch (error) {
+    logger(c).error({ message: "Review logo not stored", error })
+  }
+  if (pinned.ok) {
+    // Staff then see "Not pinned · not-stored" rather than "None".
+    try {
+      await store.putReviewLogo(reviewId, {
+        status: "refused",
+        reason: "not-stored",
+        sourceUrl,
+        pinnedAt,
+      })
+    } catch {
+      // Already logged; the page shows "None".
+    }
+  }
+  return null
 }
 
 export default function registerEnvironmentRoutes(app: ConsoleApp): void {
@@ -468,10 +510,9 @@ export default function registerEnvironmentRoutes(app: ConsoleApp): void {
     }
     // Staff review this copy of the logo, never the live URL, which could
     // serve them one image and the Worker another (`logo-pin.ts`).
+    const { logoUrl } = access.app
     const pinned =
-      access.app.logoUrl === null
-        ? null
-        : await pinLogo(deps(c).logoFetch, access.app.logoUrl)
+      logoUrl === null ? null : await pinLogo(deps(c).logoFetch, logoUrl)
     const review = await store.createReview({
       environmentId,
       requestedScopes: environment.requestedScopes,
@@ -482,20 +523,10 @@ export default function registerEnvironmentRoutes(app: ConsoleApp): void {
       reviewerNote: null,
       decidedAt: null,
     })
-    let logoSha256: string | null = null
-    if (pinned?.ok === true) {
-      try {
-        await store.putReviewLogo(review.id, { ...pinned.logo, pinnedAt: at })
-        logoSha256 = pinned.logo.sha256
-      } catch (error) {
-        logger(c).error({ message: "Review logo not stored", error })
-      }
-    } else if (pinned !== null) {
-      logger(c).warn({
-        message: "Review logo not pinned",
-        reason: pinned.reason,
-      })
-    }
+    const logoSha256 =
+      logoUrl === null || pinned === null
+        ? null
+        : await storeReviewLogo(c, review.id, logoUrl, pinned, at)
     const updated = await store.updateEnvironment(environmentId, {
       reviewState: environmentReviewState(
         environment.approvedScopes,

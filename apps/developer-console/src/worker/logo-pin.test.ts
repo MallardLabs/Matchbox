@@ -10,7 +10,7 @@ import {
   pinLogo,
   sniffLogoType,
 } from "./logo-pin"
-import { createHarness } from "./test/harness"
+import { type Harness, createHarness } from "./test/harness"
 
 const png = new Uint8Array([
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d,
@@ -18,6 +18,105 @@ const png = new Uint8Array([
 // Another valid PNG: the lookalike a cloaking server would hand the Worker.
 const lookalike = new Uint8Array([...png, 0x4d, 0x45, 0x5a, 0x4f])
 const logoUrl = "https://cdn.example.com/logo.png"
+
+function concat(parts: Uint8Array[]): Uint8Array {
+  const out = new Uint8Array(parts.reduce((sum, part) => sum + part.length, 0))
+  let offset = 0
+  for (const part of parts) {
+    out.set(part, offset)
+    offset += part.length
+  }
+  return out
+}
+
+function latin1(text: string): Uint8Array {
+  return Uint8Array.from(text, (char) => char.charCodeAt(0))
+}
+
+/** A PNG chunk (big-endian length, type, data, CRC left zero). */
+function pngChunk(type: string, length: number): Uint8Array {
+  const out = new Uint8Array(12 + length)
+  new DataView(out.buffer).setUint32(0, length)
+  out.set(latin1(type), 4)
+  return out
+}
+
+const stillPng = concat([
+  png.subarray(0, 8),
+  pngChunk("IHDR", 13),
+  pngChunk("IDAT", 10),
+  pngChunk("IEND", 0),
+])
+const apng = concat([
+  png.subarray(0, 8),
+  pngChunk("IHDR", 13),
+  pngChunk("acTL", 8),
+  pngChunk("fcTL", 26),
+  pngChunk("IDAT", 10),
+  pngChunk("IEND", 0),
+])
+
+function gif({
+  frames,
+  loop = false,
+  palette = false,
+}: {
+  frames: number
+  loop?: boolean
+  palette?: boolean
+}): Uint8Array {
+  // Logical screen descriptor: 1x1, global color table of 2 entries or none.
+  const header = latin1("GIF89a")
+  const screen = new Uint8Array([1, 0, 1, 0, palette ? 0x80 : 0, 0, 0])
+  const globalTable = new Uint8Array(palette ? 6 : 0)
+  const netscape = concat([
+    new Uint8Array([0x21, 0xff, 11]),
+    latin1("NETSCAPE2.0"),
+    new Uint8Array([3, 1, 0, 0, 0]),
+  ])
+  const control = new Uint8Array([0x21, 0xf9, 4, 0, 100, 0, 0, 0])
+  // Descriptor (no local table), LZW minimum code size, one data sub-block.
+  const frame = new Uint8Array([
+    0x2c, 0, 0, 0, 0, 1, 0, 1, 0, 0, 2, 2, 0x44, 0x01, 0,
+  ])
+  return concat([
+    header,
+    screen,
+    globalTable,
+    ...(loop ? [netscape] : []),
+    ...Array.from({ length: frames }, () => concat([control, frame])),
+    new Uint8Array([0x3b]),
+  ])
+}
+
+/** A RIFF chunk (little-endian size, data padded to even). */
+function chunk4(type: string, size: number): Uint8Array {
+  const out = new Uint8Array(8 + size + (size % 2))
+  out.set(latin1(type), 0)
+  new DataView(out.buffer).setUint32(4, size, true)
+  return out
+}
+
+function vp8x(flags: number): Uint8Array {
+  const out = chunk4("VP8X", 10)
+  out[8] = flags
+  return out
+}
+
+function webp(chunks: Uint8Array[]): Uint8Array {
+  const body = concat([latin1("WEBP"), ...chunks])
+  const header = concat([latin1("RIFF"), new Uint8Array(4)])
+  new DataView(header.buffer).setUint32(4, body.length, true)
+  return concat([header, body])
+}
+
+function deferred() {
+  let resolve: () => void = () => undefined
+  const promise = new Promise<void>((done) => {
+    resolve = done
+  })
+  return { promise, resolve }
+}
 
 function serve(body: Uint8Array | string, init: ResponseInit = {}): LogoFetch {
   return async () => new Response(body, init)
@@ -178,6 +277,36 @@ describe("pinLogo", () => {
     })
   })
 
+  it("refuses animations that could switch frames after review", async () => {
+    // PoC: frame one is the logo staff approve; a later frame (or an APNG
+    // fcTL frame) is a Matchbox lookalike that appears after N seconds.
+    const animated: [string, Uint8Array][] = [
+      ["APNG", apng],
+      ["two-frame GIF", gif({ frames: 2 })],
+      ["looping GIF", gif({ frames: 1, loop: true })],
+      ["two-frame GIF, global palette", gif({ frames: 2, palette: true })],
+      ["animated WebP (VP8X flag)", webp([vp8x(0x02), chunk4("VP8 ", 4)])],
+      ["WebP with ANIM", webp([vp8x(0), chunk4("ANIM", 6)])],
+    ]
+    for (const [name, bytes] of animated) {
+      expect(await pinLogo(serve(bytes), logoUrl), name).toEqual({
+        ok: false,
+        reason: "animated",
+      })
+    }
+    const still: [string, Uint8Array][] = [
+      ["PNG", stillPng],
+      ["one-frame GIF", gif({ frames: 1 })],
+      ["one-frame GIF, global palette", gif({ frames: 1, palette: true })],
+      ["lossy WebP", webp([chunk4("VP8 ", 4)])],
+      ["extended WebP", webp([vp8x(0x10), chunk4("VP8L", 5)])],
+    ]
+    for (const [name, bytes] of still) {
+      const result = await pinLogo(serve(bytes), logoUrl)
+      expect(result.ok, name).toBe(true)
+    }
+  })
+
   it("recognises the four allowed formats by magic bytes", () => {
     const webp = new Uint8Array([
       0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x45, 0x42, 0x50,
@@ -193,8 +322,12 @@ describe("pinLogo", () => {
 })
 
 describe("the reviewed logo is the verified logo", () => {
-  async function submitted(logoFetch: LogoFetch) {
+  async function submitted(
+    logoFetch: LogoFetch,
+    prepare: (harness: Harness) => void = () => undefined,
+  ) {
     const harness = createHarness({ logoFetch })
+    prepare(harness)
     const owner = await harness.account("owner@example.com")
     const organization = await harness.organization(owner)
     const { app, live } = await harness.appWithEnvironments(organization.id)
@@ -244,7 +377,7 @@ describe("the reviewed logo is the verified logo", () => {
         logo: harness.store.verifiedLogo(live.id),
       }
     }
-    return { harness, app, cookie, reviewId, shown, decide, state }
+    return { harness, app, live, cookie, reviewId, shown, decide, state }
   }
 
   it("shows staff the bytes the Worker will verify, even when cloaked", async () => {
@@ -309,10 +442,40 @@ describe("the reviewed logo is the verified logo", () => {
   it("verifies with no logo when none could be pinned", async () => {
     const { shown, decide, state } = await submitted(serve("<svg/>"))
     expect(shown.logo).toBeNull()
+    expect(shown.notPinned).toMatchObject({
+      reason: "not-an-image",
+      sourceUrl: logoUrl,
+    })
     expect((await decide(null)).status).toBe(200)
     const after = await state()
     expect(after.verifiedAt).not.toBeNull()
     expect(after.logo).toBeNull()
+  })
+
+  it("tells staff why a logo was not pinned, not just None", async () => {
+    const animated = await submitted(serve(gif({ frames: 2 })))
+    expect(animated.shown).toMatchObject({
+      logo: null,
+      notPinned: { reason: "animated", sourceUrl: logoUrl },
+    })
+
+    // The pin succeeded but its row could not be written.
+    let writes = 0
+    const unstored = await submitted(serve(png), (harness) => {
+      const put = harness.store.putReviewLogo.bind(harness.store)
+      harness.store.putReviewLogo = async (reviewId, logo) => {
+        writes += 1
+        if (logo.status === "pinned") throw new Error("database unavailable")
+        await put(reviewId, logo)
+      }
+    })
+    expect(writes).toBe(2)
+    expect(unstored.shown).toMatchObject({
+      logo: null,
+      notPinned: { reason: "not-stored", sourceUrl: logoUrl },
+    })
+    expect((await unstored.decide(null)).status).toBe(200)
+    expect((await unstored.state()).logo).toBeNull()
   })
 
   it("leaves the review open and nothing granted if storing the logo fails", async () => {
@@ -326,6 +489,44 @@ describe("the reviewed logo is the verified logo", () => {
       verifiedAt: null,
       logo: null,
     })
+  })
+
+  it("keeps the winner's logo when two staff approve at once", async () => {
+    // PoC: approval B passes the open check and stalls before its logo
+    // write; approval A (a later clock) writes, closes and verifies; B's
+    // write then lands and its close gets 409. With one row per environment
+    // B's write replaced A's, the row's verifiedAt no longer matched, and the
+    // verified app showed its initial.
+    const { shown, decide, state, harness, live } = await submitted(serve(png))
+    const sha = shown.logo?.sha256
+    const put = harness.store.putVerifiedLogo.bind(harness.store)
+    const stalled = deferred()
+    const gate = deferred()
+    let writes = 0
+    harness.store.putVerifiedLogo = async (environmentId, logo) => {
+      writes += 1
+      if (writes === 1) {
+        stalled.resolve()
+        await gate.promise
+      }
+      await put(environmentId, logo)
+    }
+    const loser = decide(sha)
+    await stalled.promise
+    harness.advance(1_000)
+    expect((await decide(sha)).status).toBe(200)
+    const won = await state()
+    gate.resolve()
+    expect((await loser).status).toBe(409)
+
+    const after = await state()
+    expect(after.verifiedAt).toBe(won.verifiedAt)
+    expect(after.logo).toMatchObject({
+      sha256: sha,
+      verifiedAt: won.verifiedAt,
+    })
+    // The loser's row sits beside it, keyed by its own (never current) time.
+    expect(harness.store.verifiedLogoRows(live.id)).toHaveLength(2)
   })
 
   it("is staff only", async () => {
