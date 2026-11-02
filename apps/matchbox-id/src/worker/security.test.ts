@@ -16,6 +16,11 @@ import {
   getAddress,
   verifyMessage,
 } from "viem"
+import {
+  type PrivateKeyAccount,
+  generatePrivateKey,
+  privateKeyToAccount,
+} from "viem/accounts"
 import { describe, expect, it } from "vitest"
 import { z } from "zod"
 import { purgeExpiredRows } from "./cleanup"
@@ -856,34 +861,42 @@ describe("authorize hardening", () => {
     expect(exchange.status).toBe(200)
   })
 
-  it("gives one IP prefix only a share of a public client's quota", async () => {
+  const live = {
+    clientId: memorySeed.liveClientId,
+    redirectUri: memorySeed.liveRedirectUris[0],
+  }
+
+  /** A throwaway wallet's sign-in, redeemed by a public client. */
+  async function redeemFrom(
+    harness: Harness,
+    ip: string,
+    account: PrivateKeyAccount = devAccount,
+  ): Promise<Response> {
+    const challenge = await pkce()
+    const code = await obtainCode(harness, await signIn(harness, account), {
+      pkce: challenge,
+      ...live,
+    })
+    return tokenRequest(
+      harness,
+      {
+        grant_type: "authorization_code",
+        code,
+        code_verifier: challenge.verifier,
+        redirect_uri: live.redirectUri,
+        client_id: live.clientId,
+      },
+      { "CF-Connecting-IP": ip },
+    )
+  }
+
+  it("caps the tokens one grant of a public client is issued", async () => {
     const harness = await createHarness()
     harness.store.admin.setClientType(memorySeed.liveEnvironmentId, "public")
-    const live = {
-      clientId: memorySeed.liveClientId,
-      redirectUri: memorySeed.liveRedirectUris[0],
-    }
-    async function redeemFrom(ip: string): Promise<Response> {
-      const challenge = await pkce()
-      const code = await obtainCode(harness, await signIn(harness), {
-        pkce: challenge,
-        ...live,
-      })
-      return tokenRequest(
-        harness,
-        {
-          grant_type: "authorization_code",
-          code,
-          code_verifier: challenge.verifier,
-          redirect_uri: live.redirectUri,
-          client_id: live.clientId,
-        },
-        { "CF-Connecting-IP": ip },
-      )
-    }
-    // Valid tokens from a throwaway sign-in, refreshed in a loop.
+    // Valid tokens from a throwaway sign-in, refreshed in a loop from as
+    // many IP prefixes.
     let tokens = tokenResponseSchema.parse(
-      await (await redeemFrom("203.0.113.7")).json(),
+      await (await redeemFrom(harness, "203.0.113.7")).json(),
     )
     const statuses: Record<number, number> = {}
     for (let index = 0; index < 40; index++) {
@@ -894,15 +907,40 @@ describe("authorize hardening", () => {
           refresh_token: tokens.refresh_token ?? "",
           client_id: live.clientId,
         },
-        { "CF-Connecting-IP": "203.0.113.7" },
+        { "CF-Connecting-IP": `198.51.${index}.9` },
       )
       statuses[response.status] = (statuses[response.status] ?? 0) + 1
       if (response.status === 200) {
         tokens = tokenResponseSchema.parse(await response.json())
       }
     }
-    expect(statuses).toEqual({ 200: 29, 429: 11 })
-    expect((await redeemFrom("198.51.100.9")).status).toBe(200)
+    // 10 a minute, the code redemption included.
+    expect(statuses).toEqual({ 200: 9, 429: 31 })
+    expect(
+      (await redeemFrom(harness, "203.0.113.7", otherAccount)).status,
+    ).toBe(200)
+  })
+
+  it("gives one IP prefix a share of a public client's quota", async () => {
+    const harness = await createHarness()
+    harness.store.admin.setClientType(memorySeed.liveEnvironmentId, "public")
+    // The share follows quota overrides: a tenth of 50 a minute.
+    harness.store.admin.setQuotaOverrides(memorySeed.liveEnvironmentId, [
+      {
+        endpointClass: "oidc-token",
+        perMinute: 50,
+        perDay: 1_000,
+        expiresAt: null,
+      },
+    ])
+    const statuses: Record<number, number> = {}
+    for (let index = 0; index < 7; index++) {
+      const wallet = privateKeyToAccount(generatePrivateKey())
+      const response = await redeemFrom(harness, "203.0.113.7", wallet)
+      statuses[response.status] = (statuses[response.status] ?? 0) + 1
+    }
+    expect(statuses).toEqual({ 200: 5, 429: 2 })
+    expect((await redeemFrom(harness, "198.51.100.9")).status).toBe(200)
   })
 
   // ID-L06: the code used to be consumed before it was checked.

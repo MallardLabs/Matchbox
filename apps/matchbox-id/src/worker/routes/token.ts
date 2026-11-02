@@ -46,7 +46,9 @@ const rawFormSchema = z.record(z.string(), z.string())
 /**
  * Failed token requests per client IP prefix. Only issued tokens spend the
  * environment's quota, so junk codes and refresh tokens sent with a public
- * `client_id` cannot drain it for the app's users.
+ * `client_id` cannot drain it for the app's users. Charged only after a
+ * request fails, never checked first: that would also refuse the prefix's
+ * valid requests, so anyone sharing it could block them.
  */
 const failedTokenRateLimitPolicy = {
   perMinute: 30,
@@ -54,13 +56,31 @@ const failedTokenRateLimitPolicy = {
 } as const satisfies RateLimitPolicy
 
 /**
- * Issued tokens per public-client environment and IP prefix, spent before
- * the environment's own bucket.
+ * Anyone can get valid tokens for a public client by signing in with a
+ * throwaway wallet, so tokens issued for one are capped per grant and per
+ * IP prefix before they reach the environment's bucket.
+ *
+ * Per grant: access tokens last 10 minutes, so one user refreshing on a few
+ * devices stays well below this, but one grant cannot rotate its refresh
+ * token in a loop.
  */
-const publicClientIpRateLimitPolicy = {
-  perMinute: 30,
-  perDay: 5_000,
+const publicGrantRateLimitPolicy = {
+  perMinute: 10,
+  perDay: 500,
 } as const satisfies RateLimitPolicy
+
+/**
+ * Per IP prefix: this share of the environment's policy, quota overrides
+ * included, so draining it takes ten prefixes.
+ */
+const publicClientIpQuotaShare = 0.1
+
+function policyShare(policy: RateLimitPolicy, share: number): RateLimitPolicy {
+  return {
+    perMinute: Math.max(1, Math.floor(policy.perMinute * share)),
+    perDay: Math.max(1, Math.floor(policy.perDay * share)),
+  }
+}
 
 type TokenContext = {
   c: Context
@@ -71,7 +91,7 @@ type TokenContext = {
    * Spends the environment's quota once the grant checks out; the 429 to
    * send when it is used up.
    */
-  chargeEnvironment: () => Promise<Response | null>
+  chargeEnvironment: (grant: GrantRecord) => Promise<Response | null>
 }
 
 function rateLimited(
@@ -155,7 +175,7 @@ async function authorizationCodeGrant(
       description: "Grant is no longer active",
     })
   }
-  const limited = await context.chargeEnvironment()
+  const limited = await context.chargeEnvironment(grant)
   if (limited !== null) return limited
   // A concurrent redemption may have consumed it since the read above.
   if ((await deps.store.consumeAuthorizationCode(codeHash, now)) === null) {
@@ -246,7 +266,7 @@ async function refreshTokenGrant(context: TokenContext): Promise<Response> {
   }
   const account = await deps.store.findAccount(grant.accountId)
   if (account === null || account.disabledAt !== null) return invalid()
-  const limited = await context.chargeEnvironment()
+  const limited = await context.chargeEnvironment(grant)
   if (limited !== null) return limited
   // Rotation is atomic: if another request rotated this token first, the
   // store revokes the whole family (including that request's successor).
@@ -299,30 +319,32 @@ async function tokenResponse(
       description: "App unavailable",
     })
   }
-  async function chargeEnvironment(): Promise<Response | null> {
+  async function chargeEnvironment(
+    grant: GrantRecord,
+  ): Promise<Response | null> {
     const prefix = ipPrefix(c.req.raw) ?? "unknown"
+    const environmentId = client.environment.id
+    const policy = resolveRateLimitPolicy({
+      environmentKind: client.environment.kind,
+      endpointClass: "oidc-token",
+      appStatus: client.app.status,
+      overrides: await quotaOverrides(environmentId),
+      now: deps.now(),
+    })
     const limited = await firstRateLimitRejection(deps, [
-      // Anyone can get valid tokens for a public client by signing in with a
-      // throwaway wallet, so one IP prefix only gets a share of the quota.
       ...(client.environment.clientType === "public"
         ? [
             {
-              key: `oidc-token:env-ip:${client.environment.id}:${prefix}`,
-              policy: publicClientIpRateLimitPolicy,
+              key: `oidc-token:grant:${grant.id}`,
+              policy: publicGrantRateLimitPolicy,
+            },
+            {
+              key: `oidc-token:env-ip:${environmentId}:${prefix}`,
+              policy: policyShare(policy, publicClientIpQuotaShare),
             },
           ]
         : []),
-      {
-        key: `oidc-token:env:${client.environment.id}`,
-        policy: resolveRateLimitPolicy({
-          environmentKind: client.environment.kind,
-          endpointClass: "oidc-token",
-          appStatus: client.app.status,
-          overrides: await quotaOverrides(client.environment.id),
-
-          now: deps.now(),
-        }),
-      },
+      { key: `oidc-token:env:${environmentId}`, policy },
     ])
     return limited === null ? null : rateLimited(c, deps, limited)
   }
