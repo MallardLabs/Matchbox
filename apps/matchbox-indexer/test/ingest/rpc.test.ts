@@ -370,6 +370,32 @@ describe("RpcClient failover", () => {
     expect(logs.map((log) => log.blockNumber)).toEqual([2n, 18n])
   })
 
+  // One shared budget let a hot chunk starve the chunks after it.
+  it("gives each address chunk its own split budget", async () => {
+    const watched = addresses(2)
+    const chain = new FakeChain({
+      head: 100,
+      logs: watched.map((address, index) =>
+        eventLog({ block: 16, logIndex: index, address, signature: "Foo()" }),
+      ),
+    })
+    const rpc = (maxLogSplitsPerCall: number) =>
+      new RpcClient({
+        network: "mezo",
+        fetch: chain.fetch,
+        sleep: async () => {},
+        maxLogSplits: 3,
+        maxLogSplitsPerCall,
+        endpoints: [{ url: PRIMARY, maxAddresses: 1, maxBlockRange: 4 }],
+      })
+
+    // 16 blocks against a 4-block limit: three splits for each chunk.
+    expect(await rpc(512).getLogs(1n, 16n, watched)).toHaveLength(2)
+    await expect(rpc(4).getLogs(1n, 16n, watched)).rejects.toThrow(
+      /still failing after 4 splits across the window/,
+    )
+  })
+
   it("stops splitting a query that keeps failing after maxLogSplits", async () => {
     const [address] = addresses(1) as [Address]
     let requests = 0

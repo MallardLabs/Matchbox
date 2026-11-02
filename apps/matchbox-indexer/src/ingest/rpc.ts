@@ -125,9 +125,13 @@ export type RpcClientOptions = {
   timeoutMs?: number
   // A failing eth_getLogs query is split in half, by block range down to one
   // block and then by address, which covers "too many results" without
-  // parsing provider error strings. This many splits per call end the search,
-  // so an outage fails about as fast as it did with a fixed split depth.
+  // parsing provider error strings. Each address chunk's query may split
+  // this many times, so one busy chunk can't use up the splits the others
+  // need...
   maxLogSplits?: number
+  // ...and a call (one window) this many times across its chunks, which
+  // bounds the work a window can cost however many chunks it has.
+  maxLogSplitsPerCall?: number
   // Header and transaction batches in flight at once, per call.
   batchConcurrency?: number
 }
@@ -142,7 +146,11 @@ export type LogFilter = {
 
 type LogQuery = { fromBlock: bigint; toBlock: bigint; addresses: Address[] }
 
-type SplitBudget = { splitsLeft: number }
+// Splits left to one address chunk's query, and to the whole call.
+type SplitBudget = {
+  chunk: { splitsLeft: number }
+  call: { splitsLeft: number }
+}
 
 const TX_BATCH_SIZE = 50
 const HEADER_BATCH_SIZE = 50
@@ -209,6 +217,7 @@ export class RpcClient {
   private readonly baseDelayMs: number
   private readonly timeoutMs: number
   private readonly maxLogSplits: number
+  private readonly maxLogSplitsPerCall: number
   private readonly maxAddresses: number
   private readonly batchConcurrency: number
   private nextId = 1
@@ -226,9 +235,12 @@ export class RpcClient {
     this.attemptsPerEndpoint = options.attemptsPerEndpoint ?? 3
     this.baseDelayMs = options.baseDelayMs ?? 500
     this.timeoutMs = options.timeoutMs ?? 30_000
-    // Four groups at four splits deep each made about this many queries
-    // before an outage failed the window.
+    // 128 splits take one chunk of a 10,000-block window down to 78-block
+    // ranges throughout. The ~13 chunks of a window could take 1,664; 512
+    // keeps a window to about 1,000 queries, and four chunks must each use
+    // up their 128 before the rest go short.
     this.maxLogSplits = options.maxLogSplits ?? 128
+    this.maxLogSplitsPerCall = options.maxLogSplitsPerCall ?? 512
     // Queries are chunked for the most generous endpoint; a stricter one
     // chunks again (getLogsOnEndpoint).
     this.maxAddresses = Math.max(
@@ -264,7 +276,7 @@ export class RpcClient {
     filters: LogFilter[],
   ): Promise<RawLog[]> {
     if (fromBlock > toBlock) return []
-    const budget: SplitBudget = { splitsLeft: this.maxLogSplits }
+    const call = { splitsLeft: this.maxLogSplitsPerCall }
     const active = filters.filter((filter) => filter.addresses.length > 0)
     const batches = await Promise.all(
       active.map(async ({ addresses, topic0s }) => {
@@ -274,7 +286,7 @@ export class RpcClient {
             await this.getLogsSplitting(
               { fromBlock, toBlock, addresses: addressChunk },
               topic0s,
-              budget,
+              { chunk: { splitsLeft: this.maxLogSplits }, call },
             ),
           )
         }
@@ -344,13 +356,20 @@ export class RpcClient {
           false,
         )
       }
-      if (budget.splitsLeft <= 0) {
+      const spent =
+        budget.chunk.splitsLeft <= 0
+          ? `${this.maxLogSplits} splits of its address chunk`
+          : budget.call.splitsLeft <= 0
+            ? `${this.maxLogSplitsPerCall} splits across the window`
+            : null
+      if (spent !== null) {
         throw new RpcError(
-          `eth_getLogs ${fromBlock}-${toBlock} for ${addresses.length} addresses still failing after ${this.maxLogSplits} splits: ${message}`,
+          `eth_getLogs ${fromBlock}-${toBlock} for ${addresses.length} addresses still failing after ${spent}: ${message}`,
           false,
         )
       }
-      budget.splitsLeft--
+      budget.chunk.splitsLeft--
+      budget.call.splitsLeft--
       const parts: RpcLog[][] = []
       for (const part of splitQuery(query)) {
         parts.push(await this.getLogsSplitting(part, topic0s, budget))
