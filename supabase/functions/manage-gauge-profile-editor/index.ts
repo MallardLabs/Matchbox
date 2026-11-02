@@ -10,6 +10,8 @@ import {
   editorAuthorizationMessage,
   resolveGaugeController,
   sha256,
+  signedBy,
+  signerIsContract,
 } from "../_shared/gaugeProfileAuthorization.ts"
 import { getMezoNetworkConfigForChain } from "../_shared/contracts.ts"
 import { corsHeaders } from "../_shared/cors.ts"
@@ -169,10 +171,14 @@ Deno.serve(async (request) => {
     if (!isHex(parsed.data.proof.signature)) {
       return json({ error: "invalid-proof" }, 401)
     }
-    const signatureValid = await publicClient.verifyMessage({
+    const signatureValid = await signedBy(publicClient, {
       address: controller.controllerAddress,
       message: parsed.data.proof.message,
       signature: parsed.data.proof.signature,
+      contractSigner: signerIsContract(
+        controller,
+        controller.controllerAddress,
+      ),
     })
     if (!signatureValid) {
       return json({ error: "controller-authorization-failed" }, 403)

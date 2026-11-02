@@ -15,7 +15,11 @@ import {
 import { z } from "https://esm.sh/zod@4.1.12"
 import { getMezoNetworkConfigForChain } from "../_shared/contracts.ts"
 import { corsHeaders } from "../_shared/cors.ts"
-import { sha256 } from "../_shared/gaugeProfileAuthorization.ts"
+import {
+  hasContractCode,
+  sha256,
+  signedBy,
+} from "../_shared/gaugeProfileAuthorization.ts"
 import {
   parseSavedProfileMessage,
   savedProfileAuthorizationMessage,
@@ -134,10 +138,12 @@ Deno.serve(async (request) => {
       chain: network.chain,
       transport: http(network.rpcUrl),
     })
-    const signatureValid = await publicClient.verifyMessage({
-      address: getAddress(body.ownerAddress),
+    const ownerAddress = getAddress(body.ownerAddress)
+    const signatureValid = await signedBy(publicClient, {
+      address: ownerAddress,
       message: body.proof.message,
       signature: body.proof.signature,
+      contractSigner: () => hasContractCode(publicClient, ownerAddress),
     })
     if (!signatureValid) {
       return json({ error: "template-authorization-failed" }, 403)

@@ -61,8 +61,8 @@ type ResolveGaugeControllerInput = {
   boostVoterAddress: Address
 }
 
-async function hasContractCode(
-  client: PublicClient,
+export async function hasContractCode(
+  client: Pick<PublicClient, "getCode">,
   address: Address,
 ): Promise<boolean> {
   const code = await client.getCode({ address })
@@ -182,9 +182,31 @@ export function signerIsContract(
 }
 
 /**
+ * Whether `signerAddress` is a contract. The NFT owner and controller reuse
+ * what controller resolution found; any other signer, such as a delegated
+ * editor, is looked up with getCode.
+ */
+export async function gaugeSignerIsContract(
+  client: Pick<PublicClient, "getCode">,
+  controller: GaugeController,
+  signerAddress: string,
+): Promise<boolean> {
+  const signer = signerAddress.toLowerCase()
+  if (
+    signer === controller.nftOwnerAddress.toLowerCase() ||
+    signer === controller.controllerAddress.toLowerCase()
+  ) {
+    return signerIsContract(controller, signer)
+  }
+  return await hasContractCode(client, getAddress(signerAddress))
+}
+
+/**
  * Checks `signature` over `message` by `address`. ECDSA is recovered locally
  * first; the RPC's ERC-1271/6492 check runs only for a contract signer, so a
  * faulty or hostile RPC cannot vouch for a plain key's forged signature.
+ * `contractSigner` may be a lookup, which then runs only when local recovery
+ * fails.
  */
 export async function signedBy(
   client: Pick<PublicClient, "verifyMessage">,
@@ -192,7 +214,7 @@ export async function signedBy(
     address: Address
     message: string
     signature: Hex
-    contractSigner: boolean
+    contractSigner: boolean | (() => Promise<boolean>)
   },
 ): Promise<boolean> {
   const recovered = await recoverMessageAddress({
@@ -200,7 +222,11 @@ export async function signedBy(
     signature: input.signature,
   }).catch(() => null)
   if (recovered?.toLowerCase() === input.address.toLowerCase()) return true
-  if (!input.contractSigner) return false
+  const contractSigner =
+    typeof input.contractSigner === "function"
+      ? await input.contractSigner()
+      : input.contractSigner
+  if (!contractSigner) return false
   return await client.verifyMessage({
     address: input.address,
     message: input.message,

@@ -2,6 +2,7 @@ import { privateKeyToAccount } from "https://esm.sh/viem@2/accounts"
 import {
   editorAuthorizationMessage,
   type GaugeController,
+  gaugeSignerIsContract,
   isGaugeController,
   parseAuthorizationNonce,
   profileTransferAuthorizationMessage,
@@ -271,4 +272,70 @@ Deno.test("signatures recover locally and reach the RPC only for contract signer
   // A contract signer is checked through ERC-1271/6492.
   assertEquals(String(await check(other.address, "0xdeadbeef", true)), "true")
   assertEquals(String(rpcCalls), "1")
+})
+
+Deno.test("a lazy contract lookup runs only after local recovery fails", async () => {
+  const account = privateKeyToAccount(`0x${"11".repeat(32)}`)
+  const other = privateKeyToAccount(`0x${"22".repeat(32)}`)
+  const message = "Matchbox gauge profile authorization"
+  const signature = await account.signMessage({ message })
+  let rpcCalls = 0
+  let lookups = 0
+  const client = {
+    verifyMessage: () => {
+      rpcCalls += 1
+      return Promise.resolve(true)
+    },
+  } as unknown as Parameters<typeof signedBy>[0]
+  const check = (address: `0x${string}`, isContract: boolean) =>
+    signedBy(client, {
+      address,
+      message,
+      signature,
+      contractSigner: () => {
+        lookups += 1
+        return Promise.resolve(isContract)
+      },
+    })
+
+  assertEquals(String(await check(account.address, false)), "true")
+  assertEquals(`${lookups}/${rpcCalls}`, "0/0")
+  // A forged signature for an address without code never reaches the RPC.
+  assertEquals(String(await check(other.address, false)), "false")
+  assertEquals(`${lookups}/${rpcCalls}`, "1/0")
+  assertEquals(String(await check(other.address, true)), "true")
+  assertEquals(`${lookups}/${rpcCalls}`, "2/1")
+})
+
+Deno.test("gauge signers reuse controller resolution before asking for code", async () => {
+  const contracts = new Set<string>()
+  const lookedUp: string[] = []
+  const client = {
+    getCode: ({ address }: { address: string }) => {
+      lookedUp.push(address.toLowerCase())
+      return Promise.resolve(
+        contracts.has(address.toLowerCase()) ? "0x6080" : undefined,
+      )
+    },
+  } as unknown as Parameters<typeof gaugeSignerIsContract>[0]
+  const ownable: GaugeController = {
+    chainId: 31612,
+    gaugeAddress: "0x5893a3Fbb51DD117C08Cf0407103ce0809aaC406",
+    veBtcTokenId: 1226n,
+    nftOwnerAddress: "0x920b1c573F503554E113e4c47A92cd289a3d1625",
+    controllerAddress: "0xCBdBCAf764881138DeFf673143cEAaAe9c714b00",
+    controllerKind: "ownable-eoa",
+  }
+  const check = async (signer: string) =>
+    String(await gaugeSignerIsContract(client, ownable, signer))
+
+  assertEquals(await check(identity.nftOwnerAddress), "true")
+  assertEquals(await check(identity.controllerAddress.toLowerCase()), "false")
+  assertEquals(String(lookedUp.length), "0")
+  // A delegated editor is looked up onchain.
+  const editor = identity.editorAddress.toLowerCase()
+  assertEquals(await check(identity.editorAddress), "false")
+  contracts.add(editor)
+  assertEquals(await check(identity.editorAddress), "true")
+  assertEquals(lookedUp.join(","), `${editor},${editor}`)
 })
