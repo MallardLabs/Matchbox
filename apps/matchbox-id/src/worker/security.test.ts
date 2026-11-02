@@ -673,11 +673,112 @@ describe("authorize hardening", () => {
         expiresAt: null,
       },
     ])
-    const first = await refreshRequest(harness, "not-a-token")
-    expect(first.status).toBe(400)
-    const second = await refreshRequest(harness, "not-a-token")
-    expect(second.status).toBe(429)
-    expect(await oauthError(second)).toBe("temporarily_unavailable")
+    const cookie = await signIn(harness)
+    const challenge = await pkce()
+    const code = await obtainCode(harness, cookie, { pkce: challenge })
+    const tokens = await exchangeCode(harness, code, challenge.verifier)
+    // Rejected requests never spend the quota; issuing tokens does.
+    for (let index = 0; index < 3; index++) {
+      expect((await refreshRequest(harness, "not-a-token")).status).toBe(400)
+    }
+    const limited = await refreshRequest(harness, tokens.refresh_token)
+    expect(limited.status).toBe(429)
+    expect(await oauthError(limited)).toBe("temporarily_unavailable")
+    // The refused refresh token was not rotated.
+    harness.clock.advance(60_000)
+    expect((await refreshRequest(harness, tokens.refresh_token)).status).toBe(
+      200,
+    )
+  })
+
+  // ID-06: junk refresh tokens sent with a public client_id used to spend
+  // the environment's bucket, denying sign-in to every user of the app.
+  it("keeps rejected token requests off the environment's quota", async () => {
+    const harness = await createHarness()
+    harness.store.admin.setClientType(memorySeed.liveEnvironmentId, "public")
+    const statuses: Record<number, number> = {}
+    for (let index = 0; index < 300; index++) {
+      const response = await tokenRequest(
+        harness,
+        {
+          grant_type: "refresh_token",
+          refresh_token: `junk-${index}`,
+          client_id: memorySeed.liveClientId,
+        },
+        { "CF-Connecting-IP": "203.0.113.7" },
+      )
+      statuses[response.status] = (statuses[response.status] ?? 0) + 1
+    }
+    // The prefix's own failure bucket turns it away after 30 a minute.
+    expect(statuses).toEqual({ 400: 30, 429: 270 })
+
+    const cookie = await signIn(harness)
+    const challenge = await pkce()
+    const code = await obtainCode(harness, cookie, {
+      pkce: challenge,
+      clientId: memorySeed.liveClientId,
+      redirectUri: memorySeed.liveRedirectUris[0],
+    })
+    const exchange = await tokenRequest(
+      harness,
+      {
+        grant_type: "authorization_code",
+        code,
+        code_verifier: challenge.verifier,
+        redirect_uri: memorySeed.liveRedirectUris[0],
+        client_id: memorySeed.liveClientId,
+      },
+      { "CF-Connecting-IP": "198.51.100.9" },
+    )
+    expect(exchange.status).toBe(200)
+  })
+
+  // ID-L06: the code used to be consumed before it was checked.
+  it("keeps a code redeemable after wrong or rate-limited requests", async () => {
+    const harness = await createHarness()
+    harness.store.admin.setQuotaOverrides(memorySeed.testEnvironmentId, [
+      {
+        endpointClass: "oidc-token",
+        perMinute: 1,
+        perDay: 100,
+        expiresAt: null,
+      },
+    ])
+    const cookie = await signIn(harness)
+    const first = await pkce()
+    // Spends this minute's single token request.
+    await exchangeCode(
+      harness,
+      await obtainCode(harness, cookie, { pkce: first }),
+      first.verifier,
+    )
+    harness.clock.advance(30_000)
+
+    const challenge = await pkce()
+    const code = await obtainCode(harness, cookie, { pkce: challenge })
+    const request = {
+      grant_type: "authorization_code",
+      code,
+      code_verifier: challenge.verifier,
+      redirect_uri: memorySeed.testRedirectUris[0],
+      client_id: memorySeed.testClientId,
+    }
+    for (const wrong of [
+      { code_verifier: (await pkce()).verifier },
+      { redirect_uri: memorySeed.testRedirectUris[1] },
+      {
+        client_id: memorySeed.liveClientId,
+        client_secret: memorySeed.liveClientSecret,
+        redirect_uri: memorySeed.liveRedirectUris[0],
+      },
+    ]) {
+      const response = await tokenRequest(harness, { ...request, ...wrong })
+      expect(await oauthError(response)).toBe("invalid_grant")
+    }
+    expect((await tokenRequest(harness, request)).status).toBe(429)
+    // Next minute, still inside the code's 60 s lifetime.
+    harness.clock.advance(31_000)
+    expect((await tokenRequest(harness, request)).status).toBe(200)
   })
 
   it("refuses a decision whose redirect URI was unregistered meanwhile", async () => {

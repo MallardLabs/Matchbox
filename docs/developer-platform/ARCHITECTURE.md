@@ -554,7 +554,10 @@ only once the signature verifies; per-IP-prefix +
 per-client limits on `/oauth/token`, `/oauth/userinfo` and
 `/oauth/authorize` (authorize: 60/min, 2 000/day per IP prefix before any
 lookup, then the client's `oidc-token` policy before a request row is
-stored). Per-client limits honour `mbx_dev_quota_overrides` (cached 60 s).
+stored; token: the client's bucket is spent only once the code or refresh
+token checks out, and rejected requests spend a 30/min, 1 000/day bucket
+per IP prefix instead). Per-client limits honour `mbx_dev_quota_overrides`
+(cached 60 s).
 The consent decision re-checks that the stored `redirect_uri` is still
 registered and otherwise sends the SPA error page (`invalid_redirect_uri`).
 An hourly cron (`triggers.crons`) purges expired rows.
