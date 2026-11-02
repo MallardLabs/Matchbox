@@ -127,6 +127,7 @@ export function SendView({ onBack, onClose }: SendViewProps): JSX.Element {
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [txHash, setTxHash] = useState<`0x${string}` | undefined>()
   const [isTokenDropdownOpen, setIsTokenDropdownOpen] = useState(false)
+  const [formChainId, setFormChainId] = useState(chainId)
 
   const isNativeToken = useMemo(
     () =>
@@ -205,6 +206,15 @@ export function SendView({ onBack, onClose }: SendViewProps): JSX.Element {
     }
   }, [writeError, sendError])
 
+  // Token addresses differ per network, so a network change drops the selected
+  // token and its amount before the form can send them.
+  useEffect(() => {
+    if (step !== "form" || formChainId === chainId) return
+    setFormChainId(chainId)
+    setSelectedToken(undefined)
+    setAmount("")
+  }, [step, formChainId, chainId])
+
   const isValidRecipient = useMemo(
     () => isAddress(recipientAddress),
     [recipientAddress],
@@ -228,11 +238,18 @@ export function SendView({ onBack, onClose }: SendViewProps): JSX.Element {
   const canSend = useMemo(
     () =>
       selectedToken &&
+      selectedToken.chainId === chainId &&
       isValidRecipient &&
       parsedAmount &&
       parsedAmount > 0n &&
       !hasInsufficientBalance,
-    [selectedToken, isValidRecipient, parsedAmount, hasInsufficientBalance],
+    [
+      selectedToken,
+      chainId,
+      isValidRecipient,
+      parsedAmount,
+      hasInsufficientBalance,
+    ],
   )
 
   const handleSend = useCallback(() => {
