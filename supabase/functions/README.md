@@ -15,6 +15,74 @@ Records daily snapshots of gauge performance metrics into the `gauge_history` ta
 - Total incentives (USD)
 - Calculated APY
 
+### Scheduled jobs: caller authorization
+
+`record-gauge-history`, `verify-gauge-ownership`, `backfill-gauge-history-prices`
+and `discord-reconcile-roles` write with the service role, so each one checks
+its caller before doing anything (`_shared/serviceRoleAuth.ts`). A request is
+accepted only if either:
+
+- `Authorization: Bearer <service role key>` matches the function's
+  `SUPABASE_SERVICE_ROLE_KEY` (what the pg_cron jobs below send), or
+- the `x-matchbox-job-secret` header matches the optional `MATCHBOX_JOB_SECRET`
+  function secret. Use this if the scheduler holds a different key, for example
+  a new `sb_secret_…` API key. The gateway still needs a valid JWT in
+  `Authorization` when `verify_jwt` is on, so send the anon key there.
+
+Anything else, including the public anon key, gets `401`. The check does not
+depend on `verify_jwt`, so a redeploy with the wrong flag cannot open these
+jobs up. Keep the default `verify_jwt` anyway.
+
+When deploying these guarded functions:
+
+1. Before the deploy, confirm the Vault secret `service_role_key` (what the
+   pg_cron jobs send) equals the functions' `SUPABASE_SERVICE_ROLE_KEY` (the
+   legacy `service_role` key in Settings → API). Compare hashes rather than
+   printing the key:
+   ```sql
+   SELECT encode(extensions.digest(decrypted_secret, 'sha256'), 'hex')
+   FROM vault.decrypted_secrets WHERE name = 'service_role_key';
+   ```
+   If they differ, update the Vault secret or set `MATCHBOX_JOB_SECRET` and
+   send it from the jobs; otherwise every scheduled run gets `401`.
+2. Any Dashboard schedule (Edge Functions → Schedule) for these jobs, including
+   `discord-reconcile-roles` and `backfill-gauge-history-prices`, must send
+   `Authorization: Bearer <service role key>` (or the job secret header).
+3. After the first scheduled run of each job, check the responses:
+   ```sql
+   SELECT id, status_code, created, left(content, 200) AS body
+   FROM net._http_response ORDER BY created DESC LIMIT 20;
+   ```
+   A `401` means the caller's key does not match.
+
+### `transfer-gauge-profile`
+
+Signed moves of a gauge profile to another gauge, once per source gauge per
+epoch. The webapp asks for a `nonce` message naming the chain, both gauges and
+both veBTC token ids; the wallet that controls both NFTs signs it; `transfer`
+checks that each token maps to its gauge in the boost voter, verifies the
+signature (ECDSA recovered locally; the RPC's ERC-1271/6492 check only for a
+contract signer), consumes the nonce in `gauge_profile_transfer_nonces`, claims
+the epoch in `profile_transfers` and moves the profile with the service role.
+Delegated profile editors cannot transfer. Each nonce request also deletes up
+to 50 expired nonces, here and in `gauge_profile_write_nonces`
+(`upsert-gauge-profile`).
+
+1. Apply `20261030000001_sign_gauge_profile_transfers.sql`, then
+   `20261030000002_lock_legacy_anon_table_writes.sql`. The first drops the anon
+   insert policy on `profile_transfers`, deletes forged claims (future or
+   misaligned epochs, malformed addresses, current-epoch rows whose gauge
+   profiles were not touched at `transferred_at`), keeps the first of any
+   duplicate claim and drops the old per-wallet unique index. Its header has a
+   review query for current-epoch rows that pass these checks; delete any the
+   function logs do not back.
+2. Deploy with the default `verify_jwt` (the webapp sends the anon key):
+
+```bash
+supabase functions deploy transfer-gauge-profile --project-ref <ref> --use-api
+supabase functions deploy upsert-gauge-profile --project-ref <ref> --use-api
+```
+
 ### Matchbox Discord bot (`discord-interactions`, `discord-link`, `discord-reconcile-roles`)
 
 These functions implement the Matchbox Discord bot, which links a Discord account to
@@ -33,7 +101,8 @@ reward-floor cull for that semester's window.
 - **`discord-reconcile-roles`** — scheduled job that re-checks every linked member's
   points per semester and adds/removes roles so they stay correct between `/matchbox`
   runs. **Not public** — schedule with pg_cron using the service-role key (default
-  `verify_jwt`). Fetches each window's leaderboard once for efficiency.
+  `verify_jwt`); other callers get `401` (see "Scheduled jobs" above). Fetches each
+  window's leaderboard once for efficiency.
 
 Shared helpers live in `_shared/discord.ts` (Ed25519 verify, REST, role add/remove,
 avatar URL) and `_shared/discordLink.ts` (signed-message format, token/nonce, points
@@ -111,7 +180,8 @@ member holds into `granted_roles` so syncs can manage it again.
 7. **Schedule reconciliation** (keeps roles current as points change). Use the
    Dashboard schedule on `discord-reconcile-roles`, or pg_cron (see Option 2 below)
    pointed at `.../functions/v1/discord-reconcile-roles`, e.g. hourly `0 * * * *`.
-   For one-off manual cleanup, run `/poke-roles` in Discord.
+   Either way, send `Authorization: Bearer <service role key>`; the anon key
+   gets `401`. For one-off manual cleanup, run `/poke-roles` in Discord.
 
 ### `manage-saved-profile`
 
@@ -174,8 +244,8 @@ supabase functions deploy record-gauge-history
 3. Find `record-gauge-history` in the list
 4. Click the **...** menu → **Schedule**
 5. Set the cron expression: `0 0 * * *` (daily at midnight UTC)
-
-This method automatically handles authentication - no service key needed!
+6. Set the `Authorization` header to `Bearer <service role key>`. A schedule
+   that sends the anon key gets `401`.
 
 #### Option 2: Using pg_cron with Vault (Advanced)
 
@@ -225,7 +295,7 @@ You can manually invoke the function via HTTP:
 ```bash
 curl -X POST \
   'https://YOUR_PROJECT_REF.supabase.co/functions/v1/record-gauge-history' \
-  -H 'Authorization: Bearer YOUR_ANON_KEY' \
+  -H 'Authorization: Bearer YOUR_SERVICE_ROLE_KEY' \
   -H 'Content-Type: application/json'
 ```
 
@@ -251,7 +321,8 @@ supabase functions serve record-gauge-history --env-file .env.local
 
 3. Test with curl:
    ```bash
-   curl -X POST http://localhost:54321/functions/v1/record-gauge-history
+   curl -X POST http://localhost:54321/functions/v1/record-gauge-history \
+     -H 'Authorization: Bearer your-service-role-key'
    ```
 
 ## Troubleshooting

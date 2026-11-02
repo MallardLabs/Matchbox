@@ -1,31 +1,39 @@
 // Supabase Edge Function: transfer-gauge-profile
-// Transfers gauge profile metadata from one gauge to another
-// Limited to once per epoch per source gauge
+// Moves gauge profile metadata from one veBTC boost gauge to another and
+// clears the source. Limited to once per epoch per source gauge.
+//
+// `nonce` issues a single-use message naming the chain, both gauges and both
+// veBTC token ids; `transfer` verifies the signature (ECDSA locally, or
+// ERC-1271/6492 for a contract signer), consumes the nonce and moves the
+// profile with the service role. Each token must map to its gauge in the boost
+// voter, and one signer must control both NFTs. Delegated profile editors
+// cannot transfer: a transfer clears the source, which only its controller may
+// authorize.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 import {
   createPublicClient,
+  getAddress,
   http,
-  type Address,
+  isHex,
 } from "https://esm.sh/viem@2"
+import { z } from "https://esm.sh/zod@4.1.12"
+import { getMezoNetworkConfigForChain } from "../_shared/contracts.ts"
+import { corsHeaders } from "../_shared/cors.ts"
+import { purgeExpiredNonces } from "../_shared/expiredNonces.ts"
 import {
-  BOOST_VOTER_ABI,
-  VOTING_ESCROW_ABI,
-  NON_STAKING_GAUGE_ABI,
-  CHAIN_ID,
-  CONTRACTS,
-  getMezoNetworkConfig,
-} from "../_shared/contracts.ts"
-import { corsHeaders, handleCors } from "../_shared/cors.ts"
+  isGaugeController,
+  parseAuthorizationNonce,
+  profileTransferAuthorizationMessage,
+  resolveGaugeController,
+  sha256,
+  signedBy,
+  signerIsContract,
+} from "../_shared/gaugeProfileAuthorization.ts"
+import { structuredLogger } from "../_shared/structuredLogger.ts"
 
-// Constants
 const EPOCH_DURATION = 7 * 24 * 60 * 60 // 7 days in seconds
-const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
-
-// Helper to get current epoch start
-function getEpochStart(timestamp: number): number {
-  return Math.floor(timestamp / EPOCH_DURATION) * EPOCH_DURATION
-}
+const nonceLifetimeMs = 5 * 60_000
 
 // Profile fields to transfer
 const PROFILE_FIELDS = [
@@ -39,300 +47,267 @@ const PROFILE_FIELDS = [
   "tags",
 ] as const
 
-type TransferRequest = {
-  fromGaugeAddress: string
-  toGaugeAddress: string
-  ownerAddress: string
-  toVeBTCTokenId: string // The veBTC token ID for the destination gauge
-  chainId?: number
+const addressSchema = z.string().regex(/^0x[0-9a-fA-F]{40}$/)
+const tokenIdSchema = z.string().regex(/^\d{1,78}$/)
+const identitySchema = z.object({
+  chainId: z.union([z.literal(31611), z.literal(31612)]),
+  fromGaugeAddress: addressSchema,
+  fromVeBtcTokenId: tokenIdSchema,
+  toGaugeAddress: addressSchema,
+  toVeBtcTokenId: tokenIdSchema,
+  signerAddress: addressSchema,
+})
+const proofSchema = z.object({
+  message: z.string().min(100).max(1600),
+  signature: z.string().regex(/^0x[0-9a-fA-F]+$/),
+})
+const requestSchema = z.union([
+  identitySchema.extend({ action: z.literal("nonce") }),
+  identitySchema.extend({
+    action: z.literal("transfer"),
+    proof: proofSchema,
+  }),
+])
+
+function getEpochStart(timestamp: number): number {
+  return Math.floor(timestamp / EPOCH_DURATION) * EPOCH_DURATION
 }
 
-// Verify that an address owns a gauge by checking:
-// 1. The gauge's rewardsBeneficiary matches the owner
-// 2. OR the owner has a veBTC token mapped to this gauge
-async function verifyGaugeOwnership(
-  publicClient: ReturnType<typeof createPublicClient>,
-  gaugeAddress: Address,
-  ownerAddress: Address,
-  contracts: (typeof CONTRACTS)[keyof typeof CONTRACTS]
-): Promise<{ isOwner: boolean; tokenId: bigint | null }> {
-  const boostVoterAddress = contracts.boostVoter as Address
-  const veBTCAddress = contracts.veBTC as Address
+function json(value: unknown, status = 200): Response {
+  return new Response(JSON.stringify(value), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  })
+}
 
-  try {
-    // Check if owner is the rewards beneficiary
-    const beneficiary = await publicClient.readContract({
-      address: gaugeAddress,
-      abi: NON_STAKING_GAUGE_ABI,
-      functionName: "rewardsBeneficiary",
-    }) as Address
-
-    if (beneficiary.toLowerCase() === ownerAddress.toLowerCase()) {
-      // Now find the veBTC token that maps to this gauge
-      const balance = await publicClient.readContract({
-        address: veBTCAddress,
-        abi: VOTING_ESCROW_ABI,
-        functionName: "balanceOf",
-        args: [ownerAddress],
-      }) as bigint
-
-      for (let i = 0n; i < balance && i < 20n; i++) {
-        const tokenId = await publicClient.readContract({
-          address: veBTCAddress,
-          abi: VOTING_ESCROW_ABI,
-          functionName: "ownerToNFTokenIdList",
-          args: [ownerAddress, i],
-        }) as bigint
-
-        const mappedGauge = await publicClient.readContract({
-          address: boostVoterAddress,
-          abi: BOOST_VOTER_ABI,
-          functionName: "boostableTokenIdToGauge",
-          args: [tokenId],
-        }) as Address
-
-        if (mappedGauge.toLowerCase() === gaugeAddress.toLowerCase()) {
-          return { isOwner: true, tokenId }
-        }
-      }
-      
-      // Owner is beneficiary but no token mapped - still allow (gauge owner)
-      return { isOwner: true, tokenId: null }
-    }
-
-    return { isOwner: false, tokenId: null }
-  } catch (error) {
-    console.error("Error verifying gauge ownership:", error)
-    return { isOwner: false, tokenId: null }
+Deno.serve(async (request) => {
+  if (request.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders })
   }
-}
-
-Deno.serve(async (req) => {
-  // Handle CORS preflight
-  const corsResponse = handleCors(req)
-  if (corsResponse) return corsResponse
-
-  // Only allow POST
-  if (req.method !== "POST") {
-    return new Response(
-      JSON.stringify({ success: false, error: "Method not allowed" }),
-      { status: 405, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    )
+  if (request.method !== "POST") {
+    return json({ error: "method-not-allowed" }, 405)
   }
 
   try {
-    const body: TransferRequest = await req.json()
-    const { fromGaugeAddress, toGaugeAddress, ownerAddress, toVeBTCTokenId } = body
+    const parsed = requestSchema.safeParse(await request.json())
+    if (!parsed.success) return json({ error: "invalid-request" }, 400)
+    const body = parsed.data
+    const fromGauge = body.fromGaugeAddress.toLowerCase()
+    const toGauge = body.toGaugeAddress.toLowerCase()
+    const signer = body.signerAddress.toLowerCase()
+    if (fromGauge === toGauge) return json({ error: "same-gauge" }, 400)
 
-    // Validate required fields
-    if (!fromGaugeAddress || !toGaugeAddress || !ownerAddress || !toVeBTCTokenId) {
-      return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: "Missing required fields: fromGaugeAddress, toGaugeAddress, ownerAddress, toVeBTCTokenId" 
-        }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      )
+    const authorization = {
+      chainId: body.chainId,
+      fromGaugeAddress: fromGauge,
+      fromVeBtcTokenId: BigInt(body.fromVeBtcTokenId).toString(),
+      toGaugeAddress: toGauge,
+      toVeBtcTokenId: BigInt(body.toVeBtcTokenId).toString(),
+      signerAddress: signer,
     }
-
-    // Normalize addresses
-    const fromAddr = fromGaugeAddress.toLowerCase()
-    const toAddr = toGaugeAddress.toLowerCase()
-    const ownerAddr = ownerAddress.toLowerCase()
-
-    // Can't transfer to the same gauge
-    if (fromAddr === toAddr) {
-      return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: "Cannot transfer profile to the same gauge" 
-        }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      )
-    }
-
-    console.log(`Transfer request: ${fromAddr} -> ${toAddr} by ${ownerAddr}`)
-
-    // Get environment variables
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")
-    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")
-
-    if (!supabaseUrl || !supabaseKey) {
-      throw new Error("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY")
-    }
-
-    const { chain, contracts, network, rpcUrl } = getMezoNetworkConfig({
-      chainId:
-        body.chainId === CHAIN_ID.testnet || body.chainId === CHAIN_ID.mainnet
-          ? body.chainId
-          : undefined,
-    })
-
-    // Initialize clients
-    const supabase = createClient(supabaseUrl, supabaseKey, {
-      auth: { autoRefreshToken: false, persistSession: false },
-    })
-
+    const network = getMezoNetworkConfigForChain(body.chainId)
     const publicClient = createPublicClient({
-      chain,
-      transport: http(rpcUrl),
+      chain: network.chain,
+      transport: http(network.rpcUrl),
     })
-    console.log(`Transfer request on ${network} (${rpcUrl})`)
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+      { auth: { autoRefreshToken: false, persistSession: false } },
+    )
 
-    // Get current epoch
-    const now = Math.floor(Date.now() / 1000)
-    const epochStart = getEpochStart(now)
-
-    // Check if this gauge profile has already been transferred this epoch
-    const { data: existingTransfer, error: transferCheckError } = await supabase
-      .from("profile_transfers")
-      .select("id")
-      .eq("from_gauge_address", fromAddr)
-      .eq("epoch_start", epochStart)
-      .single()
-
-    if (transferCheckError && transferCheckError.code !== "PGRST116") {
-      // PGRST116 = no rows found, which is what we want
-      console.error("Error checking existing transfer:", transferCheckError)
-      throw new Error("Failed to check transfer history")
-    }
-
-    if (existingTransfer) {
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: "This gauge profile has already been transferred this epoch. You can transfer it again next epoch.",
-          epoch_start: epochStart,
-          next_epoch: epochStart + EPOCH_DURATION
+    // Each lookup throws unless boostableTokenIdToGauge(token) is that gauge,
+    // so neither side can be an arbitrary contract. Null when the signer does
+    // not control both NFTs.
+    const resolveControllers = async () => {
+      const veBtcAddress = getAddress(network.contracts.veBTC)
+      const boostVoterAddress = getAddress(network.contracts.boostVoter)
+      const [fromController, toController] = await Promise.all([
+        resolveGaugeController(publicClient, {
+          chainId: body.chainId,
+          gaugeAddress: fromGauge,
+          veBtcTokenId: authorization.fromVeBtcTokenId,
+          veBtcAddress,
+          boostVoterAddress,
         }),
-        { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      )
-    }
-
-    // Verify ownership of both gauges
-    const [fromOwnership, toOwnership] = await Promise.all([
-      verifyGaugeOwnership(publicClient, fromAddr as Address, ownerAddr as Address, contracts),
-      verifyGaugeOwnership(publicClient, toAddr as Address, ownerAddr as Address, contracts),
-    ])
-
-    if (!fromOwnership.isOwner) {
-      return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: "You do not own the source gauge" 
+        resolveGaugeController(publicClient, {
+          chainId: body.chainId,
+          gaugeAddress: toGauge,
+          veBtcTokenId: authorization.toVeBtcTokenId,
+          veBtcAddress,
+          boostVoterAddress,
         }),
-        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      )
+      ])
+      const managedEditorsEnabled =
+        Deno.env.get("ENABLE_MANAGED_GAUGE_EDITORS") === "true"
+      if (
+        !isGaugeController(fromController, signer, managedEditorsEnabled) ||
+        !isGaugeController(toController, signer, managedEditorsEnabled)
+      ) {
+        return null
+      }
+      return { fromController, toController }
     }
 
-    if (!toOwnership.isOwner) {
-      return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: "You do not own the destination gauge" 
+    if (body.action === "nonce") {
+      if (!(await resolveControllers())) {
+        return json({ error: "transfer-authorization-failed" }, 403)
+      }
+      const nonce = crypto.randomUUID().replaceAll("-", "")
+      const expiresAt = new Date(Date.now() + nonceLifetimeMs).toISOString()
+      const [{ error }] = await Promise.all([
+        supabase.from("gauge_profile_transfer_nonces").insert({
+          nonce_hash: await sha256(nonce),
+          chain_id: authorization.chainId,
+          from_gauge_address: fromGauge,
+          from_vebtc_token_id: authorization.fromVeBtcTokenId,
+          to_gauge_address: toGauge,
+          to_vebtc_token_id: authorization.toVeBtcTokenId,
+          signer_address: signer,
+          expires_at: expiresAt,
         }),
-        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      )
+        purgeExpiredNonces(supabase, "gauge_profile_transfer_nonces"),
+      ])
+      if (error) throw new Error("Unable to issue transfer nonce")
+      return json({
+        message: profileTransferAuthorizationMessage({
+          ...authorization,
+          nonce,
+          expiresAt,
+        }),
+      })
     }
 
-    // Fetch the source profile
+    // A malformed or mismatched proof is refused before any RPC read.
+    const fields = parseAuthorizationNonce(body.proof.message)
+    if (fields === null || !isHex(body.proof.signature)) {
+      return json({ error: "invalid-proof" }, 401)
+    }
+    const expected = profileTransferAuthorizationMessage({
+      ...authorization,
+      nonce: fields.nonce,
+      expiresAt: fields.expiresAt,
+    })
+    if (expected !== body.proof.message) {
+      return json({ error: "invalid-proof" }, 401)
+    }
+
+    const controllers = await resolveControllers()
+    if (!controllers) {
+      return json({ error: "transfer-authorization-failed" }, 403)
+    }
+    const { toController } = controllers
+    const signatureValid = await signedBy(publicClient, {
+      address: getAddress(signer),
+      message: body.proof.message,
+      signature: body.proof.signature,
+      contractSigner:
+        signerIsContract(controllers.fromController, signer) ||
+        signerIsContract(toController, signer),
+    })
+    if (!signatureValid) {
+      return json({ error: "transfer-authorization-failed" }, 403)
+    }
+
+    const now = new Date().toISOString()
+    const { data: consumedNonce } = await supabase
+      .from("gauge_profile_transfer_nonces")
+      .update({ used_at: now })
+      .eq("nonce_hash", await sha256(fields.nonce))
+      .eq("chain_id", authorization.chainId)
+      .eq("from_gauge_address", fromGauge)
+      .eq("from_vebtc_token_id", authorization.fromVeBtcTokenId)
+      .eq("to_gauge_address", toGauge)
+      .eq("to_vebtc_token_id", authorization.toVeBtcTokenId)
+      .eq("signer_address", signer)
+      .eq("expires_at", fields.expiresAt)
+      .is("used_at", null)
+      .gt("expires_at", now)
+      .select("nonce_hash")
+      .maybeSingle()
+    if (!consumedNonce) return json({ error: "expired-or-used-proof" }, 401)
+
     const { data: sourceProfile, error: sourceError } = await supabase
       .from("gauge_profiles")
       .select("*")
-      .eq("gauge_address", fromAddr)
-      .single()
+      .eq("gauge_address", fromGauge)
+      .maybeSingle()
+    if (sourceError) throw new Error("Unable to load source profile")
+    if (!sourceProfile) return json({ error: "source-profile-not-found" }, 404)
 
-    if (sourceError) {
-      if (sourceError.code === "PGRST116") {
-        return new Response(
-          JSON.stringify({ 
-            success: false, 
-            error: "Source gauge has no profile to transfer" 
-          }),
-          { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        )
-      }
-      console.error("Error fetching source profile:", sourceError)
-      throw new Error("Failed to fetch source profile")
-    }
-
-    // Build the profile data for the destination
-    const profileData: Record<string, unknown> = {
-      gauge_address: toAddr,
-      vebtc_token_id: toVeBTCTokenId,
-      owner_address: ownerAddr,
-    }
-
-    // Copy transferable fields
-    for (const field of PROFILE_FIELDS) {
-      if (sourceProfile[field] !== null && sourceProfile[field] !== undefined) {
-        profileData[field] = sourceProfile[field]
-      }
-    }
-
-    // Upsert the destination profile
-    const { data: destProfile, error: upsertError } = await supabase
-      .from("gauge_profiles")
-      .upsert(profileData, {
-        onConflict: "gauge_address",
-      })
-      .select()
-      .single()
-
-    if (upsertError) {
-      console.error("Error upserting destination profile:", upsertError)
-      throw new Error("Failed to update destination profile")
-    }
-
-    // Clear the source profile (keep the row but clear the transferable fields)
-    const clearData: Record<string, null> = {}
-    for (const field of PROFILE_FIELDS) {
-      clearData[field] = null
-    }
-
-    const { error: clearError } = await supabase
-      .from("gauge_profiles")
-      .update(clearData)
-      .eq("gauge_address", fromAddr)
-
-    if (clearError) {
-      console.error("Error clearing source profile:", clearError)
-      // Don't fail the request, the transfer was successful
-    }
-
-    // Record the transfer
-    const { error: recordError } = await supabase
+    // Claim this epoch's transfer of the source before moving anything. The
+    // unique (from_gauge_address, epoch_start) index admits one claim, even
+    // for concurrent requests.
+    const epochStart = getEpochStart(Math.floor(Date.now() / 1000))
+    const { data: claim, error: claimError } = await supabase
       .from("profile_transfers")
       .insert({
-        owner_address: ownerAddr,
-        from_gauge_address: fromAddr,
-        to_gauge_address: toAddr,
+        owner_address: signer,
+        from_gauge_address: fromGauge,
+        to_gauge_address: toGauge,
         epoch_start: epochStart,
       })
+      .select("id")
+      .single()
+    if (claimError?.code === "23505") {
+      return json(
+        {
+          error: "already-transferred-this-epoch",
+          epoch_start: epochStart,
+          next_epoch: epochStart + EPOCH_DURATION,
+        },
+        429,
+      )
+    }
+    if (claimError || !claim) throw new Error("Unable to claim the transfer")
 
-    if (recordError) {
-      console.error("Error recording transfer:", recordError)
-      // Don't fail the request, the transfer was successful
+    try {
+      const destination: Record<string, unknown> = {
+        gauge_address: toGauge,
+        vebtc_token_id: authorization.toVeBtcTokenId,
+        owner_address: toController.nftOwnerAddress.toLowerCase(),
+      }
+      for (const field of PROFILE_FIELDS) {
+        const value = sourceProfile[field]
+        if (value !== null && value !== undefined) destination[field] = value
+      }
+      const { error: upsertError } = await supabase
+        .from("gauge_profiles")
+        .upsert(destination, { onConflict: "gauge_address" })
+      if (upsertError) throw new Error("Unable to write destination profile")
+
+      const cleared: Record<string, null> = {}
+      for (const field of PROFILE_FIELDS) cleared[field] = null
+      const { error: clearError } = await supabase
+        .from("gauge_profiles")
+        .update(cleared)
+        .eq("gauge_address", fromGauge)
+      if (clearError) throw new Error("Unable to clear source profile")
+    } catch (error) {
+      // Release the claim so the controller can retry this epoch.
+      await supabase.from("profile_transfers").delete().eq("id", claim.id)
+      throw error
     }
 
-    console.log(`Profile transferred successfully: ${fromAddr} -> ${toAddr}`)
-
-    return new Response(
-      JSON.stringify({
-        success: true,
-        message: "Profile transferred successfully",
-        from_gauge: fromAddr,
-        to_gauge: toAddr,
-        epoch_start: epochStart,
-        transferred_at: new Date().toISOString(),
-      }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    )
+    structuredLogger.info({
+      message: "Gauge profile transferred after signer authorization",
+      chainId: authorization.chainId,
+      fromGaugeAddress: fromGauge,
+      toGaugeAddress: toGauge,
+      signerAddress: signer,
+    })
+    return json({
+      success: true,
+      from_gauge: fromGauge,
+      to_gauge: toGauge,
+      epoch_start: epochStart,
+      transferred_at: now,
+    })
   } catch (error) {
-    console.error("Error:", error)
-    return new Response(
-      JSON.stringify({ success: false, error: String(error) }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    )
+    structuredLogger.error({
+      message: "Gauge profile transfer failed",
+      error: error instanceof Error ? error.message : "Unknown error",
+    })
+    return json({ error: "request-failed" }, 500)
   }
 })

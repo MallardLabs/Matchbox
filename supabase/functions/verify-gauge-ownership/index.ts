@@ -18,6 +18,7 @@ import {
   getMezoNetworkConfig,
 } from "../_shared/contracts.ts"
 import { corsHeaders, handleCors } from "../_shared/cors.ts"
+import { requireServiceRole } from "../_shared/serviceRoleAuth.ts"
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
 
@@ -152,6 +153,8 @@ async function recordReset(
 Deno.serve(async (req) => {
   const corsResponse = handleCors(req)
   if (corsResponse) return corsResponse
+  const unauthorized = await requireServiceRole(req)
+  if (unauthorized) return unauthorized
 
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")
@@ -198,6 +201,14 @@ Deno.serve(async (req) => {
     let skippedUnverifiable = 0
 
     for (const profile of profilesWithContent) {
+      // A malformed stored id skips its row instead of aborting the run.
+      if (!/^\d+$/.test(profile.vebtc_token_id)) {
+        console.warn(
+          `Skipping reset for gauge ${profile.gauge_address}: invalid token id`,
+        )
+        skippedUnverifiable++
+        continue
+      }
       const tokenId = BigInt(profile.vebtc_token_id)
 
       try {

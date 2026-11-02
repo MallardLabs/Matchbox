@@ -603,89 +603,95 @@ export function useCanTransferProfile(ownerAddress: Address | undefined) {
 
 export type TransferGaugeProfileParams = {
   fromGaugeAddress: Address
+  fromVeBTCTokenId: bigint
   toGaugeAddress: Address
-  ownerAddress: Address
   toVeBTCTokenId: bigint
+  signerAddress: Address
 }
 
-export type TransferResult = {
-  success: boolean
-  message?: string
-  error?: string
-  from_gauge?: string
-  to_gauge?: string
-  epoch_start?: number
-  transferred_at?: string
-  next_epoch?: number
+export type TransferResult =
+  | { success: true }
+  | { success: false; error: string }
+
+const transferResponseSchema = z.object({ success: z.literal(true) })
+
+async function invokeGaugeProfileTransfer(body: unknown): Promise<unknown> {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  if (!url || !anonKey) throw new Error("Transfer service is not configured")
+  const response = await fetch(`${url}/functions/v1/transfer-gauge-profile`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${anonKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  })
+  if (response.status === 429) throw new Error("Already transferred this epoch")
+  if (response.status === 403) throw new Error("Wallet must own both gauges")
+  if (!response.ok) throw new Error("Transfer failed")
+  const data: unknown = await response.json()
+  return data
 }
 
 /**
- * Hook to transfer a gauge profile from one gauge to another.
- * Each gauge profile can only be transferred once per epoch.
+ * Hook to transfer a gauge profile from one gauge to another. The wallet that
+ * owns both veBTC NFTs signs each transfer; each gauge profile can only be
+ * transferred once per epoch.
  */
 export function useTransferGaugeProfile() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<Error | null>(null)
   const { refetch } = useAllGaugeProfilesFromContext()
   const { chainId } = useNetwork()
+  const { signMessageAsync } = useSignMessage()
 
   const transferProfile = useCallback(
     async ({
       fromGaugeAddress,
+      fromVeBTCTokenId,
       toGaugeAddress,
-      ownerAddress,
       toVeBTCTokenId,
+      signerAddress,
     }: TransferGaugeProfileParams): Promise<TransferResult> => {
       setIsLoading(true)
       setError(null)
 
       try {
-        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-        if (!supabaseUrl) {
-          throw new Error("Supabase URL not configured")
+        const identity = {
+          chainId,
+          fromGaugeAddress,
+          fromVeBtcTokenId: fromVeBTCTokenId.toString(),
+          toGaugeAddress,
+          toVeBtcTokenId: toVeBTCTokenId.toString(),
+          signerAddress,
         }
-
-        const response = await fetch(
-          `${supabaseUrl}/functions/v1/transfer-gauge-profile`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`,
-            },
-            body: JSON.stringify({
-              fromGaugeAddress: fromGaugeAddress.toLowerCase(),
-              toGaugeAddress: toGaugeAddress.toLowerCase(),
-              ownerAddress: ownerAddress.toLowerCase(),
-              toVeBTCTokenId: toVeBTCTokenId.toString(),
-              chainId,
-            }),
-          },
+        const nonce = nonceResponseSchema.parse(
+          await invokeGaugeProfileTransfer({ action: "nonce", ...identity }),
         )
-
-        const result: TransferResult = await response.json()
-
-        if (!response.ok || !result.success) {
-          const errorMessage = result.error || "Transfer failed"
-          setError(new Error(errorMessage))
-          setIsLoading(false)
-          return result
-        }
+        const signature = await signMessageAsync({ message: nonce.message })
+        transferResponseSchema.parse(
+          await invokeGaugeProfileTransfer({
+            action: "transfer",
+            ...identity,
+            proof: { message: nonce.message, signature },
+          }),
+        )
 
         // Refetch all profiles to update the cache
         await refetch()
 
         setIsLoading(false)
-        return result
+        return { success: true }
       } catch (err) {
         const errorMessage =
-          err instanceof Error ? err.message : "Unknown error occurred"
+          err instanceof Error ? err.message : "Transfer failed"
         setError(new Error(errorMessage))
         setIsLoading(false)
         return { success: false, error: errorMessage }
       }
     },
-    [chainId, refetch],
+    [chainId, refetch, signMessageAsync],
   )
 
   return {
@@ -934,8 +940,11 @@ export function useGaugeOwnershipCheck(
   const { chainId, isNetworkReady } = useNetwork()
   const contracts = getContractConfig(chainId)
 
+  // Stored ids are text; a malformed one must not throw during render.
   const tokenIdBigInt =
-    veBTCTokenId !== undefined ? BigInt(veBTCTokenId) : undefined
+    veBTCTokenId !== undefined && /^\d+$/.test(veBTCTokenId)
+      ? BigInt(veBTCTokenId)
+      : undefined
 
   const { data, isLoading } = useReadContract({
     ...contracts.veBTC,
