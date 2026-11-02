@@ -102,13 +102,19 @@ describe("SIWE sign-in", () => {
     expect(harness.verifySpy.calls).toBe(0)
   })
 
-  it("rejects a foreign URI", async () => {
+  it("accepts only this origin, exactly, as the URI", async () => {
     const harness = await createHarness()
-    const message = await siweMessage(harness, devAccount, {
-      uri: "https://evil.example/login",
-    })
-    const response = await verifySiwe(harness, message, devAccount)
-    expect(await errorMessage(response)).toContain("uri-mismatch")
+    for (const uri of [
+      "https://evil.example/login",
+      "https://id.test/sign-in",
+      "https://id.test/",
+      "https://id.test:443",
+      "https://user@id.test",
+    ]) {
+      const message = await siweMessage(harness, devAccount, { uri })
+      const response = await verifySiwe(harness, message, devAccount)
+      expect(await errorMessage(response)).toContain("uri-mismatch")
+    }
   })
 
   it("rejects chains other than Mezo", async () => {

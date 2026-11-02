@@ -55,14 +55,6 @@ export type SiweCheckResult =
     }
   | { ok: false; reason: SiweRejection }
 
-function originOf(value: string): string | null {
-  try {
-    return new URL(value).origin
-  } catch {
-    return null
-  }
-}
-
 function isValidDate(value: Date | undefined): value is Date {
   return value !== undefined && Number.isFinite(value.getTime())
 }
@@ -126,9 +118,8 @@ export function checkSiweMessage(
     return { ok: false, reason: "non-canonical" }
   }
   if (domain !== expected.host) return { ok: false, reason: "domain-mismatch" }
-  if (originOf(uri) !== expected.origin) {
-    return { ok: false, reason: "uri-mismatch" }
-  }
+  // The SPA signs `window.location.origin` exactly.
+  if (uri !== expected.origin) return { ok: false, reason: "uri-mismatch" }
   const network = networkForChainId(chainId)
   if (network === null) return { ok: false, reason: "unsupported-chain" }
 
