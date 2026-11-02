@@ -175,6 +175,15 @@ export type ReviewRecord = {
   decidedAt: string | null
 }
 
+/** `mbx_dev_review_logos`: the logo as fetched at submission. */
+export type ReviewLogoRecord = PinnedLogo & { pinnedAt: string }
+
+/**
+ * `mbx_dev_verified_logos`: the approved copy, shown only while the
+ * environment's `verifiedAt` equals this one.
+ */
+export type VerifiedLogoRecord = PinnedLogo & { verifiedAt: string }
+
 export type AdminReviewRecord = {
   review: ReviewRecord
   environment: EnvironmentRecord
@@ -414,10 +423,13 @@ export type ConsoleStore = {
   listOrigins(environmentId: string): Promise<string[]>
   /** Atomically replaces the set (existing rows keep their order). */
   replaceOrigins(environmentId: string, origins: string[]): Promise<void>
-  /** Logo bytes pinned at staff approval (`logo-pin.ts`); null deletes. */
+  /**
+   * The logo Matchbox ID shows beside the Verified badge, copied from the
+   * approved review's pin (`logo-pin.ts`); null deletes.
+   */
   putVerifiedLogo(
     environmentId: string,
-    logo: (PinnedLogo & { pinnedAt: string }) | null,
+    logo: VerifiedLogoRecord | null,
   ): Promise<void>
   /**
    * Atomically revokes the environment's active Matchbox ID refresh-token
@@ -435,6 +447,9 @@ export type ConsoleStore = {
   createReview(
     input: Omit<ReviewRecord, "id" | "createdAt"> & { createdAt?: string },
   ): Promise<ReviewRecord>
+  /** The logo pinned when the review was submitted (`logo-pin.ts`). */
+  putReviewLogo(reviewId: string, logo: ReviewLogoRecord): Promise<void>
+  getReviewLogo(reviewId: string): Promise<ReviewLogoRecord | null>
   /**
    * Decides or withdraws a review only while it is still open (one
    * conditional update); null when it was already closed.

@@ -106,6 +106,7 @@ const verifiedLogoRowSchema = z.object({
   content_type: z.enum(["image/png", "image/jpeg", "image/gif", "image/webp"]),
   data_base64: z.string(),
   source_url: z.string(),
+  verified_at: dateSchema,
 })
 
 const clientRowSchema = z
@@ -502,7 +503,7 @@ export default function createSupabaseIdStore(
     async findVerifiedLogo(environmentId) {
       const { data, error } = await supabase
         .from("mbx_dev_verified_logos")
-        .select("content_type, data_base64, source_url")
+        .select("content_type, data_base64, source_url, verified_at")
         .eq("environment_id", environmentId)
         .maybeSingle()
       if (error !== null) fail("find verified logo", error)
@@ -513,6 +514,7 @@ export default function createSupabaseIdStore(
             contentType: row.content_type,
             dataBase64: row.data_base64,
             sourceUrl: row.source_url,
+            verifiedAt: row.verified_at,
           }
     },
     async listClientSecrets(environmentId) {

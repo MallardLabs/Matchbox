@@ -7,6 +7,7 @@ import {
   adminAppSchema,
   adminReviewContextResponseSchema,
   adminReviewListResponseSchema,
+  adminReviewLogoResponseSchema,
   adminReviewQuerySchema,
   adminReviewSchema,
   adminReviewStats,
@@ -40,7 +41,6 @@ import {
   requireStepUp,
 } from "../context"
 import { type ReviewOutcome, reviewDecisionEmail } from "../email/templates"
-import { pinLogo } from "../logo-pin"
 import { respond, toApp, toQuotaOverride, toReview } from "../mappers"
 import { approvalOutcome, environmentReviewState } from "../review-policy"
 import type { AdminAppRecord, AdminReviewRecord } from "../store/console-store"
@@ -221,6 +221,30 @@ export default function registerAdminRoutes(app: ConsoleApp): void {
     })
   })
 
+  // The logo pinned at submission, as staff should see it: these bytes, not
+  // the developer's live URL. The approval names their sha256.
+  app.get("/api/admin/reviews/:reviewId/logo", async (c) => {
+    await requireStaff(c, "reviewer")
+    const { reviewId } = pathParams(c, consolePaths.reviewId)
+    const { store } = deps(c)
+    if ((await store.getReview(reviewId)) === null) {
+      throw new PlatformError("not_found")
+    }
+    const logo = await store.getReviewLogo(reviewId)
+    return respond(c, adminReviewLogoResponseSchema, {
+      logo:
+        logo === null
+          ? null
+          : {
+              contentType: logo.contentType,
+              dataBase64: logo.dataBase64,
+              sha256: logo.sha256,
+              sourceUrl: logo.sourceUrl,
+              pinnedAt: new Date(logo.pinnedAt).toISOString(),
+            },
+    })
+  })
+
   app.get("/api/admin/reviews/:reviewId", async (c) => {
     await requireStaff(c, "reviewer")
     const { reviewId } = pathParams(c, consolePaths.reviewId)
@@ -233,7 +257,7 @@ export default function registerAdminRoutes(app: ConsoleApp): void {
     const staff = await staffAction(c, "reviewer")
     const { reviewId } = pathParams(c, consolePaths.reviewId)
     const body = await jsonBody(c, reviewDecisionRequestSchema)
-    const { store, email, config, logoFetch } = deps(c)
+    const { store, email, config } = deps(c)
     const record = await store.getAdminReview(reviewId)
     if (record === null) throw new PlatformError("not_found")
     if (record.review.state !== "open") {
@@ -269,20 +293,42 @@ export default function registerAdminRoutes(app: ConsoleApp): void {
       verifiedAt === null
         ? null
         : await verificationSubject(c, record.app.id, environment.id)
-    // The logo the reviewer saw, pinned: the bytes behind logoUrl can change.
-    const pinned =
-      verifiedAt === null || record.app.logoUrl === null
-        ? null
-        : await pinLogo(logoFetch, record.app.logoUrl)
-    if (pinned !== null && !pinned.ok) {
-      logger(c).warn({
-        message: "Logo not pinned; the verified consent screen shows none",
-        reviewId,
-        reason: pinned.reason,
-      })
+    // Staff saw the copy pinned at submission (`GET .../logo`): the approval
+    // must name its sha256, and the app's logoUrl must still be the pinned
+    // one (only live reviews freeze it).
+    const logo = approval === null ? null : await store.getReviewLogo(reviewId)
+    if (approval !== null) {
+      if ((body.logoSha256 ?? null) !== (logo?.sha256 ?? null)) {
+        throw new PlatformError("conflict", {
+          message: "Reviewed logo does not match the pinned logo.",
+        })
+      }
+      if (logo !== null && logo.sourceUrl !== record.app.logoUrl) {
+        throw new PlatformError("conflict", {
+          message: "The logo URL changed since submission.",
+        })
+      }
     }
-    // Close the review first, conditionally: a withdraw that got there first
-    // wins, and once it is closed nothing else can decide or withdraw it.
+    // Written before the review closes, so a failure here leaves the review
+    // open and nothing granted. The row only shows while the environment's
+    // verifiedAt equals this one, so an approval that then loses the close
+    // (or an earlier approval's row) never puts it beside the badge.
+    if (verifiedAt !== null) {
+      await store.putVerifiedLogo(
+        environment.id,
+        logo === null
+          ? null
+          : {
+              contentType: logo.contentType,
+              dataBase64: logo.dataBase64,
+              sha256: logo.sha256,
+              sourceUrl: logo.sourceUrl,
+              verifiedAt,
+            },
+      )
+    }
+    // Close the review, conditionally: a withdraw that got there first wins,
+    // and once it is closed nothing else can decide or withdraw it.
     const closed = await store.closeReview(reviewId, {
       state: decisionOutcome[body.decision],
       reviewerId: staff.account.id,
@@ -293,12 +339,6 @@ export default function registerAdminRoutes(app: ConsoleApp): void {
       throw new PlatformError("conflict", { message: "Review is closed." })
     }
     if (approval !== null) {
-      if (verifiedAt !== null) {
-        await store.putVerifiedLogo(
-          environment.id,
-          pinned?.ok === true ? { ...pinned.logo, pinnedAt: at } : null,
-        )
-      }
       await store.updateEnvironment(environment.id, {
         approvedScopes: approval.approvedScopes,
         scopeVersion: approval.scopeVersion,
@@ -325,7 +365,7 @@ export default function registerAdminRoutes(app: ConsoleApp): void {
         added: approval.added,
         scopeVersion: approval.scopeVersion,
         verified,
-        logoPinned: verified && pinned?.ok === true,
+        logoSha256: verified ? (logo?.sha256 ?? null) : null,
       }
     } else {
       await store.updateEnvironment(environment.id, {

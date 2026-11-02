@@ -7,7 +7,6 @@ import { compareReviewsNewestFirst } from "@repo/platform-contracts/console"
 import { grantRevokedReasonSchema } from "@repo/platform-contracts/identity"
 import { oidcScopeSchema } from "@repo/platform-contracts/scopes"
 import type { OidcScope } from "@repo/platform-contracts/scopes"
-import type { PinnedLogo } from "../logo-pin"
 import {
   type AccountRecord,
   type AdminReviewRecord,
@@ -22,9 +21,11 @@ import {
   type OrganizationRecord,
   type OrganizationReviewRecord,
   type QuotaOverrideRow,
+  type ReviewLogoRecord,
   type ReviewRecord,
   type SessionRecord,
   StoreConflictError,
+  type VerifiedLogoRecord,
 } from "./console-store"
 
 /** A grant row as the memory store keeps it (for OAuth stats only). */
@@ -62,9 +63,7 @@ export type MemoryConsoleStore = ConsoleStore & {
   oauthTokens(): MemoryOAuthToken[]
   auditEvents(): AuditEvent[]
   sessions(): SessionRecord[]
-  verifiedLogo(
-    environmentId: string,
-  ): (PinnedLogo & { pinnedAt: string }) | null
+  verifiedLogo(environmentId: string): VerifiedLogoRecord | null
 }
 
 function missing(entity: string): Error {
@@ -89,8 +88,9 @@ export default function createMemoryStore(
   const environments = new Map<string, EnvironmentRecord>()
   const redirectUris = new Map<string, string[]>()
   const origins = new Map<string, string[]>()
-  const verifiedLogos = new Map<string, PinnedLogo & { pinnedAt: string }>()
+  const verifiedLogos = new Map<string, VerifiedLogoRecord>()
   const reviews = new Map<string, ReviewRecord>()
+  const reviewLogos = new Map<string, ReviewLogoRecord>()
   const apiKeys = new Map<string, ApiKeyRow>()
   const clientSecrets = new Map<string, ClientSecretRow>()
   const quotaOverrides = new Map<string, QuotaOverrideRow>()
@@ -643,6 +643,14 @@ export default function createMemoryStore(
       }
       reviews.set(review.id, review)
       return copy(review)
+    },
+    async putReviewLogo(reviewId, logo) {
+      if (!reviews.has(reviewId)) throw missing("Review")
+      reviewLogos.set(reviewId, copy(logo))
+    },
+    async getReviewLogo(reviewId) {
+      const logo = reviewLogos.get(reviewId)
+      return logo === undefined ? null : copy(logo)
     },
     async closeReview(id, patch) {
       const review = reviews.get(id)

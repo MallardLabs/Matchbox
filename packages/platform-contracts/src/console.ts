@@ -1104,6 +1104,36 @@ export const adminReviewListResponseSchema = z.object({
 
 // GET /api/admin/reviews/{reviewId} -> adminReviewSchema
 
+const sha256HexSchema = z.string().regex(/^[0-9a-f]{64}$/)
+
+/**
+ * GET /api/admin/reviews/{reviewId}/logo: the app logo as the console
+ * fetched it when the review was submitted. Staff see these bytes, never
+ * the developer's live URL, and an approval names their `sha256`. Null when
+ * the app had no logo or it could not be pinned (Matchbox ID then shows the
+ * initial).
+ */
+export const adminReviewLogoResponseSchema = z.object({
+  logo: z
+    .object({
+      contentType: z.enum([
+        "image/png",
+        "image/jpeg",
+        "image/gif",
+        "image/webp",
+      ]),
+      dataBase64: z.string().max(87_384),
+      sha256: sha256HexSchema,
+      sourceUrl: z.string(),
+      pinnedAt: isoDateTimeSchema,
+    })
+    .nullable(),
+})
+
+export type AdminReviewLogoResponse = z.infer<
+  typeof adminReviewLogoResponseSchema
+>
+
 /**
  * GET /api/admin/reviews/{reviewId}/context (C09b strip): what staff need
  * to judge a review without reading the org's own usage or OAuth views.
@@ -1225,6 +1255,12 @@ export const reviewDecisionRequestSchema = z.object({
   note: z.string().trim().max(2000).optional(),
   /** Approve a subset of the requested scopes; defaults to all requested. */
   approvedScopes: z.array(platformScopeSchema).optional(),
+  /**
+   * Approve only: the `sha256` of the pinned logo the reviewer saw
+   * (`GET .../logo`); null or omitted when none was pinned. A mismatch is
+   * 409.
+   */
+  logoSha256: sha256HexSchema.nullable().optional(),
 })
 
 export type ReviewDecisionRequest = z.infer<typeof reviewDecisionRequestSchema>

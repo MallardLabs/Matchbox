@@ -46,9 +46,11 @@ import {
   type ConsoleContext,
   audit,
   deps,
+  logger,
   nowIso,
   requireStepUp,
 } from "../context"
+import { pinLogo } from "../logo-pin"
 import {
   loadEnvironment,
   respond,
@@ -464,6 +466,12 @@ export default function registerEnvironmentRoutes(app: ConsoleApp): void {
         autoApproved: true,
       })
     }
+    // Staff review this copy of the logo, never the live URL, which could
+    // serve them one image and the Worker another (`logo-pin.ts`).
+    const pinned =
+      access.app.logoUrl === null
+        ? null
+        : await pinLogo(deps(c).logoFetch, access.app.logoUrl)
     const review = await store.createReview({
       environmentId,
       requestedScopes: environment.requestedScopes,
@@ -474,6 +482,20 @@ export default function registerEnvironmentRoutes(app: ConsoleApp): void {
       reviewerNote: null,
       decidedAt: null,
     })
+    let logoSha256: string | null = null
+    if (pinned?.ok === true) {
+      try {
+        await store.putReviewLogo(review.id, { ...pinned.logo, pinnedAt: at })
+        logoSha256 = pinned.logo.sha256
+      } catch (error) {
+        logger(c).error({ message: "Review logo not stored", error })
+      }
+    } else if (pinned !== null) {
+      logger(c).warn({
+        message: "Review logo not pinned",
+        reason: pinned.reason,
+      })
+    }
     const updated = await store.updateEnvironment(environmentId, {
       reviewState: environmentReviewState(
         environment.approvedScopes,
@@ -488,6 +510,7 @@ export default function registerEnvironmentRoutes(app: ConsoleApp): void {
       metadata: {
         requestedScopes: environment.requestedScopes,
         added: evaluation.added,
+        logoSha256,
       },
     })
     return respond(c, submitReviewResponseSchema, {

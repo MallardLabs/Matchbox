@@ -1,6 +1,7 @@
 import type { AuditEvent } from "@repo/platform-contracts/audit"
 import type {
   AdminReview,
+  AdminReviewLogoResponse,
   ReviewDecision,
 } from "@repo/platform-contracts/console"
 import {
@@ -36,6 +37,7 @@ import {
 } from "react"
 import QueryError from "../../../components/QueryError"
 import { Crumb, Crumbs } from "../../../components/shell/Breadcrumbs"
+import AppMark from "../../../components/ui/AppMark"
 import LockHint from "../../../components/ui/LockHint"
 import PageTitle from "../../../components/ui/PageTitle"
 import { Pill } from "../../../components/ui/Pill"
@@ -172,7 +174,38 @@ function ExternalLink({ href }: { href: string | null }): ReactElement {
   )
 }
 
+/**
+ * The logo pinned at submission, from its bytes: never the developer's URL,
+ * which could show staff a different image than the one pinned.
+ */
+function PinnedLogo({
+  name,
+  logo,
+}: {
+  name: string
+  logo: AdminReviewLogoResponse["logo"] | undefined
+}): ReactElement {
+  if (logo === undefined) return <Skeleton.Root className="h-7 w-28" />
+  if (logo === null) return <span className="text-muted">None</span>
+  return (
+    <span className="inline-flex items-center gap-2">
+      <AppMark
+        name={name}
+        logoUrl={`data:${logo.contentType};base64,${logo.dataBase64}`}
+        size="sm"
+      />
+      <span className="font-mono text-caption text-muted" title={logo.sha256}>
+        {`sha256 ${logo.sha256.slice(0, 8)}…`}
+      </span>
+    </span>
+  )
+}
+
 function ReviewDetail({ review }: { review: AdminReview }): ReactElement {
+  const logo = useQuery({
+    queryKey: [...keys.admin, "review", review.id, "logo"],
+    queryFn: () => api.admin.reviewLogo(review.id),
+  })
   const context = useQuery({
     queryKey: [...keys.admin, "review", review.id, "context"],
     queryFn: () => api.admin.reviewContext(review.id),
@@ -222,6 +255,13 @@ function ReviewDetail({ review }: { review: AdminReview }): ReactElement {
                 <ExternalLink href={review.app.termsUrl ?? null} />
               </Fact>
               <Fact term="Support">{review.app.supportEmail ?? dash}</Fact>
+              <Fact term="Logo">
+                {logo.isError ? (
+                  <span className="text-neg">Unavailable</span>
+                ) : (
+                  <PinnedLogo name={review.app.name} logo={logo.data?.logo} />
+                )}
+              </Fact>
             </dl>
             <dl className="m-0 flex flex-col">
               <Fact term="Submitter">{review.submitterEmail ?? dash}</Fact>
@@ -276,7 +316,14 @@ function ReviewDetail({ review }: { review: AdminReview }): ReactElement {
         </div>
         <aside className="flex min-w-0 flex-col">
           {review.state === "open" ? (
-            <DecisionForm review={review} />
+            <DecisionForm
+              review={review}
+              logoSha256={
+                logo.data === undefined
+                  ? undefined
+                  : (logo.data.logo?.sha256 ?? null)
+              }
+            />
           ) : (
             <DecidedPanel review={review} />
           )}
@@ -476,7 +523,14 @@ function isDecision(value: string): value is ReviewDecision {
   return value in decisionLabels
 }
 
-function DecisionForm({ review }: { review: AdminReview }): ReactElement {
+function DecisionForm({
+  review,
+  logoSha256,
+}: {
+  review: AdminReview
+  /** The pinned logo shown; null for none, undefined until it loads. */
+  logoSha256: string | null | undefined
+}): ReactElement {
   const [decision, setDecision] = useState<ReviewDecision>("approve")
   const [note, setNote] = useState("")
   const alreadyApproved = review.environment.approvedScopes
@@ -494,7 +548,9 @@ function DecisionForm({ review }: { review: AdminReview }): ReactElement {
         api.admin.decide(review.id, {
           decision,
           ...(note.trim() === "" ? {} : { note: note.trim() }),
-          ...(decision === "approve" ? { approvedScopes: approved } : {}),
+          ...(decision === "approve"
+            ? { approvedScopes: approved, logoSha256: logoSha256 ?? null }
+            : {}),
         }),
       ),
     async onSuccess(updated) {
@@ -642,8 +698,9 @@ function DecisionForm({ review }: { review: AdminReview }): ReactElement {
           disabled={
             needsNote ||
             (approving &&
-              approved.filter((scope) => !alreadyApproved.includes(scope))
-                .length === 0)
+              (logoSha256 === undefined ||
+                approved.filter((scope) => !alreadyApproved.includes(scope))
+                  .length === 0))
           }
         >
           {decide.isPending ? null : (

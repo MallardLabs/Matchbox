@@ -36,6 +36,7 @@ import {
   type EnvironmentPatch,
   type OAuthStatsRecord,
   type OrganizationReviewRecord,
+  type ReviewLogoRecord,
   StoreConflictError,
 } from "./console-store"
 
@@ -307,6 +308,29 @@ function mapReview(row: ReviewRowInput) {
 }
 
 const reviewRow = z.object(reviewFields).transform(mapReview)
+
+const reviewLogoRow = z
+  .object({
+    content_type: z.enum([
+      "image/png",
+      "image/jpeg",
+      "image/gif",
+      "image/webp",
+    ]),
+    data_base64: z.string(),
+    sha256: z.string(),
+    source_url: z.string(),
+    pinned_at: z.string(),
+  })
+  .transform(
+    (row): ReviewLogoRecord => ({
+      contentType: row.content_type,
+      dataBase64: row.data_base64,
+      sha256: row.sha256,
+      sourceUrl: row.source_url,
+      pinnedAt: row.pinned_at,
+    }),
+  )
 
 const adminReviewSelect =
   "*, environment:mbx_dev_environments!inner(*, app:mbx_dev_apps!inner(*, organization:mbx_dev_organizations!inner(*))), submitter:mbx_dev_accounts!submitter_id(email)"
@@ -1177,7 +1201,7 @@ export default function createSupabaseStore(
             data_base64: logo.dataBase64,
             sha256: logo.sha256,
             source_url: logo.sourceUrl,
-            pinned_at: logo.pinnedAt,
+            verified_at: logo.verifiedAt,
           },
           { onConflict: "environment_id" },
         ),
@@ -1233,6 +1257,33 @@ export default function createSupabaseStore(
         reviewRow,
         "create review",
         await supabase.from("mbx_dev_reviews").insert(row).select("*").single(),
+      )
+    },
+    async putReviewLogo(reviewId, logo) {
+      done(
+        "put review logo",
+        await supabase.from("mbx_dev_review_logos").upsert(
+          {
+            review_id: reviewId,
+            content_type: logo.contentType,
+            data_base64: logo.dataBase64,
+            sha256: logo.sha256,
+            source_url: logo.sourceUrl,
+            pinned_at: logo.pinnedAt,
+          },
+          { onConflict: "review_id" },
+        ),
+      )
+    },
+    async getReviewLogo(reviewId) {
+      return maybe(
+        reviewLogoRow,
+        "get review logo",
+        await supabase
+          .from("mbx_dev_review_logos")
+          .select("content_type, data_base64, sha256, source_url, pinned_at")
+          .eq("review_id", reviewId)
+          .maybeSingle(),
       )
     },
     async closeReview(id, patch) {
