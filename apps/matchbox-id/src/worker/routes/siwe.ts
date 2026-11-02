@@ -67,8 +67,6 @@ async function provenSignerKind(
     message: string
     signature: `0x${string}`
     checked: Extract<SiweCheckResult, { ok: true }>
-    domain: string
-    now: Date
   },
 ): Promise<SignerKind | null> {
   const { message, signature, checked } = proof
@@ -85,14 +83,7 @@ async function provenSignerKind(
   }
   const check = await verifyContractSignature(
     deps.publicClientsFor(network),
-    {
-      message,
-      signature,
-      address,
-      domain: proof.domain,
-      nonce: checked.nonce,
-      time: proof.now,
-    },
+    { message, signature, address },
     checked.chainId,
   )
   if (check.status === "unavailable") {
@@ -157,8 +148,6 @@ export default function siweRoutes(deps: AppDeps): Hono {
       message: body.message,
       signature,
       checked,
-      domain: url.host,
-      now,
     })
     if (signerKind === null) {
       throw new PlatformError("unauthorized", {

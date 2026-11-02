@@ -5,19 +5,20 @@ import type { IdFlags } from "./config"
 import type { SigningKeys } from "./oidc/keys"
 import type { IdStore } from "./store/id-store"
 
-export type SiweVerifyArgs = {
+export type ContractSignatureArgs = {
   message: string
   signature: `0x${string}`
   address: `0x${string}`
-  domain: string
-  nonce: string
-  time: Date
 }
 
-/** The subset of a viem public client contract-signature checks need. */
+/**
+ * One RPC's word on a contract-account signature (see rpcSignatureClient).
+ * `isValidSignature` resolves only on the chain's answer and throws when the
+ * RPC gave none (HTTP error, timeout).
+ */
 export type SiwePublicClient = {
   getChainId(): Promise<number>
-  verifySiweMessage(args: SiweVerifyArgs): Promise<boolean>
+  isValidSignature(args: ContractSignatureArgs): Promise<boolean>
 }
 
 export type IdConfig = {

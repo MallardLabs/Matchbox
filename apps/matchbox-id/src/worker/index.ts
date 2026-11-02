@@ -17,6 +17,7 @@ import {
 } from "./config"
 import type { SiwePublicClient } from "./deps"
 import { createSigningKeys } from "./oidc/keys"
+import { rpcSignatureClient } from "./siwe"
 import type { IdStore } from "./store/id-store"
 import { createMemoryIdStore } from "./store/memory-store"
 import createSupabaseIdStore from "./store/supabase-store"
@@ -30,8 +31,8 @@ const mezoChains = {
   "mezo-testnet": { id: 31611, name: "Mezo Testnet" },
 } as const satisfies Record<NetworkSlug, { id: number; name: string }>
 
-// Every RPC is asked at once and sign-in waits for the slowest, so a dead
-// one must fail fast.
+// A contract sign-in waits for the primary, then for the slowest confirming
+// RPC, so a dead one must fail fast.
 const rpcTimeoutMs = 5_000
 
 function publicClientsFactory(
@@ -47,10 +48,12 @@ function publicClientsFactory(
         nativeCurrency: { name: "Bitcoin", symbol: "BTC", decimals: 18 },
         rpcUrls: { default: { http: [rpcUrl] } },
       })
-      return createPublicClient({
-        chain,
-        transport: http(rpcUrl, { timeout: rpcTimeoutMs, retryCount: 1 }),
-      })
+      return rpcSignatureClient(
+        createPublicClient({
+          chain,
+          transport: http(rpcUrl, { timeout: rpcTimeoutMs, retryCount: 1 }),
+        }),
+      )
     })
     clients.set(network, created)
     return created

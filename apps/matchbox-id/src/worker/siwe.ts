@@ -3,7 +3,19 @@ import {
   networkForChainId,
 } from "@repo/platform-contracts/network"
 import { oidcLifetimes } from "@repo/platform-contracts/oidc"
-import { isAddress, isAddressEqual, recoverMessageAddress } from "viem"
+import {
+  BaseError,
+  ExecutionRevertedError,
+  type Hex,
+  encodeDeployData,
+  erc6492SignatureValidatorAbi,
+  erc6492SignatureValidatorByteCode,
+  hashMessage,
+  hexToBool,
+  isAddress,
+  isAddressEqual,
+  recoverMessageAddress,
+} from "viem"
 import {
   type SiweMessage,
   createSiweMessage,
@@ -11,7 +23,7 @@ import {
   validateSiweMessage,
 } from "viem/siwe"
 import { siweStatement } from "../shared/siwe-message"
-import type { SiwePublicClient, SiweVerifyArgs } from "./deps"
+import type { ContractSignatureArgs, SiwePublicClient } from "./deps"
 
 /**
  * EIP-4361 checks before the (RPC-backed) signature verification: the
@@ -176,37 +188,91 @@ export type ContractSignatureCheck = {
   errors: unknown[]
 }
 
+/** The viem public client calls rpcSignatureClient makes. */
+export type SignatureRpc = {
+  getChainId(): Promise<number>
+  call(args: { data: Hex }): Promise<{ data?: Hex | undefined }>
+}
+
+/**
+ * ERC-1271 / ERC-6492 check through one RPC: the deployless ERC-6492
+ * validator `eth_call` viem's `verifySiweMessage` makes. viem reads any
+ * failed call (HTTP 5xx or 429, timeout) as "invalid", which let one flaky
+ * RPC deny every contract sign-in. Here only the chain answers: the
+ * validator's result, or its revert on a malformed signature. Anything else
+ * throws.
+ */
+export function rpcSignatureClient(rpc: SignatureRpc): SiwePublicClient {
+  return {
+    getChainId: () => rpc.getChainId(),
+    async isValidSignature({ message, signature, address }) {
+      const data = encodeDeployData({
+        abi: erc6492SignatureValidatorAbi,
+        bytecode: erc6492SignatureValidatorByteCode,
+        args: [address, hashMessage(message), signature],
+      })
+      let result: { data?: Hex | undefined }
+      try {
+        result = await rpc.call({ data })
+      } catch (error) {
+        const reverted =
+          error instanceof BaseError &&
+          error.walk((cause) => cause instanceof ExecutionRevertedError) !==
+            null
+        if (reverted) return false
+        throw error
+      }
+      if (result.data === undefined) {
+        throw new Error("Signature validator returned no data")
+      }
+      // One byte, 0x01 or 0x00; hexToBool throws on anything else.
+      return hexToBool(result.data)
+    },
+  }
+}
+
+async function rpcAnswer(
+  client: SiwePublicClient,
+  args: ContractSignatureArgs,
+  chainId: number,
+): Promise<boolean> {
+  const [servedChainId, valid] = await Promise.all([
+    client.getChainId(),
+    client.isValidSignature(args),
+  ])
+  if (servedChainId !== chainId) {
+    throw new Error(`RPC serves chain ${servedChainId}, not ${chainId}`)
+  }
+  return valid
+}
+
 /**
  * ERC-1271 / ERC-6492 validity is an RPC's word about one chain's contract
  * state. When more than one RPC is configured, two must confirm it and none
- * may deny it.
+ * may deny it. The primary is asked alone first: any denial is final, so a
+ * forged signature costs one RPC call, and only a "valid" or no answer
+ * brings in the confirming RPCs (one extra round trip for real contract
+ * sign-ins).
  */
 export async function verifyContractSignature(
   clients: readonly SiwePublicClient[],
-  args: SiweVerifyArgs,
+  args: ContractSignatureArgs,
   chainId: number,
 ): Promise<ContractSignatureCheck> {
-  const answers = await Promise.allSettled(
-    clients.map(async (client) => {
-      const [servedChainId, valid] = await Promise.all([
-        client.getChainId(),
-        client.verifySiweMessage(args),
-      ])
-      if (servedChainId !== chainId) {
-        throw new Error(`RPC serves chain ${servedChainId}, not ${chainId}`)
-      }
-      return valid
-    }),
-  )
   const errors: unknown[] = []
   let confirmed = 0
-  let denied = false
-  for (const answer of answers) {
-    if (answer.status === "rejected") errors.push(answer.reason)
-    else if (answer.value) confirmed += 1
-    else denied = true
+  for (const round of [clients.slice(0, 1), clients.slice(1)]) {
+    const answers = await Promise.allSettled(
+      round.map((client) => rpcAnswer(client, args, chainId)),
+    )
+    let denied = false
+    for (const answer of answers) {
+      if (answer.status === "rejected") errors.push(answer.reason)
+      else if (answer.value) confirmed += 1
+      else denied = true
+    }
+    if (denied) return { status: "invalid", errors }
   }
-  if (denied) return { status: "invalid", errors }
   const required = clients.length > 1 ? 2 : 1
   return { status: confirmed >= required ? "valid" : "unavailable", errors }
 }

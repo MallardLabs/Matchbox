@@ -95,7 +95,8 @@ index 0 signs, all are published), optional `MEZO_MAINNET_RPC_URL` /
 SIWE signatures that ecrecover to the wallet are verified locally. Only
 other signatures (ERC-1271 / ERC-6492 contract accounts) go to the RPCs:
 with more than one RPC host configured for the network, two must confirm
-and none may deny. A wallet that has ever signed in with its key never
+and none may deny. A failed, rate-limited or timed-out `eth_call` is no
+answer, not a denial. A wallet that has ever signed in with its key never
 takes the contract path. Mainnet confirms with Boar and Validation Cloud by
 default; testnet has no second RPC unless one is configured.
 

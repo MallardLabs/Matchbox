@@ -60,10 +60,10 @@ async function testSigningKey(): Promise<SigningJwk> {
 /** A fake RPC; without `getChainId` it serves the network's chain. */
 export type TestRpc =
   | SiwePublicClient
-  | Pick<SiwePublicClient, "verifySiweMessage">
+  | Pick<SiwePublicClient, "isValidSignature">
 
 export const verifyingPublicClient: TestRpc = {
-  verifySiweMessage({ message, signature, address }) {
+  isValidSignature({ message, signature, address }) {
     return verifyMessage({ address, message, signature })
   },
 }
@@ -114,9 +114,9 @@ export async function createHarness(
           "getChainId" in client
             ? () => client.getChainId()
             : async () => chainIdForNetwork(network),
-        verifySiweMessage(args) {
+        isValidSignature(args) {
           verifySpy.calls += 1
-          return client.verifySiweMessage(args)
+          return client.isValidSignature(args)
         },
       })),
   }

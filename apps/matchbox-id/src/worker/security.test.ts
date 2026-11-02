@@ -10,8 +10,8 @@ import {
 } from "@repo/platform-contracts/oidc"
 import { decodeJwt } from "jose"
 import {
+  http,
   createPublicClient,
-  custom,
   defineChain,
   getAddress,
   verifyMessage,
@@ -19,8 +19,9 @@ import {
 import { describe, expect, it } from "vitest"
 import { z } from "zod"
 import { purgeExpiredRows } from "./cleanup"
+import type { SiwePublicClient } from "./deps"
 import { familyIdForCodeHash, opaqueTokenHash } from "./oidc/tokens"
-import { verifyContractSignature } from "./siwe"
+import { rpcSignatureClient, verifyContractSignature } from "./siwe"
 import { type MemoryIdStore, memorySeed } from "./store/memory-store"
 import {
   url,
@@ -60,7 +61,7 @@ const silentLogger = createLogger({ sink: () => undefined, level: "error" })
 const contractWallet = getAddress("0x000000000000000000000000000000000000c0de")
 
 const contractAwareClient: TestRpc = {
-  verifySiweMessage({ message, signature, address }) {
+  isValidSignature({ message, signature, address }) {
     if (address.toLowerCase() === contractWallet.toLowerCase()) {
       return verifyMessage({ address: devAccount.address, message, signature })
     }
@@ -273,34 +274,72 @@ describe("SIWE network binding", () => {
 /** 65 bytes nobody signed. */
 const junkSignature = `0x${"11".repeat(65)}` as const
 
-type RpcAnswer = "valid" | "invalid" | "down"
+/**
+ * What a fake RPC answers to the validator's `eth_call`: a result ("valid"
+ * from a lying RPC), a revert, an HTTP 503 for every request ("down"), a
+ * 429 ("rate-limited") or nothing ("hang").
+ */
+type RpcAnswer =
+  | "valid"
+  | "invalid"
+  | "revert"
+  | "down"
+  | "rate-limited"
+  | "hang"
+
+type FakeRpcState = { answer: RpcAnswer; ethCalls?: number }
+
+const rpcRequestSchema = z.object({ id: z.number(), method: z.string() })
 
 /**
- * A real viem client over a fake RPC that answers the deployless ERC-6492
- * validator's `eth_call` with `rpc.answer` (a lying RPC says "valid").
+ * The production client stack (rpcSignatureClient over viem's HTTP
+ * transport, timeouts and retries) in front of a fake RPC endpoint.
  */
-function fakeRpc(rpc: { answer: RpcAnswer }, chainId = 31612): TestRpc {
-  return createPublicClient({
-    chain: defineChain({
-      id: chainId,
-      name: "Mezo",
-      nativeCurrency: { name: "Bitcoin", symbol: "BTC", decimals: 18 },
-      rpcUrls: { default: { http: ["https://rpc.invalid"] } },
+function fakeRpc(rpc: FakeRpcState, chainId = 31612): SiwePublicClient {
+  async function fetchFn(
+    _input: unknown,
+    init?: RequestInit,
+  ): Promise<Response> {
+    const { id, method } = rpcRequestSchema.parse(
+      JSON.parse(String(init?.body)),
+    )
+    const reply = (body: object) =>
+      Response.json({ jsonrpc: "2.0", id, ...body })
+    if (rpc.answer === "down") {
+      return new Response("upstream overloaded", { status: 503 })
+    }
+    if (method === "eth_chainId") {
+      return reply({ result: `0x${chainId.toString(16)}` })
+    }
+    rpc.ethCalls = (rpc.ethCalls ?? 0) + 1
+    switch (rpc.answer) {
+      case "rate-limited":
+        return new Response("Too Many Requests", { status: 429 })
+      case "hang":
+        return new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () => reject(new Error()))
+        })
+      case "revert":
+        return reply({ error: { code: 3, message: "execution reverted" } })
+      default:
+        return reply({ result: rpc.answer === "valid" ? "0x01" : "0x00" })
+    }
+  }
+  return rpcSignatureClient(
+    createPublicClient({
+      chain: defineChain({
+        id: chainId,
+        name: "Mezo",
+        nativeCurrency: { name: "Bitcoin", symbol: "BTC", decimals: 18 },
+        rpcUrls: { default: { http: ["https://rpc.invalid"] } },
+      }),
+      transport: http("https://rpc.invalid", {
+        fetchFn,
+        timeout: 100,
+        retryCount: 1,
+      }),
     }),
-    transport: custom(
-      {
-        async request({ method }: { method: string }) {
-          if (rpc.answer === "down") throw new Error("RPC unavailable")
-          if (method === "eth_chainId") return `0x${chainId.toString(16)}`
-          if (method === "eth_call") {
-            return `0x${"00".repeat(31)}${rpc.answer === "valid" ? "01" : "00"}`
-          }
-          throw new Error(`Unexpected RPC ${method}`)
-        },
-      },
-      { retryCount: 0 },
-    ),
-  })
+  )
 }
 
 async function junkSignIn(
@@ -331,7 +370,7 @@ describe("SIWE signature proof", () => {
   })
 
   it("never lets RPCs vouch for a wallet that signed in with its key", async () => {
-    const rpc = { answer: "invalid" as RpcAnswer }
+    const rpc: FakeRpcState = { answer: "invalid" }
     const harness = await createHarness({
       publicClients: [fakeRpc(rpc), fakeRpc(rpc), fakeRpc(rpc)],
     })
@@ -351,9 +390,9 @@ describe("SIWE signature proof", () => {
   })
 
   it("needs two RPCs to confirm a contract signature and none to deny it", async () => {
-    const lying = { answer: "valid" as const }
-    const honest = { answer: "invalid" as const }
-    const down = { answer: "down" as const }
+    const lying: FakeRpcState = { answer: "valid" }
+    const honest: FakeRpcState = { answer: "invalid" }
+    const down: FakeRpcState = { answer: "down" }
     // A wallet that never signed in, so only the RPCs can be asked.
     const target = otherAccount.address
 
@@ -376,19 +415,77 @@ describe("SIWE signature proof", () => {
     expect(contract.store.admin.sessions()[0]?.signerKind).toBe("contract")
   })
 
+  // viem's verifySiweMessage read a failed eth_call as "invalid", so one
+  // flaky confirming RPC refused every contract sign-in.
+  it("counts an RPC that fails or hangs on eth_call as no answer", async () => {
+    for (const answer of ["rate-limited", "hang", "down"] as const) {
+      const contract = await createHarness({
+        publicClients: [
+          contractAwareClient,
+          contractAwareClient,
+          fakeRpc({ answer }),
+        ],
+      })
+      await signInContract(contract, 31612)
+      expect(contract.store.admin.sessions()[0]?.signerKind).toBe("contract")
+    }
+
+    const args = {
+      message: "",
+      signature: junkSignature,
+      address: contractWallet,
+    } as const
+    const valid = () => fakeRpc({ answer: "valid" })
+    const flaky = await verifyContractSignature(
+      [valid(), valid(), fakeRpc({ answer: "rate-limited" })],
+      args,
+      31612,
+    )
+    expect(flaky).toMatchObject({
+      status: "valid",
+      errors: [expect.any(Error)],
+    })
+    // A revert is the chain's answer: the validator rejects the signature.
+    expect(
+      await verifyContractSignature(
+        [valid(), valid(), fakeRpc({ answer: "revert" })],
+        args,
+        31612,
+      ),
+    ).toEqual({ status: "invalid", errors: [] })
+  })
+
+  it("asks only the primary RPC about a signature it rejects", async () => {
+    const primary: FakeRpcState = { answer: "invalid" }
+    const confirming: FakeRpcState = { answer: "valid" }
+    const harness = await createHarness({
+      publicClients: [
+        fakeRpc(primary),
+        fakeRpc(confirming),
+        fakeRpc(confirming),
+      ],
+    })
+    expect((await junkSignIn(harness, otherAccount.address)).status).toBe(401)
+    expect(primary.ethCalls).toBe(1)
+    expect(confirming.ethCalls).toBeUndefined()
+
+    // A primary with no answer brings in both confirming RPCs.
+    primary.answer = "down"
+    confirming.answer = "invalid"
+    expect((await junkSignIn(harness, otherAccount.address)).status).toBe(401)
+    expect(confirming.ethCalls).toBe(2)
+  })
+
   it("ignores an RPC that serves another chain", async () => {
     const args = {
       message: "",
       signature: junkSignature,
       address: contractWallet,
-      domain: "id.test",
-      nonce: "abcdefgh12345678",
-      time: new Date(),
     } as const
-    function rpc(chainId: number) {
+    function rpc(chainId: number): SiwePublicClient {
       return {
         getChainId: async () => chainId,
-        verifySiweMessage: async () => true,
+        isValidSignature: async () => true,
       }
     }
     expect(

@@ -506,7 +506,7 @@ Issuer: `https://id.matchbox.markets`.
 | `GET/POST /oauth/userinfo` | bearer access token; claims per granted scopes |
 | `POST /oauth/revoke` | RFC 7009; refresh tokens revoke the family, access tokens by jti |
 | `POST /api/siwe/nonce` | `{ nonce }` |
-| `POST /api/siwe/verify` | `{ message, signature }` → requires the SPA's canonical EIP-4361 message (pinned statement); verifies domain = ID host, URI, chain id ∈ Mezo networks, nonce single-use, expiry ≤ 10 min; ecrecover locally first, else viem `verifySiweMessage` (ERC-1271 + ERC-6492) on the network's RPCs, two of which must agree when more than one is configured, never for a wallet that has signed in with its key; sets `__Host-mbx_id` cookie |
+| `POST /api/siwe/verify` | `{ message, signature }` → requires the SPA's canonical EIP-4361 message (pinned statement); verifies domain = ID host, URI, chain id ∈ Mezo networks, nonce single-use, expiry ≤ 10 min; ecrecover locally first, else the ERC-6492 validator `eth_call` (ERC-1271 + ERC-6492) on the network's RPCs, two of which must agree when more than one is configured, never for a wallet that has signed in with its key; sets `__Host-mbx_id` cookie |
 | `POST /api/session/sign-out` | |
 | `GET /api/session` | `{ account: { walletAddress, discord: {...} | null } | null }` |
 | `GET /api/authorization-requests/{id}` | app, env kind, scopes with labels, claim preview with **the signed-in user's own** values, existing grant diff |
@@ -588,7 +588,10 @@ ERC-1271 / ERC-6492 `eth_call`, so the Worker never asks an RPC about a
 signature that ecrecovers, refuses the contract path for a wallet with any
 `eoa` session (sessions are never purged), and with more than one RPC host
 configured for the network needs two to confirm (each on the right chain
-id) and none to deny. Mainnet confirms with Boar and Validation Cloud by
+id) and none to deny. Only the chain's answer counts (the ERC-6492
+validator's result or revert); an RPC that fails, rate-limits or times out
+gave no answer. The primary is asked first, the confirming RPCs only when
+it does not deny. Mainnet confirms with Boar and Validation Cloud by
 default; testnet relies on its one RPC unless
 `MEZO_TESTNET_CONFIRMING_RPC_URLS` is set.
 
