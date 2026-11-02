@@ -22,9 +22,10 @@ Neon. There is no Goldsky pipeline. Go-live steps are in `GO-LIVE.md`.
   - Only the events a handler reads are stored, per contract kind
     (`src/ingest/topics.ts`), as one `eth_getLogs` filter per topic group.
   - Pools' `Sync`/`Fees`/LP `Transfer`/`Approval` alone would double the raw table.
-  - The ~750 voter bribe contracts are not listed by address: their group is
-    fetched with one address-less filter on the two reward topics
-    (`NotifyReward`, `ClaimRewards`) and kept to the registered set.
+  - Every filter lists its addresses, including the ~750 voter bribe
+    contracts (their own group, eight address chunks a window). An
+    address-less scan of their reward topics let any contract's look-alike
+    logs fill a provider's result cap and stall ingest (audit MBX-02).
   - Widening a set is a config change plus a re-backfill.
   - `test/ingest/manifest.test.ts` fails if the explorer contracts or topics
     drift from `apps/activity-subgraph/subgraph.yaml`.
@@ -32,7 +33,12 @@ Neon. There is no Goldsky pipeline. Go-live steps are in `GO-LIVE.md`.
   - Logs are fetched in 10,000-block windows, at most 100 addresses per filter
     on `rpc-internal.mezo.org`. ValidationCloud (30) and Boar are fallbacks.
   - Failures retry with backoff, then fail over to the next endpoint.
-  - A range no endpoint serves is split.
+  - A query no endpoint serves is split by block range, then within one block
+    by address, and only that address chunk. One contract's logs in one block
+    can't be split; that fails the window rather than drop logs.
+  - Each address chunk may split 128 times, a window 512 times. When every
+    endpoint is unreachable (network error, timeout, HTTP 429/5xx) a query
+    splits at most four times in a row, then fails as an "RPC outage".
   - A child created mid-window has its logs from that same window fetched
     before the window commits.
 - **Timestamps.**
@@ -113,15 +119,22 @@ the Neon compute, and Neon Free has 100 CU-hours a month). Each tick:
 1. checks the storage guard: at 90% of `neon.max_cluster_size` it logs
    "WAREHOUSE NEAR STORAGE CAP" and writes nothing;
 2. ingests from the `logs` checkpoint to head minus 2, at most 50,000 blocks;
+   a window it can't fetch is never skipped: it logs "INGEST FAILED" with the
+   lag and the cause, and the checkpoint waits there until someone fixes it;
 3. projects what it ingested;
-4. prunes raw past the retention window, at most 250,000 blocks per tick.
+4. prunes raw past the retention window, at most 250,000 blocks per tick;
+5. pings `HEARTBEAT_URL`, if set, while the checkpoint isn't stale and
+   projection isn't halted.
 
-`GET /health` reports head, last block, lag, projection state and
-`database` (`bytes`, `capBytes`, `usedPercent`, `writable`). It queries the
+`GET /health` reports head, last block, lag, `stale` (lag over 700 blocks,
+about 45 minutes), projection state and `database` (`bytes`, `capBytes`,
+`usedPercent`, `writable`), with status 503 when stale. It queries the
 database, so it wakes the compute: check it by hand, not from a monitor.
+Alerts come from a dead man's switch on the heartbeat (GO-LIVE.md, step 6).
 
 - `DATABASE_URL` is a secret: `wrangler secret put DATABASE_URL`. Use the
   direct URL for a login granted `matchbox_indexer`.
+- `HEARTBEAT_URL` is an optional secret: a heartbeat monitor's ping URL.
 - On an empty `logs` checkpoint the cron starts at the network start, so the
   mUSD history before it only arrives through `rebuild:history`.
 

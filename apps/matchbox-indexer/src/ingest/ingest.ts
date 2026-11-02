@@ -119,7 +119,6 @@ export async function fetchLogs(
     groups.map((addresses, index) => ({
       addresses: [...new Set(addresses)].sort(),
       topic0s: GROUP_TOPIC0S[index],
-      scanByTopic: FILTER_GROUPS[index]?.scanByTopic ?? false,
     })),
   )
 }
@@ -150,7 +149,7 @@ export async function fetchWindow(
     const discovery = mergeDiscoveries(
       scan.map((log) => discoverFromLog(log, factories)),
     )
-    poolLinks.push(...discovery.poolLinks)
+    for (const link of discovery.poolLinks) poolLinks.push(link)
     const fresh = discovery.children.filter(
       (child) =>
         !known.has(child.address) && !pendingChildren.has(child.address),
@@ -162,7 +161,9 @@ export async function fetchWindow(
     if (fresh.length === 0) break
     // Children never spawn children, so this loop runs at most twice.
     scan = await fetchLogs(deps, window, fresh)
-    logs.push(...scan)
+    // Not push(...scan): spreading 100k+ logs into arguments overflows the
+    // stack.
+    for (const log of scan) logs.push(log)
   }
 
   logs.sort(compareLogs)
