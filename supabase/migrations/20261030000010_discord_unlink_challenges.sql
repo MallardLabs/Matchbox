@@ -9,9 +9,18 @@
 -- Only the service role (edge functions) touches this table: RLS is on with no
 -- policies and client grants are revoked, as for discord_link_tokens.
 --
+-- Anyone can ask for a challenge or try a link token, so both are capped:
+-- a link token is expired after 5 failed Discord sign-in checks (each one is a
+-- call to Discord), a wallet holds at most 3 open challenges, and a challenge
+-- is spent after 5 signature attempts.
+--
 -- Apply before deploying the discord-link function that reads it.
 --
 -- Rollback (manual):
+--   DROP FUNCTION IF EXISTS public.claim_discord_link_auth_check(TEXT);
+--   DROP FUNCTION IF EXISTS public.settle_discord_link_auth_check(TEXT, BOOLEAN);
+--   ALTER TABLE public.discord_link_tokens
+--     DROP COLUMN IF EXISTS discord_auth_failures;
 --   DROP TABLE IF EXISTS public.discord_unlink_challenges;
 
 CREATE TABLE IF NOT EXISTS public.discord_unlink_challenges (
@@ -53,5 +62,94 @@ BEGIN
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'service_role') THEN
     GRANT SELECT, INSERT, UPDATE, DELETE
       ON public.discord_unlink_challenges TO service_role;
+  END IF;
+END $$;
+
+-- ---------------------------------------------------------------------------
+-- Link tokens: at most 5 failed Discord sign-in checks
+-- ---------------------------------------------------------------------------
+
+-- Checks that failed, plus any still in flight.
+ALTER TABLE IF EXISTS public.discord_link_tokens
+  ADD COLUMN IF NOT EXISTS discord_auth_failures INTEGER NOT NULL DEFAULT 0;
+
+-- Reserves one Discord sign-in check on a usable link token before discord-link
+-- calls Discord. Counting before the call keeps concurrent requests within the
+-- cap too. Returns false once 5 checks have failed or are in flight.
+CREATE OR REPLACE FUNCTION public.claim_discord_link_auth_check(p_token TEXT)
+RETURNS BOOLEAN
+LANGUAGE sql
+SECURITY INVOKER
+SET search_path = public
+AS $$
+  WITH claimed AS (
+    UPDATE public.discord_link_tokens
+    SET discord_auth_failures = discord_auth_failures + 1
+    WHERE token = p_token
+      AND status = 'pending'
+      AND expires_at > NOW()
+      AND discord_auth_failures < 5
+    RETURNING 1
+  )
+  SELECT EXISTS (SELECT 1 FROM claimed)
+$$;
+
+-- Settles a reserved check. A pass, or a check Discord couldn't answer, hands
+-- it back; a failure keeps it, and the fifth expires the token.
+CREATE OR REPLACE FUNCTION public.settle_discord_link_auth_check(
+  p_token TEXT,
+  p_passed BOOLEAN
+)
+RETURNS VOID
+LANGUAGE sql
+SECURITY INVOKER
+SET search_path = public
+AS $$
+  UPDATE public.discord_link_tokens
+  SET
+    discord_auth_failures = CASE
+      WHEN p_passed THEN GREATEST(discord_auth_failures - 1, 0)
+      ELSE discord_auth_failures
+    END,
+    expires_at = CASE
+      WHEN NOT p_passed AND discord_auth_failures >= 5
+        THEN LEAST(expires_at, NOW())
+      ELSE expires_at
+    END
+  WHERE token = p_token
+    AND status = 'pending'
+$$;
+
+REVOKE ALL ON FUNCTION public.claim_discord_link_auth_check(TEXT) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.settle_discord_link_auth_check(TEXT, BOOLEAN)
+  FROM PUBLIC;
+
+DO $$
+DECLARE
+  client_role TEXT;
+  function_signature TEXT;
+  function_signatures TEXT[] := ARRAY[
+    'public.claim_discord_link_auth_check(TEXT)',
+    'public.settle_discord_link_auth_check(TEXT, BOOLEAN)'
+  ];
+BEGIN
+  FOREACH client_role IN ARRAY ARRAY['anon', 'authenticated'] LOOP
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = client_role) THEN
+      FOREACH function_signature IN ARRAY function_signatures LOOP
+        EXECUTE format(
+          'REVOKE ALL ON FUNCTION %s FROM %I',
+          function_signature,
+          client_role
+        );
+      END LOOP;
+    END IF;
+  END LOOP;
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'service_role') THEN
+    FOREACH function_signature IN ARRAY function_signatures LOOP
+      EXECUTE format(
+        'GRANT EXECUTE ON FUNCTION %s TO service_role',
+        function_signature
+      );
+    END LOOP;
   END IF;
 END $$;

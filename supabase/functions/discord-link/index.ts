@@ -19,10 +19,11 @@ import {
 import { z } from "https://esm.sh/zod@3"
 import { getMezoNetworkConfigForChain } from "../_shared/contracts.ts"
 import { corsHeaders } from "../_shared/cors.ts"
-import { avatarUrl, discordOAuthUserId } from "../_shared/discord.ts"
+import { avatarUrl } from "../_shared/discord.ts"
 import {
   type SupabaseClient,
   academyEnabled,
+  checkDiscordMember,
   getActiveSemesters,
   heldManagedRoles,
   pointsFromWad,
@@ -99,19 +100,27 @@ function linkMessage(row: LinkToken, address: string): string {
 // was minted for. Without it a token handed to someone else would bind their
 // wallet to that member's Discord account.
 async function discordMemberRefusal(
+  supabase: SupabaseClient,
+  row: LinkToken,
   accessToken: string,
-  discordUserId: string,
 ): Promise<Response | null> {
   const appId = Deno.env.get("DISCORD_APP_ID")
   if (!appId) {
     console.error("Missing DISCORD_APP_ID")
     return json({ success: false, reason: "server_error" }, 500)
   }
-  try {
-    const userId = await discordOAuthUserId({ accessToken, appId })
-    if (userId === discordUserId) return null
-  } catch (err) {
-    console.error("Discord OAuth check failed:", err)
+  const check = await checkDiscordMember({
+    supabase,
+    token: row.token,
+    accessToken,
+    discordUserId: row.discord_user_id,
+    appId,
+  })
+  if (check === "member") return null
+  if (check === "locked") {
+    return json({ success: false, reason: "expired" }, 404)
+  }
+  if (check === "unavailable") {
     return json({ success: false, reason: "server_error" }, 502)
   }
   return json({ success: false, reason: "discord_auth" }, 403)
@@ -475,8 +484,9 @@ Deno.serve(async (req) => {
     const result = await loadToken(supabase, parsed.data.token)
     if (!result.ok) return json({ success: false, reason: result.reason }, 404)
     const refusal = await discordMemberRefusal(
+      supabase,
+      result.row,
       parsed.data.accessToken,
-      result.row.discord_user_id,
     )
     if (refusal) return refusal
     return json({
@@ -509,8 +519,9 @@ Deno.serve(async (req) => {
     const tokenRow = result.row
 
     const refusal = await discordMemberRefusal(
+      supabase,
+      tokenRow,
       parsed.data.accessToken,
-      tokenRow.discord_user_id,
     )
     if (refusal) return refusal
 
