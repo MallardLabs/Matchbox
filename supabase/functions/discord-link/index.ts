@@ -186,7 +186,6 @@ type UnlinkChallenge = {
   discord_user_id: string
   issued_at: string
   expires_at: string
-  consumed_at: string | null
 }
 
 Deno.serve(async (req) => {
@@ -277,21 +276,17 @@ Deno.serve(async (req) => {
     const issuedAt = new Date(nowMs).toISOString()
     const expiresAt = unlinkChallengeExpiry(nowMs)
 
-    const { error: purgeError } = await supabase
-      .from("discord_unlink_challenges")
-      .delete()
-      .lt("expires_at", issuedAt)
-    if (purgeError) console.error("unlink challenge purge error:", purgeError)
-
-    const { error: insertError } = await supabase
-      .from("discord_unlink_challenges")
-      .insert({
-        nonce_hash: await sha256(nonce),
-        wallet_address: walletLower,
-        discord_user_id: link.discord_user_id,
-        issued_at: issuedAt,
-        expires_at: expiresAt,
-      })
+    // Anyone can ask, so a wallet keeps only its 3 newest open challenges.
+    const { error: insertError } = await supabase.rpc(
+      "issue_discord_unlink_challenge",
+      {
+        p_nonce_hash: await sha256(nonce),
+        p_wallet_address: walletLower,
+        p_discord_user_id: link.discord_user_id,
+        p_issued_at: issuedAt,
+        p_expires_at: expiresAt,
+      },
+    )
     if (insertError) {
       console.error("unlink challenge insert error:", insertError)
       return json({ success: false, reason: "server_error" }, 500)
@@ -329,20 +324,18 @@ Deno.serve(async (req) => {
     const walletLower = address.toLowerCase()
     const nonceHash = await sha256(parsed.data.nonce)
 
-    const { data } = await supabase
-      .from("discord_unlink_challenges")
-      .select("discord_user_id, issued_at, expires_at, consumed_at")
-      .eq("nonce_hash", nonceHash)
-      .eq("wallet_address", walletLower)
-      .maybeSingle()
-    const challenge: UnlinkChallenge | null = data
-    if (
-      !challenge ||
-      challenge.consumed_at !== null ||
-      new Date(challenge.expires_at).getTime() <= Date.now()
-    ) {
-      return json({ success: false, reason: "expired" }, 401)
+    // Counts this attempt, so one challenge can't be retried forever.
+    const { data: challenge, error: claimError } = await supabase
+      .rpc("claim_discord_unlink_attempt", {
+        p_nonce_hash: nonceHash,
+        p_wallet_address: walletLower,
+      })
+      .maybeSingle<UnlinkChallenge>()
+    if (claimError) {
+      console.error("unlink challenge claim error:", claimError)
+      return json({ success: false, reason: "server_error" }, 500)
     }
+    if (!challenge) return json({ success: false, reason: "expired" }, 401)
 
     const validSig = await walletSigned({
       address,

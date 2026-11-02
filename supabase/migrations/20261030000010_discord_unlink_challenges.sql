@@ -17,6 +17,10 @@
 -- Apply before deploying the discord-link function that reads it.
 --
 -- Rollback (manual):
+--   DROP FUNCTION IF EXISTS public.issue_discord_unlink_challenge(
+--     TEXT, TEXT, TEXT, TIMESTAMPTZ, TIMESTAMPTZ
+--   );
+--   DROP FUNCTION IF EXISTS public.claim_discord_unlink_attempt(TEXT, TEXT);
 --   DROP FUNCTION IF EXISTS public.claim_discord_link_auth_check(TEXT);
 --   DROP FUNCTION IF EXISTS public.settle_discord_link_auth_check(TEXT, BOOLEAN);
 --   ALTER TABLE public.discord_link_tokens
@@ -30,6 +34,8 @@ CREATE TABLE IF NOT EXISTS public.discord_unlink_challenges (
   issued_at TIMESTAMPTZ NOT NULL,
   expires_at TIMESTAMPTZ NOT NULL,
   consumed_at TIMESTAMPTZ,
+  -- Signatures tried against this challenge.
+  attempts INTEGER NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   CONSTRAINT discord_unlink_challenges_hash_format CHECK (
     nonce_hash ~ '^[0-9a-f]{64}$'
@@ -42,8 +48,13 @@ CREATE TABLE IF NOT EXISTS public.discord_unlink_challenges (
   )
 );
 
+ALTER TABLE public.discord_unlink_challenges
+  ADD COLUMN IF NOT EXISTS attempts INTEGER NOT NULL DEFAULT 0;
+
 CREATE INDEX IF NOT EXISTS idx_discord_unlink_challenges_expires
   ON public.discord_unlink_challenges(expires_at);
+CREATE INDEX IF NOT EXISTS idx_discord_unlink_challenges_wallet
+  ON public.discord_unlink_challenges(wallet_address, issued_at);
 
 ALTER TABLE public.discord_unlink_challenges ENABLE ROW LEVEL SECURITY;
 
@@ -62,6 +73,115 @@ BEGIN
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'service_role') THEN
     GRANT SELECT, INSERT, UPDATE, DELETE
       ON public.discord_unlink_challenges TO service_role;
+  END IF;
+END $$;
+
+-- Stores a new challenge, after clearing expired ones and the wallet's oldest
+-- open ones beyond the newest 2, so a wallet never holds more than 3.
+CREATE OR REPLACE FUNCTION public.issue_discord_unlink_challenge(
+  p_nonce_hash TEXT,
+  p_wallet_address TEXT,
+  p_discord_user_id TEXT,
+  p_issued_at TIMESTAMPTZ,
+  p_expires_at TIMESTAMPTZ
+)
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = public
+AS $$
+BEGIN
+  -- One issuance per wallet at a time, so concurrent requests can't overshoot.
+  PERFORM pg_advisory_xact_lock(
+    hashtext('discord_unlink_challenges'),
+    hashtext(p_wallet_address)
+  );
+  DELETE FROM public.discord_unlink_challenges
+  WHERE expires_at < p_issued_at;
+  DELETE FROM public.discord_unlink_challenges
+  WHERE nonce_hash IN (
+    SELECT nonce_hash
+    FROM public.discord_unlink_challenges
+    WHERE wallet_address = p_wallet_address
+      AND consumed_at IS NULL
+    ORDER BY issued_at DESC, nonce_hash
+    OFFSET 2
+  );
+  INSERT INTO public.discord_unlink_challenges (
+    nonce_hash,
+    wallet_address,
+    discord_user_id,
+    issued_at,
+    expires_at
+  )
+  VALUES (
+    p_nonce_hash,
+    p_wallet_address,
+    p_discord_user_id,
+    p_issued_at,
+    p_expires_at
+  );
+END;
+$$;
+
+-- Counts one signature attempt against an open challenge and returns it, or
+-- nothing once it is consumed, expired or has had 5 attempts.
+CREATE OR REPLACE FUNCTION public.claim_discord_unlink_attempt(
+  p_nonce_hash TEXT,
+  p_wallet_address TEXT
+)
+RETURNS TABLE (
+  discord_user_id TEXT,
+  issued_at TIMESTAMPTZ,
+  expires_at TIMESTAMPTZ
+)
+LANGUAGE sql
+SECURITY INVOKER
+SET search_path = public
+AS $$
+  UPDATE public.discord_unlink_challenges AS c
+  SET attempts = c.attempts + 1
+  WHERE c.nonce_hash = p_nonce_hash
+    AND c.wallet_address = p_wallet_address
+    AND c.consumed_at IS NULL
+    AND c.expires_at > NOW()
+    AND c.attempts < 5
+  RETURNING c.discord_user_id, c.issued_at, c.expires_at
+$$;
+
+REVOKE ALL ON FUNCTION public.issue_discord_unlink_challenge(
+  TEXT, TEXT, TEXT, TIMESTAMPTZ, TIMESTAMPTZ
+) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.claim_discord_unlink_attempt(TEXT, TEXT)
+  FROM PUBLIC;
+
+DO $$
+DECLARE
+  client_role TEXT;
+  function_signature TEXT;
+  function_signatures TEXT[] := ARRAY[
+    'public.issue_discord_unlink_challenge(TEXT, TEXT, TEXT, TIMESTAMPTZ, TIMESTAMPTZ)',
+    'public.claim_discord_unlink_attempt(TEXT, TEXT)'
+  ];
+BEGIN
+  FOREACH client_role IN ARRAY ARRAY['anon', 'authenticated'] LOOP
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = client_role) THEN
+      FOREACH function_signature IN ARRAY function_signatures LOOP
+        EXECUTE format(
+          'REVOKE ALL ON FUNCTION %s FROM %I',
+          function_signature,
+          client_role
+        );
+      END LOOP;
+    END IF;
+  END LOOP;
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'service_role') THEN
+    FOREACH function_signature IN ARRAY function_signatures LOOP
+      EXECUTE format(
+        'GRANT EXECUTE ON FUNCTION %s TO service_role',
+        function_signature
+      );
+    END LOOP;
   END IF;
 END $$;
 
