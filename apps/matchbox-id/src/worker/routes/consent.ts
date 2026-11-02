@@ -202,8 +202,9 @@ export default function consentRoutes(deps: AppDeps): Hono {
     })
   })
 
-  // A verified app's pinned logo, only while it is still verified and its
-  // `logoUrl` is the one that was pinned. 404 lets the SPA show the initial.
+  // A verified app's pinned logo, only while the approval that wrote it is
+  // the current verification and the app's `logoUrl` is the one pinned.
+  // 404 lets the SPA show the initial.
   app.get("/api/app-logos/:id", async (c) => {
     const rejected = await firstRateLimitRejection(deps, [
       {
@@ -226,7 +227,11 @@ export default function consentRoutes(deps: AppDeps): Hono {
       throw new PlatformError("not_found")
     }
     const logo = await deps.store.findVerifiedLogo(id)
-    if (logo === null || logo.sourceUrl !== client.app.logoUrl) {
+    if (
+      logo === null ||
+      logo.sourceUrl !== client.app.logoUrl ||
+      logo.verifiedAt.getTime() !== client.environment.verifiedAt?.getTime()
+    ) {
       throw new PlatformError("not_found")
     }
     const bytes = Uint8Array.from(atob(logo.dataBase64), (char) =>

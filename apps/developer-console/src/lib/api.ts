@@ -16,6 +16,7 @@ import {
   adminAppSchema,
   adminReviewContextResponseSchema,
   adminReviewListResponseSchema,
+  adminReviewLogoResponseSchema,
   adminReviewSchema,
   adminReviewStatsResponseSchema,
   apiKeyListResponseSchema,
@@ -568,6 +569,13 @@ export const admin = {
     return apiRequest(
       adminReviewContextResponseSchema,
       `/api/admin/reviews/${enc(reviewId)}/context`,
+    )
+  },
+  /** The logo pinned at submission; staff see these bytes, not the URL. */
+  reviewLogo(reviewId: string) {
+    return apiRequest(
+      adminReviewLogoResponseSchema,
+      `/api/admin/reviews/${enc(reviewId)}/logo`,
     )
   },
   decide(reviewId: string, body: ReviewDecisionRequest) {

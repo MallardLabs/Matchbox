@@ -1,4 +1,7 @@
-import { submitReviewResponseSchema } from "@repo/platform-contracts/console"
+import {
+  adminReviewLogoResponseSchema,
+  submitReviewResponseSchema,
+} from "@repo/platform-contracts/console"
 import { describe, expect, it } from "vitest"
 import {
   type LogoFetch,
@@ -12,6 +15,8 @@ import { createHarness } from "./test/harness"
 const png = new Uint8Array([
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d,
 ])
+// Another valid PNG: the lookalike a cloaking server would hand the Worker.
+const lookalike = new Uint8Array([...png, 0x4d, 0x45, 0x5a, 0x4f])
 const logoUrl = "https://cdn.example.com/logo.png"
 
 function serve(body: Uint8Array | string, init: ResponseInit = {}): LogoFetch {
@@ -187,8 +192,8 @@ describe("pinLogo", () => {
   })
 })
 
-describe("staff approval pins the logo", () => {
-  async function approveWithLogo(logoFetch: LogoFetch) {
+describe("the reviewed logo is the verified logo", () => {
+  async function submitted(logoFetch: LogoFetch) {
     const harness = createHarness({ logoFetch })
     const owner = await harness.account("owner@example.com")
     const organization = await harness.organization(owner)
@@ -202,7 +207,7 @@ describe("staff approval pins the logo", () => {
       cookie,
       body: { requestedScopes: ["openid", "wallet"] },
     })
-    const submitted = await harness.json(
+    const response = await harness.json(
       await harness.request(
         "POST",
         `/api/environments/${live.id}/submit-review`,
@@ -210,33 +215,126 @@ describe("staff approval pins the logo", () => {
       ),
       submitReviewResponseSchema,
     )
-    const decision = await harness.request(
-      "POST",
-      `/api/admin/reviews/${submitted.review?.id}/decision`,
-      { cookie: staffCookie, body: { decision: "approve" } },
+    const reviewId = response.review?.id ?? ""
+    expect(reviewId).not.toBe("")
+    const shown = await harness.json(
+      await harness.request("GET", `/api/admin/reviews/${reviewId}/logo`, {
+        cookie: staffCookie,
+      }),
+      adminReviewLogoResponseSchema,
     )
-    expect(decision.status).toBe(200)
-    const environment = await harness.store.getEnvironment(live.id)
-    expect(environment?.verifiedAt).not.toBeNull()
+    function decide(logoSha256?: string | null) {
+      return harness.request(
+        "POST",
+        `/api/admin/reviews/${reviewId}/decision`,
+        {
+          cookie: staffCookie,
+          body: {
+            decision: "approve",
+            ...(logoSha256 === undefined ? {} : { logoSha256 }),
+          },
+        },
+      )
+    }
+    async function state() {
+      return {
+        review: (await harness.store.getReview(reviewId))?.state,
+        verifiedAt:
+          (await harness.store.getEnvironment(live.id))?.verifiedAt ?? null,
+        logo: harness.store.verifiedLogo(live.id),
+      }
+    }
+    return { harness, app, cookie, reviewId, shown, decide, state }
+  }
+
+  it("shows staff the bytes the Worker will verify, even when cloaked", async () => {
+    // PoC: the developer's server gives the first requester (the console at
+    // submission) a benign logo and every later one a Matchbox lookalike.
+    // Staff used to see nothing pinned, and the Worker fetched the URL again
+    // at approval.
+    let requests = 0
+    const cloak: LogoFetch = async () => {
+      requests += 1
+      return new Response(requests === 1 ? png : lookalike)
+    }
+    const { shown, decide, state, harness } = await submitted(cloak)
+    expect(requests).toBe(1)
+    const benign = shown.logo
+    expect(benign?.contentType).toBe("image/png")
+    expect(atob(benign?.dataBase64 ?? "")).toHaveLength(png.length)
+
+    expect((await decide(benign?.sha256)).status).toBe(200)
+    expect(requests).toBe(1)
+    const after = await state()
+    expect(after.review).toBe("approved")
+    expect(after.verifiedAt).not.toBeNull()
+    expect(after.logo).toEqual({
+      contentType: "image/png",
+      dataBase64: benign?.dataBase64,
+      sha256: benign?.sha256,
+      sourceUrl: logoUrl,
+      verifiedAt: after.verifiedAt,
+    })
     const approved = harness.store
       .auditEvents()
       .find((event) => event.action === "review-approved")
-    return {
-      logo: harness.store.verifiedLogo(live.id),
-      metadata: approved?.metadata,
-    }
-  }
-
-  it("stores the bytes staff saw", async () => {
-    const { logo, metadata } = await approveWithLogo(serve(png))
-    expect(logo?.contentType).toBe("image/png")
-    expect(logo?.sourceUrl).toBe(logoUrl)
-    expect(metadata).toMatchObject({ verified: true, logoPinned: true })
+    expect(approved?.metadata).toMatchObject({
+      verified: true,
+      logoSha256: benign?.sha256,
+    })
   })
 
-  it("verifies without a logo when it cannot be pinned", async () => {
-    const { logo, metadata } = await approveWithLogo(serve("<svg/>"))
-    expect(logo).toBeNull()
-    expect(metadata).toMatchObject({ verified: true, logoPinned: false })
+  it("refuses an approval that names other bytes, or none", async () => {
+    const { shown, decide, state } = await submitted(serve(png))
+    const sha = shown.logo?.sha256 ?? ""
+    for (const claimed of [undefined, null, "0".repeat(64)]) {
+      expect((await decide(claimed)).status).toBe(409)
+      expect(await state()).toEqual({
+        review: "open",
+        verifiedAt: null,
+        logo: null,
+      })
+    }
+    expect((await decide(sha)).status).toBe(200)
+  })
+
+  it("refuses when the logo URL moved after submission", async () => {
+    const { shown, decide, state, harness, app } = await submitted(serve(png))
+    // Only live reviews freeze logoUrl; change it behind the routes' back.
+    await harness.store.updateApp(app.id, { logoUrl: `${logoUrl}?v=2` })
+    expect((await decide(shown.logo?.sha256)).status).toBe(409)
+    expect((await state()).review).toBe("open")
+  })
+
+  it("verifies with no logo when none could be pinned", async () => {
+    const { shown, decide, state } = await submitted(serve("<svg/>"))
+    expect(shown.logo).toBeNull()
+    expect((await decide(null)).status).toBe(200)
+    const after = await state()
+    expect(after.verifiedAt).not.toBeNull()
+    expect(after.logo).toBeNull()
+  })
+
+  it("leaves the review open and nothing granted if storing the logo fails", async () => {
+    const { shown, decide, state, harness } = await submitted(serve(png))
+    harness.store.putVerifiedLogo = async () => {
+      throw new Error("database unavailable")
+    }
+    expect((await decide(shown.logo?.sha256)).status).toBe(500)
+    expect(await state()).toEqual({
+      review: "open",
+      verifiedAt: null,
+      logo: null,
+    })
+  })
+
+  it("is staff only", async () => {
+    const { harness, reviewId, cookie } = await submitted(serve(png))
+    const response = await harness.request(
+      "GET",
+      `/api/admin/reviews/${reviewId}/logo`,
+      { cookie },
+    )
+    expect(response.status).toBe(403)
   })
 })

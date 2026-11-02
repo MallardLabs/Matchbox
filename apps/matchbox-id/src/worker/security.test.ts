@@ -532,6 +532,8 @@ describe("consent verified badge", () => {
       contentType: "image/png" as const,
       dataBase64: btoa(String.fromCharCode(...pngBytes)),
       sourceUrl: logoUrl,
+      // The seeded live environment's verifiedAt.
+      verifiedAt: new Date("2026-09-30T00:00:00.000Z"),
     }
 
     async function logoResponse(harness: Harness, path: string | null) {
@@ -570,6 +572,21 @@ describe("consent verified badge", () => {
       expect((await logoResponse(harness, path)).status).toBe(404)
       harness.store.admin.setAppLogoUrl(memorySeed.appId, logoUrl)
       harness.store.admin.setVerifiedLogo(memorySeed.liveEnvironmentId, null)
+      expect((await logoResponse(harness, path)).status).toBe(404)
+
+      // A row from another approval (one that lost its close, or an
+      // earlier one) is not the current verification's: 404.
+      harness.store.admin.setVerifiedLogo(memorySeed.liveEnvironmentId, {
+        ...pinned,
+        verifiedAt: new Date("2026-10-01T00:00:00.000Z"),
+      })
+      expect((await logoResponse(harness, path)).status).toBe(404)
+      harness.store.admin.setVerifiedLogo(memorySeed.liveEnvironmentId, pinned)
+      expect((await logoResponse(harness, path)).status).toBe(200)
+      harness.store.admin.setVerifiedAt(
+        memorySeed.liveEnvironmentId,
+        new Date("2026-10-02T00:00:00.000Z"),
+      )
       expect((await logoResponse(harness, path)).status).toBe(404)
 
       // Unverified: no badge, so the developer's own URL is fine.

@@ -536,7 +536,7 @@ Issuer: `https://id.matchbox.markets`.
 | `GET /api/authorization-requests/{id}` | app, env kind, scopes with labels, claim preview with **the signed-in user's own** values, existing grant diff |
 | `POST /api/authorization-requests/{id}/decision` | `{ decision: "approve" | "deny" }` → `{ redirectTo }`; CSRF-protected |
 | `GET /api/grants` | connected apps for the session account |
-| `GET /api/app-logos/{environmentId}` | a verified app's logo as pinned at staff approval (`mbx_dev_verified_logos`); 404 unless still verified with the same `logo_url` |
+| `GET /api/app-logos/{environmentId}` | a verified app's logo as staff approved it (`mbx_dev_verified_logos`); 404 unless the approval that wrote it is the current verification and `logo_url` is unchanged |
 | `DELETE /api/grants/{id}` | revoke (+ tokens), audit |
 | `GET /api/sessions`, `DELETE /api/sessions/{id}` | device/session management |
 
@@ -709,17 +709,35 @@ withdraws it if any changed; a profile, redirect URI or origin change also
 withdraws verification again after its own write.
 
 Logo beside the badge: `logo_url` is a developer-controlled URL whose bytes
-can change after review. At approval the console fetches it server-side
-(HTTPS, 5 s, 64 KiB, PNG/JPEG/GIF/WebP by magic bytes) into
-`mbx_dev_verified_logos`. Matchbox ID's verified screens (consent, connected
-apps) point at `GET /api/app-logos/:environmentId?v=<verified_at>`, which
-serves that copy only while the environment is verified and the app's
+can change after review, or differ per requester (a server can show staff
+one image and the Worker another). So the logo is pinned once, when the
+review is submitted: the console fetches it server-side into
+`mbx_dev_review_logos` (HTTPS on the default port, no IP literal or
+local/internal name, redirects followed by hand at most 3 times and
+re-checked each hop, one 5 s deadline covering every hop and the body,
+64 KiB, PNG/JPEG/GIF/WebP by magic bytes; the Worker runs with
+`global_fetch_strictly_public`). The staff review page shows those bytes
+(`GET /api/admin/reviews/{id}/logo`, rendered from a `data:` URL with their
+sha256), never the live URL, and an approval must send that `logoSha256`
+(null when nothing was pinned); a mismatch, or a `logo_url` changed since
+submission, is 409. Pinning at submission rather than when staff open the
+review means one fetch per review, no write on a staff GET, and pinned bytes
+that cannot change under an open review page.
+
+Before closing the review the approval copies the pin into
+`mbx_dev_verified_logos` with `verified_at` set to the value it is about to
+grant, so a failed write leaves the review open and nothing granted. Matchbox
+ID's verified screens (consent, connected apps) point at
+`GET /api/app-logos/:environmentId?v=<verified_at>`, which serves that copy
+only while the environment's `verified_at` equals the row's and the app's
 `logo_url` still equals the pinned `source_url`; otherwise it returns 404 and
-the SPA shows the initial. Unverified screens keep the developer's URL (no
-badge, no claim). SVG and oversized logos are not pinned, so those verified
-apps show the initial. Trade-off: one extra DB row and one same-origin image
-request, in exchange for no logo swap after review. The cached image outlives
-a withdrawal by up to 5 minutes, but withdrawn screens no longer reference it.
+the SPA shows the initial. A row from an approval that lost the close, or an
+earlier one, therefore never shows. Unverified screens keep the developer's
+URL (no badge, no claim). SVG, oversized or unreachable logos are not pinned,
+so those verified apps show the initial. Trade-off: a DB row per open review
+and per verified environment, and one same-origin image request, in exchange
+for no logo swap after review. The cached image outlives a withdrawal by up
+to 5 minutes, but withdrawn screens no longer reference it.
 
 Review lifecycle status (ID-L12, partial): the badge is fixed as above, but
 approved scopes still survive later name, redirect-URI and origin changes

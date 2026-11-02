@@ -51,12 +51,14 @@ export type EnvironmentRecord = {
   verifiedAt: Date | null
 }
 
-/** Logo bytes the console pinned at staff approval. */
+/** Logo bytes staff approved (pinned by the console at submission). */
 export type VerifiedLogoRecord = {
   contentType: "image/png" | "image/jpeg" | "image/gif" | "image/webp"
   dataBase64: string
   /** The app's `logoUrl` when it was pinned. */
   sourceUrl: string
+  /** The environment's `verifiedAt` from the approval that wrote it. */
+  verifiedAt: Date
 }
 
 export type ClientRecord = {
