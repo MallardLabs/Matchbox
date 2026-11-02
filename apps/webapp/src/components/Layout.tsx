@@ -1,7 +1,7 @@
 import type { ReactNode } from "react"
 import { Footer } from "./Footer"
 import { Header } from "./Header"
-import { WrongNetworkBanner } from "./WrongNetworkBanner"
+import WrongNetworkBanner from "./WrongNetworkBanner"
 
 type LayoutProps = {
   children: ReactNode

@@ -12,7 +12,7 @@ import {
   useWriteContract,
 } from "wagmi"
 import { useSafeBatchExport } from "./useSafeBatchExport"
-import { useWalletNetworkGate } from "./useWalletNetworkGate"
+import useWalletNetworkGate from "./useWalletNetworkGate"
 
 export type LockTxStatus =
   | "pending"

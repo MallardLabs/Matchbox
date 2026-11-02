@@ -14,7 +14,7 @@ import type { Pool } from "@/hooks/usePools"
 import type { Token } from "@/hooks/useTokenList"
 import { useVotables } from "@/hooks/useVotables"
 import { useApproveToken, useTokenAllowance } from "@/hooks/useVoting"
-import { useWalletNetworkGate } from "@/hooks/useWalletNetworkGate"
+import useWalletNetworkGate from "@/hooks/useWalletNetworkGate"
 import {
   Button,
   Input,

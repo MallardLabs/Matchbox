@@ -11,7 +11,7 @@ import {
   useIsAllowlistedToken,
   useTokenAllowance,
 } from "@/hooks/useVoting"
-import { useWalletNetworkGate } from "@/hooks/useWalletNetworkGate"
+import useWalletNetworkGate from "@/hooks/useWalletNetworkGate"
 import {
   Button,
   Input,

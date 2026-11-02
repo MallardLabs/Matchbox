@@ -31,7 +31,7 @@ test("a confirmed incentive refreshes once despite parent renders and reopening"
       }
     }
     if (name === "@/hooks/useWalletNetworkGate") {
-      return { useWalletNetworkGate: () => ({ isWrongNetwork: false }) }
+      return { __esModule: true, default: () => ({ isWrongNetwork: false }) }
     }
     if (name === "@/contexts/NetworkContext") {
       return {

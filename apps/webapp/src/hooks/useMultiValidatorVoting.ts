@@ -12,7 +12,7 @@ import {
   useWalletClient,
 } from "wagmi"
 import { useSafeBatchExport } from "./useSafeBatchExport"
-import { useWalletNetworkGate } from "./useWalletNetworkGate"
+import useWalletNetworkGate from "./useWalletNetworkGate"
 
 export type ValidatorLockTxState = {
   tokenId: bigint

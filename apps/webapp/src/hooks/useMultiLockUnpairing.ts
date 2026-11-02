@@ -13,7 +13,7 @@ import {
 } from "wagmi"
 import type { LockTxStatus, MultiLockExecutionMode } from "./useMultiLockVoting"
 import { useSafeBatchExport } from "./useSafeBatchExport"
-import { useWalletNetworkGate } from "./useWalletNetworkGate"
+import useWalletNetworkGate from "./useWalletNetworkGate"
 
 export type UnpairBoostRequest = {
   veMEZOTokenId: bigint

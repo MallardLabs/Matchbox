@@ -14,7 +14,7 @@ import {
 import type { MultiLockExecutionMode } from "./useMultiLockVoting"
 import { useSafeBatchExport } from "./useSafeBatchExport"
 import type { BribeVoterKind } from "./useVoting"
-import { useWalletNetworkGate } from "./useWalletNetworkGate"
+import useWalletNetworkGate from "./useWalletNetworkGate"
 
 type LockTxStatus = "pending" | "signing" | "confirming" | "success" | "error"
 

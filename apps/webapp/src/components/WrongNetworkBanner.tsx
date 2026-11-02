@@ -1,7 +1,7 @@
 import { useNetwork } from "@/contexts/NetworkContext"
-import { useWalletNetworkGate } from "@/hooks/useWalletNetworkGate"
+import useWalletNetworkGate from "@/hooks/useWalletNetworkGate"
 
-export function WrongNetworkBanner(): JSX.Element | null {
+export default function WrongNetworkBanner(): JSX.Element | null {
   const { networkName } = useNetwork()
   const {
     isWrongNetwork,

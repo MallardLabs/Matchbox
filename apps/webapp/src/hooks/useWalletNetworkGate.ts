@@ -24,7 +24,7 @@ export type WalletNetworkGate = {
  * before a signing request, because React state and the cached wallet client
  * can lag a switch made inside the wallet.
  */
-export function useWalletNetworkGate(): WalletNetworkGate {
+export default function useWalletNetworkGate(): WalletNetworkGate {
   const { chainId } = useNetwork()
   const config = useConfig()
   const { chainId: walletChainId, isConnected } = useAccount()

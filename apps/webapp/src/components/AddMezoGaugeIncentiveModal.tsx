@@ -8,7 +8,7 @@ import {
 } from "@/hooks/useMezoGaugeIncentives"
 import type { Token } from "@/hooks/useTokenList"
 import { useApproveToken, useTokenAllowance } from "@/hooks/useVoting"
-import { useWalletNetworkGate } from "@/hooks/useWalletNetworkGate"
+import useWalletNetworkGate from "@/hooks/useWalletNetworkGate"
 import {
   Button,
   Input,

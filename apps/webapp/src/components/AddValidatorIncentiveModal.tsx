@@ -8,7 +8,7 @@ import {
   useValidatorTokenAllowlisted,
 } from "@/hooks/useValidatorGauge"
 import { useApproveToken, useTokenAllowance } from "@/hooks/useVoting"
-import { useWalletNetworkGate } from "@/hooks/useWalletNetworkGate"
+import useWalletNetworkGate from "@/hooks/useWalletNetworkGate"
 import {
   Button,
   Input,
