@@ -19,6 +19,97 @@ const png = new Uint8Array([
 const lookalike = new Uint8Array([...png, 0x4d, 0x45, 0x5a, 0x4f])
 const logoUrl = "https://cdn.example.com/logo.png"
 
+function concat(parts: Uint8Array[]): Uint8Array {
+  const out = new Uint8Array(parts.reduce((sum, part) => sum + part.length, 0))
+  let offset = 0
+  for (const part of parts) {
+    out.set(part, offset)
+    offset += part.length
+  }
+  return out
+}
+
+function latin1(text: string): Uint8Array {
+  return Uint8Array.from(text, (char) => char.charCodeAt(0))
+}
+
+/** A PNG chunk (big-endian length, type, data, CRC left zero). */
+function pngChunk(type: string, length: number): Uint8Array {
+  const out = new Uint8Array(12 + length)
+  new DataView(out.buffer).setUint32(0, length)
+  out.set(latin1(type), 4)
+  return out
+}
+
+const stillPng = concat([
+  png.subarray(0, 8),
+  pngChunk("IHDR", 13),
+  pngChunk("IDAT", 10),
+  pngChunk("IEND", 0),
+])
+const apng = concat([
+  png.subarray(0, 8),
+  pngChunk("IHDR", 13),
+  pngChunk("acTL", 8),
+  pngChunk("fcTL", 26),
+  pngChunk("IDAT", 10),
+  pngChunk("IEND", 0),
+])
+
+function gif({
+  frames,
+  loop = false,
+  palette = false,
+}: {
+  frames: number
+  loop?: boolean
+  palette?: boolean
+}): Uint8Array {
+  // Logical screen descriptor: 1x1, global color table of 2 entries or none.
+  const header = latin1("GIF89a")
+  const screen = new Uint8Array([1, 0, 1, 0, palette ? 0x80 : 0, 0, 0])
+  const globalTable = new Uint8Array(palette ? 6 : 0)
+  const netscape = concat([
+    new Uint8Array([0x21, 0xff, 11]),
+    latin1("NETSCAPE2.0"),
+    new Uint8Array([3, 1, 0, 0, 0]),
+  ])
+  const control = new Uint8Array([0x21, 0xf9, 4, 0, 100, 0, 0, 0])
+  // Descriptor (no local table), LZW minimum code size, one data sub-block.
+  const frame = new Uint8Array([
+    0x2c, 0, 0, 0, 0, 1, 0, 1, 0, 0, 2, 2, 0x44, 0x01, 0,
+  ])
+  return concat([
+    header,
+    screen,
+    globalTable,
+    ...(loop ? [netscape] : []),
+    ...Array.from({ length: frames }, () => concat([control, frame])),
+    new Uint8Array([0x3b]),
+  ])
+}
+
+/** A RIFF chunk (little-endian size, data padded to even). */
+function chunk4(type: string, size: number): Uint8Array {
+  const out = new Uint8Array(8 + size + (size % 2))
+  out.set(latin1(type), 0)
+  new DataView(out.buffer).setUint32(4, size, true)
+  return out
+}
+
+function vp8x(flags: number): Uint8Array {
+  const out = chunk4("VP8X", 10)
+  out[8] = flags
+  return out
+}
+
+function webp(chunks: Uint8Array[]): Uint8Array {
+  const body = concat([latin1("WEBP"), ...chunks])
+  const header = concat([latin1("RIFF"), new Uint8Array(4)])
+  new DataView(header.buffer).setUint32(4, body.length, true)
+  return concat([header, body])
+}
+
 function serve(body: Uint8Array | string, init: ResponseInit = {}): LogoFetch {
   return async () => new Response(body, init)
 }
@@ -176,6 +267,36 @@ describe("pinLogo", () => {
       ok: false,
       reason: "timeout",
     })
+  })
+
+  it("refuses animations that could switch frames after review", async () => {
+    // PoC: frame one is the logo staff approve; a later frame (or an APNG
+    // fcTL frame) is a Matchbox lookalike that appears after N seconds.
+    const animated: [string, Uint8Array][] = [
+      ["APNG", apng],
+      ["two-frame GIF", gif({ frames: 2 })],
+      ["looping GIF", gif({ frames: 1, loop: true })],
+      ["two-frame GIF, global palette", gif({ frames: 2, palette: true })],
+      ["animated WebP (VP8X flag)", webp([vp8x(0x02), chunk4("VP8 ", 4)])],
+      ["WebP with ANIM", webp([vp8x(0), chunk4("ANIM", 6)])],
+    ]
+    for (const [name, bytes] of animated) {
+      expect(await pinLogo(serve(bytes), logoUrl), name).toEqual({
+        ok: false,
+        reason: "animated",
+      })
+    }
+    const still: [string, Uint8Array][] = [
+      ["PNG", stillPng],
+      ["one-frame GIF", gif({ frames: 1 })],
+      ["one-frame GIF, global palette", gif({ frames: 1, palette: true })],
+      ["lossy WebP", webp([chunk4("VP8 ", 4)])],
+      ["extended WebP", webp([vp8x(0x10), chunk4("VP8L", 5)])],
+    ]
+    for (const [name, bytes] of still) {
+      const result = await pinLogo(serve(bytes), logoUrl)
+      expect(result.ok, name).toBe(true)
+    }
   })
 
   it("recognises the four allowed formats by magic bytes", () => {

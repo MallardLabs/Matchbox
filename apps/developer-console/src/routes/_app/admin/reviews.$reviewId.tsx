@@ -185,14 +185,15 @@ function PinnedLogo({
   name: string
   logo: AdminReviewLogoResponse["logo"] | undefined
 }): ReactElement {
-  if (logo === undefined) return <Skeleton.Root className="h-7 w-28" />
+  if (logo === undefined) return <Skeleton.Root className="h-12 w-28" />
   if (logo === null) return <span className="text-muted">None</span>
   return (
     <span className="inline-flex items-center gap-2">
+      {/* The consent screen's size, so staff judge what users will see. */}
       <AppMark
         name={name}
         logoUrl={`data:${logo.contentType};base64,${logo.dataBase64}`}
-        size="sm"
+        size="lg"
       />
       <span className="font-mono text-caption text-muted" title={logo.sha256}>
         {`sha256 ${logo.sha256.slice(0, 8)}…`}

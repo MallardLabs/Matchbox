@@ -4,7 +4,8 @@
  * requester. Staff review the pinned copy (never the live URL), the approval
  * names its SHA-256, and Matchbox ID shows a verified app's logo only from
  * that copy (`mbx_dev_verified_logos`); when the logo cannot be pinned, the
- * verified consent screen shows the app's initial instead.
+ * verified consent screen shows the app's initial instead. Only still images
+ * are pinned: an animation could switch to another frame after review.
  */
 
 export const maxPinnedLogoBytes = 64 * 1024
@@ -56,6 +57,96 @@ export function sniffLogoType(bytes: Uint8Array): PinnedLogoType | null {
     return "image/webp"
   }
   return null
+}
+
+function ascii(bytes: Uint8Array, start: number, length: number): string {
+  return String.fromCharCode(...bytes.subarray(start, start + length))
+}
+
+/** APNG: an `acTL` or `fcTL` chunk anywhere (browsers need one before IDAT). */
+function pngIsAnimated(bytes: Uint8Array): boolean {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+  for (let offset = 8; offset + 8 <= bytes.length; ) {
+    const type = ascii(bytes, offset + 4, 4)
+    if (type === "acTL" || type === "fcTL") return true
+    if (type === "IEND") return false
+    // Length, type, data, CRC.
+    offset += 12 + view.getUint32(offset)
+  }
+  return false
+}
+
+/** Bytes in a GIF color table from its block's packed field. */
+function gifColorTableSize(packed: number): number {
+  return (packed & 0x80) === 0 ? 0 : 3 * 2 ** ((packed & 0x07) + 1)
+}
+
+/** Skips GIF data sub-blocks from `offset`; the offset after the terminator. */
+function skipGifSubBlocks(bytes: Uint8Array, offset: number): number {
+  let at = offset
+  while (at < bytes.length && bytes[at] !== 0) at += 1 + (bytes[at] ?? 0)
+  return at + 1
+}
+
+/**
+ * More than one image descriptor, or a NETSCAPE/ANIMEXTS loop extension.
+ * Walks the block structure the way browsers do and stops where they would
+ * (an unknown block, the trailer or the end of the data).
+ */
+function gifIsAnimated(bytes: Uint8Array): boolean {
+  let offset = 13 + gifColorTableSize(bytes[10] ?? 0)
+  let frames = 0
+  while (offset < bytes.length) {
+    const block = bytes[offset]
+    if (block === 0x2c) {
+      frames += 1
+      if (frames > 1) return true
+      // Descriptor, local color table, LZW minimum code size, image data.
+      offset += 10 + gifColorTableSize(bytes[offset + 9] ?? 0) + 1
+      offset = skipGifSubBlocks(bytes, offset)
+    } else if (block === 0x21) {
+      if (bytes[offset + 1] === 0xff && bytes[offset + 2] === 11) {
+        const application = ascii(bytes, offset + 3, 8)
+        if (application === "NETSCAPE" || application === "ANIMEXTS") {
+          return true
+        }
+      }
+      offset = skipGifSubBlocks(bytes, offset + 2)
+    } else {
+      return false
+    }
+  }
+  return false
+}
+
+/** WebP: the VP8X animation flag, or an `ANIM`/`ANMF` chunk. */
+function webpIsAnimated(bytes: Uint8Array): boolean {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+  for (let offset = 12; offset + 8 <= bytes.length; ) {
+    const type = ascii(bytes, offset, 4)
+    if (type === "ANIM" || type === "ANMF") return true
+    if (type === "VP8X" && ((bytes[offset + 8] ?? 0) & 0x02) !== 0) {
+      return true
+    }
+    const size = view.getUint32(offset + 4, true)
+    // FourCC, size, data padded to an even length.
+    offset += 8 + size + (size % 2)
+  }
+  return false
+}
+
+/**
+ * Whether the image can change after it is shown: an animation could open
+ * on the logo staff approved and switch to a lookalike frame seconds later.
+ */
+export function isAnimatedLogo(
+  bytes: Uint8Array,
+  contentType: PinnedLogoType,
+): boolean {
+  if (contentType === "image/png") return pngIsAnimated(bytes)
+  if (contentType === "image/gif") return gifIsAnimated(bytes)
+  if (contentType === "image/webp") return webpIsAnimated(bytes)
+  return false
 }
 
 const privateSuffixes = [".localhost", ".local", ".internal", ".arpa"]
@@ -217,6 +308,9 @@ export async function pinLogo(
     if (bytes === null) return { ok: false, reason: "too-large" }
     const contentType = sniffLogoType(bytes)
     if (contentType === null) return { ok: false, reason: "not-an-image" }
+    if (isAnimatedLogo(bytes, contentType)) {
+      return { ok: false, reason: "animated" }
+    }
     return {
       ok: true,
       logo: {
