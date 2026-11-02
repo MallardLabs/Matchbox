@@ -2,12 +2,12 @@ import { getContractConfig } from "@/config/contracts"
 import { toJsonRpcAccount } from "@/config/mezoRpcWrite"
 import { QUERY_PROFILES } from "@/config/queryProfiles"
 import { useNetwork } from "@/contexts/NetworkContext"
+import { useGatedSendTransaction } from "@/hooks/useGatedWalletWrites"
 import type { Address, Hex } from "viem"
 import { encodeFunctionData } from "viem"
 import {
   useAccount,
   useReadContract,
-  useSendTransaction,
   useWaitForTransactionReceipt,
 } from "wagmi"
 
@@ -44,8 +44,11 @@ export function useAddMezoGaugeIncentive(): {
   const { chainId } = useNetwork()
   const { address } = useAccount()
   const contracts = getContractConfig(chainId)
-  const send = useSendTransaction()
-  const receipt = useWaitForTransactionReceipt({ hash: send.data })
+  const send = useGatedSendTransaction()
+  const receipt = useWaitForTransactionReceipt({
+    hash: send.data,
+    chainId: send.variables?.chainId ?? chainId,
+  })
   return {
     addIncentive: (gauge, token, amount) => {
       if (!address) return

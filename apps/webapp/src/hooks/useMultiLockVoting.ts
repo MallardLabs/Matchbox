@@ -1,17 +1,14 @@
 import { getContractConfig } from "@/config/contracts"
 import { useNetwork } from "@/contexts/NetworkContext"
+import { useGatedWriteContract } from "@/hooks/useGatedWalletWrites"
 import { type AtomicBatchSupport, getAtomicBatchSupport } from "@/utils/eip5792"
 import { encodeSafeBatchCall } from "@/utils/safeBatch"
 import { useCallback, useEffect, useRef, useState } from "react"
 import type { Address, Hex } from "viem"
 import { sendCalls, waitForCallsStatus } from "viem/actions"
-import {
-  useAccount,
-  usePublicClient,
-  useWalletClient,
-  useWriteContract,
-} from "wagmi"
+import { useAccount, usePublicClient, useWalletClient } from "wagmi"
 import { useSafeBatchExport } from "./useSafeBatchExport"
+import useWalletNetworkGate from "./useWalletNetworkGate"
 
 export type LockTxStatus =
   | "pending"
@@ -80,8 +77,9 @@ export function useMultiLockVoting(): UseMultiLockVotingReturn {
   const contracts = getContractConfig(chainId)
   const publicClient = usePublicClient({ chainId })
   const { data: walletClient } = useWalletClient({ chainId })
-  const { writeContractAsync } = useWriteContract()
+  const { writeContractAsync } = useGatedWriteContract()
   const safeBatch = useSafeBatchExport("vote")
+  const { assertWalletNetwork } = useWalletNetworkGate()
 
   const [status, setStatus] = useState<MultiLockVoteStatus>("idle")
   const [executionMode, setExecutionMode] =
@@ -181,6 +179,7 @@ export function useMultiLockVoting(): UseMultiLockVotingReturn {
         if (tokenId === undefined) continue
 
         try {
+          await assertWalletNetwork()
           const hash = await executeFn(tokenId)
           updateLockState(i, { status: "confirming", hash })
 
@@ -211,7 +210,13 @@ export function useMultiLockVoting(): UseMultiLockVotingReturn {
 
       return buildExecutionResult(lockStatesRef.current)
     },
-    [buildExecutionResult, publicClient, replaceLockStates, updateLockState],
+    [
+      assertWalletNetwork,
+      buildExecutionResult,
+      publicClient,
+      replaceLockStates,
+      updateLockState,
+    ],
   )
 
   const executeBatched = useCallback(
@@ -239,6 +244,7 @@ export function useMultiLockVoting(): UseMultiLockVotingReturn {
       setStatus("voting")
 
       try {
+        await assertWalletNetwork()
         const { id } = await sendCalls(walletClient, {
           account: accountAddress,
           calls,
@@ -280,7 +286,13 @@ export function useMultiLockVoting(): UseMultiLockVotingReturn {
 
       return buildExecutionResult(lockStatesRef.current)
     },
-    [accountAddress, buildExecutionResult, replaceLockStates, walletClient],
+    [
+      accountAddress,
+      assertWalletNetwork,
+      buildExecutionResult,
+      replaceLockStates,
+      walletClient,
+    ],
   )
 
   const voteAll = useCallback(
@@ -315,6 +327,7 @@ export function useMultiLockVoting(): UseMultiLockVotingReturn {
         return writeContractAsync({
           address,
           abi,
+          chainId,
           functionName: "vote",
           args: [tokenId, gaugeAddresses, weights],
         })
@@ -426,6 +439,7 @@ export function useMultiLockVoting(): UseMultiLockVotingReturn {
         return writeContractAsync({
           address,
           abi,
+          chainId,
           functionName: "reset",
           args: [tokenId],
         })

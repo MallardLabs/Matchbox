@@ -1,18 +1,15 @@
 import { getContractConfig } from "@/config/contracts"
 import { useNetwork } from "@/contexts/NetworkContext"
+import { useGatedWriteContract } from "@/hooks/useGatedWalletWrites"
 import { type AtomicBatchSupport, getAtomicBatchSupport } from "@/utils/eip5792"
 import { encodeSafeBatchCall } from "@/utils/safeBatch"
 import { useCallback, useEffect, useRef, useState } from "react"
 import type { Address, Hex } from "viem"
 import { sendCalls, waitForCallsStatus } from "viem/actions"
-import {
-  useAccount,
-  usePublicClient,
-  useWalletClient,
-  useWriteContract,
-} from "wagmi"
+import { useAccount, usePublicClient, useWalletClient } from "wagmi"
 import type { LockTxStatus, MultiLockExecutionMode } from "./useMultiLockVoting"
 import { useSafeBatchExport } from "./useSafeBatchExport"
+import useWalletNetworkGate from "./useWalletNetworkGate"
 
 export type UnpairBoostRequest = {
   veMEZOTokenId: bigint
@@ -81,8 +78,9 @@ export function useMultiLockUnpairing(): UseMultiLockUnpairingReturn {
   const contracts = getContractConfig(chainId)
   const publicClient = usePublicClient({ chainId })
   const { data: walletClient } = useWalletClient({ chainId })
-  const { writeContractAsync } = useWriteContract()
+  const { writeContractAsync } = useGatedWriteContract()
   const safeBatch = useSafeBatchExport("unpair")
+  const { assertWalletNetwork } = useWalletNetworkGate()
 
   const [status, setStatus] = useState<MultiLockUnpairStatus>("idle")
   const [executionMode, setExecutionMode] =
@@ -248,6 +246,7 @@ export function useMultiLockUnpairing(): UseMultiLockUnpairingReturn {
       ]
 
       try {
+        await assertWalletNetwork()
         const { id } = await sendCalls(walletClient, {
           account: accountAddress,
           calls,
@@ -291,6 +290,7 @@ export function useMultiLockUnpairing(): UseMultiLockUnpairingReturn {
     },
     [
       accountAddress,
+      assertWalletNetwork,
       buildExecutionResult,
       buildInitialStates,
       replaceTxStates,
@@ -338,9 +338,11 @@ export function useMultiLockUnpairing(): UseMultiLockUnpairingReturn {
         updateTxState(i, { status: "signing" })
 
         try {
+          await assertWalletNetwork()
           const hash = await writeContractAsync({
             address,
             abi,
+            chainId,
             functionName: "reset",
             args: [request.veMEZOTokenId],
           })
@@ -369,9 +371,11 @@ export function useMultiLockUnpairing(): UseMultiLockUnpairingReturn {
           updateTxState(pokeStateIndex, { status: "signing" })
 
           try {
+            await assertWalletNetwork()
             const hash = await writeContractAsync({
               address,
               abi,
+              chainId,
               functionName: "pokeBoosts",
               args: [
                 Array.from(uniqueSuccessfulVeBTCTokens, (tokenId) =>
@@ -397,6 +401,7 @@ export function useMultiLockUnpairing(): UseMultiLockUnpairingReturn {
     },
     [
       accountAddress,
+      assertWalletNetwork,
       buildExecutionResult,
       buildInitialStates,
       chainId,

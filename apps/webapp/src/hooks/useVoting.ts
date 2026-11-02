@@ -2,6 +2,10 @@ import { getContractConfig } from "@/config/contracts"
 import { toJsonRpcAccount } from "@/config/mezoRpcWrite"
 import { QUERY_PROFILES } from "@/config/queryProfiles"
 import { useNetwork } from "@/contexts/NetworkContext"
+import {
+  useGatedSendTransaction,
+  useGatedWriteContract,
+} from "@/hooks/useGatedWalletWrites"
 import { useGaugeTopology } from "@/hooks/useGaugeTopology"
 import { chunkArray } from "@/utils/chunk"
 import { useQuery } from "@tanstack/react-query"
@@ -13,9 +17,7 @@ import {
   usePublicClient,
   useReadContract,
   useReadContracts,
-  useSendTransaction,
   useWaitForTransactionReceipt,
-  useWriteContract,
 } from "wagmi"
 
 type VoteStateResult = {
@@ -268,10 +270,17 @@ type CreateBoostGaugeResult = WriteHookResult & {
 export function useCreateBoostGauge(): CreateBoostGaugeResult {
   const { chainId } = useNetwork()
   const contracts = getContractConfig(chainId)
-  const { writeContract, data: hash, isPending, error } = useWriteContract()
+  const {
+    writeContract,
+    data: hash,
+    variables,
+    isPending,
+    error,
+  } = useGatedWriteContract()
 
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
     hash,
+    chainId: variables?.chainId ?? chainId,
   })
 
   const createGauge = (
@@ -289,6 +298,7 @@ export function useCreateBoostGauge(): CreateBoostGaugeResult {
     writeContract({
       address,
       abi,
+      chainId,
       functionName: "createBoostGauge",
       args: [gaugeFactoryAddress, veBTCTokenId, bribeTokens, bribeAmounts],
     })
@@ -315,10 +325,17 @@ type VoteOnGaugeResult = WriteHookResult & {
 export function useVoteOnGauge(): VoteOnGaugeResult {
   const { chainId } = useNetwork()
   const contracts = getContractConfig(chainId)
-  const { writeContract, data: hash, isPending, error } = useWriteContract()
+  const {
+    writeContract,
+    data: hash,
+    variables,
+    isPending,
+    error,
+  } = useGatedWriteContract()
 
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
     hash,
+    chainId: variables?.chainId ?? chainId,
   })
 
   const vote = (
@@ -332,6 +349,7 @@ export function useVoteOnGauge(): VoteOnGaugeResult {
     writeContract({
       address,
       abi,
+      chainId,
       functionName: "vote",
       args: [veMEZOTokenId, gaugeAddresses, weights],
     })
@@ -354,10 +372,17 @@ type ResetVoteResult = WriteHookResult & {
 export function useResetVote(): ResetVoteResult {
   const { chainId } = useNetwork()
   const contracts = getContractConfig(chainId)
-  const { writeContract, data: hash, isPending, error } = useWriteContract()
+  const {
+    writeContract,
+    data: hash,
+    variables,
+    isPending,
+    error,
+  } = useGatedWriteContract()
 
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
     hash,
+    chainId: variables?.chainId ?? chainId,
   })
 
   const reset = (veMEZOTokenId: bigint) => {
@@ -367,6 +392,7 @@ export function useResetVote(): ResetVoteResult {
     writeContract({
       address,
       abi,
+      chainId,
       functionName: "reset",
       args: [veMEZOTokenId],
     })
@@ -389,10 +415,17 @@ type PokeBoostResult = WriteHookResult & {
 export function usePokeBoost(): PokeBoostResult {
   const { chainId } = useNetwork()
   const contracts = getContractConfig(chainId)
-  const { writeContract, data: hash, isPending, error } = useWriteContract()
+  const {
+    writeContract,
+    data: hash,
+    variables,
+    isPending,
+    error,
+  } = useGatedWriteContract()
 
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
     hash,
+    chainId: variables?.chainId ?? chainId,
   })
 
   const pokeBoost = (veBTCTokenId: bigint) => {
@@ -402,6 +435,7 @@ export function usePokeBoost(): PokeBoostResult {
     writeContract({
       address,
       abi,
+      chainId,
       functionName: "pokeBoost",
       args: [veBTCTokenId],
     })
@@ -657,13 +691,15 @@ export function useApproveToken(): {
   const {
     sendTransaction,
     data: hash,
+    variables,
     isPending,
     error,
     reset,
-  } = useSendTransaction()
+  } = useGatedSendTransaction()
 
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
     hash,
+    chainId: variables?.chainId ?? chainId,
   })
 
   const approve = (
@@ -899,10 +935,17 @@ export function useAllUsedWeights(tokenIds: bigint[]): {
 export function useAddIncentives(): AddIncentivesResult {
   const { chainId } = useNetwork()
   const contracts = getContractConfig(chainId)
-  const { writeContract, data: hash, isPending, error } = useWriteContract()
+  const {
+    writeContract,
+    data: hash,
+    variables,
+    isPending,
+    error,
+  } = useGatedWriteContract()
 
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
     hash,
+    chainId: variables?.chainId ?? chainId,
   })
 
   const addIncentives = (
@@ -916,6 +959,7 @@ export function useAddIncentives(): AddIncentivesResult {
     writeContract({
       address,
       abi,
+      chainId,
       functionName: "addBribes",
       args: [gaugeAddress, tokens, amounts],
     })
@@ -1233,10 +1277,17 @@ export function useClaimBribes(
 ): ClaimBribesResult {
   const { chainId } = useNetwork()
   const contracts = getContractConfig(chainId)
-  const { writeContract, data: hash, isPending, error } = useWriteContract()
+  const {
+    writeContract,
+    data: hash,
+    variables,
+    isPending,
+    error,
+  } = useGatedWriteContract()
 
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
     hash,
+    chainId: variables?.chainId ?? chainId,
   })
 
   const claimBribes = (
@@ -1253,6 +1304,7 @@ export function useClaimBribes(
     writeContract({
       address,
       abi,
+      chainId,
       functionName: "claimBribes",
       args: [bribeAddresses, tokens, tokenId],
     })

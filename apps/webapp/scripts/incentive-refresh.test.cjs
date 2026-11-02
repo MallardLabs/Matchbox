@@ -30,6 +30,17 @@ test("a confirmed incentive refreshes once despite parent renders and reopening"
         useTokenAllowance: () => ({ refetch }),
       }
     }
+    if (name === "@/hooks/useWalletNetworkGate") {
+      return { __esModule: true, default: () => ({ isWrongNetwork: false }) }
+    }
+    if (name === "@/contexts/NetworkContext") {
+      return {
+        useNetwork: () => ({ chainId: 31612, networkName: "Mezo Mainnet" }),
+      }
+    }
+    if (name === "@/config/mezoRpcWrite") {
+      return { formatWalletWriteError: (error) => error.message }
+    }
     if (name === "wagmi")
       return { useAccount: () => ({}), useReadContract: () => ({ refetch }) }
     if (name === "next/router") return { useRouter: () => ({}) }

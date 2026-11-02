@@ -1,19 +1,16 @@
 import { getContractConfig } from "@/config/contracts"
 import { useNetwork } from "@/contexts/NetworkContext"
+import { useGatedWriteContract } from "@/hooks/useGatedWalletWrites"
 import { type AtomicBatchSupport, getAtomicBatchSupport } from "@/utils/eip5792"
 import { encodeSafeBatchCall } from "@/utils/safeBatch"
 import { useCallback, useEffect, useState } from "react"
 import type { Address, Hex } from "viem"
 import { sendCalls, waitForCallsStatus } from "viem/actions"
-import {
-  useAccount,
-  usePublicClient,
-  useWalletClient,
-  useWriteContract,
-} from "wagmi"
+import { useAccount, usePublicClient, useWalletClient } from "wagmi"
 import type { MultiLockExecutionMode } from "./useMultiLockVoting"
 import { useSafeBatchExport } from "./useSafeBatchExport"
 import type { BribeVoterKind } from "./useVoting"
+import useWalletNetworkGate from "./useWalletNetworkGate"
 
 type LockTxStatus = "pending" | "signing" | "confirming" | "success" | "error"
 
@@ -68,10 +65,11 @@ export function useMultiLockClaimBribes(
   const lockLabel = voter === "validators" ? "veBTC" : "veMEZO"
   const publicClient = usePublicClient({ chainId })
   const { data: walletClient } = useWalletClient({ chainId })
-  const { writeContractAsync } = useWriteContract()
+  const { writeContractAsync } = useGatedWriteContract()
   const safeBatch = useSafeBatchExport(
     voter === "validators" ? "claim-validator-bribes" : "claim-bribes",
   )
+  const { assertWalletNetwork } = useWalletNetworkGate()
 
   const [status, setStatus] = useState<MultiLockClaimStatus>("idle")
   const [executionMode, setExecutionMode] =
@@ -145,9 +143,11 @@ export function useMultiLockClaimBribes(
         updateLockState(index, { status: "signing" })
 
         try {
+          await assertWalletNetwork()
           const hash = await writeContractAsync({
             address,
             abi,
+            chainId,
             functionName: "claimBribes",
             args: [
               claim.bribes.map((bribe) => bribe.bribeAddress),
@@ -189,7 +189,14 @@ export function useMultiLockClaimBribes(
 
       setStatus("done")
     },
-    [voterContract, publicClient, updateLockState, writeContractAsync],
+    [
+      assertWalletNetwork,
+      chainId,
+      voterContract,
+      publicClient,
+      updateLockState,
+      writeContractAsync,
+    ],
   )
 
   const executeBatched = useCallback(
@@ -221,6 +228,7 @@ export function useMultiLockClaimBribes(
       setStatus("claiming")
 
       try {
+        await assertWalletNetwork()
         const { id } = await sendCalls(walletClient, {
           account: accountAddress,
           calls: validClaims.map((claim) => ({
@@ -270,7 +278,7 @@ export function useMultiLockClaimBribes(
 
       setStatus("done")
     },
-    [accountAddress, voterContract, walletClient],
+    [accountAddress, assertWalletNetwork, voterContract, walletClient],
   )
 
   const claimAll = useCallback(

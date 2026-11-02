@@ -8,6 +8,7 @@ import {
 } from "@/hooks/useMezoGaugeIncentives"
 import type { Token } from "@/hooks/useTokenList"
 import { useApproveToken, useTokenAllowance } from "@/hooks/useVoting"
+import useWalletNetworkGate from "@/hooks/useWalletNetworkGate"
 import {
   Button,
   Input,
@@ -36,8 +37,10 @@ export default function AddMezoGaugeIncentiveModal({
   onClose,
   onAdded,
 }: AddMezoGaugeIncentiveModalProps): JSX.Element {
-  const { chainId } = useNetwork()
+  const { chainId, networkName } = useNetwork()
   const { address } = useAccount()
+  const walletNetwork = useWalletNetworkGate()
+  const needsWalletSwitch = walletNetwork.isWrongNetwork
   const voter = getContractConfig(chainId).thirdPartyVoter.address
   const { data: nativeBalance } = useBalance({
     address,
@@ -65,6 +68,7 @@ export default function AddMezoGaugeIncentiveModal({
   const { data: balanceData, refetch: refetchBalance } = useReadContract({
     address: token?.address,
     abi: erc20Abi,
+    chainId,
     functionName: "balanceOf",
     args: address ? [address] : undefined,
     query: { enabled: !!token && !!address },
@@ -96,8 +100,10 @@ export default function AddMezoGaugeIncentiveModal({
     onClose()
   }
 
-  const writeError = approval.error ?? incentive.error
+  const writeError =
+    walletNetwork.switchError ?? approval.error ?? incentive.error
   const isBusy =
+    walletNetwork.isSwitching ||
     approval.isPending ||
     approval.isConfirming ||
     incentive.isPending ||
@@ -177,6 +183,10 @@ export default function AddMezoGaugeIncentiveModal({
           )}
           <Button
             onClick={() => {
+              if (needsWalletSwitch) {
+                walletNetwork.switchWalletNetwork()
+                return
+              }
               if (!token || parsedAmount <= 0n) return
               if (needsApproval)
                 approval.approve(token.address, voter, parsedAmount)
@@ -185,19 +195,22 @@ export default function AddMezoGaugeIncentiveModal({
             disabled={
               !address ||
               isBusy ||
-              parsedAmount <= 0n ||
-              hasInsufficientBalance ||
-              hasNoGas ||
-              isAllowlisted !== true ||
-              isLoadingAllowance ||
-              allowance === undefined
+              (!needsWalletSwitch &&
+                (parsedAmount <= 0n ||
+                  hasInsufficientBalance ||
+                  hasNoGas ||
+                  isAllowlisted !== true ||
+                  isLoadingAllowance ||
+                  allowance === undefined))
             }
           >
             {isBusy
               ? "Confirming..."
-              : needsApproval
-                ? `Approve ${token?.symbol ?? "token"}`
-                : "Add Incentives"}
+              : needsWalletSwitch
+                ? `Switch wallet to ${networkName}`
+                : needsApproval
+                  ? `Approve ${token?.symbol ?? "token"}`
+                  : "Add Incentives"}
           </Button>
         </div>
       </ModalBody>

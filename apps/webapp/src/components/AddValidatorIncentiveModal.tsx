@@ -8,6 +8,7 @@ import {
   useValidatorTokenAllowlisted,
 } from "@/hooks/useValidatorGauge"
 import { useApproveToken, useTokenAllowance } from "@/hooks/useVoting"
+import useWalletNetworkGate from "@/hooks/useWalletNetworkGate"
 import {
   Button,
   Input,
@@ -17,7 +18,7 @@ import {
 } from "@mezo-org/mezo-clay"
 import { useEffect, useMemo, useState } from "react"
 import { type Address, erc20Abi, formatUnits, parseUnits } from "viem"
-import { useAccount, useBalance, useReadContract, useSwitchChain } from "wagmi"
+import { useAccount, useBalance, useReadContract } from "wagmi"
 
 type Props = {
   gauge: Address
@@ -35,9 +36,9 @@ export default function AddValidatorIncentiveModal({
   onAdded,
 }: Props): JSX.Element {
   const { chainId, networkName } = useNetwork()
-  const { address, chainId: walletChainId } = useAccount()
-  const needsWalletSwitch = !!address && walletChainId !== chainId
-  const walletSwitch = useSwitchChain()
+  const { address } = useAccount()
+  const walletNetwork = useWalletNetworkGate()
+  const needsWalletSwitch = walletNetwork.isWrongNetwork
   const voter = getContractConfig(chainId).validatorsVoter.address
   const { data: nativeBalance } = useBalance({
     address,
@@ -96,9 +97,10 @@ export default function AddValidatorIncentiveModal({
     onClose()
   }
 
-  const writeError = walletSwitch.error ?? approval.error ?? incentive.error
+  const writeError =
+    walletNetwork.switchError ?? approval.error ?? incentive.error
   const isBusy =
-    walletSwitch.isPending ||
+    walletNetwork.isSwitching ||
     approval.isPending ||
     approval.isConfirming ||
     incentive.isPending ||
@@ -174,7 +176,7 @@ export default function AddValidatorIncentiveModal({
           <Button
             onClick={() => {
               if (needsWalletSwitch) {
-                walletSwitch.switchChain({ chainId })
+                walletNetwork.switchWalletNetwork()
                 return
               }
               if (!token || parsedAmount <= 0n) return

@@ -1,6 +1,11 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 import {
+  ChainMismatchError,
+  TransactionExecutionError,
+  defineChain,
+} from "viem"
+import {
   formatWalletWriteError,
   isMutationRpcMethod,
   normalizeRawTransaction,
@@ -60,4 +65,21 @@ test("maps mezod unmarshal errors to the empty-tx guidance", () => {
     ),
   )
   assert.match(formatted, /empty signed transaction/)
+})
+
+test("maps viem's chain mismatch to the wrong-network label", () => {
+  // wagmi passes `chain: { id }` without a name for a pinned write.
+  const mismatch = new ChainMismatchError({
+    chain: defineChain({
+      id: 31611,
+      name: "",
+      nativeCurrency: { name: "BTC", symbol: "BTC", decimals: 18 },
+      rpcUrls: { default: { http: [] } },
+    }),
+    currentChainId: 31612,
+  })
+  const formatted = formatWalletWriteError(
+    new TransactionExecutionError(mismatch, { account: null }),
+  )
+  assert.equal(formatted, "Wallet on Mezo Mainnet, expected Mezo Testnet")
 })

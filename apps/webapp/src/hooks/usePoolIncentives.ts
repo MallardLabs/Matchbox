@@ -1,6 +1,7 @@
 import { getContractConfig } from "@/config/contracts"
 import { QUERY_PROFILES } from "@/config/queryProfiles"
 import { useNetwork } from "@/contexts/NetworkContext"
+import { useGatedWriteContract } from "@/hooks/useGatedWalletWrites"
 import { useTokenList } from "@/hooks/useTokenList"
 import { useCallback, useMemo } from "react"
 import type { Address, Hex } from "viem"
@@ -9,7 +10,6 @@ import {
   useReadContract,
   useReadContracts,
   useWaitForTransactionReceipt,
-  useWriteContract,
 } from "wagmi"
 
 export type PoolIncentive = {
@@ -272,9 +272,16 @@ export type AddPoolIncentiveResult = {
 export function useAddPoolIncentive(): AddPoolIncentiveResult {
   const { chainId } = useNetwork()
   const contracts = getContractConfig(chainId)
-  const { writeContract, data: hash, isPending, error } = useWriteContract()
+  const {
+    writeContract,
+    data: hash,
+    variables,
+    isPending,
+    error,
+  } = useGatedWriteContract()
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
     hash,
+    chainId: variables?.chainId ?? chainId,
   })
 
   const addIncentive = (
@@ -286,6 +293,7 @@ export function useAddPoolIncentive(): AddPoolIncentiveResult {
     writeContract({
       address: bribeAddress,
       abi: contracts.bribe.abi,
+      chainId,
       functionName: "notifyRewardAmount",
       args: [tokenAddress, amount],
     })

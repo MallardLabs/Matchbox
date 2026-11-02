@@ -1,7 +1,13 @@
 import { TokenIcon } from "@/components/TokenIcon"
 import { getExplorerTransactionUrl } from "@/config/explorer"
+import { formatWalletWriteError } from "@/config/mezoRpcWrite"
 import { useNetwork } from "@/contexts/NetworkContext"
+import {
+  useGatedSendTransaction,
+  useGatedWriteContract,
+} from "@/hooks/useGatedWalletWrites"
 import { type Token, useTokenList } from "@/hooks/useTokenList"
+import useWalletNetworkGate from "@/hooks/useWalletNetworkGate"
 import { useWalletAccount } from "@mezo-org/passport"
 import { ERC20_ABI } from "@repo/shared/contracts"
 import { useCallback, useEffect, useMemo, useState } from "react"
@@ -9,9 +15,7 @@ import { type Address, formatUnits, isAddress, parseUnits } from "viem"
 import {
   useBalance,
   useReadContract,
-  useSendTransaction,
   useWaitForTransactionReceipt,
-  useWriteContract,
 } from "wagmi"
 
 type SendStep = "form" | "confirming" | "success" | "error"
@@ -111,7 +115,9 @@ type SendViewProps = {
 
 export function SendView({ onBack, onClose }: SendViewProps): JSX.Element {
   const { accountAddress } = useWalletAccount()
-  const { chainId, isMainnet } = useNetwork()
+  const { chainId, isMainnet, networkName } = useNetwork()
+  const { isWrongNetwork, isSwitching, switchWalletNetwork } =
+    useWalletNetworkGate()
   const { tokens } = useTokenList()
 
   const [selectedToken, setSelectedToken] = useState<Token | undefined>()
@@ -121,6 +127,10 @@ export function SendView({ onBack, onClose }: SendViewProps): JSX.Element {
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [txHash, setTxHash] = useState<`0x${string}` | undefined>()
   const [isTokenDropdownOpen, setIsTokenDropdownOpen] = useState(false)
+  const [formChainId, setFormChainId] = useState(chainId)
+  // The receipt and explorer link stay on the chain the transfer was signed
+  // for, even if the wallet and the UI move on while it is pending.
+  const [txChainId, setTxChainId] = useState(chainId)
 
   const isNativeToken = useMemo(
     () =>
@@ -166,7 +176,7 @@ export function SendView({ onBack, onClose }: SendViewProps): JSX.Element {
     isPending: isWritePending,
     error: writeError,
     reset: resetWrite,
-  } = useWriteContract()
+  } = useGatedWriteContract()
 
   const {
     sendTransaction,
@@ -174,11 +184,12 @@ export function SendView({ onBack, onClose }: SendViewProps): JSX.Element {
     isPending: isSendPending,
     error: sendError,
     reset: resetSend,
-  } = useSendTransaction()
+  } = useGatedSendTransaction()
 
   const { isLoading: isConfirming, isSuccess: isConfirmed } =
     useWaitForTransactionReceipt({
       hash: txHash,
+      chainId: txChainId,
     })
 
   useEffect(() => {
@@ -193,10 +204,19 @@ export function SendView({ onBack, onClose }: SendViewProps): JSX.Element {
   useEffect(() => {
     const error = writeError || sendError
     if (error) {
-      setErrorMessage(error.message || "Transaction failed")
+      setErrorMessage(formatWalletWriteError(error) || "Transaction failed")
       setStep("error")
     }
   }, [writeError, sendError])
+
+  // Token addresses differ per network, so a network change drops the selected
+  // token and its amount before the form can send them.
+  useEffect(() => {
+    if (step !== "form" || formChainId === chainId) return
+    setFormChainId(chainId)
+    setSelectedToken(undefined)
+    setAmount("")
+  }, [step, formChainId, chainId])
 
   const isValidRecipient = useMemo(
     () => isAddress(recipientAddress),
@@ -221,17 +241,25 @@ export function SendView({ onBack, onClose }: SendViewProps): JSX.Element {
   const canSend = useMemo(
     () =>
       selectedToken &&
+      selectedToken.chainId === chainId &&
       isValidRecipient &&
       parsedAmount &&
       parsedAmount > 0n &&
       !hasInsufficientBalance,
-    [selectedToken, isValidRecipient, parsedAmount, hasInsufficientBalance],
+    [
+      selectedToken,
+      chainId,
+      isValidRecipient,
+      parsedAmount,
+      hasInsufficientBalance,
+    ],
   )
 
   const handleSend = useCallback(() => {
     if (!canSend || !selectedToken || !parsedAmount) return
 
     setStep("confirming")
+    setTxChainId(chainId)
     setErrorMessage(null)
 
     const to = recipientAddress as Address
@@ -241,6 +269,7 @@ export function SendView({ onBack, onClose }: SendViewProps): JSX.Element {
         to,
         value: parsedAmount,
         data: "0x" as `0x${string}`,
+        chainId,
       })
     } else {
       writeContract({
@@ -305,7 +334,7 @@ export function SendView({ onBack, onClose }: SendViewProps): JSX.Element {
         </p>
         {txHash && (
           <a
-            href={getExplorerTransactionUrl(chainId, txHash)}
+            href={getExplorerTransactionUrl(txChainId, txHash)}
             target="_blank"
             rel="noopener noreferrer"
             className="mb-8 text-sm text-[var(--accent)] hover:underline"
@@ -505,21 +534,27 @@ export function SendView({ onBack, onClose }: SendViewProps): JSX.Element {
       {/* Send Button */}
       <button
         type="button"
-        onClick={handleSend}
-        disabled={!canSend || isWritePending || isSendPending}
+        onClick={isWrongNetwork ? switchWalletNetwork : handleSend}
+        disabled={
+          isWrongNetwork
+            ? isSwitching
+            : !canSend || isWritePending || isSendPending
+        }
         className="mt-auto w-full rounded-2xl bg-[var(--accent)] py-4 text-lg font-semibold text-white transition-all hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
       >
-        {!selectedToken
-          ? "Select a token"
-          : !amount || !parsedAmount
-            ? "Enter amount"
-            : !recipientAddress
-              ? "Enter recipient"
-              : !isValidRecipient
-                ? "Invalid address"
-                : hasInsufficientBalance
-                  ? "Insufficient balance"
-                  : "Send"}
+        {isWrongNetwork
+          ? `Switch wallet to ${networkName}`
+          : !selectedToken
+            ? "Select a token"
+            : !amount || !parsedAmount
+              ? "Enter amount"
+              : !recipientAddress
+                ? "Enter recipient"
+                : !isValidRecipient
+                  ? "Invalid address"
+                  : hasInsufficientBalance
+                    ? "Insufficient balance"
+                    : "Send"}
       </button>
     </div>
   )

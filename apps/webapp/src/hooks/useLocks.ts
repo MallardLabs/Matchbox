@@ -1,12 +1,12 @@
 import { getContractConfig } from "@/config/contracts"
 import { QUERY_PROFILES } from "@/config/queryProfiles"
 import { useNetwork } from "@/contexts/NetworkContext"
+import { useGatedWriteContract } from "@/hooks/useGatedWalletWrites"
 import { useEffect } from "react"
 import {
   useAccount,
   useReadContracts,
   useWaitForTransactionReceipt,
-  useWriteContract,
 } from "wagmi"
 
 type Lock = {
@@ -271,19 +271,22 @@ export function useApproveMEZO(): {
   const {
     writeContract,
     data: hash,
+    variables,
     isPending,
     error,
     reset,
-  } = useWriteContract()
+  } = useGatedWriteContract()
 
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
     hash,
+    chainId: variables?.chainId ?? chainId,
   })
 
   const approve = (amount: bigint) => {
     if (!contracts.veMEZO.address) return
     writeContract({
       ...contracts.mezoToken,
+      chainId,
       functionName: "approve",
       args: [contracts.veMEZO.address, amount],
     })
@@ -324,13 +327,15 @@ export function useCreateVeMEZOLock(): {
   const {
     writeContract,
     data: hash,
+    variables,
     isPending,
     error,
     reset,
-  } = useWriteContract()
+  } = useGatedWriteContract()
 
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
     hash,
+    chainId: variables?.chainId ?? chainId,
   })
 
   useEffect(() => {
@@ -345,6 +350,7 @@ export function useCreateVeMEZOLock(): {
     writeContract({
       address: veMEZOAddress,
       abi: contracts.veMEZO.abi,
+      chainId,
       functionName: "createLock",
       args: [amount, BigInt(lockDuration)],
     })
