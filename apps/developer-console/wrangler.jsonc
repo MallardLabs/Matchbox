@@ -3,7 +3,11 @@
   "name": "matchbox-developer-console",
   "main": "src/worker/index.ts",
   "compatibility_date": "2026-09-01",
-  "compatibility_flags": ["nodejs_compat"],
+  // global_fetch_strictly_public: fetch() to a hostname on our own zone goes
+  // through the public front door, never straight to an origin. The logo pin
+  // fetches developer-chosen URLs; the other outbound calls (Supabase, Google
+  // JWKS, Cloudflare analytics) are public hosts either way.
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
   "workers_dev": true,
   "routes": [
     { "pattern": "developer.matchbox.markets", "custom_domain": true },

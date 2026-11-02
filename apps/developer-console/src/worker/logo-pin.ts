@@ -1,13 +1,16 @@
 /**
- * Pins the app logo at staff approval. `logoUrl` is any HTTPS URL the
- * developer controls, so the bytes behind it can change after review.
- * Matchbox ID shows a verified app's logo only from this copy
- * (`mbx_dev_verified_logos`); when the logo cannot be pinned, the verified
- * consent screen shows the app's initial instead.
+ * Pins the app logo when a review is submitted. `logoUrl` is any HTTPS URL
+ * the developer controls, so the bytes behind it can change, or differ per
+ * requester. Staff review the pinned copy (never the live URL), the approval
+ * names its SHA-256, and Matchbox ID shows a verified app's logo only from
+ * that copy (`mbx_dev_verified_logos`); when the logo cannot be pinned, the
+ * verified consent screen shows the app's initial instead.
  */
 
 export const maxPinnedLogoBytes = 64 * 1024
+/** One deadline for every hop and the body. */
 export const logoFetchTimeoutMs = 5_000
+export const maxLogoRedirects = 3
 
 export type PinnedLogoType =
   | "image/png"
@@ -55,24 +58,65 @@ export function sniffLogoType(bytes: Uint8Array): PinnedLogoType | null {
   return null
 }
 
-/** Reads at most `limit` bytes; null when the body is longer. */
+const privateSuffixes = [".localhost", ".local", ".internal", ".arpa"]
+
+/**
+ * Null when the Worker may fetch `url`: HTTPS on the default port, a dotted
+ * DNS name (no IP literal, localhost or private-use suffix), no credentials.
+ * Checked on every hop; `global_fetch_strictly_public` keeps same-zone
+ * hostnames on the public path.
+ */
+export function logoUrlProblem(url: URL): string | null {
+  if (url.protocol !== "https:") return "not-https"
+  if (url.username !== "" || url.password !== "" || url.port !== "") {
+    return "bad-host"
+  }
+  const host = url.hostname.toLowerCase().replace(/\.$/, "")
+  if (
+    host.startsWith("[") ||
+    /^[\d.]+$/.test(host) ||
+    !host.includes(".") ||
+    privateSuffixes.some((suffix) => host.endsWith(suffix))
+  ) {
+    return "bad-host"
+  }
+  return null
+}
+
+class DeadlineError extends Error {}
+
+/** Rejects once `deadline` (epoch ms) passes; the caller cleans up. */
+function beforeDeadline<T>(promise: Promise<T>, deadline: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const expired = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new DeadlineError()),
+      Math.max(0, deadline - Date.now()),
+    )
+  })
+  return Promise.race([promise, expired]).finally(() => clearTimeout(timer))
+}
+
+/** Reads at most `limit` bytes by `deadline`; null when the body is longer. */
 async function readCapped(
   response: Response,
   limit: number,
+  deadline: number,
 ): Promise<Uint8Array | null> {
   if (response.body === null) return new Uint8Array()
   const reader = response.body.getReader()
   const chunks: Uint8Array[] = []
   let size = 0
-  for (;;) {
-    const { done, value } = await reader.read()
-    if (done) break
-    size += value.byteLength
-    if (size > limit) {
-      await reader.cancel()
-      return null
+  try {
+    for (;;) {
+      const { done, value } = await beforeDeadline(reader.read(), deadline)
+      if (done) break
+      size += value.byteLength
+      if (size > limit) return null
+      chunks.push(value)
     }
-    chunks.push(value)
+  } finally {
+    reader.cancel().catch(() => undefined)
   }
   const bytes = new Uint8Array(size)
   let offset = 0
@@ -98,10 +142,51 @@ async function sha256Hex(bytes: Uint8Array): Promise<string> {
   ).join("")
 }
 
+function isRedirect(status: number): boolean {
+  return status >= 300 && status < 400
+}
+
+/**
+ * Follows at most `maxLogoRedirects` redirects by hand, re-checking each
+ * target; the final response, or a refusal reason.
+ */
+async function fetchFinal(
+  fetchLogo: LogoFetch,
+  start: URL,
+  signal: AbortSignal,
+  deadline: number,
+): Promise<Response | string> {
+  let current = start
+  for (let hop = 0; ; hop += 1) {
+    const problem = logoUrlProblem(current)
+    if (problem !== null) return problem
+    const response = await beforeDeadline(
+      fetchLogo(current.href, {
+        headers: { Accept: "image/png,image/jpeg,image/gif,image/webp" },
+        redirect: "manual",
+        signal,
+      }),
+      deadline,
+    )
+    if (!isRedirect(response.status)) return response
+    await response.body?.cancel()
+    const location = response.headers.get("Location")
+    if (location === null || hop >= maxLogoRedirects) {
+      return "too-many-redirects"
+    }
+    try {
+      current = new URL(location, current)
+    } catch {
+      return "invalid-url"
+    }
+  }
+}
+
 /** Fetches and checks the logo; never throws. */
 export async function pinLogo(
   fetchLogo: LogoFetch,
   url: string,
+  timeoutMs = logoFetchTimeoutMs,
 ): Promise<PinLogoResult> {
   let parsed: URL
   try {
@@ -109,17 +194,16 @@ export async function pinLogo(
   } catch {
     return { ok: false, reason: "invalid-url" }
   }
-  if (parsed.protocol !== "https:") return { ok: false, reason: "not-https" }
+  const controller = new AbortController()
+  const deadline = Date.now() + timeoutMs
   try {
-    const response = await fetchLogo(parsed.href, {
-      headers: { Accept: "image/png,image/jpeg,image/gif,image/webp" },
-      redirect: "follow",
-      signal: AbortSignal.timeout(logoFetchTimeoutMs),
-    })
-    if (response.url !== "" && !response.url.startsWith("https://")) {
-      await response.body?.cancel()
-      return { ok: false, reason: "not-https" }
-    }
+    const response = await fetchFinal(
+      fetchLogo,
+      parsed,
+      controller.signal,
+      deadline,
+    )
+    if (typeof response === "string") return { ok: false, reason: response }
     if (!response.ok) {
       await response.body?.cancel()
       return { ok: false, reason: `status-${response.status}` }
@@ -129,7 +213,7 @@ export async function pinLogo(
       await response.body?.cancel()
       return { ok: false, reason: "too-large" }
     }
-    const bytes = await readCapped(response, maxPinnedLogoBytes)
+    const bytes = await readCapped(response, maxPinnedLogoBytes, deadline)
     if (bytes === null) return { ok: false, reason: "too-large" }
     const contentType = sniffLogoType(bytes)
     if (contentType === null) return { ok: false, reason: "not-an-image" }
@@ -142,7 +226,13 @@ export async function pinLogo(
         sourceUrl: url,
       },
     }
-  } catch {
-    return { ok: false, reason: "fetch-failed" }
+  } catch (error) {
+    return {
+      ok: false,
+      reason: error instanceof DeadlineError ? "timeout" : "fetch-failed",
+    }
+  } finally {
+    // Stops any hop or body still in flight after a refusal or deadline.
+    controller.abort()
   }
 }
