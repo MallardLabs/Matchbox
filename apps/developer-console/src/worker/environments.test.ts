@@ -1,6 +1,7 @@
 import {
   adminReviewSchema,
   appSchema,
+  environmentReviewListResponseSchema,
   environmentSchema,
   submitReviewResponseSchema,
 } from "@repo/platform-contracts/console"
@@ -418,6 +419,26 @@ describe("staff review decisions", () => {
     expect(after?.approvedScopes).toEqual([])
     expect(after?.scopeVersion).toBe(1)
     expect(after?.reviewState).toBe("changes-requested")
+  })
+
+  it("never shows the organization the reviewer's account id", async () => {
+    const context = await openReview()
+    await context.harness.request(
+      "POST",
+      `/api/admin/reviews/${context.reviewId}/decision`,
+      { cookie: context.staffCookie, body: { decision: "approve" } },
+    )
+    const response = await context.harness.request(
+      "GET",
+      `/api/environments/${context.live.id}/reviews`,
+      { cookie: context.cookie },
+    )
+    expect(response.status).toBe(200)
+    const body = await response.text()
+    expect(body).not.toContain(context.reviewer.id)
+    const { data } = environmentReviewListResponseSchema.parse(JSON.parse(body))
+    expect(data[0]?.decidedBy).toBe("staff")
+    expect(data[0]).not.toHaveProperty("reviewerId")
   })
 
   it("app status changes record the reason", async () => {

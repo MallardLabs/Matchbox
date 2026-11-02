@@ -180,14 +180,17 @@ export async function toDeveloperReviews(
       account === null ? [] : [[account.id, account.displayName] as const],
     ),
   )
-  return reviews.map((review) => ({
-    ...toReview(review),
-    decidedBy: reviewDecidedBy(review),
-    submitterName:
-      review.submitterId === null
-        ? null
-        : (names.get(review.submitterId) ?? null),
-  }))
+  return reviews.map((review) => {
+    const { reviewerId: _staffAccountId, ...visible } = toReview(review)
+    return {
+      ...visible,
+      decidedBy: reviewDecidedBy(review),
+      submitterName:
+        review.submitterId === null
+          ? null
+          : (names.get(review.submitterId) ?? null),
+    }
+  })
 }
 
 /** Loads redirect URIs, origins and the open review for the response. */

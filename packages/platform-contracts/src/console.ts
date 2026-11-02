@@ -385,13 +385,16 @@ export function compareReviewsNewestFirst(
 
 /**
  * A review as developers see it, decided ones included. `reviewerNote` is
- * the staff "Note to developer" (shown on Overview + Environments).
+ * the staff "Note to developer" (shown on Overview + Environments). Staff
+ * account ids stay internal: `decidedBy` says who closed it.
  */
-export const developerReviewSchema = reviewSchema.extend({
-  decidedBy: reviewDecidedBySchema.nullable(),
-  /** Submitter's display name; null when the account is gone. */
-  submitterName: z.string().nullable(),
-})
+export const developerReviewSchema = reviewSchema
+  .omit({ reviewerId: true })
+  .extend({
+    decidedBy: reviewDecidedBySchema.nullable(),
+    /** Submitter's display name; null when the account is gone. */
+    submitterName: z.string().nullable(),
+  })
 
 export type DeveloperReview = z.infer<typeof developerReviewSchema>
 
