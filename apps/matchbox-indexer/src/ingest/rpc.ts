@@ -268,17 +268,17 @@ export class RpcClient {
     const active = filters.filter((filter) => filter.addresses.length > 0)
     const batches = await Promise.all(
       active.map(async ({ addresses, topic0s }) => {
-        const logs: RpcLog[] = []
+        const parts: RpcLog[][] = []
         for (const addressChunk of chunk(addresses, this.maxAddresses)) {
-          logs.push(
-            ...(await this.getLogsSplitting(
+          parts.push(
+            await this.getLogsSplitting(
               { fromBlock, toBlock, addresses: addressChunk },
               topic0s,
               budget,
-            )),
+            ),
           )
         }
-        return logs
+        return parts.flat()
       }),
     )
     const normalized = await this.normalizeLogs(batches.flat())
@@ -351,11 +351,11 @@ export class RpcClient {
         )
       }
       budget.splitsLeft--
-      const logs: RpcLog[] = []
+      const parts: RpcLog[][] = []
       for (const part of splitQuery(query)) {
-        logs.push(...(await this.getLogsSplitting(part, topic0s, budget)))
+        parts.push(await this.getLogsSplitting(part, topic0s, budget))
       }
-      return logs
+      return parts.flat()
     }
   }
 
@@ -370,7 +370,7 @@ export class RpcClient {
         false,
       )
     }
-    const logs: RpcLog[] = []
+    const parts: RpcLog[][] = []
     for (const addressChunk of chunk(addresses, endpoint.maxAddresses)) {
       const filter = {
         fromBlock: toHex(fromBlock),
@@ -378,16 +378,16 @@ export class RpcClient {
         address: addressChunk,
         ...(topic0s ? { topics: [topic0s] } : {}),
       }
-      logs.push(
-        ...(await this.call(
+      parts.push(
+        await this.call(
           endpoint,
           "eth_getLogs",
           [filter],
           z.array(rpcLogSchema),
-        )),
+        ),
       )
     }
-    return logs
+    return parts.flat()
   }
 
   // Mezo's eth_getLogs reports blockTimestamp "0x0" on every log, so the

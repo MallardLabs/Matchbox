@@ -2,14 +2,16 @@ import { type Address, encodeFunctionData, pad } from "viem"
 import { describe, expect, it } from "vitest"
 import { CLAIM_ABI } from "../../src/decode/calldata"
 import {
+  ContractSet,
   type IngestDeps,
   blockWindows,
+  fetchWindow,
   historyStartBlock,
   ingestRange,
   ingestToHead,
 } from "../../src/ingest/ingest"
 import type { NetworkConfig } from "../../src/ingest/networks"
-import { RpcClient } from "../../src/ingest/rpc"
+import { type RawLog, RpcClient } from "../../src/ingest/rpc"
 import { MemoryIngestStore, nextCheckpoint } from "../../src/ingest/store"
 import type { RegisteredContract } from "../../src/ingest/store"
 import {
@@ -154,6 +156,40 @@ describe("ingestRange", () => {
     expect(contracts.map((contract) => contract.address).sort()).toEqual(
       [VOTER, FACTORY, POOL, GAUGE, BRIBE, FEE].sort(),
     )
+  })
+
+  // logs.push(...childLogs) overflowed the stack at about 125,000 logs.
+  it("adds more child logs than fit in a call's arguments", async () => {
+    const { deps } = setup(CHAIN)
+    const rpc = deps.rpc
+    const childLogs: RawLog[] = Array.from({ length: 200_000 }, (_, index) => ({
+      network: "mezo",
+      blockNumber: 16n,
+      blockHash: pad("0x16", { size: 32 }),
+      blockTimestamp: 1n,
+      txHash: pad("0xaa", { size: 32 }),
+      txIndex: 0,
+      logIndex: index,
+      address: GAUGE,
+      topics: [],
+      data: "0x",
+    }))
+    let fetches = 0
+    deps.rpc = {
+      // The factory logs, then the new children's logs.
+      getLogsForFilters: async (
+        ...args: Parameters<RpcClient["getLogsForFilters"]>
+      ) => (fetches++ === 0 ? rpc.getLogsForFilters(...args) : childLogs),
+      getTransactions: async () => [],
+    } as unknown as RpcClient
+    const result = await fetchWindow(
+      deps,
+      { from: 11n, to: 20n },
+      new ContractSet(STATICS),
+    )
+
+    expect(fetches).toBe(2)
+    expect(result.logs.length).toBeGreaterThan(childLogs.length)
   })
 
   it("stores only handled topics", async () => {

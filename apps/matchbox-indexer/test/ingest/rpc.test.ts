@@ -242,6 +242,81 @@ describe("RpcClient.getLogsForFilters", () => {
     expect(quietCalls).toHaveLength(1)
   })
 
+  // push(...logs) overflowed the stack at about 125,000 logs, so a dense
+  // window failed for good.
+  it("returns more logs than fit in a call's arguments", async () => {
+    const [address] = addresses(1) as [Address]
+    const perBlock = 8_000
+    const busyBlocks = 20
+    const topic = toEventSelector("Foo()")
+    type Request = { id: number; method: string; params: unknown[] }
+    const fetchImpl = (async (
+      _input: RequestInfo | URL,
+      init?: RequestInit,
+    ) => {
+      const body = JSON.parse(String(init?.body)) as Request | Request[]
+      if (Array.isArray(body)) {
+        // Header batches.
+        return Response.json(
+          body.map((request) => {
+            const block = Number(BigInt(request.params[0] as string))
+            return {
+              jsonrpc: "2.0",
+              id: request.id,
+              result: {
+                hash: blockHash(block),
+                timestamp: `0x${blockTimestamp(block).toString(16)}`,
+              },
+            }
+          }),
+        )
+      }
+      const request = body
+      const reply = (result: unknown) =>
+        Response.json({ jsonrpc: "2.0", id: request.id, result })
+      const filter = request.params[0] as { fromBlock: string; toBlock: string }
+      const from = Number(BigInt(filter.fromBlock))
+      const to = Math.min(Number(BigInt(filter.toBlock)), busyBlocks)
+      if ((to - from + 1) * perBlock > 10_000) {
+        return Response.json({
+          jsonrpc: "2.0",
+          id: request.id,
+          error: { code: -32000, message: "query returned more than 10000" },
+        })
+      }
+      const logs = []
+      for (let block = from; block <= to; block++) {
+        for (let index = 0; index < perBlock; index++) {
+          logs.push({
+            address,
+            topics: [topic],
+            data: "0x",
+            blockNumber: `0x${block.toString(16)}`,
+            blockHash: blockHash(block),
+            transactionHash: blockHash(block),
+            transactionIndex: "0x0",
+            logIndex: `0x${index.toString(16)}`,
+          })
+        }
+      }
+      return reply(logs)
+    }) as typeof fetch
+    const rpc = new RpcClient({
+      network: "mezo",
+      fetch: fetchImpl,
+      sleep: async () => {},
+      endpoints: [{ url: PRIMARY, maxAddresses: 100, maxBlockRange: 10 }],
+    })
+    // 160,000 logs, all in the first half of the range, so both a split and
+    // the address chunk return them in one piece.
+    const logs = await rpc.getLogsForFilters(1n, 40n, [
+      { addresses: [address], topic0s: [topic] },
+    ])
+
+    expect(logs).toHaveLength(perBlock * busyBlocks)
+    expect(logs.at(-1)?.blockNumber).toBe(BigInt(busyBlocks))
+  }, 60_000)
+
   it("fails, naming the block, when one contract alone fills it past the cap", async () => {
     const [address] = addresses(1) as [Address]
     const chain = new FakeChain({
