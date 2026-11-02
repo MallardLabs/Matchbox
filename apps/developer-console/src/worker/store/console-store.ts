@@ -429,15 +429,19 @@ export type ConsoleStore = {
   createReview(
     input: Omit<ReviewRecord, "id" | "createdAt"> & { createdAt?: string },
   ): Promise<ReviewRecord>
-  updateReview(
+  /**
+   * Decides or withdraws a review only while it is still open (one
+   * conditional update); null when it was already closed.
+   */
+  closeReview(
     id: string,
     patch: {
-      state: ReviewRecordState
+      state: Exclude<ReviewRecordState, "open">
       reviewerId?: string | null
       reviewerNote?: string | null
       decidedAt: string
     },
-  ): Promise<ReviewRecord>
+  ): Promise<ReviewRecord | null>
   /** Every review of an environment, newest activity first. */
   listEnvironmentReviews(environmentId: string): Promise<ReviewRecord[]>
   /** Reviews across an organization's apps, newest activity first. */

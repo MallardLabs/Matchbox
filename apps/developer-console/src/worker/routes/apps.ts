@@ -184,12 +184,15 @@ export default function registerAppRoutes(app: ConsoleApp): void {
       }
     }
     const patch = profilePatch(body)
-    if (consentProfileChanged(access.app, patch)) {
+    const profileChanged = consentProfileChanged(access.app, patch)
+    if (profileChanged) {
       const live = await store.getEnvironmentByKind(appId, "live")
       if (live !== null) await assertNoOpenLiveReview(c, live, "the profile")
       await withdrawAppVerification(c, appId)
     }
     const updated = await store.updateApp(appId, patch)
+    // Again after the write: a staff approval may have landed in between.
+    if (profileChanged) await withdrawAppVerification(c, appId)
     await audit(c, {
       action: "app-updated",
       organizationId: updated.organizationId,

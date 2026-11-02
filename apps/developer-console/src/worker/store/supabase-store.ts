@@ -1209,7 +1209,7 @@ export default function createSupabaseStore(
         await supabase.from("mbx_dev_reviews").insert(row).select("*").single(),
       )
     },
-    async updateReview(id, patch) {
+    async closeReview(id, patch) {
       const row: Record<string, string | null> = {
         state: patch.state,
         decided_at: patch.decidedAt,
@@ -1218,15 +1218,16 @@ export default function createSupabaseStore(
       if (patch.reviewerNote !== undefined) {
         row.reviewer_note = patch.reviewerNote
       }
-      return one(
+      return maybe(
         reviewRow,
-        "update review",
+        "close review",
         await supabase
           .from("mbx_dev_reviews")
           .update(row)
           .eq("id", id)
+          .eq("state", "open")
           .select("*")
-          .single(),
+          .maybeSingle(),
       )
     },
     async listEnvironmentReviews(environmentId) {

@@ -635,9 +635,10 @@ export default function createMemoryStore(
       reviews.set(review.id, review)
       return copy(review)
     },
-    async updateReview(id, patch) {
+    async closeReview(id, patch) {
       const review = reviews.get(id)
       if (review === undefined) throw missing("Review")
+      if (review.state !== "open") return null
       Object.assign(review, patch)
       return copy(review)
     },

@@ -61,7 +61,11 @@ import {
   evaluateSubmission,
 } from "../review-policy"
 import type { EnvironmentRecord } from "../store/console-store"
-import { assertNoOpenLiveReview, withdrawVerification } from "../verification"
+import {
+  assertNoOpenLiveReview,
+  withdrawCurrentVerification,
+  withdrawVerification,
+} from "../verification"
 
 function validateAll(
   values: string[],
@@ -267,6 +271,11 @@ export default function registerEnvironmentRoutes(app: ConsoleApp): void {
       environment = await withdrawVerification(c, environment)
     }
     await store.replaceRedirectUris(environmentId, uris)
+    // Again after the write: a staff approval may have landed in between.
+    if (added.length > 0) {
+      environment =
+        (await withdrawCurrentVerification(c, environmentId)) ?? environment
+    }
     await audit(c, {
       ...auditScope(access),
       action: "redirect-uris-updated",
@@ -299,6 +308,10 @@ export default function registerEnvironmentRoutes(app: ConsoleApp): void {
       environment = await withdrawVerification(c, environment)
     }
     await store.replaceOrigins(environmentId, origins)
+    if (added.length > 0) {
+      environment =
+        (await withdrawCurrentVerification(c, environmentId)) ?? environment
+    }
     await audit(c, {
       ...auditScope(access),
       action: "origins-updated",
@@ -492,10 +505,14 @@ export default function registerEnvironmentRoutes(app: ConsoleApp): void {
     if (review === null) {
       throw new PlatformError("conflict", { message: "No open review." })
     }
-    await store.updateReview(review.id, {
+    // Conditional: a staff decision closing it first wins.
+    const withdrawn = await store.closeReview(review.id, {
       state: "withdrawn",
       decidedAt: nowIso(c),
     })
+    if (withdrawn === null) {
+      throw new PlatformError("conflict", { message: "No open review." })
+    }
     const environment = await store.updateEnvironment(environmentId, {
       reviewState: environmentReviewState(
         access.environment.approvedScopes,

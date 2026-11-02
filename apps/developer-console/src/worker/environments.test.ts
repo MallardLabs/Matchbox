@@ -646,4 +646,133 @@ describe("staff verification", () => {
     )
     expect(environment?.approvedScopes).toEqual(["openid", "wallet"])
   })
+
+  describe("races with the developer", () => {
+    async function openLiveReview() {
+      const context = await ownerContext()
+      const cookies = await staff(context)
+      await requestScopes(context, context.live.id, ["openid", "wallet"])
+      const submitted = await context.harness.json(
+        await submit(context, context.live.id),
+        submitReviewResponseSchema,
+      )
+      const reviewId = submitted.review?.id ?? ""
+      const approve = () =>
+        context.harness.request(
+          "POST",
+          `/api/admin/reviews/${reviewId}/decision`,
+          { cookie: cookies.reviewerCookie, body: { decision: "approve" } },
+        )
+      const rename = () =>
+        context.harness.request("PATCH", `/api/apps/${context.app.id}`, {
+          cookie: context.cookie,
+          body: { name: "Mezo Official" },
+        })
+      const withdraw = () =>
+        context.harness.request(
+          "POST",
+          `/api/environments/${context.live.id}/withdraw-review`,
+          { cookie: context.cookie, body: {} },
+        )
+      return { ...context, reviewId, approve, rename, withdraw }
+    }
+
+    it("a withdraw and rename inside the decision make it a 409", async () => {
+      const context = await openLiveReview()
+      const { store } = context.harness
+      const getAdminReview = store.getAdminReview.bind(store)
+      const during: number[] = []
+      store.getAdminReview = async (id) => {
+        const record = structuredClone(await getAdminReview(id))
+        if (during.length === 0) {
+          during.push((await context.withdraw()).status)
+          during.push((await context.rename()).status)
+        }
+        return record
+      }
+      const decision = await context.approve()
+      expect(during).toEqual([200, 200])
+      expect(decision.status).toBe(409)
+      expect(await verifiedAt(context)).toBeNull()
+      const review = await store.getReview(context.reviewId)
+      expect(review?.state).toBe("withdrawn")
+      expect(review?.reviewerId).toBeNull()
+    })
+
+    it("a rename after the review closes withdraws the new badge", async () => {
+      const context = await openLiveReview()
+      const { store } = context.harness
+      const closeReview = store.closeReview.bind(store)
+      const during: number[] = []
+      store.closeReview = async (id, patch) => {
+        const closed = await closeReview(id, patch)
+        if (patch.state === "approved") {
+          during.push((await context.rename()).status)
+        }
+        return closed
+      }
+      expect((await context.approve()).status).toBe(200)
+      expect(during).toEqual([200])
+      expect(await verifiedAt(context)).toBeNull()
+      expect((await store.getReview(context.reviewId))?.state).toBe("approved")
+    })
+
+    it("a rename after the badge is written withdraws it", async () => {
+      const context = await openLiveReview()
+      const { store } = context.harness
+      const updateEnvironment = store.updateEnvironment.bind(store)
+      const during: number[] = []
+      store.updateEnvironment = async (id, patch) => {
+        const updated = await updateEnvironment(id, patch)
+        if (typeof patch.verifiedAt === "string" && during.length === 0) {
+          during.push((await context.rename()).status)
+        }
+        return updated
+      }
+      expect((await context.approve()).status).toBe(200)
+      expect(during).toEqual([200])
+      expect(await verifiedAt(context)).toBeNull()
+    })
+
+    it("a badge written between a rename's checks is withdrawn", async () => {
+      const context = await verifiedLive()
+      const { store } = context.harness
+      const updateApp = store.updateApp.bind(store)
+      store.updateApp = async (id, patch) => {
+        // A staff approval (and its re-check) completes after the rename
+        // withdrew verification but before the new name is stored.
+        await store.updateEnvironment(context.live.id, {
+          verifiedAt: "2026-09-30T12:00:00.000Z",
+        })
+        return updateApp(id, patch)
+      }
+      const rename = await context.harness.request(
+        "PATCH",
+        `/api/apps/${context.app.id}`,
+        { cookie: context.cookie, body: { name: "Mezo Official" } },
+      )
+      expect(rename.status).toBe(200)
+      expect(await verifiedAt(context)).toBeNull()
+    })
+
+    it("a withdraw after the decision closed the review is a 409", async () => {
+      const context = await openLiveReview()
+      const { store } = context.harness
+      const getOpenReview = store.getOpenReview.bind(store)
+      store.getOpenReview = async (environmentId) => {
+        const open = await getOpenReview(environmentId)
+        // The staff decision lands between the withdraw's read and write.
+        if (open !== null) {
+          await store.closeReview(open.id, {
+            state: "approved",
+            decidedAt: "2026-09-30T12:00:00.000Z",
+          })
+        }
+        return open
+      }
+      const response = await context.withdraw()
+      expect(response.status).toBe(409)
+      expect((await store.getReview(context.reviewId))?.state).toBe("approved")
+    })
+  })
 })
