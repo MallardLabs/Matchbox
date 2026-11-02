@@ -7,9 +7,11 @@ import {
 } from "https://esm.sh/viem@2"
 import { z } from "https://esm.sh/zod@4.1.12"
 import {
+  gaugeSignerIsContract,
   profileWriteAuthorizationMessage,
   resolveGaugeController,
   sha256,
+  signedBy,
 } from "../_shared/gaugeProfileAuthorization.ts"
 import { getMezoNetworkConfigForChain } from "../_shared/contracts.ts"
 import { corsHeaders } from "../_shared/cors.ts"
@@ -173,10 +175,12 @@ Deno.serve(async (request) => {
     if (!isHex(parsed.data.proof.signature)) {
       return json({ error: "invalid-proof" }, 401)
     }
-    const signatureValid = await publicClient.verifyMessage({
+    const signatureValid = await signedBy(publicClient, {
       address: getAddress(parsed.data.ownerAddress),
       message: parsed.data.proof.message,
       signature: parsed.data.proof.signature,
+      contractSigner: () =>
+        gaugeSignerIsContract(publicClient, controller, signer),
     })
     if (!signatureValid) {
       return json({ error: "profile-authorization-failed" }, 403)
