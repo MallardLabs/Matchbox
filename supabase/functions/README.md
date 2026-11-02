@@ -94,21 +94,27 @@ reward-floor cull for that semester's window.
   `/matchbox` and `/poke-roles` slash commands plus the Unlink / Re-link buttons.
   Authenticates every request via the Ed25519 signature Discord attaches (no
   Supabase JWT), so deploy with `--no-verify-jwt`.
-- **`discord-link`** — backs the web `/link` page. Resolves a link token to the
-  Discord profile shown on the page, returns the message to sign, and verifies the
-  wallet signature to store the link + reconcile semester roles. Also deploy with
-  `--no-verify-jwt` (the link token + wallet signature are the proof).
+- **`discord-link`** — backs the web `/link` page and the web unlink. Resolves a
+  link token to the Discord profile shown on the page, checks the page's Discord
+  OAuth2 sign-in belongs to that token's member, returns the EIP-4361 message to
+  sign, and verifies the wallet signature to store the link + reconcile semester
+  roles. Unlinking signs a single-use challenge. Also deploy with
+  `--no-verify-jwt` (the link token, Discord sign-in and wallet signature are the
+  proof).
 - **`discord-reconcile-roles`** — scheduled job that re-checks every linked member's
   points per semester and adds/removes roles so they stay correct between `/matchbox`
   runs. **Not public** — schedule with pg_cron using the service-role key (default
   `verify_jwt`); other callers get `401` (see "Scheduled jobs" above). Fetches each
   window's leaderboard once for efficiency.
 
-Shared helpers live in `_shared/discord.ts` (Ed25519 verify, REST, role add/remove,
-avatar URL) and `_shared/discordLink.ts` (signed-message format, token/nonce, points
-lookup, semester role reconciliation). Data lives in `discord_wallet_links`,
-`discord_link_tokens`, and `discord_semesters` (see
-`supabase/migrations/20260529000001_create_discord_links.sql`).
+Shared helpers live in `_shared/discord.ts` (Ed25519 verify, OAuth2 identity,
+REST, role add/remove, avatar URL), `_shared/discordLinkMessage.ts` (signed-message
+format) and `_shared/discordLink.ts` (token/nonce, points lookup, semester role
+reconciliation). Data lives in `discord_wallet_links`, `discord_link_tokens`, and
+`discord_semesters` (see
+`supabase/migrations/20260529000001_create_discord_links.sql`), plus
+`discord_unlink_challenges`
+(`supabase/migrations/20261030000010_discord_unlink_challenges.sql`).
 
 **Semesters (seasons):** each row in `discord_semesters` defines a fixed point window
 (`from_ts`/`to_ts`, unix seconds, Thursday-aligned) and the `role_id` to grant.
@@ -123,8 +129,9 @@ Setting the optional `DISCORD_ROLE_ID` secret additionally grants a "current" ro
 based on the live rolling 8-epoch window. Leave it unset for semester-only roles.
 
 **Flow:** `/matchbox` → bot replies with an ephemeral link to `/link?token=…` → user
-connects a wallet and signs → `discord-link` verifies, stores the link, and grants a
-role for each qualifying semester. Re-running `/matchbox` shows per-semester points +
+signs in with Discord (OAuth2 implicit grant, `identify`; it must be the account
+that ran `/matchbox`), connects a wallet and signs → `discord-link` verifies, stores
+the link, and grants a role for each qualifying semester. Re-running `/matchbox` shows per-semester points +
 an Unlink button. Members with Manage Roles can run `/poke-roles` to reconcile all
 linked members immediately.
 
@@ -171,6 +178,9 @@ member holds into `granted_roles` so syncs can manage it again.
    Information) to:
    `https://YOUR_PROJECT_REF.supabase.co/functions/v1/discord-interactions`
    Discord sends a signed PING to validate it — it should save successfully.
+   Under **OAuth2**, add the redirect `<MATCHBOX_WEBAPP_URL>/link` (e.g.
+   `https://app.matchbox.markets/link`); the `/link` page signs in with it and
+   `DISCORD_APP_ID` as the client ID. No client secret is used.
 6. **Register slash commands** (guild-scoped, appears instantly):
    ```bash
    DISCORD_APP_ID=... DISCORD_BOT_TOKEN=... DISCORD_GUILD_ID=... \

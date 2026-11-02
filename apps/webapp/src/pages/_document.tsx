@@ -1,3 +1,4 @@
+import { DISCORD_SIGN_IN_RETURN_KEY } from "@/lib/discordSignIn"
 import { getBaseUrl, getOgImageUrl } from "@/utils/seo"
 import { Head, Html, Main, NextScript } from "next/document"
 
@@ -67,6 +68,26 @@ export default function Document() {
           content="The powerful veBTC + veMEZO matching platform for Mezo"
         />
         <meta name="twitter:image" content={ogImageUrl} />
+
+        {/* Move a Discord sign-in return off the /link URL before analytics loads */}
+        <script
+          // biome-ignore lint/security/noDangerouslySetInnerHtml: Static script; its only interpolation is a constant storage key.
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                try {
+                  if (location.pathname !== '/link') return;
+                  var hash = location.hash.slice(1);
+                  var query = location.search.slice(1);
+                  var returned = /(^|&)state=/.test(hash) ? hash : /(^|&)state=/.test(query) ? query : null;
+                  if (returned === null) return;
+                  history.replaceState(null, '', location.pathname);
+                  sessionStorage.setItem(${JSON.stringify(DISCORD_SIGN_IN_RETURN_KEY)}, returned);
+                } catch (e) {}
+              })();
+            `,
+          }}
+        />
 
         {/* Analytics */}
         <script

@@ -1,11 +1,16 @@
 // Linking + semester-role primitives shared by the Matchbox edge functions:
-// the signed-message format, random token/nonce generation, the Academy
-// allocation lookup (rolling or fixed window), and the role reconciliation rule
-// (a member holds a semester's role iff they survive the reward-floor cull).
+// random token/nonce generation, the Academy allocation lookup (rolling or
+// fixed window), and the role reconciliation rule (a member holds a semester's
+// role iff they survive the reward-floor cull). The signed-message format lives
+// in discordLinkMessage.ts.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
-import { getAddress } from "https://esm.sh/viem@2"
-import { addGuildRole, getMemberRoles, removeGuildRole } from "./discord.ts"
+import {
+  addGuildRole,
+  discordOAuthUserId,
+  getMemberRoles,
+  removeGuildRole,
+} from "./discord.ts"
 
 // Concrete client type matching a default createClient(url, key) call. The bare
 // SupabaseClient generic defaults to a `never` schema that isn't assignable from
@@ -36,6 +41,7 @@ export type Semester = {
 export type WindowRange = { from: number; to: number }
 
 const TOKEN_TTL_SECONDS = 15 * 60
+const UNLINK_CHALLENGE_TTL_SECONDS = 5 * 60
 
 function randomHex(byteLength: number): string {
   const bytes = new Uint8Array(byteLength)
@@ -57,47 +63,58 @@ export function linkTokenExpiry(nowMs: number): string {
   return new Date(nowMs + TOKEN_TTL_SECONDS * 1000).toISOString()
 }
 
-// The exact human-readable message the wallet signs. Deterministic given its
-// inputs so the verifier can rebuild and compare it byte-for-byte.
-export function buildLinkMessage(args: {
-  domain: string
+export function unlinkChallengeExpiry(nowMs: number): string {
+  return new Date(nowMs + UNLINK_CHALLENGE_TTL_SECONDS * 1000).toISOString()
+}
+
+// Whether the browser finishing /link is signed in to Discord, through this
+// app's OAuth2, as the member a link token was minted for. Anyone holding the
+// token can send access tokens, and each check is a call to Discord, so a
+// token is expired after 5 failures (see claim_discord_link_auth_check).
+// "locked" means the token can't be checked any more; "unavailable" that
+// Discord or the database couldn't answer.
+export async function checkDiscordMember(args: {
+  supabase: SupabaseClient
+  token: string
+  accessToken: string
   discordUserId: string
-  address: string
-  nonce: string
-  expiresAt: string
-}): string {
-  const checksummed = getAddress(args.address)
-  return [
-    `${args.domain} wants you to link your wallet to your Discord account.`,
-    "",
-    `Wallet: ${checksummed}`,
-    `Discord User ID: ${args.discordUserId}`,
-    `Nonce: ${args.nonce}`,
-    `Expires: ${args.expiresAt}`,
-    "",
-    "Signing this message proves you own this wallet. It does not create a",
-    "transaction or cost any gas.",
-  ].join("\n")
+  appId: string
+}): Promise<"member" | "not_member" | "locked" | "unavailable"> {
+  const { supabase, token } = args
+  const { data: claimed, error } = await supabase.rpc(
+    "claim_discord_link_auth_check",
+    { p_token: token },
+  )
+  if (error) {
+    console.error("Discord check claim error:", error)
+    return "unavailable"
+  }
+  if (claimed !== true) return "locked"
+
+  let outcome: "member" | "not_member" | "unavailable"
+  try {
+    const userId = await discordOAuthUserId({
+      accessToken: args.accessToken,
+      appId: args.appId,
+    })
+    outcome = userId === args.discordUserId ? "member" : "not_member"
+  } catch (err) {
+    console.error("Discord OAuth check failed:", err)
+    outcome = "unavailable"
+  }
+  // Only a failed check counts against the token, not one Discord couldn't
+  // answer.
+  const { error: settleError } = await supabase.rpc(
+    "settle_discord_link_auth_check",
+    { p_token: token, p_passed: outcome !== "not_member" },
+  )
+  if (settleError) console.error("Discord check settle error:", settleError)
+  return outcome
 }
 
-// The message a wallet signs to unlink itself from Discord. Deterministic so the
-// verifier can rebuild and compare it byte-for-byte.
-export function buildUnlinkMessage(args: {
-  domain: string
-  address: string
-}): string {
-  const checksummed = getAddress(args.address)
-  return [
-    `${args.domain} wants you to unlink your wallet from your Discord account.`,
-    "",
-    `Wallet: ${checksummed}`,
-    "",
-    "Signing this message proves you own this wallet. It does not create a",
-    "transaction or cost any gas.",
-  ].join("\n")
-}
-
-function webappBaseUrl(): string {
+// The webapp origin that hosts /link and the Discord card, without a trailing
+// slash.
+export function webappBaseUrl(): string {
   const baseUrl = Deno.env.get("MATCHBOX_WEBAPP_URL")
   if (!baseUrl) throw new Error("Missing MATCHBOX_WEBAPP_URL")
   return baseUrl.replace(/\/$/, "")

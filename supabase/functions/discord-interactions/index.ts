@@ -271,10 +271,25 @@ async function followupUnlink(args: {
     await revokeAllRoles({ supabase, link, semesters })
   }
 
-  await supabase
+  const { error: deleteError } = await supabase
     .from("discord_wallet_links")
     .delete()
     .eq("discord_user_id", user.id)
+  if (deleteError) {
+    console.error("unlink delete error:", deleteError)
+    await editOriginalInteraction({
+      appId,
+      interactionToken,
+      payload: {
+        content: null,
+        embeds: [{
+          color: EMBED_COLOR_NEUTRAL,
+          description: "Couldn't unlink your wallet right now — please try again shortly.",
+        }],
+      },
+    })
+    return
+  }
 
   const url = await createLinkUrl(supabase, user, guildId)
   await editOriginalInteraction({
