@@ -536,6 +536,7 @@ Issuer: `https://id.matchbox.markets`.
 | `GET /api/authorization-requests/{id}` | app, env kind, scopes with labels, claim preview with **the signed-in user's own** values, existing grant diff |
 | `POST /api/authorization-requests/{id}/decision` | `{ decision: "approve" | "deny" }` → `{ redirectTo }`; CSRF-protected |
 | `GET /api/grants` | connected apps for the session account |
+| `GET /api/app-logos/{environmentId}` | a verified app's logo as pinned at staff approval (`mbx_dev_verified_logos`); 404 unless still verified with the same `logo_url` |
 | `DELETE /api/grants/{id}` | revoke (+ tokens), audit |
 | `GET /api/sessions`, `DELETE /api/sessions/{id}` | device/session management |
 
@@ -699,6 +700,19 @@ the app's status change, when a redirect URI or origin is added, and on a
 reject / request-changes decision. Those attributes cannot change while a live
 review is open. A live environment with OIDC scopes and no verification can
 submit for review with nothing new to approve.
+
+Logo beside the badge: `logo_url` is a developer-controlled URL whose bytes
+can change after review. At approval the console fetches it server-side
+(HTTPS, 5 s, 64 KiB, PNG/JPEG/GIF/WebP by magic bytes) into
+`mbx_dev_verified_logos`. Matchbox ID's verified screens (consent, connected
+apps) point at `GET /api/app-logos/:environmentId?v=<verified_at>`, which
+serves that copy only while the environment is verified and the app's
+`logo_url` still equals the pinned `source_url`; otherwise it returns 404 and
+the SPA shows the initial. Unverified screens keep the developer's URL (no
+badge, no claim). SVG and oversized logos are not pinned, so those verified
+apps show the initial. Trade-off: one extra DB row and one same-origin image
+request, in exchange for no logo swap after review. The cached image outlives
+a withdrawal by up to 5 minutes, but withdrawn screens no longer reference it.
 
 SPA sections: Overview, Apps (list, create), App detail (Settings,
 Environments [test/live tabs: credentials, redirect URIs, origins, scopes,

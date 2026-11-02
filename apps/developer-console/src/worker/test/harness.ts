@@ -59,6 +59,8 @@ export function createHarness(
     health?: ConsoleDeps["health"]
     /** false = `GOOGLE_CLIENT_ID` unset. */
     google?: boolean
+    /** Default: every logo URL answers 404. */
+    logoFetch?: ConsoleDeps["logoFetch"]
   } = {},
 ) {
   let current = new Date("2026-09-30T12:00:00.000Z")
@@ -88,6 +90,9 @@ export function createHarness(
               },
             },
           },
+    logoFetch:
+      options.logoFetch ??
+      (async () => new Response("Not found", { status: 404 })),
     now,
     flags: {
       consoleEnabled: options.consoleEnabled ?? true,

@@ -84,6 +84,24 @@ export function consentVerified(
   )
 }
 
+/**
+ * The logo beside an app's name. Next to the Verified badge it is only the
+ * copy the console pinned at staff approval (`/api/app-logos`): the bytes
+ * behind a developer's `logoUrl` can change after review. The badge-free
+ * screen keeps the developer's URL. `v` changes with every approval.
+ */
+export function consentLogoUrl(
+  app: AppRecord,
+  environment: EnvironmentRecord,
+): string | null {
+  if (!consentVerified(app, environment)) return app.logoUrl
+  if (app.logoUrl === null || environment.verifiedAt === null) return null
+  return `/api/app-logos/${environment.id}?v=${environment.verifiedAt.getTime()}`
+}
+
+/** Seconds a pinned logo may be cached (it outlives a withdrawal by this). */
+export const appLogoMaxAgeSeconds = 300
+
 function isAppUnavailable(client: ClientRecord): boolean {
   return client.app.status === "suspended" || client.app.status === "retired"
 }
@@ -173,7 +191,7 @@ export default function consentRoutes(deps: AppDeps): Hono {
     const summary: AuthorizationRequestSummary = {
       app: {
         name: clientApp.name,
-        logoUrl: clientApp.logoUrl,
+        logoUrl: consentLogoUrl(clientApp, environment),
         verified: consentVerified(clientApp, environment),
       },
       environmentKind: environment.kind,
@@ -181,6 +199,47 @@ export default function consentRoutes(deps: AppDeps): Hono {
     }
     return c.json(authorizationRequestSummarySchema.parse(summary), 200, {
       "Cache-Control": "no-store",
+    })
+  })
+
+  // A verified app's pinned logo, only while it is still verified and its
+  // `logoUrl` is the one that was pinned. 404 lets the SPA show the initial.
+  app.get("/api/app-logos/:id", async (c) => {
+    const rejected = await firstRateLimitRejection(deps, [
+      {
+        key: `app-logo:ip:${ipPrefix(c.req.raw) ?? "unknown"}`,
+        policy: authorizeIpRateLimitPolicy,
+      },
+    ])
+    if (rejected !== null) {
+      throw new PlatformError("rate_limited", {
+        headers: rateLimitHeaders(rejected, deps.now().getTime()),
+      })
+    }
+    const { id } = pathParams(c, idPathParamsSchema)
+    const client = await deps.store.findEnvironment(id)
+    if (
+      client === null ||
+      client.app.logoUrl === null ||
+      !consentVerified(client.app, client.environment)
+    ) {
+      throw new PlatformError("not_found")
+    }
+    const logo = await deps.store.findVerifiedLogo(id)
+    if (logo === null || logo.sourceUrl !== client.app.logoUrl) {
+      throw new PlatformError("not_found")
+    }
+    const bytes = Uint8Array.from(atob(logo.dataBase64), (char) =>
+      char.charCodeAt(0),
+    )
+    return new Response(bytes, {
+      headers: {
+        "Content-Type": logo.contentType,
+        "Cache-Control": `public, max-age=${appLogoMaxAgeSeconds}`,
+        "Content-Security-Policy": "default-src 'none'; sandbox",
+        "Cross-Origin-Resource-Policy": "same-origin",
+        "X-Content-Type-Options": "nosniff",
+      },
     })
   })
 
@@ -202,7 +261,7 @@ export default function consentRoutes(deps: AppDeps): Hono {
       id: request.id,
       app: {
         name: clientApp.name,
-        logoUrl: clientApp.logoUrl,
+        logoUrl: consentLogoUrl(clientApp, environment),
         websiteUrl: clientApp.websiteUrl,
         privacyUrl: clientApp.privacyUrl,
         termsUrl: clientApp.termsUrl,

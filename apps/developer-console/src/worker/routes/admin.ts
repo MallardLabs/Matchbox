@@ -40,6 +40,7 @@ import {
   requireStepUp,
 } from "../context"
 import { type ReviewOutcome, reviewDecisionEmail } from "../email/templates"
+import { pinLogo } from "../logo-pin"
 import { respond, toApp, toQuotaOverride, toReview } from "../mappers"
 import { approvalOutcome, environmentReviewState } from "../review-policy"
 import type { AdminAppRecord, AdminReviewRecord } from "../store/console-store"
@@ -232,7 +233,7 @@ export default function registerAdminRoutes(app: ConsoleApp): void {
     const staff = await staffAction(c, "reviewer")
     const { reviewId } = pathParams(c, consolePaths.reviewId)
     const body = await jsonBody(c, reviewDecisionRequestSchema)
-    const { store, email, config } = deps(c)
+    const { store, email, config, logoFetch } = deps(c)
     const record = await store.getAdminReview(reviewId)
     if (record === null) throw new PlatformError("not_found")
     if (record.review.state !== "open") {
@@ -268,6 +269,18 @@ export default function registerAdminRoutes(app: ConsoleApp): void {
       verifiedAt === null
         ? null
         : await verificationSubject(c, record.app.id, environment.id)
+    // The logo the reviewer saw, pinned: the bytes behind logoUrl can change.
+    const pinned =
+      verifiedAt === null || record.app.logoUrl === null
+        ? null
+        : await pinLogo(logoFetch, record.app.logoUrl)
+    if (pinned !== null && !pinned.ok) {
+      logger(c).warn({
+        message: "Logo not pinned; the verified consent screen shows none",
+        reviewId,
+        reason: pinned.reason,
+      })
+    }
     // Close the review first, conditionally: a withdraw that got there first
     // wins, and once it is closed nothing else can decide or withdraw it.
     const closed = await store.closeReview(reviewId, {
@@ -280,6 +293,12 @@ export default function registerAdminRoutes(app: ConsoleApp): void {
       throw new PlatformError("conflict", { message: "Review is closed." })
     }
     if (approval !== null) {
+      if (verifiedAt !== null) {
+        await store.putVerifiedLogo(
+          environment.id,
+          pinned?.ok === true ? { ...pinned.logo, pinnedAt: at } : null,
+        )
+      }
       await store.updateEnvironment(environment.id, {
         approvedScopes: approval.approvedScopes,
         scopeVersion: approval.scopeVersion,
@@ -306,6 +325,7 @@ export default function registerAdminRoutes(app: ConsoleApp): void {
         added: approval.added,
         scopeVersion: approval.scopeVersion,
         verified,
+        logoPinned: verified && pinned?.ok === true,
       }
     } else {
       await store.updateEnvironment(environment.id, {

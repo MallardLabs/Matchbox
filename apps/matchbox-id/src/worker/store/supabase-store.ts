@@ -102,6 +102,12 @@ const environmentRowSchema = z
   .object(environmentColumns)
   .transform(environmentFromRow)
 
+const verifiedLogoRowSchema = z.object({
+  content_type: z.enum(["image/png", "image/jpeg", "image/gif", "image/webp"]),
+  data_base64: z.string(),
+  source_url: z.string(),
+})
+
 const clientRowSchema = z
   .object({
     ...environmentColumns,
@@ -492,6 +498,22 @@ export default function createSupabaseIdStore(
         .maybeSingle()
       if (error !== null) fail("find environment", error)
       return parseRow("environment", clientRowSchema, data)
+    },
+    async findVerifiedLogo(environmentId) {
+      const { data, error } = await supabase
+        .from("mbx_dev_verified_logos")
+        .select("content_type, data_base64, source_url")
+        .eq("environment_id", environmentId)
+        .maybeSingle()
+      if (error !== null) fail("find verified logo", error)
+      const row = parseRow("verified logo", verifiedLogoRowSchema, data)
+      return row === null
+        ? null
+        : {
+            contentType: row.content_type,
+            dataBase64: row.data_base64,
+            sourceUrl: row.source_url,
+          }
     },
     async listClientSecrets(environmentId) {
       const now = iso(new Date())

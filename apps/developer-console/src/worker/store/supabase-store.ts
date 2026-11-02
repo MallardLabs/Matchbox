@@ -1157,6 +1157,32 @@ export default function createSupabaseStore(
         }),
       )
     },
+    async putVerifiedLogo(environmentId, logo) {
+      if (logo === null) {
+        done(
+          "delete verified logo",
+          await supabase
+            .from("mbx_dev_verified_logos")
+            .delete()
+            .eq("environment_id", environmentId),
+        )
+        return
+      }
+      done(
+        "put verified logo",
+        await supabase.from("mbx_dev_verified_logos").upsert(
+          {
+            environment_id: environmentId,
+            content_type: logo.contentType,
+            data_base64: logo.dataBase64,
+            sha256: logo.sha256,
+            source_url: logo.sourceUrl,
+            pinned_at: logo.pinnedAt,
+          },
+          { onConflict: "environment_id" },
+        ),
+      )
+    },
     async revokeEnvironmentTokens(environmentId, reason) {
       return one(
         environmentTokenRevocationSchema,

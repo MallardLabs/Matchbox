@@ -159,6 +159,7 @@ async function buildApp(
             clientId: config.googleClientId,
             verifier: createGoogleTokenVerifier(config.googleClientId),
           },
+    logoFetch: (url, init) => fetch(url, init),
     now: () => new Date(),
     flags: {
       consoleEnabled: config.consoleEnabled,

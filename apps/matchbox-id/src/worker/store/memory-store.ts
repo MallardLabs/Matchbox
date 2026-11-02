@@ -22,6 +22,7 @@ import type {
   PurgeCounts,
   RefreshTokenRecord,
   SessionRecord,
+  VerifiedLogoRecord,
 } from "./id-store"
 
 /**
@@ -66,6 +67,7 @@ export type MemoryAuditEvent = ReturnType<typeof auditEventInputSchema.parse>
 export type MemoryIdStore = IdStore & {
   admin: {
     setAppStatus(appId: string, status: AppStatus): void
+    setAppLogoUrl(appId: string, logoUrl: string | null): void
     setScopeVersion(environmentId: string, scopeVersion: number): void
     setClientType(environmentId: string, clientType: ClientType): void
     setRedirectUris(environmentId: string, uris: string[]): void
@@ -79,6 +81,10 @@ export type MemoryIdStore = IdStore & {
       scopes: EnvironmentRecord["optionalScopes"],
     ): void
     setVerifiedAt(environmentId: string, verifiedAt: Date | null): void
+    setVerifiedLogo(
+      environmentId: string,
+      logo: VerifiedLogoRecord | null,
+    ): void
     /** Replaces (or removes) a wallet's Discord link like the DB trigger. */
     setDiscordLink(
       walletAddress: string,
@@ -126,6 +132,7 @@ export async function createMemoryIdStore(options: {
   const apps = new Map<string, AppRecord>()
   const environments = new Map<string, EnvironmentRecord>()
   const redirectUris = new Map<string, string[]>()
+  const verifiedLogos = new Map<string, VerifiedLogoRecord>()
   const clientSecrets = new Map<string, ClientSecretRecord[]>()
   const accounts = new Map<string, AccountRecord>()
   const nonces = new Map<string, { expiresAt: Date; consumedAt: Date | null }>()
@@ -294,6 +301,10 @@ export async function createMemoryIdStore(options: {
     async findEnvironment(environmentId) {
       const environment = environments.get(environmentId)
       return environment === undefined ? null : clientFor(environment)
+    },
+    async findVerifiedLogo(environmentId) {
+      const logo = verifiedLogos.get(environmentId)
+      return logo === undefined ? null : clone(logo)
     },
     async listClientSecrets(environmentId) {
       const now = new Date()
@@ -689,6 +700,10 @@ export async function createMemoryIdStore(options: {
         const app = apps.get(appId)
         if (app !== undefined) app.status = status
       },
+      setAppLogoUrl(appId, logoUrl) {
+        const app = apps.get(appId)
+        if (app !== undefined) app.logoUrl = logoUrl
+      },
       setScopeVersion(environmentId, scopeVersion) {
         const environment = environments.get(environmentId)
         if (environment !== undefined) environment.scopeVersion = scopeVersion
@@ -714,6 +729,10 @@ export async function createMemoryIdStore(options: {
       setVerifiedAt(environmentId, verifiedAt) {
         const environment = environments.get(environmentId)
         if (environment !== undefined) environment.verifiedAt = verifiedAt
+      },
+      setVerifiedLogo(environmentId, logo) {
+        if (logo === null) verifiedLogos.delete(environmentId)
+        else verifiedLogos.set(environmentId, clone(logo))
       },
       setDiscordLink(walletAddress, link, now) {
         const previous = discordLinks.get(walletAddress)

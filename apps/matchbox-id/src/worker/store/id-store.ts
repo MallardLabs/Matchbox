@@ -51,6 +51,14 @@ export type EnvironmentRecord = {
   verifiedAt: Date | null
 }
 
+/** Logo bytes the console pinned at staff approval. */
+export type VerifiedLogoRecord = {
+  contentType: "image/png" | "image/jpeg" | "image/gif" | "image/webp"
+  dataBase64: string
+  /** The app's `logoUrl` when it was pinned. */
+  sourceUrl: string
+}
+
 export type ClientRecord = {
   app: AppRecord
   environment: EnvironmentRecord
@@ -261,6 +269,8 @@ export type IdStore = {
   findClient(clientId: string): Promise<ClientRecord | null>
   findEnvironment(environmentId: string): Promise<ClientRecord | null>
   listClientSecrets(environmentId: string): Promise<ClientSecretRecord[]>
+  /** `mbx_dev_verified_logos`: the logo shown beside the Verified badge. */
+  findVerifiedLogo(environmentId: string): Promise<VerifiedLogoRecord | null>
 
   // Accounts, nonces and sessions ------------------------------------------
   upsertAccountForSignIn(

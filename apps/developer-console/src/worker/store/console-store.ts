@@ -20,6 +20,7 @@ import type {
 } from "@repo/platform-contracts/network"
 import type { EndpointClass } from "@repo/platform-contracts/rate-limits"
 import type { OidcScope, PlatformScope } from "@repo/platform-contracts/scopes"
+import type { PinnedLogo } from "../logo-pin"
 
 /**
  * Storage port for the developer console. Routes depend only on this type;
@@ -413,6 +414,11 @@ export type ConsoleStore = {
   listOrigins(environmentId: string): Promise<string[]>
   /** Atomically replaces the set (existing rows keep their order). */
   replaceOrigins(environmentId: string, origins: string[]): Promise<void>
+  /** Logo bytes pinned at staff approval (`logo-pin.ts`); null deletes. */
+  putVerifiedLogo(
+    environmentId: string,
+    logo: (PinnedLogo & { pinnedAt: string }) | null,
+  ): Promise<void>
   /**
    * Atomically revokes the environment's active Matchbox ID refresh-token
    * families and access tokens, bumps its `scope_version` (users must
