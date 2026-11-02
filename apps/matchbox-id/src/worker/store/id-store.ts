@@ -279,9 +279,12 @@ export type IdStore = {
     sessionId: string,
     now: Date,
   ): Promise<boolean>
+  /** Revokes the account's active `contract` sessions; returns how many. */
+  revokeContractSessions(accountId: string, now: Date): Promise<number>
   /**
    * Whether the wallet's account ever signed in with the wallet's own key
-   * (an `eoa` session, live or ended). Relies on sessions never being
+   * (an `eoa` session, live or ended). Pre-binding sessions (null signer
+   * kind) prove nothing and do not count. Relies on sessions never being
    * purged; record it on the account before purging them.
    */
   walletHasEoaSession(walletAddress: string): Promise<boolean>

@@ -190,6 +190,15 @@ export default function siweRoutes(deps: AppDeps): Hono {
       siweChainId: checked.chainId,
       signerKind,
     })
+    // The key now closes the contract path (walletHasEoaSession), and ends
+    // contract sessions RPCs vouched for before, which the key never proved.
+    // After the first key sign-in this finds nothing. Pre-binding sessions
+    // (null signer kind) prove nothing (sessionVerifiedFor) and are left to
+    // expire.
+    const revokedContractSessions =
+      signerKind === "eoa"
+        ? await deps.store.revokeContractSessions(account.id, now)
+        : 0
     await deps.store.recordAudit({
       actorType: "wallet",
       actorId: account.id,
@@ -200,6 +209,7 @@ export default function siweRoutes(deps: AppDeps): Hono {
         network: checked.network,
         chainId: checked.chainId,
         signerKind,
+        ...(revokedContractSessions > 0 ? { revokedContractSessions } : {}),
       },
 
       ipPrefix: ipPrefix(c.req.raw),

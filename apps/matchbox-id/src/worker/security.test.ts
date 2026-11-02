@@ -389,6 +389,32 @@ describe("SIWE signature proof", () => {
     expect(harness.store.admin.sessions()).toHaveLength(1)
   })
 
+  it("ends contract sessions RPCs vouched for once the key signs in", async () => {
+    const rpc: FakeRpcState = { answer: "valid" }
+    const harness = await createHarness({
+      publicClients: [fakeRpc(rpc), fakeRpc(rpc), fakeRpc(rpc)],
+    })
+    // Lying RPCs vouch for a wallet whose owner has not signed in yet.
+    const forged = await junkSignIn(harness, devAccount.address)
+    expect(forged.status).toBe(200)
+    const forgedCookie = sessionCookieFrom(forged)
+
+    await signIn(harness)
+    const [first, second] = harness.store.admin
+      .sessions()
+      .sort(
+        (left, right) => left.createdAt.getTime() - right.createdAt.getTime(),
+      )
+    expect(first?.signerKind).toBe("contract")
+    expect(first?.revokedAt).not.toBeNull()
+    expect(second?.signerKind).toBe("eoa")
+    expect(second?.revokedAt).toBeNull()
+    const stale = await harness.app.request(url("/api/sessions"), {
+      headers: { Cookie: forgedCookie },
+    })
+    expect(stale.status).toBe(401)
+  })
+
   it("needs two RPCs to confirm a contract signature and none to deny it", async () => {
     const lying: FakeRpcState = { answer: "valid" }
     const honest: FakeRpcState = { answer: "invalid" }

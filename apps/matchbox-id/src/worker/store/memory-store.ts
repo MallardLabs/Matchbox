@@ -393,6 +393,20 @@ export async function createMemoryIdStore(options: {
       session.revokedAt = now
       return true
     },
+    async revokeContractSessions(accountId, now) {
+      let revoked = 0
+      for (const session of sessions.values()) {
+        if (
+          session.accountId === accountId &&
+          session.signerKind === "contract" &&
+          session.revokedAt === null
+        ) {
+          session.revokedAt = now
+          revoked += 1
+        }
+      }
+      return revoked
+    },
     async walletHasEoaSession(walletAddress) {
       const account = [...accounts.values()].find(
         (candidate) => candidate.walletAddress === walletAddress,

@@ -586,7 +586,9 @@ another network. The Worker still accepts either Mezo network.
 RPC trust: a `contract` signature is only as good as the RPC answering the
 ERC-1271 / ERC-6492 `eth_call`, so the Worker never asks an RPC about a
 signature that ecrecovers, refuses the contract path for a wallet with any
-`eoa` session (sessions are never purged), and with more than one RPC host
+`eoa` session (sessions are never purged; pre-binding sessions with a null
+signer kind do not count), revokes the account's `contract` sessions on
+every key sign-in, and with more than one RPC host
 configured for the network needs two to confirm (each on the right chain
 id) and none to deny. Only the chain's answer counts (the ERC-6492
 validator's result or revert); an RPC that fails, rate-limits or times out

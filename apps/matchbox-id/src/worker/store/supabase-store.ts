@@ -601,6 +601,17 @@ export default function createSupabaseIdStore(
       if (error !== null) fail("revoke session", error)
       return (data ?? []).length === 1
     },
+    async revokeContractSessions(accountId, now) {
+      const { data, error } = await supabase
+        .from("mbx_id_sessions")
+        .update({ revoked_at: iso(now) })
+        .eq("account_id", accountId)
+        .eq("signer_kind", "contract")
+        .is("revoked_at", null)
+        .select("id")
+      if (error !== null) fail("revoke contract sessions", error)
+      return (data ?? []).length
+    },
     async walletHasEoaSession(walletAddress) {
       const { data, error } = await supabase
         .from("mbx_id_sessions")
