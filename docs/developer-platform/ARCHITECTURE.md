@@ -460,6 +460,23 @@ Rules:
   bucket would let junk keys lock out valid integrators. The limiter fails
   open when the Durable Object is unavailable (logged); for `ip:` that only
   turns a 429 into the 401 the request gets anyway.
+- Key lookups are bounded without charging valid keys. Each isolate keeps
+  three in-memory structures (no KV writes). `rejectedPrefixes` holds, for
+  15 s, prefixes that failed verification: null for an unknown prefix,
+  otherwise the row's secret hash. Repeated wrong secrets on one prefix
+  therefore skip the DB, and the right secret still gets a fresh read.
+  `spentBuckets` holds `ip:` buckets this isolate saw 429, and answers their
+  429 locally until `resetAt`. A snapshot of unrevoked key prefixes
+  (`listActiveKeyPrefixes`) is loaded lazily, reloaded after 60 s, and
+  reloaded after 10 s when a prefix is missing.
+- While a request's `ip:` bucket is spent, or for 30 s after a limiter error
+  (fail closed, ID-L03), a key-cache miss reads the key row only for a
+  prefix in the snapshot. Under junk, DB reads per isolate are capped at the
+  `ip:` allowance (30/min/prefix) plus one 10 s snapshot read.
+- A valid key behind a spent egress bucket still verifies. Residual: a key
+  created less than 10 s before the latest snapshot reload can get that
+  bucket's 429 until the next reload. Gated misses are not cached, so it
+  works as soon as the snapshot includes it.
 - `tag` must be a lower-case slug (`^[a-z0-9][a-z0-9-]{0,39}$`, contract
   `gaugeProfileTagFilterSchema`); the store re-checks it before it reaches
   PostgREST's `cs.{…}` filter. Stored tags are free text today, so tags such
