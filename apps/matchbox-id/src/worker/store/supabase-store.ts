@@ -601,6 +601,27 @@ export default function createSupabaseIdStore(
       if (error !== null) fail("revoke session", error)
       return (data ?? []).length === 1
     },
+    async revokeContractSessions(accountId, now) {
+      const { data, error } = await supabase
+        .from("mbx_id_sessions")
+        .update({ revoked_at: iso(now) })
+        .eq("account_id", accountId)
+        .eq("signer_kind", "contract")
+        .is("revoked_at", null)
+        .select("id")
+      if (error !== null) fail("revoke contract sessions", error)
+      return (data ?? []).length
+    },
+    async walletHasEoaSession(walletAddress) {
+      const { data, error } = await supabase
+        .from("mbx_id_sessions")
+        .select("id, mbx_id_accounts!inner(wallet_address)")
+        .eq("mbx_id_accounts.wallet_address", walletAddress)
+        .eq("signer_kind", "eoa")
+        .limit(1)
+      if (error !== null) fail("find EOA session", error)
+      return (data ?? []).length > 0
+    },
 
     async getOrCreatePairwiseSubject(accountId, sectorId, generate) {
       async function read(): Promise<string | null> {

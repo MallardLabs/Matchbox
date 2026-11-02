@@ -25,23 +25,26 @@ import {
   sessionTokenHash,
   setSessionCookie,
 } from "../session"
-import { checkSiweMessage, siweSignerKind } from "../siwe"
+import {
+  type SiweCheckResult,
+  checkSiweMessage,
+  recoversToAddress,
+  verifyContractSignature,
+} from "../siwe"
+import type { SignerKind } from "../store/id-store"
 import { identityAccount } from "./account"
 
 /** Sign-In with Ethereum: nonce issuance and signed-message verification. */
 
 const maxUserAgentLength = 512
 
-async function enforceSiweLimit(
-  c: Context,
-  deps: AppDeps,
-  extraKeys: string[] = [],
-): Promise<void> {
-  const prefix = ipPrefix(c.req.raw) ?? "unknown"
-  const policy = rateLimitPolicies.live.siwe
+function ipLimitKey(c: Context): string {
+  return `siwe:ip:${ipPrefix(c.req.raw) ?? "unknown"}`
+}
+
+async function enforceSiweLimit(deps: AppDeps, key: string): Promise<void> {
   const rejected = await firstRateLimitRejection(deps, [
-    { key: `siwe:ip:${prefix}`, policy },
-    ...extraKeys.map((key) => ({ key, policy })),
+    { key, policy: rateLimitPolicies.live.siwe },
   ])
   if (rejected !== null) {
     throw new PlatformError("rate_limited", {
@@ -50,11 +53,62 @@ async function enforceSiweLimit(
   }
 }
 
+/**
+ * How the signature proves the wallet, or null when it does not. ECDSA is
+ * checked locally first, so a key-holding wallet never depends on an RPC.
+ * The RPC-backed ERC-1271 / ERC-6492 path comes second and is closed to a
+ * wallet that has signed in with its key before: an RPC must not be able
+ * to vouch for an address whose owner holds that key.
+ */
+async function provenSignerKind(
+  c: Context,
+  deps: AppDeps,
+  proof: {
+    message: string
+    signature: `0x${string}`
+    checked: Extract<SiweCheckResult, { ok: true }>
+  },
+): Promise<SignerKind | null> {
+  const { message, signature, checked } = proof
+  const { address, network } = checked
+  if (await recoversToAddress({ message, signature, address })) return "eoa"
+
+  const log = requestLogger(c)
+  if (await deps.store.walletHasEoaSession(address.toLowerCase())) {
+    log.warn({
+      message: "Contract signature refused for a wallet proven by its key",
+      network,
+    })
+    return null
+  }
+  const check = await verifyContractSignature(
+    deps.publicClientsFor(network),
+    { message, signature, address },
+    checked.chainId,
+  )
+  if (check.status === "unavailable") {
+    log.error({
+      message: "SIWE contract signature verification failed",
+      network,
+      errors: check.errors,
+    })
+    throw new PlatformError("internal_error")
+  }
+  if (check.errors.length > 0) {
+    log.warn({
+      message: "RPCs gave no SIWE contract signature answer",
+      network,
+      errors: check.errors,
+    })
+  }
+  return check.status === "valid" ? "contract" : null
+}
+
 export default function siweRoutes(deps: AppDeps): Hono {
   const app = new Hono()
 
   app.post("/api/siwe/nonce", async (c) => {
-    await enforceSiweLimit(c, deps)
+    await enforceSiweLimit(deps, ipLimitKey(c))
     const nonce = generateSiweNonce()
     await deps.store.createSiweNonce(
       nonce,
@@ -82,44 +136,29 @@ export default function siweRoutes(deps: AppDeps): Hono {
     const signature = body.signature
     if (!isHex(signature)) throw new PlatformError("invalid_request")
     const walletAddress = checked.address.toLowerCase()
-    await enforceSiweLimit(c, deps, [`siwe:wallet:${walletAddress}`])
+    await enforceSiweLimit(deps, ipLimitKey(c))
     if (!(await deps.store.consumeSiweNonce(checked.nonce, now))) {
       throw new PlatformError("unauthorized", {
         message: "Sign-in message rejected: nonce.",
       })
     }
 
-    let verified = false
-    try {
-      verified = await deps
-        .publicClientFactory(checked.network)
-        .verifySiweMessage({
-          message: body.message,
-          signature,
-          address: checked.address,
-          domain: url.host,
-          nonce: checked.nonce,
-          time: now,
-        })
-    } catch (error) {
-      requestLogger(c).error({
-        message: "SIWE signature verification failed",
-        network: checked.network,
-        error,
-      })
-      throw new PlatformError("internal_error")
-    }
-    if (!verified) {
+    // Contract accounts are bound to the SIWE chain (see sessionVerifiedFor).
+    const signerKind = await provenSignerKind(c, deps, {
+      message: body.message,
+      signature,
+      checked,
+    })
+    if (signerKind === null) {
       throw new PlatformError("unauthorized", {
         message: "Sign-in message rejected: signature.",
       })
     }
-    // Contract accounts are bound to the SIWE chain (see sessionVerifiedFor).
-    const signerKind = await siweSignerKind({
-      message: body.message,
-      signature,
-      address: checked.address,
-    })
+    // Only proven sign-ins spend the wallet's bucket: the address in the
+    // message is unauthenticated until here, so charging it earlier let
+    // anyone lock a wallet out. Failed attempts are bounded by the IP
+    // bucket and the single-use nonce.
+    await enforceSiweLimit(deps, `siwe:wallet:${walletAddress}`)
 
     const account = await deps.store.upsertAccountForSignIn(walletAddress, now)
     if (account.disabledAt !== null) throw new PlatformError("forbidden")
@@ -151,6 +190,15 @@ export default function siweRoutes(deps: AppDeps): Hono {
       siweChainId: checked.chainId,
       signerKind,
     })
+    // The key now closes the contract path (walletHasEoaSession), and ends
+    // contract sessions RPCs vouched for before, which the key never proved.
+    // After the first key sign-in this finds nothing. Pre-binding sessions
+    // (null signer kind) prove nothing (sessionVerifiedFor) and are left to
+    // expire.
+    const revokedContractSessions =
+      signerKind === "eoa"
+        ? await deps.store.revokeContractSessions(account.id, now)
+        : 0
     await deps.store.recordAudit({
       actorType: "wallet",
       actorId: account.id,
@@ -161,6 +209,7 @@ export default function siweRoutes(deps: AppDeps): Hono {
         network: checked.network,
         chainId: checked.chainId,
         signerKind,
+        ...(revokedContractSessions > 0 ? { revokedContractSessions } : {}),
       },
 
       ipPrefix: ipPrefix(c.req.raw),

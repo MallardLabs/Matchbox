@@ -88,7 +88,17 @@ Secrets (`wrangler secret put`): `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`,
 `SESSION_PEPPER`, `CLIENT_SECRET_PEPPER` (same value as the developer
 console), `OIDC_SIGNING_KEYS` (JSON array of private ES256 JWKs with `kid`;
 index 0 signs, all are published), optional `MEZO_MAINNET_RPC_URL` /
-`MEZO_TESTNET_RPC_URL` (defaults in `src/worker/config.ts`).
+`MEZO_TESTNET_RPC_URL` and comma-separated
+`MEZO_MAINNET_CONFIRMING_RPC_URLS` / `MEZO_TESTNET_CONFIRMING_RPC_URLS`
+(defaults in `src/worker/config.ts`).
+
+SIWE signatures that ecrecover to the wallet are verified locally. Only
+other signatures (ERC-1271 / ERC-6492 contract accounts) go to the RPCs:
+with more than one RPC host configured for the network, two must confirm
+and none may deny. A failed, rate-limited or timed-out `eth_call` is no
+answer, not a denial. A wallet that has ever signed in with its key never
+takes the contract path. Mainnet confirms with Boar and Validation Cloud by
+default; testnet has no second RPC unless one is configured.
 
 Bindings: Durable Object `RATE_LIMITER` (`RateLimiter`), `ASSETS`. Cron
 `17 * * * *` purges expired rows (`mbx_id_purge_expired`).
