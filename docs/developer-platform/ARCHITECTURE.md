@@ -701,6 +701,13 @@ reject / request-changes decision. Those attributes cannot change while a live
 review is open. A live environment with OIDC scopes and no verification can
 submit for review with nothing new to approve.
 
+The decision closes the review with one conditional update
+(`state = 'open'`) before it writes `verified_at`, and a withdraw does the
+same, so whichever lands second gets 409. Closing unfreezes the reviewed
+attributes, so the decision re-reads them after writing `verified_at` and
+withdraws it if any changed; a profile, redirect URI or origin change also
+withdraws verification again after its own write.
+
 Logo beside the badge: `logo_url` is a developer-controlled URL whose bytes
 can change after review. At approval the console fetches it server-side
 (HTTPS, 5 s, 64 KiB, PNG/JPEG/GIF/WebP by magic bytes) into
@@ -713,6 +720,12 @@ badge, no claim). SVG and oversized logos are not pinned, so those verified
 apps show the initial. Trade-off: one extra DB row and one same-origin image
 request, in exchange for no logo swap after review. The cached image outlives
 a withdrawal by up to 5 minutes, but withdrawn screens no longer reference it.
+
+Review lifecycle status (ID-L12, partial): the badge is fixed as above, but
+approved scopes still survive later name, redirect-URI and origin changes
+(only `verified_at` is withdrawn), and reject / request-changes decisions
+leave a previously approved `review_state` in place. Commit f98c0e7 said
+ID-L12 was fixed; it covers only the badge part.
 
 SPA sections: Overview, Apps (list, create), App detail (Settings,
 Environments [test/live tabs: credentials, redirect URIs, origins, scopes,
