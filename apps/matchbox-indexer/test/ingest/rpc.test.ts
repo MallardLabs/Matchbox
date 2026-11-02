@@ -328,7 +328,7 @@ describe("RpcClient.getLogsForFilters", () => {
     })
 
     await expect(client(chain).getLogs(1n, 10n, [address])).rejects.toThrow(
-      `No endpoint serves the logs of ${address} in block 4`,
+      `No endpoint serves the logs of ${address} in block 4: the endpoints that answered refused it, most likely over their result cap`,
     )
   })
 })
@@ -393,6 +393,57 @@ describe("RpcClient failover", () => {
     expect(await rpc(512).getLogs(1n, 16n, watched)).toHaveLength(2)
     await expect(rpc(4).getLogs(1n, 16n, watched)).rejects.toThrow(
       /still failing after 4 splits across the window/,
+    )
+  })
+
+  it("splits around an endpoint that times out on wide ranges", async () => {
+    const [address] = addresses(1) as [Address]
+    const chain = new FakeChain({
+      head: 100,
+      logs: [eventLog({ block: 90, logIndex: 0, address, signature: "Foo()" })],
+    })
+    const rpc = new RpcClient({
+      network: "mezo",
+      sleep: async () => {},
+      endpoints: [{ url: PRIMARY, maxAddresses: 100, maxBlockRange: 100 }],
+      fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const { params } = JSON.parse(String(init?.body)) as {
+          params: [{ fromBlock?: string; toBlock?: string }]
+        }
+        const { fromBlock, toBlock } = params[0]
+        if (fromBlock && toBlock && BigInt(toBlock) - BigInt(fromBlock) > 25n) {
+          return new Response("gateway timeout", { status: 504 })
+        }
+        return chain.fetch(input, init)
+      }) as typeof fetch,
+    })
+
+    const logs = await rpc.getLogs(1n, 100n, [address])
+
+    expect(logs.map((log) => log.blockNumber)).toEqual([90n])
+  })
+
+  // In an outage the search used to go down to one block, then blame the
+  // provider's result cap.
+  it("fails an outage after a few splits, naming it an outage", async () => {
+    const [address] = addresses(1) as [Address]
+    let requests = 0
+    const rpc = new RpcClient({
+      network: "mezo",
+      sleep: async () => {},
+      endpoints: [{ url: PRIMARY, maxAddresses: 100, maxBlockRange: 100 }],
+      fetch: (async () => {
+        requests++
+        return new Response("unavailable", { status: 503 })
+      }) as typeof fetch,
+    })
+
+    const failure = rpc.getLogs(1n, 100n, [address])
+    await expect(failure).rejects.toThrow(/^RPC outage: .*not a result cap/)
+    // The query and four halves in a row, three attempts each.
+    expect(requests).toBe(15)
+    await expect(rpc.getLogs(7n, 7n, [address])).rejects.toThrow(
+      /^RPC outage: eth_getLogs 7-7 for 1 addresses/,
     )
   })
 

@@ -109,6 +109,9 @@ export class RpcError extends Error {
   constructor(
     message: string,
     readonly retryable: boolean,
+    // No answer from the endpoint: a network error, a timeout, or HTTP 429
+    // or 5xx. Anything else is an answer, if only a refusal.
+    readonly unreachable = false,
   ) {
     super(message)
     this.name = "RpcError"
@@ -132,6 +135,11 @@ export type RpcClientOptions = {
   // ...and a call (one window) this many times across its chunks, which
   // bounds the work a window can cost however many chunks it has.
   maxLogSplitsPerCall?: number
+  // When every endpoint is unreachable, splitting still gets around a
+  // provider that times out on wide ranges, but only this many times in a
+  // row: past that it is an outage, and the window fails after a few
+  // queries per filter instead of searching down to single blocks.
+  maxUnreachableSplits?: number
   // Header and transaction batches in flight at once, per call.
   batchConcurrency?: number
 }
@@ -218,6 +226,7 @@ export class RpcClient {
   private readonly timeoutMs: number
   private readonly maxLogSplits: number
   private readonly maxLogSplitsPerCall: number
+  private readonly maxUnreachableSplits: number
   private readonly maxAddresses: number
   private readonly batchConcurrency: number
   private nextId = 1
@@ -241,6 +250,8 @@ export class RpcClient {
     // up their 128 before the rest go short.
     this.maxLogSplits = options.maxLogSplits ?? 128
     this.maxLogSplitsPerCall = options.maxLogSplitsPerCall ?? 512
+    // Four deep, as the old fixed split depth: 10,000 blocks down to 625.
+    this.maxUnreachableSplits = options.maxUnreachableSplits ?? 4
     // Queries are chunked for the most generous endpoint; a stricter one
     // chunks again (getLogsOnEndpoint).
     this.maxAddresses = Math.max(
@@ -337,11 +348,13 @@ export class RpcClient {
   // split (splitQuery) until every part is served. One contract's logs in one
   // block can't be split further: that fails the call rather than dropping
   // logs, and Mezo's block gas limit keeps any registered contract well under
-  // a 10,000-result cap in one block.
+  // a 10,000-result cap in one block. `unreachableSplits` counts the splits
+  // in a row above this query that followed unreachable endpoints.
   private async getLogsSplitting(
     query: LogQuery,
     topic0s: Hex[] | undefined,
     budget: SplitBudget,
+    unreachableSplits = 0,
   ): Promise<RpcLog[]> {
     try {
       return await this.withFailover((endpoint) =>
@@ -350,9 +363,20 @@ export class RpcClient {
     } catch (error) {
       const { fromBlock, toBlock, addresses } = query
       const message = error instanceof Error ? error.message : String(error)
-      if (fromBlock === toBlock && addresses.length === 1) {
+      const unreachable = error instanceof RpcError && error.unreachable
+      const single = fromBlock === toBlock && addresses.length === 1
+      if (
+        unreachable &&
+        (single || unreachableSplits >= this.maxUnreachableSplits)
+      ) {
         throw new RpcError(
-          `No endpoint serves the logs of ${addresses[0]} in block ${fromBlock}: ${message}`,
+          `RPC outage: eth_getLogs ${fromBlock}-${toBlock} for ${addresses.length} addresses reached no endpoint, ${unreachableSplits} splits in a row (not a result cap): ${message}`,
+          false,
+        )
+      }
+      if (single) {
+        throw new RpcError(
+          `No endpoint serves the logs of ${addresses[0]} in block ${fromBlock}: the endpoints that answered refused it, most likely over their result cap: ${message}`,
           false,
         )
       }
@@ -372,7 +396,14 @@ export class RpcClient {
       budget.call.splitsLeft--
       const parts: RpcLog[][] = []
       for (const part of splitQuery(query)) {
-        parts.push(await this.getLogsSplitting(part, topic0s, budget))
+        parts.push(
+          await this.getLogsSplitting(
+            part,
+            topic0s,
+            budget,
+            unreachable ? unreachableSplits + 1 : 0,
+          ),
+        )
       }
       return parts.flat()
     }
@@ -498,6 +529,7 @@ export class RpcClient {
     operation: (endpoint: RpcEndpoint) => Promise<T>,
   ): Promise<T> {
     const failures: string[] = []
+    let unreachable = true
     for (const endpoint of this.endpoints) {
       for (let attempt = 0; attempt < this.attemptsPerEndpoint; attempt++) {
         try {
@@ -505,6 +537,9 @@ export class RpcClient {
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error)
           failures.push(`${endpoint.url}: ${message}`)
+          if (!(error instanceof RpcError && error.unreachable)) {
+            unreachable = false
+          }
           const retryable = !(error instanceof RpcError) || error.retryable
           if (!retryable) break
           if (attempt < this.attemptsPerEndpoint - 1) {
@@ -516,6 +551,7 @@ export class RpcClient {
     throw new RpcError(
       `All RPC endpoints failed: ${failures.join(" | ")}`,
       false,
+      unreachable,
     )
   }
 
@@ -565,10 +601,10 @@ export class RpcClient {
       })
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
-      throw new RpcError(`Network error: ${message}`, true)
+      throw new RpcError(`Network error: ${message}`, true, true)
     }
     if (response.status === 429 || response.status >= 500) {
-      throw new RpcError(`HTTP ${response.status}`, true)
+      throw new RpcError(`HTTP ${response.status}`, true, true)
     }
     if (!response.ok) {
       throw new RpcError(`HTTP ${response.status}`, false)

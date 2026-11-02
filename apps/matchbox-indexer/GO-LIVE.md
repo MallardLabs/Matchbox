@@ -313,9 +313,19 @@ history" every 15 minutes.
 "INGEST FAILED: logs checkpoint not advancing" in the tail (and `stale: true`
 once the lag passes 700 blocks) means a window no RPC endpoint would serve.
 Ingest never skips it, so it repeats every tick until the cause in `error`
-is fixed. "No endpoint serves the logs of X in block N" means one contract
-returned more logs in one block than the provider's result cap.
-Projection keeps up with the windows committed before it.
+is fixed. Projection keeps up with the windows committed before it. The
+`error` names the cause:
+
+- "RPC outage: eth_getLogs ... reached no endpoint": every endpoint gave
+  network errors, timeouts or HTTP 429/5xx. Not a result cap; it clears
+  when an endpoint recovers. If it doesn't, add or swap an endpoint in
+  `src/ingest/networks.ts`.
+- "No endpoint serves the logs of X in block N": the endpoints answered and
+  refused one contract's logs in one block, most likely over their result
+  cap. Splitting can't go further; it needs an endpoint with a higher cap.
+- "still failing after 128 splits of its address chunk" or "512 splits
+  across the window": the window holds more logs than the split budget
+  covers, or an endpoint refuses most ranges.
 
 Rollback: stop the cron with an empty trigger list
 (`pnpm exec wrangler triggers deploy` after setting `"crons": []`, or remove

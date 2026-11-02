@@ -36,6 +36,9 @@ Neon. There is no Goldsky pipeline. Go-live steps are in `GO-LIVE.md`.
   - A query no endpoint serves is split by block range, then within one block
     by address, and only that address chunk. One contract's logs in one block
     can't be split; that fails the window rather than drop logs.
+  - Each address chunk may split 128 times, a window 512 times. When every
+    endpoint is unreachable (network error, timeout, HTTP 429/5xx) a query
+    splits at most four times in a row, then fails as an "RPC outage".
   - A child created mid-window has its logs from that same window fetched
     before the window commits.
 - **Timestamps.**
