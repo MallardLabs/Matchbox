@@ -4,7 +4,10 @@ import {
   formatApiKey,
 } from "@repo/platform-contracts/credentials"
 import type { EnvironmentKind } from "@repo/platform-contracts/network"
-import { createMemoryRateLimitClient } from "@repo/platform-server"
+import {
+  type RateLimitClient,
+  createMemoryRateLimitClient,
+} from "@repo/platform-server"
 import { type ApiApp, createApp } from "./app"
 import { type MarketStore, createMemoryMarketStore } from "./market/store"
 import type { RequestLogSink } from "./middleware/request-log"
@@ -228,6 +231,8 @@ export async function createHarness(
     publishableQuotaShare?: number
     /** Defaults to an empty memory store; `null` = no market database. */
     market?: MarketStore | null
+    /** Wraps the memory limiter (e.g. to make it fail). */
+    rateLimits?: (memory: RateLimitClient) => RateLimitClient
   } = {},
 ): Promise<TestHarness> {
   const clock = createClock()
@@ -246,7 +251,9 @@ export async function createHarness(
   const app = createApp({
     store,
     market,
-    rateLimits: createMemoryRateLimitClient(() => clock.now.getTime()),
+    rateLimits: (options.rateLimits ?? ((memory) => memory))(
+      createMemoryRateLimitClient(() => clock.now.getTime()),
+    ),
     analytics: sink,
     now: () => clock.now,
     flags: { gaugeProfileApi: options.gaugeProfileApi ?? true },

@@ -1,4 +1,7 @@
-import type { Environment } from "@repo/platform-contracts/console"
+import {
+  type Environment,
+  awaitingVerification,
+} from "@repo/platform-contracts/console"
 import {
   type EnvironmentKind,
   chainIdForNetwork,
@@ -513,6 +516,12 @@ function ReviewPanel({
   const pending = environment.requestedScopes.filter(
     (scope) => !environment.approvedScopes.includes(scope),
   )
+  // Nothing new to approve: an unverified live consent screen can still go
+  // to staff for verification.
+  const submittable =
+    pending.length > 0 || !awaitingVerification(environment)
+      ? pending
+      : environment.requestedScopes
   const resubmit =
     latest !== undefined &&
     (latest.state === "changes-requested" || latest.state === "rejected")
@@ -533,7 +542,7 @@ function ReviewPanel({
           Review
         </h2>
         <span className="truncate font-mono text-caption text-muted">
-          {scopeSummary(open?.requestedScopes ?? pending)}
+          {scopeSummary(open?.requestedScopes ?? submittable)}
         </span>
         <span className="flex-1" />
         <ReviewStatus state={environment.reviewState} />
@@ -595,7 +604,7 @@ function ReviewPanel({
             <Button.Root
               type="submit"
               loading={submit.isPending}
-              disabled={pending.length === 0}
+              disabled={submittable.length === 0}
             >
               {resubmit ? "Resubmit" : "Submit for review"}
             </Button.Root>

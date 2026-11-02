@@ -193,7 +193,13 @@ grants that contain a `discord:*` scope for the old wallet, reason
   (`developer | staff | wallet | system`), `actor_id`, `organization_id
   null`, `app_id null`, `environment_id null`, `action` (kebab-case, e.g.
   `api-key-created`), `target_type`, `target_id`, `metadata jsonb`,
-  `ip_prefix`. UPDATE/DELETE blocked by trigger (immutable).
+  `ip_prefix`. UPDATE/DELETE blocked by trigger (immutable). Matchbox ID
+  grant rows keep the account id and IP prefix for staff and add the
+  environment's pairwise `sub` as `metadata.subject`. Organization feeds
+  (`/api/orgs/{id}/audit`, `/api/apps/{id}/audit`) show a wallet actor as
+  that `sub` (null on older rows), drop the actor id and IP prefix of
+  wallet, staff and system rows, and accept `actorId` only for developers;
+  `/api/admin/audit` returns rows as stored.
 
 ### 4.3 Gauge Profile read model
 
@@ -448,11 +454,30 @@ Rules:
   overrides), `env:<environmentId>:publishable` (the same policy scaled by
   `PUBLISHABLE_QUOTA_SHARE`, default `0.5`, floored, min 1 — anyone holding
   the public key can spend it, so it cannot drain the secret-key quota),
-  `pk:<keyId>:<ipPrefix>` (publishable), `ip:<ipPrefix>`
-  (missing/malformed/failed keys, `unauthenticated` policy) and
-  `lookup:<ipPrefix>` (120/min, 20 000/day) consumed before each key-cache
-  miss reaches the DB. The limiter fails open when the Durable Object is
-  unavailable (logged).
+  `pk:<keyId>:<ipPrefix>` (publishable) and `ip:<ipPrefix>`
+  (missing/malformed/unknown/wrong keys, `unauthenticated` policy). `ip:` is
+  charged only after a key fails verification, never for a verified key:
+  every Cloudflare Worker caller shares one egress /48, so a pre-lookup IP
+  bucket would let junk keys lock out valid integrators. The limiter fails
+  open when the Durable Object is unavailable (logged); for `ip:` that only
+  turns a 429 into the 401 the request gets anyway.
+- Key lookups are bounded without charging valid keys. Each isolate keeps
+  three in-memory structures (no KV writes). `rejectedPrefixes` holds, for
+  15 s, prefixes that failed verification: null for an unknown prefix,
+  otherwise the row's secret hash. Repeated wrong secrets on one prefix
+  therefore skip the DB, and the right secret still gets a fresh read.
+  `spentBuckets` holds `ip:` buckets this isolate saw 429, and answers their
+  429 locally until `resetAt`. A snapshot of unrevoked key prefixes
+  (`listActiveKeyPrefixes`) is loaded lazily, reloaded after 60 s, and
+  reloaded after 10 s when a prefix is missing.
+- While a request's `ip:` bucket is spent, or for 30 s after a limiter error
+  (fail closed, ID-L03), a key-cache miss reads the key row only for a
+  prefix in the snapshot. Under junk, DB reads per isolate are capped at the
+  `ip:` allowance (30/min/prefix) plus one 10 s snapshot read.
+- A valid key behind a spent egress bucket still verifies. Residual: a key
+  created less than 10 s before the latest snapshot reload can get that
+  bucket's 429 until the next reload. Gated misses are not cached, so it
+  works as soon as the snapshot includes it.
 - `tag` must be a lower-case slug (`^[a-z0-9][a-z0-9-]{0,39}$`, contract
   `gaugeProfileTagFilterSchema`); the store re-checks it before it reaches
   PostgREST's `cs.{…}` filter. Stored tags are free text today, so tags such
@@ -512,6 +537,7 @@ Issuer: `https://id.matchbox.markets`.
 | `GET /api/authorization-requests/{id}` | app, env kind, scopes with labels, claim preview with **the signed-in user's own** values, existing grant diff |
 | `POST /api/authorization-requests/{id}/decision` | `{ decision: "approve" | "deny" }` → `{ redirectTo }`; CSRF-protected |
 | `GET /api/grants` | connected apps for the session account |
+| `GET /api/app-logos/{environmentId}` | a verified app's logo as pinned at staff approval (`mbx_dev_verified_logos`); 404 unless still verified with the same `logo_url` |
 | `DELETE /api/grants/{id}` | revoke (+ tokens), audit |
 | `GET /api/sessions`, `DELETE /api/sessions/{id}` | device/session management |
 
@@ -686,6 +712,41 @@ manual review. Scope increases open a new review; the currently approved
 scopes keep working meanwhile; approval bumps `scope_version`, which forces
 re-consent (grants with a lower version are treated as not covering new
 scopes).
+
+Consent "Verified" badge: `mbx_dev_environments.verified_at`, set only by a
+staff approval (never by auto-approval). Matchbox ID shows it for a live
+environment of an `active` app. The console clears it when the app's name,
+logo, website, privacy or terms URL, the environment's requested scopes, or
+the app's status change, when a redirect URI or origin is added, and on a
+reject / request-changes decision. Those attributes cannot change while a live
+review is open. A live environment with OIDC scopes and no verification can
+submit for review with nothing new to approve.
+
+The decision closes the review with one conditional update
+(`state = 'open'`) before it writes `verified_at`, and a withdraw does the
+same, so whichever lands second gets 409. Closing unfreezes the reviewed
+attributes, so the decision re-reads them after writing `verified_at` and
+withdraws it if any changed; a profile, redirect URI or origin change also
+withdraws verification again after its own write.
+
+Logo beside the badge: `logo_url` is a developer-controlled URL whose bytes
+can change after review. At approval the console fetches it server-side
+(HTTPS, 5 s, 64 KiB, PNG/JPEG/GIF/WebP by magic bytes) into
+`mbx_dev_verified_logos`. Matchbox ID's verified screens (consent, connected
+apps) point at `GET /api/app-logos/:environmentId?v=<verified_at>`, which
+serves that copy only while the environment is verified and the app's
+`logo_url` still equals the pinned `source_url`; otherwise it returns 404 and
+the SPA shows the initial. Unverified screens keep the developer's URL (no
+badge, no claim). SVG and oversized logos are not pinned, so those verified
+apps show the initial. Trade-off: one extra DB row and one same-origin image
+request, in exchange for no logo swap after review. The cached image outlives
+a withdrawal by up to 5 minutes, but withdrawn screens no longer reference it.
+
+Review lifecycle status (ID-L12, partial): the badge is fixed as above, but
+approved scopes still survive later name, redirect-URI and origin changes
+(only `verified_at` is withdrawn), and reject / request-changes decisions
+leave a previously approved `review_state` in place. Commit f98c0e7 said
+ID-L12 was fixed; it covers only the badge part.
 
 SPA sections: Overview, Apps (list, create), App detail (Settings,
 Environments [test/live tabs: credentials, redirect URIs, origins, scopes,

@@ -7,6 +7,7 @@ import { compareReviewsNewestFirst } from "@repo/platform-contracts/console"
 import { grantRevokedReasonSchema } from "@repo/platform-contracts/identity"
 import { oidcScopeSchema } from "@repo/platform-contracts/scopes"
 import type { OidcScope } from "@repo/platform-contracts/scopes"
+import type { PinnedLogo } from "../logo-pin"
 import {
   type AccountRecord,
   type AdminReviewRecord,
@@ -61,6 +62,9 @@ export type MemoryConsoleStore = ConsoleStore & {
   oauthTokens(): MemoryOAuthToken[]
   auditEvents(): AuditEvent[]
   sessions(): SessionRecord[]
+  verifiedLogo(
+    environmentId: string,
+  ): (PinnedLogo & { pinnedAt: string }) | null
 }
 
 function missing(entity: string): Error {
@@ -85,6 +89,7 @@ export default function createMemoryStore(
   const environments = new Map<string, EnvironmentRecord>()
   const redirectUris = new Map<string, string[]>()
   const origins = new Map<string, string[]>()
+  const verifiedLogos = new Map<string, PinnedLogo & { pinnedAt: string }>()
   const reviews = new Map<string, ReviewRecord>()
   const apiKeys = new Map<string, ApiKeyRow>()
   const clientSecrets = new Map<string, ClientSecretRow>()
@@ -534,6 +539,7 @@ export default function createMemoryStore(
         optionalScopes: [],
         scopeVersion: 1,
         sectorId: id,
+        verifiedAt: null,
         createdAt: at,
         updatedAt: at,
       }
@@ -554,6 +560,10 @@ export default function createMemoryStore(
     },
     async listOrigins(environmentId) {
       return copy(origins.get(environmentId) ?? [])
+    },
+    async putVerifiedLogo(environmentId, logo) {
+      if (logo === null) verifiedLogos.delete(environmentId)
+      else verifiedLogos.set(environmentId, copy(logo))
     },
     async replaceOrigins(environmentId, values) {
       origins.set(environmentId, [...values])
@@ -634,9 +644,10 @@ export default function createMemoryStore(
       reviews.set(review.id, review)
       return copy(review)
     },
-    async updateReview(id, patch) {
+    async closeReview(id, patch) {
       const review = reviews.get(id)
       if (review === undefined) throw missing("Review")
+      if (review.state !== "open") return null
       Object.assign(review, patch)
       return copy(review)
     },
@@ -889,6 +900,10 @@ export default function createMemoryStore(
       )
     },
 
+    verifiedLogo(environmentId) {
+      const logo = verifiedLogos.get(environmentId)
+      return logo === undefined ? null : copy(logo)
+    },
     seedStaff(accountId, role) {
       staff.set(accountId, role)
     },

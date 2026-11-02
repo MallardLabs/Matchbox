@@ -246,6 +246,8 @@ const environmentFields = {
   optional_scopes: z.array(oidcScopeSchema).optional(),
   scope_version: z.number().int(),
   sector_id: z.string(),
+  /** Absent until the verified-at migration is applied: reads as null. */
+  verified_at: nullableTimestamp.optional(),
   created_at: timestampSchema,
   updated_at: timestampSchema,
 }
@@ -266,6 +268,7 @@ function mapEnvironment(row: EnvironmentRowInput) {
     optionalScopes: row.optional_scopes ?? [],
     scopeVersion: row.scope_version,
     sectorId: row.sector_id,
+    verifiedAt: row.verified_at ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -554,7 +557,7 @@ function appPatchRow(patch: AppProfilePatch) {
 }
 
 function environmentPatchRow(patch: EnvironmentPatch) {
-  const row: Record<string, string | number | string[]> = {}
+  const row: Record<string, string | number | string[] | null> = {}
   if (patch.clientType !== undefined) row.client_type = patch.clientType
   if (patch.reviewState !== undefined) row.review_state = patch.reviewState
   if (patch.requestedScopes !== undefined) {
@@ -567,6 +570,7 @@ function environmentPatchRow(patch: EnvironmentPatch) {
     row.optional_scopes = patch.optionalScopes
   }
   if (patch.scopeVersion !== undefined) row.scope_version = patch.scopeVersion
+  if (patch.verifiedAt !== undefined) row.verified_at = patch.verifiedAt
   return row
 }
 
@@ -1153,6 +1157,32 @@ export default function createSupabaseStore(
         }),
       )
     },
+    async putVerifiedLogo(environmentId, logo) {
+      if (logo === null) {
+        done(
+          "delete verified logo",
+          await supabase
+            .from("mbx_dev_verified_logos")
+            .delete()
+            .eq("environment_id", environmentId),
+        )
+        return
+      }
+      done(
+        "put verified logo",
+        await supabase.from("mbx_dev_verified_logos").upsert(
+          {
+            environment_id: environmentId,
+            content_type: logo.contentType,
+            data_base64: logo.dataBase64,
+            sha256: logo.sha256,
+            source_url: logo.sourceUrl,
+            pinned_at: logo.pinnedAt,
+          },
+          { onConflict: "environment_id" },
+        ),
+      )
+    },
     async revokeEnvironmentTokens(environmentId, reason) {
       return one(
         environmentTokenRevocationSchema,
@@ -1205,7 +1235,7 @@ export default function createSupabaseStore(
         await supabase.from("mbx_dev_reviews").insert(row).select("*").single(),
       )
     },
-    async updateReview(id, patch) {
+    async closeReview(id, patch) {
       const row: Record<string, string | null> = {
         state: patch.state,
         decided_at: patch.decidedAt,
@@ -1214,15 +1244,16 @@ export default function createSupabaseStore(
       if (patch.reviewerNote !== undefined) {
         row.reviewer_note = patch.reviewerNote
       }
-      return one(
+      return maybe(
         reviewRow,
-        "update review",
+        "close review",
         await supabase
           .from("mbx_dev_reviews")
           .update(row)
           .eq("id", id)
+          .eq("state", "open")
           .select("*")
-          .single(),
+          .maybeSingle(),
       )
     },
     async listEnvironmentReviews(environmentId) {

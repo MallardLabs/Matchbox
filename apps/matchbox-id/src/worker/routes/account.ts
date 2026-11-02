@@ -32,7 +32,7 @@ import {
   sessionVerifiedFor,
 } from "../session"
 import type { AccountRecord, SessionRecord } from "../store/id-store"
-import { consentVerified } from "./consent"
+import { consentLogoUrl, consentVerified } from "./consent"
 
 /**
  * Session, connected apps (grants) and device sessions for the SPA. A
@@ -130,12 +130,12 @@ export default function accountRoutes(deps: AppDeps): Hono {
           id: grant.id,
           app: {
             name: grantApp.name,
-            logoUrl: grantApp.logoUrl,
+            logoUrl: consentLogoUrl(grantApp, environment),
             websiteUrl: grantApp.websiteUrl,
           },
           environmentKind: environment.kind,
           network: environment.network,
-          verified: consentVerified(environment),
+          verified: consentVerified(grantApp, environment),
           scopes: oidcScopesOf(grant.scopes),
           declinedScopes: grant.declinedScopes,
           createdAt: grant.createdAt.toISOString(),

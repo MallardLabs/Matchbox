@@ -74,6 +74,8 @@ const environmentColumns = {
   optional_scopes: z.array(oidcScopeSchema).default([]),
   scope_version: z.number().int(),
   sector_id: z.string(),
+  // Absent until the verified-at migration: nothing is verified.
+  verified_at: nullableDateSchema.optional(),
 }
 
 function environmentFromRow(
@@ -92,12 +94,19 @@ function environmentFromRow(
     optionalScopes: row.optional_scopes,
     scopeVersion: row.scope_version,
     sectorId: row.sector_id,
+    verifiedAt: row.verified_at ?? null,
   }
 }
 
 const environmentRowSchema = z
   .object(environmentColumns)
   .transform(environmentFromRow)
+
+const verifiedLogoRowSchema = z.object({
+  content_type: z.enum(["image/png", "image/jpeg", "image/gif", "image/webp"]),
+  data_base64: z.string(),
+  source_url: z.string(),
+})
 
 const clientRowSchema = z
   .object({
@@ -489,6 +498,22 @@ export default function createSupabaseIdStore(
         .maybeSingle()
       if (error !== null) fail("find environment", error)
       return parseRow("environment", clientRowSchema, data)
+    },
+    async findVerifiedLogo(environmentId) {
+      const { data, error } = await supabase
+        .from("mbx_dev_verified_logos")
+        .select("content_type, data_base64, source_url")
+        .eq("environment_id", environmentId)
+        .maybeSingle()
+      if (error !== null) fail("find verified logo", error)
+      const row = parseRow("verified logo", verifiedLogoRowSchema, data)
+      return row === null
+        ? null
+        : {
+            contentType: row.content_type,
+            dataBase64: row.data_base64,
+            sourceUrl: row.source_url,
+          }
     },
     async listClientSecrets(environmentId) {
       const now = iso(new Date())

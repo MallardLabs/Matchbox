@@ -35,6 +35,11 @@ import {
   type EnvironmentRecord,
   StoreConflictError,
 } from "../store/console-store"
+import {
+  assertNoOpenLiveReview,
+  consentProfileChanged,
+  withdrawAppVerification,
+} from "../verification"
 import { auditSearch } from "./audit-search"
 
 /** Creates an environment with a fresh client id (retries a collision). */
@@ -179,7 +184,15 @@ export default function registerAppRoutes(app: ConsoleApp): void {
       }
     }
     const patch = profilePatch(body)
+    const profileChanged = consentProfileChanged(access.app, patch)
+    if (profileChanged) {
+      const live = await store.getEnvironmentByKind(appId, "live")
+      if (live !== null) await assertNoOpenLiveReview(c, live, "the profile")
+      await withdrawAppVerification(c, appId)
+    }
     const updated = await store.updateApp(appId, patch)
+    // Again after the write: a staff approval may have landed in between.
+    if (profileChanged) await withdrawAppVerification(c, appId)
     await audit(c, {
       action: "app-updated",
       organizationId: updated.organizationId,
@@ -236,10 +249,10 @@ export default function registerAppRoutes(app: ConsoleApp): void {
     const { appId } = pathParams(c, consolePaths.appId)
     const access = await appAccess(c, appId, "admin")
     const query = queryParams(c, auditSearchQuerySchema)
-    return auditSearch(c, {
-      ...query,
-      organizationId: access.app.organizationId,
-      appId,
-    })
+    return auditSearch(
+      c,
+      { ...query, organizationId: access.app.organizationId, appId },
+      "organization",
+    )
   })
 }

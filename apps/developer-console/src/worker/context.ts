@@ -12,6 +12,7 @@ import type { Context, Hono } from "hono"
 import type { GoogleTokenVerifier } from "./auth/google"
 import type { EmailSender } from "./email/sender"
 import type { EmailContent } from "./email/templates"
+import type { LogoFetch } from "./logo-pin"
 import type {
   AccountRecord,
   ConsoleStore,
@@ -31,6 +32,8 @@ export type ConsoleDeps = {
   apiLimiter: RateLimitReader
   /** Sign in with Google; null when `GOOGLE_CLIENT_ID` is unset (local). */
   google: { clientId: string; verifier: GoogleTokenVerifier } | null
+  /** Fetches app logos to pin at staff approval (`logo-pin.ts`). */
+  logoFetch: LogoFetch
   now: () => Date
   flags: {
     consoleEnabled: boolean

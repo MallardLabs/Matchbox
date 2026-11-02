@@ -42,6 +42,7 @@ import {
   sessionVerifiedFor,
 } from "../session"
 import type {
+  AppRecord,
   AuthorizationRequestRecord,
   ClientRecord,
   DiscordLinkRecord,
@@ -64,14 +65,42 @@ type LoadedRequest = OpenRequest & {
 }
 
 /**
- * The consent screen's "verified" badge: only a live environment whose
- * review is approved, for confidential and public clients alike. Nothing
- * carries over from grants made under another client type (a
+ * The consent screen's "verified" badge: a live environment of an active app
+ * that staff verified (`verifiedAt`), for confidential and public clients
+ * alike. `reviewState` is not enough: auto-approved API scopes make it
+ * `approved`. The console withdraws `verifiedAt` whenever the app's consent
+ * profile, redirect URIs, origins, requested scopes or status change.
+ * Nothing carries over from grants made under another client type (a
  * confidential→public flip bumps `scope_version`, which forces consent).
  */
-export function consentVerified(environment: EnvironmentRecord): boolean {
-  return environment.kind === "live" && environment.reviewState === "approved"
+export function consentVerified(
+  app: AppRecord,
+  environment: EnvironmentRecord,
+): boolean {
+  return (
+    environment.kind === "live" &&
+    environment.verifiedAt !== null &&
+    app.status === "active"
+  )
 }
+
+/**
+ * The logo beside an app's name. Next to the Verified badge it is only the
+ * copy the console pinned at staff approval (`/api/app-logos`): the bytes
+ * behind a developer's `logoUrl` can change after review. The badge-free
+ * screen keeps the developer's URL. `v` changes with every approval.
+ */
+export function consentLogoUrl(
+  app: AppRecord,
+  environment: EnvironmentRecord,
+): string | null {
+  if (!consentVerified(app, environment)) return app.logoUrl
+  if (app.logoUrl === null || environment.verifiedAt === null) return null
+  return `/api/app-logos/${environment.id}?v=${environment.verifiedAt.getTime()}`
+}
+
+/** Seconds a pinned logo may be cached (it outlives a withdrawal by this). */
+export const appLogoMaxAgeSeconds = 300
 
 function isAppUnavailable(client: ClientRecord): boolean {
   return client.app.status === "suspended" || client.app.status === "retired"
@@ -162,14 +191,55 @@ export default function consentRoutes(deps: AppDeps): Hono {
     const summary: AuthorizationRequestSummary = {
       app: {
         name: clientApp.name,
-        logoUrl: clientApp.logoUrl,
-        verified: consentVerified(environment),
+        logoUrl: consentLogoUrl(clientApp, environment),
+        verified: consentVerified(clientApp, environment),
       },
       environmentKind: environment.kind,
       network: environment.network,
     }
     return c.json(authorizationRequestSummarySchema.parse(summary), 200, {
       "Cache-Control": "no-store",
+    })
+  })
+
+  // A verified app's pinned logo, only while it is still verified and its
+  // `logoUrl` is the one that was pinned. 404 lets the SPA show the initial.
+  app.get("/api/app-logos/:id", async (c) => {
+    const rejected = await firstRateLimitRejection(deps, [
+      {
+        key: `app-logo:ip:${ipPrefix(c.req.raw) ?? "unknown"}`,
+        policy: authorizeIpRateLimitPolicy,
+      },
+    ])
+    if (rejected !== null) {
+      throw new PlatformError("rate_limited", {
+        headers: rateLimitHeaders(rejected, deps.now().getTime()),
+      })
+    }
+    const { id } = pathParams(c, idPathParamsSchema)
+    const client = await deps.store.findEnvironment(id)
+    if (
+      client === null ||
+      client.app.logoUrl === null ||
+      !consentVerified(client.app, client.environment)
+    ) {
+      throw new PlatformError("not_found")
+    }
+    const logo = await deps.store.findVerifiedLogo(id)
+    if (logo === null || logo.sourceUrl !== client.app.logoUrl) {
+      throw new PlatformError("not_found")
+    }
+    const bytes = Uint8Array.from(atob(logo.dataBase64), (char) =>
+      char.charCodeAt(0),
+    )
+    return new Response(bytes, {
+      headers: {
+        "Content-Type": logo.contentType,
+        "Cache-Control": `public, max-age=${appLogoMaxAgeSeconds}`,
+        "Content-Security-Policy": "default-src 'none'; sandbox",
+        "Cross-Origin-Resource-Policy": "same-origin",
+        "X-Content-Type-Options": "nosniff",
+      },
     })
   })
 
@@ -191,12 +261,12 @@ export default function consentRoutes(deps: AppDeps): Hono {
       id: request.id,
       app: {
         name: clientApp.name,
-        logoUrl: clientApp.logoUrl,
+        logoUrl: consentLogoUrl(clientApp, environment),
         websiteUrl: clientApp.websiteUrl,
         privacyUrl: clientApp.privacyUrl,
         termsUrl: clientApp.termsUrl,
         status: clientApp.status,
-        verified: consentVerified(environment),
+        verified: consentVerified(clientApp, environment),
       },
       environmentKind: environment.kind,
       network: environment.network,

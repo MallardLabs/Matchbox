@@ -16,6 +16,8 @@ import type { AppRecord, EnvironmentRecord } from "./store/console-store"
  * - everything else opens a manual review. Approved scopes keep working
  *   while a review for more scopes is open, so an environment with approved
  *   scopes stays `approved`.
+ * `approved` is not the consent "Verified" badge: only a staff approval
+ * grants that (`verifiedAt`, see verification.ts).
  */
 
 export const autoApprovableLiveScopes: readonly PlatformScope[] = [

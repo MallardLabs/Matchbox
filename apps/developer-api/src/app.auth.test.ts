@@ -70,6 +70,158 @@ describe("API key auth", () => {
     expect(lookup).toHaveBeenCalledTimes(2)
   })
 
+  describe("IP buckets behind a shared egress", () => {
+    // Cloudflare's cross-zone Worker egress: every Worker caller shares it.
+    const workerIp = "2a06:98c0:3600::103"
+    let junkCount = 0
+    function junkKey(): string {
+      junkCount += 1
+      const prefix = `Junk${String(junkCount).padStart(8, "0")}`
+      return `mbx_sk_live_${prefix}_${"x".repeat(43)}`
+    }
+
+    it("never charges a verified key, even with a cold cache", async () => {
+      const harness = await createHarness()
+      const statuses = new Map<number, number>()
+      for (let index = 0; index < 200; index++) {
+        const response = await harness.get(mainnetList, {
+          key: junkKey(),
+          ip: workerIp,
+        })
+        statuses.set(response.status, (statuses.get(response.status) ?? 0) + 1)
+      }
+      expect(statuses.get(401)).toBe(30)
+      expect(statuses.get(429)).toBe(170)
+      for (let index = 0; index < 3; index++) {
+        harness.clock.advance(15_001)
+        const valid = await harness.get(mainnetList, {
+          key: keys.skLive,
+          ip: workerIp,
+        })
+        expect(valid.status).toBe(200)
+      }
+    })
+
+    it(
+      "keeps a verified key working after junk spends the daily bucket",
+      {
+        timeout: 60_000,
+      },
+      async () => {
+        const harness = await createHarness()
+        for (let minute = 0; minute < 34; minute++) {
+          for (let index = 0; index < 30; index++) {
+            await harness.get(mainnetList, { key: junkKey(), ip: workerIp })
+          }
+          harness.clock.advance(60_000)
+        }
+        const junk = await harness.get(mainnetList, {
+          key: junkKey(),
+          ip: workerIp,
+        })
+        expect(junk.status).toBe(429)
+        expect(Number(junk.headers.get("Retry-After"))).toBeGreaterThan(3_600)
+        const valid = await harness.get(mainnetList, {
+          key: keys.skLive,
+          ip: workerIp,
+        })
+        expect(valid.status).toBe(200)
+      },
+    )
+
+    it("still limits unknown and wrong keys per IP prefix", async () => {
+      const harness = await createHarness()
+      const wrongSecret = `${keys.skTest.slice(0, -3)}zzz`
+      for (let index = 0; index < 30; index++) {
+        const response = await harness.get(testnetList, {
+          key: index % 2 === 0 ? junkKey() : wrongSecret,
+        })
+        expect(response.status).toBe(401)
+      }
+      const limited = await harness.get(testnetList, { key: junkKey() })
+      expect(limited.status).toBe(429)
+      expect(await errorCode(limited)).toBe("rate_limited")
+      expect((await harness.get(testnetList)).status).toBe(200)
+    })
+
+    it("stops reading key rows for junk once ip: is spent", async () => {
+      const harness = await createHarness()
+      const lookup = vi.spyOn(harness.store, "findApiKeyByPrefix")
+      const snapshot = vi.spyOn(harness.store, "listActiveKeyPrefixes")
+      for (let index = 0; index < 1_000; index++) {
+        await harness.get(mainnetList, { key: junkKey(), ip: workerIp })
+      }
+      // 30 allowed + the one that found the bucket spent.
+      expect(lookup).toHaveBeenCalledTimes(31)
+      expect(snapshot).toHaveBeenCalledTimes(1)
+
+      // A cold cache still verifies a known prefix.
+      const valid = await harness.get(mainnetList, {
+        key: keys.skLive,
+        ip: workerIp,
+      })
+      expect(valid.status).toBe(200)
+      expect(lookup).toHaveBeenCalledTimes(32)
+
+      // An unknown prefix reloads the snapshot at most every 10 s.
+      harness.clock.advance(5_000)
+      await harness.get(mainnetList, { key: junkKey(), ip: workerIp })
+      expect(snapshot).toHaveBeenCalledTimes(1)
+      harness.clock.advance(5_000)
+      const junk = await harness.get(mainnetList, {
+        key: junkKey(),
+        ip: workerIp,
+      })
+      expect(junk.status).toBe(429)
+      expect(snapshot).toHaveBeenCalledTimes(2)
+      expect(lookup).toHaveBeenCalledTimes(32)
+    })
+
+    it("answers repeated wrong secrets on one prefix from cache", async () => {
+      const harness = await createHarness()
+      const lookup = vi.spyOn(harness.store, "findApiKeyByPrefix")
+      for (let index = 0; index < 200; index++) {
+        const secret = String(index).padStart(43, "z")
+        const wrong = `${keys.skLive.slice(0, -43)}${secret}`
+        await harness.get(mainnetList, { key: wrong, ip: workerIp })
+      }
+      expect(lookup).toHaveBeenCalledTimes(1)
+      const valid = await harness.get(mainnetList, {
+        key: keys.skLive,
+        ip: workerIp,
+      })
+      expect(valid.status).toBe(200)
+      expect(lookup).toHaveBeenCalledTimes(2)
+    })
+
+    it("fails closed on the miss path while the limiter is down", async () => {
+      const harness = await createHarness({
+        rateLimits: (memory) => ({
+          consume(bucket, policy) {
+            if (bucket.startsWith("ip:")) {
+              return Promise.reject(new Error("limiter down"))
+            }
+            return memory.consume(bucket, policy)
+          },
+        }),
+      })
+      const lookup = vi.spyOn(harness.store, "findApiKeyByPrefix")
+      for (let index = 0; index < 300; index++) {
+        const response = await harness.get(mainnetList, {
+          key: junkKey(),
+          ip: workerIp,
+        })
+        expect(response.status).toBe(401)
+      }
+      expect(lookup).toHaveBeenCalledTimes(1)
+      const valid = await harness.get(mainnetList, {
+        key: keys.skLive,
+        ip: workerIp,
+      })
+      expect(valid.status).toBe(200)
+    })
+  })
+
   type Case = {
     name: string
     key: string

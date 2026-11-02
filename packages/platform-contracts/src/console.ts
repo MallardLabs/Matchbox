@@ -14,9 +14,18 @@ import {
 } from "./common"
 import { apiKeyKindSchema, clientIdSchema } from "./credentials"
 import { grantRevokedReasonSchema } from "./identity"
-import { environmentKindSchema, networkSlugSchema } from "./network"
+import {
+  type EnvironmentKind,
+  environmentKindSchema,
+  networkSlugSchema,
+} from "./network"
 import { endpointClassSchema } from "./rate-limits"
-import { oidcScopeSchema, platformScopeSchema } from "./scopes"
+import {
+  type PlatformScope,
+  oidcScopeSchema,
+  oidcScopesOf,
+  platformScopeSchema,
+} from "./scopes"
 
 /**
  * Request/response schemas for the developer console `/api/*` routes.
@@ -376,13 +385,16 @@ export function compareReviewsNewestFirst(
 
 /**
  * A review as developers see it, decided ones included. `reviewerNote` is
- * the staff "Note to developer" (shown on Overview + Environments).
+ * the staff "Note to developer" (shown on Overview + Environments). Staff
+ * account ids stay internal: `decidedBy` says who closed it.
  */
-export const developerReviewSchema = reviewSchema.extend({
-  decidedBy: reviewDecidedBySchema.nullable(),
-  /** Submitter's display name; null when the account is gone. */
-  submitterName: z.string().nullable(),
-})
+export const developerReviewSchema = reviewSchema
+  .omit({ reviewerId: true })
+  .extend({
+    decidedBy: reviewDecidedBySchema.nullable(),
+    /** Submitter's display name; null when the account is gone. */
+    submitterName: z.string().nullable(),
+  })
 
 export type DeveloperReview = z.infer<typeof developerReviewSchema>
 
@@ -408,6 +420,8 @@ export const environmentSummarySchema = z.object({
    * populate; optional only for older servers.
    */
   requestedScopes: z.array(platformScopeSchema).optional(),
+  /** See `environmentSchema.verifiedAt`. */
+  verifiedAt: isoDateTimeSchema.nullable(),
 })
 
 export type EnvironmentSummary = z.infer<typeof environmentSummarySchema>
@@ -486,6 +500,13 @@ export const environmentSchema = z.object({
    */
   optionalScopes: z.array(oidcScopeSchema).optional(),
   scopeVersion: z.number().int().positive(),
+  /**
+   * When staff last approved a review of the environment as it stands; the
+   * Matchbox ID consent "Verified" badge (live, active apps). Auto-approval
+   * never sets it; changing the app's consent profile, redirect URIs,
+   * origins, requested scopes or status clears it.
+   */
+  verifiedAt: isoDateTimeSchema.nullable(),
   redirectUris: z.array(z.string()),
   origins: z.array(z.string()),
   openReview: reviewSchema.nullable(),
@@ -494,6 +515,23 @@ export const environmentSchema = z.object({
 })
 
 export type Environment = z.infer<typeof environmentSchema>
+
+/**
+ * A live environment that shows a consent screen (requests OIDC scopes) and
+ * has no staff verification may open a review even when every requested
+ * scope is already approved.
+ */
+export function awaitingVerification(environment: {
+  kind: EnvironmentKind
+  requestedScopes: readonly PlatformScope[]
+  verifiedAt: string | null
+}): boolean {
+  return (
+    environment.kind === "live" &&
+    environment.verifiedAt === null &&
+    oidcScopesOf(environment.requestedScopes).length > 0
+  )
+}
 
 // GET /api/apps/{appId}/environments/{kind} -> environmentSchema
 // GET /api/environments/{environmentId} -> environmentSchema

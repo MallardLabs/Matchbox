@@ -20,6 +20,7 @@ import type {
 } from "@repo/platform-contracts/network"
 import type { EndpointClass } from "@repo/platform-contracts/rate-limits"
 import type { OidcScope, PlatformScope } from "@repo/platform-contracts/scopes"
+import type { PinnedLogo } from "../logo-pin"
 
 /**
  * Storage port for the developer console. Routes depend only on this type;
@@ -144,6 +145,8 @@ export type EnvironmentRecord = {
   optionalScopes: OidcScope[]
   scopeVersion: number
   sectorId: string
+  /** Staff verification behind the consent badge (`verification.ts`). */
+  verifiedAt: string | null
   createdAt: string
   updatedAt: string
 }
@@ -156,6 +159,7 @@ export type EnvironmentPatch = {
   /** Written in the same update as `requestedScopes` (DB subset CHECK). */
   optionalScopes?: OidcScope[]
   scopeVersion?: number
+  verifiedAt?: string | null
 }
 
 export type ReviewRecord = {
@@ -410,6 +414,11 @@ export type ConsoleStore = {
   listOrigins(environmentId: string): Promise<string[]>
   /** Atomically replaces the set (existing rows keep their order). */
   replaceOrigins(environmentId: string, origins: string[]): Promise<void>
+  /** Logo bytes pinned at staff approval (`logo-pin.ts`); null deletes. */
+  putVerifiedLogo(
+    environmentId: string,
+    logo: (PinnedLogo & { pinnedAt: string }) | null,
+  ): Promise<void>
   /**
    * Atomically revokes the environment's active Matchbox ID refresh-token
    * families and access tokens, bumps its `scope_version` (users must
@@ -426,15 +435,19 @@ export type ConsoleStore = {
   createReview(
     input: Omit<ReviewRecord, "id" | "createdAt"> & { createdAt?: string },
   ): Promise<ReviewRecord>
-  updateReview(
+  /**
+   * Decides or withdraws a review only while it is still open (one
+   * conditional update); null when it was already closed.
+   */
+  closeReview(
     id: string,
     patch: {
-      state: ReviewRecordState
+      state: Exclude<ReviewRecordState, "open">
       reviewerId?: string | null
       reviewerNote?: string | null
       decidedAt: string
     },
-  ): Promise<ReviewRecord>
+  ): Promise<ReviewRecord | null>
   /** Every review of an environment, newest activity first. */
   listEnvironmentReviews(environmentId: string): Promise<ReviewRecord[]>
   /** Reviews across an organization's apps, newest activity first. */

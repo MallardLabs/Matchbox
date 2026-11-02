@@ -1,4 +1,5 @@
 import {
+  awaitingVerification,
   consolePaths,
   environmentReviewListResponseSchema,
   environmentSchema,
@@ -60,6 +61,11 @@ import {
   evaluateSubmission,
 } from "../review-policy"
 import type { EnvironmentRecord } from "../store/console-store"
+import {
+  assertNoOpenLiveReview,
+  withdrawCurrentVerification,
+  withdrawVerification,
+} from "../verification"
 
 function validateAll(
   values: string[],
@@ -255,10 +261,21 @@ export default function registerEnvironmentRoutes(app: ConsoleApp): void {
     )
     const { store } = deps(c)
     const added = addedValues(await store.listRedirectUris(environmentId), uris)
-    // Adding a redirect URI can send authorization codes somewhere new;
-    // removing one only narrows the client.
-    if (added.length > 0) requireStepUp(c)
+    // Adding a redirect URI can send authorization codes somewhere new, so
+    // it needs a step-up and withdraws staff verification; removing one only
+    // narrows the client.
+    let environment = access.environment
+    if (added.length > 0) {
+      requireStepUp(c)
+      await assertNoOpenLiveReview(c, environment, "redirect URIs")
+      environment = await withdrawVerification(c, environment)
+    }
     await store.replaceRedirectUris(environmentId, uris)
+    // Again after the write: a staff approval may have landed in between.
+    if (added.length > 0) {
+      environment =
+        (await withdrawCurrentVerification(c, environmentId)) ?? environment
+    }
     await audit(c, {
       ...auditScope(access),
       action: "redirect-uris-updated",
@@ -269,7 +286,7 @@ export default function registerEnvironmentRoutes(app: ConsoleApp): void {
     return respond(
       c,
       environmentSchema,
-      await environmentResponse(c, access.environment),
+      await environmentResponse(c, environment),
     )
   })
 
@@ -284,8 +301,17 @@ export default function registerEnvironmentRoutes(app: ConsoleApp): void {
     )
     const { store } = deps(c)
     const added = addedValues(await store.listOrigins(environmentId), origins)
-    if (added.length > 0) requireStepUp(c)
+    let environment = access.environment
+    if (added.length > 0) {
+      requireStepUp(c)
+      await assertNoOpenLiveReview(c, environment, "origins")
+      environment = await withdrawVerification(c, environment)
+    }
     await store.replaceOrigins(environmentId, origins)
+    if (added.length > 0) {
+      environment =
+        (await withdrawCurrentVerification(c, environmentId)) ?? environment
+    }
     await audit(c, {
       ...auditScope(access),
       action: "origins-updated",
@@ -296,7 +322,7 @@ export default function registerEnvironmentRoutes(app: ConsoleApp): void {
     return respond(
       c,
       environmentSchema,
-      await environmentResponse(c, access.environment),
+      await environmentResponse(c, environment),
     )
   })
 
@@ -340,10 +366,15 @@ export default function registerEnvironmentRoutes(app: ConsoleApp): void {
     const optionalChanged =
       optionalScopes.join(" ") !==
       normalizeScopes(access.environment.optionalScopes).join(" ")
+    // Staff verified the requested set they reviewed, not this one.
+    const requestedChanged =
+      requestedScopes.join(" ") !==
+      normalizeScopes(access.environment.requestedScopes).join(" ")
     const environment = await store.updateEnvironment(environmentId, {
       requestedScopes,
       approvedScopes,
       ...(optionalChanged ? { optionalScopes } : {}),
+      ...(requestedChanged ? { verifiedAt: null } : {}),
       reviewState: environmentReviewState(approvedScopes, "development"),
     })
     await audit(c, {
@@ -386,7 +417,9 @@ export default function registerEnvironmentRoutes(app: ConsoleApp): void {
         access.app.organizationId,
       ),
     })
-    if (evaluation.added.length === 0) {
+    // With nothing new to approve, a live consent screen can still go to
+    // staff for verification (live OIDC scopes are never auto-approved).
+    if (evaluation.added.length === 0 && !awaitingVerification(environment)) {
       throw new PlatformError("conflict", {
         message: "All requested scopes are already approved.",
       })
@@ -472,10 +505,14 @@ export default function registerEnvironmentRoutes(app: ConsoleApp): void {
     if (review === null) {
       throw new PlatformError("conflict", { message: "No open review." })
     }
-    await store.updateReview(review.id, {
+    // Conditional: a staff decision closing it first wins.
+    const withdrawn = await store.closeReview(review.id, {
       state: "withdrawn",
       decidedAt: nowIso(c),
     })
+    if (withdrawn === null) {
+      throw new PlatformError("conflict", { message: "No open review." })
+    }
     const environment = await store.updateEnvironment(environmentId, {
       reviewState: environmentReviewState(
         access.environment.approvedScopes,

@@ -45,6 +45,9 @@ const profileView = "mbx_api_gauge_profiles"
 const chainStateTable = "mbx_api_gauge_chain_state"
 const upsertChunkSize = 500
 const reconciliationPageSize = 1000
+const keyPrefixPageSize = 1000
+
+const keyPrefixRowsSchema = z.array(z.object({ prefix: z.string() }))
 
 /** Thrown for any Supabase failure; the message never reaches clients. */
 export class StoreError extends Error {
@@ -248,6 +251,26 @@ export function createSupabaseApiStore(
         app: row.environment.app,
         origins: row.environment.origins.map((entry) => entry.origin),
       }
+    },
+
+    async listActiveKeyPrefixes(): Promise<string[]> {
+      const prefixes: string[] = []
+      for (let from = 0; ; from += keyPrefixPageSize) {
+        const { data, error } = await supabase
+          .from("mbx_dev_api_keys")
+          .select("prefix")
+          .is("revoked_at", null)
+          .order("prefix", { ascending: true })
+          .range(from, from + keyPrefixPageSize - 1)
+        if (error !== null) throw new StoreError("list key prefixes", error)
+        const parsed = keyPrefixRowsSchema.safeParse(data)
+        if (!parsed.success) {
+          throw new StoreError("parse key prefixes", parsed.error)
+        }
+        for (const row of parsed.data) prefixes.push(row.prefix)
+        if (parsed.data.length < keyPrefixPageSize) break
+      }
+      return prefixes
     },
 
     async listGaugeProfiles(

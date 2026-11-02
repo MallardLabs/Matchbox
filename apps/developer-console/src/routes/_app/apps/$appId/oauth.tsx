@@ -216,7 +216,8 @@ function OAuthPanel({
               audience={audience}
               verified={
                 environment.kind === "live" &&
-                environment.approvedScopes.length > 0
+                environment.verifiedAt !== null &&
+                preview.data.app.status === "active"
               }
             />
           )}

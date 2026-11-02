@@ -66,8 +66,18 @@ Durable Object `RATE_LIMITER` → `RateLimiter` from
 - Keys verified by prefix lookup + HMAC(`API_KEY_PEPPER`), cached per isolate
   for 15 s (revocation latency ≤ 15 s). Unknown keys are negatively cached.
 - Missing/malformed keys and failed verification consume `ip:<prefix>`
-  (`unauthenticated` policy). Cache misses consume `lookup:<prefix>`
-  (120/min) before the DB read.
+  (`unauthenticated` policy). Verified keys never touch an IP bucket, so
+  callers sharing an egress (all Cloudflare Workers) cannot lock each other
+  out.
+- DB reads on the miss path are bounded. A prefix that just failed
+  verification is answered from memory for 15 s (unknown prefix or the row's
+  secret hash). Once an isolate sees `ip:<prefix>` spent, it answers that
+  bucket's 429 locally until reset, and a miss reads the key row only if the
+  prefix is in the isolate's snapshot of unrevoked prefixes (one
+  `listActiveKeyPrefixes` read, reloaded after 60 s, or after 10 s for a
+  missing prefix). Junk costs at most 30 lookups per IP prefix per minute
+  plus one snapshot read per 10 s per isolate; valid keys always pass. A
+  limiter error gates the miss path the same way for 30 s (fail closed).
 - Per environment: `env:<environmentId>:secret` with `rateLimitPolicies` +
   `mbx_dev_quota_overrides` (cached 60 s), and `env:<environmentId>:publishable`
   scaled by `PUBLISHABLE_QUOTA_SHARE`. Publishable keys also use

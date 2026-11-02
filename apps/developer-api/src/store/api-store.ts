@@ -94,6 +94,8 @@ export type ReconciliationTarget = {
 export type ApiStore = {
   /** Key + environment + app status + origins, or null for an unknown prefix. */
   findApiKeyByPrefix(prefix: string): Promise<ApiKeyRecord | null>
+  /** Prefixes of every unrevoked key (bounds lookups under junk traffic). */
+  listActiveKeyPrefixes(): Promise<string[]>
   listGaugeProfiles(request: GaugeProfileListRequest): Promise<GaugeProfilePage>
   getGaugeProfile(
     network: NetworkSlug,

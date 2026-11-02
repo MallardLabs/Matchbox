@@ -40,9 +40,11 @@ import {
   requireStepUp,
 } from "../context"
 import { type ReviewOutcome, reviewDecisionEmail } from "../email/templates"
+import { pinLogo } from "../logo-pin"
 import { respond, toApp, toQuotaOverride, toReview } from "../mappers"
 import { approvalOutcome, environmentReviewState } from "../review-policy"
 import type { AdminAppRecord, AdminReviewRecord } from "../store/console-store"
+import { verificationSubject, withdrawAppVerification } from "../verification"
 import { auditSearch } from "./audit-search"
 
 /** Staff writes: the role plus a fresh Google step-up. */
@@ -231,7 +233,7 @@ export default function registerAdminRoutes(app: ConsoleApp): void {
     const staff = await staffAction(c, "reviewer")
     const { reviewId } = pathParams(c, consolePaths.reviewId)
     const body = await jsonBody(c, reviewDecisionRequestSchema)
-    const { store, email, config } = deps(c)
+    const { store, email, config, logoFetch } = deps(c)
     const record = await store.getAdminReview(reviewId)
     if (record === null) throw new PlatformError("not_found")
     if (record.review.state !== "open") {
@@ -242,6 +244,7 @@ export default function registerAdminRoutes(app: ConsoleApp): void {
       body.note === undefined || body.note.length === 0 ? null : body.note
     const at = nowIso(c)
     let metadata: Record<string, unknown> = { decision: body.decision }
+    let approval: ReturnType<typeof approvalOutcome> | null = null
     if (body.decision === "approve") {
       const approve = body.approvedScopes ?? review.requestedScopes
       const outside = approve.filter(
@@ -257,20 +260,72 @@ export default function registerAdminRoutes(app: ConsoleApp): void {
           ],
         })
       }
-      const outcome = approvalOutcome({ environment, approve })
+      approval = approvalOutcome({ environment, approve })
+    }
+    // The only place staff verification (the consent badge) is granted.
+    const verifiedAt =
+      approval !== null && approval.approvedScopes.length > 0 ? at : null
+    const subject =
+      verifiedAt === null
+        ? null
+        : await verificationSubject(c, record.app.id, environment.id)
+    // The logo the reviewer saw, pinned: the bytes behind logoUrl can change.
+    const pinned =
+      verifiedAt === null || record.app.logoUrl === null
+        ? null
+        : await pinLogo(logoFetch, record.app.logoUrl)
+    if (pinned !== null && !pinned.ok) {
+      logger(c).warn({
+        message: "Logo not pinned; the verified consent screen shows none",
+        reviewId,
+        reason: pinned.reason,
+      })
+    }
+    // Close the review first, conditionally: a withdraw that got there first
+    // wins, and once it is closed nothing else can decide or withdraw it.
+    const closed = await store.closeReview(reviewId, {
+      state: decisionOutcome[body.decision],
+      reviewerId: staff.account.id,
+      reviewerNote: note,
+      decidedAt: at,
+    })
+    if (closed === null) {
+      throw new PlatformError("conflict", { message: "Review is closed." })
+    }
+    if (approval !== null) {
+      if (verifiedAt !== null) {
+        await store.putVerifiedLogo(
+          environment.id,
+          pinned?.ok === true ? { ...pinned.logo, pinnedAt: at } : null,
+        )
+      }
       await store.updateEnvironment(environment.id, {
-        approvedScopes: outcome.approvedScopes,
-        scopeVersion: outcome.scopeVersion,
+        approvedScopes: approval.approvedScopes,
+        scopeVersion: approval.scopeVersion,
         reviewState: environmentReviewState(
-          outcome.approvedScopes,
+          approval.approvedScopes,
           "development",
         ),
+        verifiedAt,
       })
+      // Closing the review unfroze the reviewed attributes; withdraw the
+      // badge if any changed before it was written (`verification.ts`).
+      let verified = verifiedAt !== null
+      if (
+        verified &&
+        (await verificationSubject(c, record.app.id, environment.id)) !==
+          subject
+      ) {
+        await store.updateEnvironment(environment.id, { verifiedAt: null })
+        verified = false
+      }
       metadata = {
         ...metadata,
-        approvedScopes: outcome.approvedScopes,
-        added: outcome.added,
-        scopeVersion: outcome.scopeVersion,
+        approvedScopes: approval.approvedScopes,
+        added: approval.added,
+        scopeVersion: approval.scopeVersion,
+        verified,
+        logoPinned: verified && pinned?.ok === true,
       }
     } else {
       await store.updateEnvironment(environment.id, {
@@ -278,14 +333,9 @@ export default function registerAdminRoutes(app: ConsoleApp): void {
           environment.approvedScopes,
           body.decision === "reject" ? "rejected" : "changes-requested",
         ),
+        verifiedAt: null,
       })
     }
-    await store.updateReview(reviewId, {
-      state: decisionOutcome[body.decision],
-      reviewerId: staff.account.id,
-      reviewerNote: note,
-      decidedAt: at,
-    })
     await audit(c, {
       actorType: "staff",
       action: decisionAction[body.decision],
@@ -349,7 +399,11 @@ export default function registerAdminRoutes(app: ConsoleApp): void {
     const organization = await store.getOrganization(current.organizationId)
     if (organization === null) throw new PlatformError("not_found")
     // Suspension revokes nothing; the API and Matchbox ID refuse suspended
-    // apps while the status holds.
+    // apps while the status holds. Any status change withdraws staff
+    // verification, so reactivation does not restore the consent badge.
+    if (current.status !== body.status) {
+      await withdrawAppVerification(c, appId)
+    }
     const updated =
       current.status === body.status
         ? current
@@ -481,6 +535,6 @@ export default function registerAdminRoutes(app: ConsoleApp): void {
 
   app.get("/api/admin/audit", async (c) => {
     await requireStaff(c, "reviewer")
-    return auditSearch(c, queryParams(c, auditSearchQuerySchema))
+    return auditSearch(c, queryParams(c, auditSearchQuerySchema), "staff")
   })
 }

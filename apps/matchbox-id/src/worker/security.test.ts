@@ -23,6 +23,7 @@ import {
 } from "viem/accounts"
 import { describe, expect, it } from "vitest"
 import { z } from "zod"
+import { grantListViewResponseSchema } from "../shared/contracts"
 import { purgeExpiredRows } from "./cleanup"
 import type { SiwePublicClient } from "./deps"
 import { familyIdForCodeHash, opaqueTokenHash } from "./oidc/tokens"
@@ -753,6 +754,115 @@ describe("client type changes", () => {
     )
     expect(view.environmentKind).toBe("test")
     expect(view.app.verified).toBe(false)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// ID-03: the badge needs staff verification and an active app
+// ---------------------------------------------------------------------------
+
+describe("consent verified badge", () => {
+  async function liveView(harness: Harness, cookie: string) {
+    const location = await liveAuthorize(harness, cookie, "consent")
+    return requestView(
+      harness,
+      cookie,
+      location.searchParams.get("request") ?? "",
+    )
+  }
+
+  async function grantsVerified(harness: Harness, cookie: string) {
+    const response = await harness.app.request(url("/api/grants"), {
+      headers: { Cookie: cookie },
+    })
+    return grantListViewResponseSchema
+      .parse(await response.json())
+      .data.map((grant) => grant.verified)
+  }
+
+  it("is not granted by an approved review state alone", async () => {
+    const harness = await createHarness()
+    const cookie = await signIn(harness)
+    harness.store.admin.setVerifiedAt(memorySeed.liveEnvironmentId, null)
+    const view = await liveView(harness, cookie)
+    expect(view.environmentKind).toBe("live")
+    expect(view.app.verified).toBe(false)
+  })
+
+  it("is withheld from restricted and suspended apps", async () => {
+    const harness = await createHarness()
+    const cookie = await signIn(harness)
+    await obtainCode(harness, cookie, {
+      pkce: await pkce(),
+      clientId: memorySeed.liveClientId,
+      redirectUri: memorySeed.liveRedirectUris[0],
+    })
+    expect((await liveView(harness, cookie)).app.verified).toBe(true)
+    expect(await grantsVerified(harness, cookie)).toEqual([true])
+
+    harness.store.admin.setAppStatus(memorySeed.appId, "restricted")
+    expect((await liveView(harness, cookie)).app.verified).toBe(false)
+    expect(await grantsVerified(harness, cookie)).toEqual([false])
+
+    harness.store.admin.setAppStatus(memorySeed.appId, "suspended")
+    expect(await grantsVerified(harness, cookie)).toEqual([false])
+  })
+
+  describe("logo beside the badge", () => {
+    const logoUrl = "https://cdn.example.com/logo.png"
+    const pngBytes = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]
+    const pinned = {
+      contentType: "image/png" as const,
+      dataBase64: btoa(String.fromCharCode(...pngBytes)),
+      sourceUrl: logoUrl,
+    }
+
+    async function logoResponse(harness: Harness, path: string | null) {
+      expect(path).not.toBeNull()
+      return harness.app.request(url(path ?? ""))
+    }
+
+    it("is the pinned copy, never the developer's URL", async () => {
+      const harness = await createHarness()
+      const cookie = await signIn(harness)
+      harness.store.admin.setAppLogoUrl(memorySeed.appId, logoUrl)
+      harness.store.admin.setVerifiedLogo(memorySeed.liveEnvironmentId, pinned)
+      const view = await liveView(harness, cookie)
+      expect(view.app.verified).toBe(true)
+      expect(view.app.logoUrl).toMatch(
+        new RegExp(`^/api/app-logos/${memorySeed.liveEnvironmentId}\\?v=\\d+$`),
+      )
+      const response = await logoResponse(harness, view.app.logoUrl)
+      expect(response.status).toBe(200)
+      expect(response.headers.get("Content-Type")).toBe("image/png")
+      expect(response.headers.get("X-Content-Type-Options")).toBe("nosniff")
+      expect([...new Uint8Array(await response.arrayBuffer())]).toEqual(
+        pngBytes,
+      )
+    })
+
+    it("is withheld once the URL or the verification changes", async () => {
+      const harness = await createHarness()
+      const cookie = await signIn(harness)
+      harness.store.admin.setAppLogoUrl(memorySeed.appId, logoUrl)
+      harness.store.admin.setVerifiedLogo(memorySeed.liveEnvironmentId, pinned)
+      const path = (await liveView(harness, cookie)).app.logoUrl
+
+      // A logoUrl the console never pinned (no row, or another URL): 404.
+      harness.store.admin.setAppLogoUrl(memorySeed.appId, `${logoUrl}?v=2`)
+      expect((await logoResponse(harness, path)).status).toBe(404)
+      harness.store.admin.setAppLogoUrl(memorySeed.appId, logoUrl)
+      harness.store.admin.setVerifiedLogo(memorySeed.liveEnvironmentId, null)
+      expect((await logoResponse(harness, path)).status).toBe(404)
+
+      // Unverified: no badge, so the developer's own URL is fine.
+      harness.store.admin.setVerifiedLogo(memorySeed.liveEnvironmentId, pinned)
+      harness.store.admin.setVerifiedAt(memorySeed.liveEnvironmentId, null)
+      expect((await logoResponse(harness, path)).status).toBe(404)
+      const view = await liveView(harness, cookie)
+      expect(view.app.verified).toBe(false)
+      expect(view.app.logoUrl).toBe(logoUrl)
+    })
   })
 })
 

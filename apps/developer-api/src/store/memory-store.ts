@@ -136,6 +136,12 @@ export async function createMemoryApiStore(options: {
       return stored === undefined ? null : structuredClone(stored.record)
     },
 
+    async listActiveKeyPrefixes() {
+      return [...keysByPrefix.entries()]
+        .filter(([, stored]) => stored.record.key.revokedAt === null)
+        .map(([prefix]) => prefix)
+    },
+
     async listGaugeProfiles(request) {
       const addresses =
         request.addresses === null ? null : new Set(request.addresses)
