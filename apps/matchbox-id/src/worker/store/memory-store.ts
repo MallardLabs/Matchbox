@@ -81,10 +81,13 @@ export type MemoryIdStore = IdStore & {
       scopes: EnvironmentRecord["optionalScopes"],
     ): void
     setVerifiedAt(environmentId: string, verifiedAt: Date | null): void
+    /** Replaces the environment's verified logo rows with this one, or none. */
     setVerifiedLogo(
       environmentId: string,
       logo: VerifiedLogoRecord | null,
     ): void
+    /** Adds a row beside the others, as another approval would. */
+    addVerifiedLogo(environmentId: string, logo: VerifiedLogoRecord): void
     /** Replaces (or removes) a wallet's Discord link like the DB trigger. */
     setDiscordLink(
       walletAddress: string,
@@ -132,7 +135,13 @@ export async function createMemoryIdStore(options: {
   const apps = new Map<string, AppRecord>()
   const environments = new Map<string, EnvironmentRecord>()
   const redirectUris = new Map<string, string[]>()
-  const verifiedLogos = new Map<string, VerifiedLogoRecord>()
+  /** By environment id, then verifiedAt (ms). */
+  const verifiedLogos = new Map<string, Map<number, VerifiedLogoRecord>>()
+  function addVerifiedLogo(environmentId: string, logo: VerifiedLogoRecord) {
+    const rows = verifiedLogos.get(environmentId) ?? new Map()
+    rows.set(logo.verifiedAt.getTime(), clone(logo))
+    verifiedLogos.set(environmentId, rows)
+  }
   const clientSecrets = new Map<string, ClientSecretRecord[]>()
   const accounts = new Map<string, AccountRecord>()
   const nonces = new Map<string, { expiresAt: Date; consumedAt: Date | null }>()
@@ -302,8 +311,8 @@ export async function createMemoryIdStore(options: {
       const environment = environments.get(environmentId)
       return environment === undefined ? null : clientFor(environment)
     },
-    async findVerifiedLogo(environmentId) {
-      const logo = verifiedLogos.get(environmentId)
+    async findVerifiedLogo(environmentId, verifiedAt) {
+      const logo = verifiedLogos.get(environmentId)?.get(verifiedAt.getTime())
       return logo === undefined ? null : clone(logo)
     },
     async listClientSecrets(environmentId) {
@@ -731,9 +740,10 @@ export async function createMemoryIdStore(options: {
         if (environment !== undefined) environment.verifiedAt = verifiedAt
       },
       setVerifiedLogo(environmentId, logo) {
-        if (logo === null) verifiedLogos.delete(environmentId)
-        else verifiedLogos.set(environmentId, clone(logo))
+        verifiedLogos.delete(environmentId)
+        if (logo !== null) addVerifiedLogo(environmentId, logo)
       },
+      addVerifiedLogo,
       setDiscordLink(walletAddress, link, now) {
         const previous = discordLinks.get(walletAddress)
         if (link === null) discordLinks.delete(walletAddress)

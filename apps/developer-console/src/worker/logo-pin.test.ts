@@ -10,7 +10,7 @@ import {
   pinLogo,
   sniffLogoType,
 } from "./logo-pin"
-import { createHarness } from "./test/harness"
+import { type Harness, createHarness } from "./test/harness"
 
 const png = new Uint8Array([
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d,
@@ -108,6 +108,14 @@ function webp(chunks: Uint8Array[]): Uint8Array {
   const header = concat([latin1("RIFF"), new Uint8Array(4)])
   new DataView(header.buffer).setUint32(4, body.length, true)
   return concat([header, body])
+}
+
+function deferred() {
+  let resolve: () => void = () => undefined
+  const promise = new Promise<void>((done) => {
+    resolve = done
+  })
+  return { promise, resolve }
 }
 
 function serve(body: Uint8Array | string, init: ResponseInit = {}): LogoFetch {
@@ -314,8 +322,12 @@ describe("pinLogo", () => {
 })
 
 describe("the reviewed logo is the verified logo", () => {
-  async function submitted(logoFetch: LogoFetch) {
+  async function submitted(
+    logoFetch: LogoFetch,
+    prepare: (harness: Harness) => void = () => undefined,
+  ) {
     const harness = createHarness({ logoFetch })
+    prepare(harness)
     const owner = await harness.account("owner@example.com")
     const organization = await harness.organization(owner)
     const { app, live } = await harness.appWithEnvironments(organization.id)
@@ -365,7 +377,7 @@ describe("the reviewed logo is the verified logo", () => {
         logo: harness.store.verifiedLogo(live.id),
       }
     }
-    return { harness, app, cookie, reviewId, shown, decide, state }
+    return { harness, app, live, cookie, reviewId, shown, decide, state }
   }
 
   it("shows staff the bytes the Worker will verify, even when cloaked", async () => {
@@ -430,10 +442,40 @@ describe("the reviewed logo is the verified logo", () => {
   it("verifies with no logo when none could be pinned", async () => {
     const { shown, decide, state } = await submitted(serve("<svg/>"))
     expect(shown.logo).toBeNull()
+    expect(shown.notPinned).toMatchObject({
+      reason: "not-an-image",
+      sourceUrl: logoUrl,
+    })
     expect((await decide(null)).status).toBe(200)
     const after = await state()
     expect(after.verifiedAt).not.toBeNull()
     expect(after.logo).toBeNull()
+  })
+
+  it("tells staff why a logo was not pinned, not just None", async () => {
+    const animated = await submitted(serve(gif({ frames: 2 })))
+    expect(animated.shown).toMatchObject({
+      logo: null,
+      notPinned: { reason: "animated", sourceUrl: logoUrl },
+    })
+
+    // The pin succeeded but its row could not be written.
+    let writes = 0
+    const unstored = await submitted(serve(png), (harness) => {
+      const put = harness.store.putReviewLogo.bind(harness.store)
+      harness.store.putReviewLogo = async (reviewId, logo) => {
+        writes += 1
+        if (logo.status === "pinned") throw new Error("database unavailable")
+        await put(reviewId, logo)
+      }
+    })
+    expect(writes).toBe(2)
+    expect(unstored.shown).toMatchObject({
+      logo: null,
+      notPinned: { reason: "not-stored", sourceUrl: logoUrl },
+    })
+    expect((await unstored.decide(null)).status).toBe(200)
+    expect((await unstored.state()).logo).toBeNull()
   })
 
   it("leaves the review open and nothing granted if storing the logo fails", async () => {
@@ -447,6 +489,44 @@ describe("the reviewed logo is the verified logo", () => {
       verifiedAt: null,
       logo: null,
     })
+  })
+
+  it("keeps the winner's logo when two staff approve at once", async () => {
+    // PoC: approval B passes the open check and stalls before its logo
+    // write; approval A (a later clock) writes, closes and verifies; B's
+    // write then lands and its close gets 409. With one row per environment
+    // B's write replaced A's, the row's verifiedAt no longer matched, and the
+    // verified app showed its initial.
+    const { shown, decide, state, harness, live } = await submitted(serve(png))
+    const sha = shown.logo?.sha256
+    const put = harness.store.putVerifiedLogo.bind(harness.store)
+    const stalled = deferred()
+    const gate = deferred()
+    let writes = 0
+    harness.store.putVerifiedLogo = async (environmentId, logo) => {
+      writes += 1
+      if (writes === 1) {
+        stalled.resolve()
+        await gate.promise
+      }
+      await put(environmentId, logo)
+    }
+    const loser = decide(sha)
+    await stalled.promise
+    harness.advance(1_000)
+    expect((await decide(sha)).status).toBe(200)
+    const won = await state()
+    gate.resolve()
+    expect((await loser).status).toBe(409)
+
+    const after = await state()
+    expect(after.verifiedAt).toBe(won.verifiedAt)
+    expect(after.logo).toMatchObject({
+      sha256: sha,
+      verifiedAt: won.verifiedAt,
+    })
+    // The loser's row sits beside it, keyed by its own (never current) time.
+    expect(harness.store.verifiedLogoRows(live.id)).toHaveLength(2)
   })
 
   it("is staff only", async () => {

@@ -63,7 +63,9 @@ export type MemoryConsoleStore = ConsoleStore & {
   oauthTokens(): MemoryOAuthToken[]
   auditEvents(): AuditEvent[]
   sessions(): SessionRecord[]
+  /** The row Matchbox ID would serve: the one for the current verifiedAt. */
   verifiedLogo(environmentId: string): VerifiedLogoRecord | null
+  verifiedLogoRows(environmentId: string): VerifiedLogoRecord[]
 }
 
 function missing(entity: string): Error {
@@ -88,7 +90,8 @@ export default function createMemoryStore(
   const environments = new Map<string, EnvironmentRecord>()
   const redirectUris = new Map<string, string[]>()
   const origins = new Map<string, string[]>()
-  const verifiedLogos = new Map<string, VerifiedLogoRecord>()
+  /** By environment id, then verifiedAt (ms). */
+  const verifiedLogos = new Map<string, Map<number, VerifiedLogoRecord>>()
   const reviews = new Map<string, ReviewRecord>()
   const reviewLogos = new Map<string, ReviewLogoRecord>()
   const apiKeys = new Map<string, ApiKeyRow>()
@@ -562,8 +565,15 @@ export default function createMemoryStore(
       return copy(origins.get(environmentId) ?? [])
     },
     async putVerifiedLogo(environmentId, logo) {
-      if (logo === null) verifiedLogos.delete(environmentId)
-      else verifiedLogos.set(environmentId, copy(logo))
+      const rows = verifiedLogos.get(environmentId) ?? new Map()
+      rows.set(Date.parse(logo.verifiedAt), copy(logo))
+      verifiedLogos.set(environmentId, rows)
+    },
+    async pruneVerifiedLogos(environmentId, verifiedAt) {
+      const rows = verifiedLogos.get(environmentId)
+      for (const at of rows?.keys() ?? []) {
+        if (at < Date.parse(verifiedAt)) rows?.delete(at)
+      }
     },
     async replaceOrigins(environmentId, values) {
       origins.set(environmentId, [...values])
@@ -909,8 +919,13 @@ export default function createMemoryStore(
     },
 
     verifiedLogo(environmentId) {
-      const logo = verifiedLogos.get(environmentId)
+      const verifiedAt = environments.get(environmentId)?.verifiedAt ?? null
+      if (verifiedAt === null) return null
+      const logo = verifiedLogos.get(environmentId)?.get(Date.parse(verifiedAt))
       return logo === undefined ? null : copy(logo)
+    },
+    verifiedLogoRows(environmentId) {
+      return copy([...(verifiedLogos.get(environmentId)?.values() ?? [])])
     },
     seedStaff(accountId, role) {
       staff.set(accountId, role)

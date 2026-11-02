@@ -309,28 +309,46 @@ function mapReview(row: ReviewRowInput) {
 
 const reviewRow = z.object(reviewFields).transform(mapReview)
 
-const reviewLogoRow = z
-  .object({
-    content_type: z.enum([
-      "image/png",
-      "image/jpeg",
-      "image/gif",
-      "image/webp",
-    ]),
-    data_base64: z.string(),
-    sha256: z.string(),
-    source_url: z.string(),
-    pinned_at: z.string(),
-  })
-  .transform(
-    (row): ReviewLogoRecord => ({
-      contentType: row.content_type,
-      dataBase64: row.data_base64,
-      sha256: row.sha256,
-      sourceUrl: row.source_url,
-      pinnedAt: row.pinned_at,
-    }),
-  )
+const reviewLogoRow = z.union([
+  z
+    .object({
+      refusal_reason: z.null(),
+      content_type: z.enum([
+        "image/png",
+        "image/jpeg",
+        "image/gif",
+        "image/webp",
+      ]),
+      data_base64: z.string(),
+      sha256: z.string(),
+      source_url: z.string(),
+      pinned_at: z.string(),
+    })
+    .transform(
+      (row): ReviewLogoRecord => ({
+        status: "pinned",
+        contentType: row.content_type,
+        dataBase64: row.data_base64,
+        sha256: row.sha256,
+        sourceUrl: row.source_url,
+        pinnedAt: row.pinned_at,
+      }),
+    ),
+  z
+    .object({
+      refusal_reason: z.string(),
+      source_url: z.string(),
+      pinned_at: z.string(),
+    })
+    .transform(
+      (row): ReviewLogoRecord => ({
+        status: "refused",
+        reason: row.refusal_reason,
+        sourceUrl: row.source_url,
+        pinnedAt: row.pinned_at,
+      }),
+    ),
+])
 
 const adminReviewSelect =
   "*, environment:mbx_dev_environments!inner(*, app:mbx_dev_apps!inner(*, organization:mbx_dev_organizations!inner(*))), submitter:mbx_dev_accounts!submitter_id(email)"
@@ -1182,16 +1200,6 @@ export default function createSupabaseStore(
       )
     },
     async putVerifiedLogo(environmentId, logo) {
-      if (logo === null) {
-        done(
-          "delete verified logo",
-          await supabase
-            .from("mbx_dev_verified_logos")
-            .delete()
-            .eq("environment_id", environmentId),
-        )
-        return
-      }
       done(
         "put verified logo",
         await supabase.from("mbx_dev_verified_logos").upsert(
@@ -1203,8 +1211,18 @@ export default function createSupabaseStore(
             source_url: logo.sourceUrl,
             verified_at: logo.verifiedAt,
           },
-          { onConflict: "environment_id" },
+          { onConflict: "environment_id,verified_at" },
         ),
+      )
+    },
+    async pruneVerifiedLogos(environmentId, verifiedAt) {
+      done(
+        "prune verified logos",
+        await supabase
+          .from("mbx_dev_verified_logos")
+          .delete()
+          .eq("environment_id", environmentId)
+          .lt("verified_at", verifiedAt),
       )
     },
     async revokeEnvironmentTokens(environmentId, reason) {
@@ -1260,14 +1278,16 @@ export default function createSupabaseStore(
       )
     },
     async putReviewLogo(reviewId, logo) {
+      const pinned = logo.status === "pinned"
       done(
         "put review logo",
         await supabase.from("mbx_dev_review_logos").upsert(
           {
             review_id: reviewId,
-            content_type: logo.contentType,
-            data_base64: logo.dataBase64,
-            sha256: logo.sha256,
+            content_type: pinned ? logo.contentType : null,
+            data_base64: pinned ? logo.dataBase64 : null,
+            sha256: pinned ? logo.sha256 : null,
+            refusal_reason: pinned ? null : logo.reason,
             source_url: logo.sourceUrl,
             pinned_at: logo.pinnedAt,
           },
@@ -1281,7 +1301,9 @@ export default function createSupabaseStore(
         "get review logo",
         await supabase
           .from("mbx_dev_review_logos")
-          .select("content_type, data_base64, sha256, source_url, pinned_at")
+          .select(
+            "content_type, data_base64, sha256, refusal_reason, source_url, pinned_at",
+          )
           .eq("review_id", reviewId)
           .maybeSingle(),
       )

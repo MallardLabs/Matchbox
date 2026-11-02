@@ -219,18 +219,20 @@ export default function consentRoutes(deps: AppDeps): Hono {
     }
     const { id } = pathParams(c, idPathParamsSchema)
     const client = await deps.store.findEnvironment(id)
+    const verifiedAt = client?.environment.verifiedAt ?? null
     if (
       client === null ||
+      verifiedAt === null ||
       client.app.logoUrl === null ||
       !consentVerified(client.app, client.environment)
     ) {
       throw new PlatformError("not_found")
     }
-    const logo = await deps.store.findVerifiedLogo(id)
+    const logo = await deps.store.findVerifiedLogo(id, verifiedAt)
     if (
       logo === null ||
       logo.sourceUrl !== client.app.logoUrl ||
-      logo.verifiedAt.getTime() !== client.environment.verifiedAt?.getTime()
+      logo.verifiedAt.getTime() !== verifiedAt.getTime()
     ) {
       throw new PlatformError("not_found")
     }

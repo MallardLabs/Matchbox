@@ -715,10 +715,13 @@ review is submitted: the console fetches it server-side into
 `mbx_dev_review_logos` (HTTPS on the default port, no IP literal or
 local/internal name, redirects followed by hand at most 3 times and
 re-checked each hop, one 5 s deadline covering every hop and the body,
-64 KiB, PNG/JPEG/GIF/WebP by magic bytes; the Worker runs with
-`global_fetch_strictly_public`). The staff review page shows those bytes
+64 KiB, PNG/JPEG/GIF/WebP by magic bytes, still images only: an APNG
+`acTL`/`fcTL`, a second GIF frame or loop extension, or WebP animation is
+refused; the Worker runs with `global_fetch_strictly_public`). The staff
+review page shows those bytes at the consent screen's 48 px
 (`GET /api/admin/reviews/{id}/logo`, rendered from a `data:` URL with their
-sha256), never the live URL, and an approval must send that `logoSha256`
+sha256), or "Not pinned · <reason>" with the source URL when the row holds a
+refusal instead, never the live URL, and an approval must send that `logoSha256`
 (null when nothing was pinned); a mismatch, or a `logo_url` changed since
 submission, is 409. Pinning at submission rather than when staff open the
 review means one fetch per review, no write on a staff GET, and pinned bytes
@@ -726,14 +729,17 @@ that cannot change under an open review page.
 
 Before closing the review the approval copies the pin into
 `mbx_dev_verified_logos` with `verified_at` set to the value it is about to
-grant, so a failed write leaves the review open and nothing granted. Matchbox
+grant, so a failed write leaves the review open and nothing granted. Rows are
+keyed by `(environment_id, verified_at)`, one per approval, so an approval
+that loses the close (two staff approving at once, or a withdraw) adds a row
+that never shows and overwrites neither the winner's nor an earlier one; the
+winner prunes older rows after it verifies. Matchbox
 ID's verified screens (consent, connected apps) point at
-`GET /api/app-logos/:environmentId?v=<verified_at>`, which serves that copy
-only while the environment's `verified_at` equals the row's and the app's
+`GET /api/app-logos/:environmentId?v=<verified_at>`, which serves the row for
+the environment's current `verified_at`, only while the app's
 `logo_url` still equals the pinned `source_url`; otherwise it returns 404 and
-the SPA shows the initial. A row from an approval that lost the close, or an
-earlier one, therefore never shows. Unverified screens keep the developer's
-URL (no badge, no claim). SVG, oversized or unreachable logos are not pinned,
+the SPA shows the initial. Unverified screens keep the developer's
+URL (no badge, no claim). SVG, animated, oversized or unreachable logos are not pinned,
 so those verified apps show the initial. Trade-off: a DB row per open review
 and per verified environment, and one same-origin image request, in exchange
 for no logo swap after review. The cached image outlives a withdrawal by up

@@ -597,6 +597,33 @@ describe("consent verified badge", () => {
       expect(view.app.verified).toBe(false)
       expect(view.app.logoUrl).toBe(logoUrl)
     })
+
+    it("is the current verification's row beside rows from lost closes", async () => {
+      // Two staff approving at once each write a row before the close; the
+      // loser's must not displace the winner's (or an earlier approval's).
+      const harness = await createHarness()
+      const cookie = await signIn(harness)
+      harness.store.admin.setAppLogoUrl(memorySeed.appId, logoUrl)
+      harness.store.admin.setVerifiedLogo(memorySeed.liveEnvironmentId, pinned)
+      for (const at of [
+        "2026-09-29T23:59:59.000Z",
+        "2026-09-30T00:00:01.000Z",
+      ]) {
+        harness.store.admin.addVerifiedLogo(memorySeed.liveEnvironmentId, {
+          ...pinned,
+          dataBase64: btoa("not the approved bytes"),
+          verifiedAt: new Date(at),
+        })
+      }
+      const response = await logoResponse(
+        harness,
+        (await liveView(harness, cookie)).app.logoUrl,
+      )
+      expect(response.status).toBe(200)
+      expect([...new Uint8Array(await response.arrayBuffer())]).toEqual(
+        pngBytes,
+      )
+    })
   })
 })
 

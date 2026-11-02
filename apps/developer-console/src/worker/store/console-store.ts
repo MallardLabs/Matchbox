@@ -175,12 +175,17 @@ export type ReviewRecord = {
   decidedAt: string | null
 }
 
-/** `mbx_dev_review_logos`: the logo as fetched at submission. */
-export type ReviewLogoRecord = PinnedLogo & { pinnedAt: string }
+/**
+ * `mbx_dev_review_logos`: the logo as fetched at submission, or why it was
+ * not pinned (`PinLogoResult` reasons, or "not-stored").
+ */
+export type ReviewLogoRecord =
+  | (PinnedLogo & { status: "pinned"; pinnedAt: string })
+  | { status: "refused"; reason: string; sourceUrl: string; pinnedAt: string }
 
 /**
- * `mbx_dev_verified_logos`: the approved copy, shown only while the
- * environment's `verifiedAt` equals this one.
+ * `mbx_dev_verified_logos`: the approved copy, one row per approval, shown
+ * only while the environment's `verifiedAt` equals this one.
  */
 export type VerifiedLogoRecord = PinnedLogo & { verifiedAt: string }
 
@@ -424,13 +429,17 @@ export type ConsoleStore = {
   /** Atomically replaces the set (existing rows keep their order). */
   replaceOrigins(environmentId: string, origins: string[]): Promise<void>
   /**
-   * The logo Matchbox ID shows beside the Verified badge, copied from the
-   * approved review's pin (`logo-pin.ts`); null deletes.
+   * Adds the logo Matchbox ID shows beside the Verified badge, copied from
+   * the approved review's pin (`logo-pin.ts`). Rows are keyed by the
+   * `verifiedAt` they belong to, so an approval that loses the close never
+   * overwrites the current verification's row.
    */
   putVerifiedLogo(
     environmentId: string,
-    logo: VerifiedLogoRecord | null,
+    logo: VerifiedLogoRecord,
   ): Promise<void>
+  /** Deletes the environment's verified logos from before `verifiedAt`. */
+  pruneVerifiedLogos(environmentId: string, verifiedAt: string): Promise<void>
   /**
    * Atomically revokes the environment's active Matchbox ID refresh-token
    * families and access tokens, bumps its `scope_version` (users must
