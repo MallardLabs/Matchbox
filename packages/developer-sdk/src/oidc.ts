@@ -16,7 +16,12 @@ import { isRecord } from "./errors"
 
 export const defaultIssuer = "https://id.matchbox.markets"
 
-export type OidcScope = "openid" | "wallet" | "discord:id" | "discord:profile"
+export type OidcScope =
+  | "openid"
+  | "wallet"
+  | "discord:id"
+  | "discord:profile"
+  | "discord:membership"
 
 export type OidcFetch = (
   input: string,
@@ -335,6 +340,8 @@ export type MatchboxClaims = {
   discord_username?: string
   discord_display_name?: string | null
   discord_avatar_url?: string | null
+  /** ISO 8601 UTC time the user joined the Mezo Discord server. */
+  discord_joined_at?: string | null
 }
 
 function releasedClaims(source: Record<string, unknown>): MatchboxClaims {
@@ -357,7 +364,11 @@ function releasedClaims(source: Record<string, unknown>): MatchboxClaims {
   if (typeof source.discord_username === "string") {
     claims.discord_username = source.discord_username
   }
-  for (const name of ["discord_display_name", "discord_avatar_url"] as const) {
+  for (const name of [
+    "discord_display_name",
+    "discord_avatar_url",
+    "discord_joined_at",
+  ] as const) {
     const value = source[name]
     if (typeof value === "string" || value === null) claims[name] = value
   }
@@ -397,15 +408,20 @@ export type IdTokenClaims = MatchboxClaims & {
   iat: number
   exp: number
   auth_time: number | null
-  nonce: string
+  /** Null for an ID token from a refresh (verified with `nonce: null`). */
+  nonce: string | null
   azp: string | null
 }
 
 export type VerifyIdTokenOptions = {
   clientId: string
   issuer?: string
-  /** The nonce you sent in `buildAuthorizeUrl`. */
-  nonce: string
+  /**
+   * The nonce you sent in `buildAuthorizeUrl`. Pass `null` for an ID token
+   * from a refresh: it carries no `nonce` (OIDC Core 12.2), and one that does
+   * is rejected.
+   */
+  nonce: string | null
   /** Allowed clock skew in seconds (default 60). */
   clockToleranceSeconds?: number
   /** Key source override (defaults to the issuer's remote JWKS). */
@@ -441,7 +457,8 @@ function numberClaim(payload: JWTPayload, name: string): number | null {
 
 /**
  * Verifies an ES256 ID token: signature (issuer JWKS), `iss`, `aud`,
- * `exp`/`iat`, `nonce`, and `azp` when present.
+ * `exp`/`iat`, `nonce`, and `azp` when present. With `nonce: null` (refreshed
+ * ID tokens) the token must carry no `nonce`.
  */
 export async function verifyIdToken(
   idToken: string,
@@ -454,9 +471,16 @@ export async function verifyIdToken(
     audience: options.clientId,
     algorithms: ["ES256"],
     clockTolerance: options.clockToleranceSeconds ?? 60,
-    requiredClaims: ["sub", "iat", "exp", "nonce"],
+    requiredClaims:
+      options.nonce === null
+        ? ["sub", "iat", "exp"]
+        : ["sub", "iat", "exp", "nonce"],
   })
-  if (payload.nonce !== options.nonce) {
+  const nonceMatches =
+    options.nonce === null
+      ? payload.nonce === undefined
+      : payload.nonce === options.nonce
+  if (!nonceMatches) {
     throw new OidcError(400, "invalid_token", "ID token nonce mismatch")
   }
   const azp = typeof payload.azp === "string" ? payload.azp : null

@@ -193,6 +193,7 @@ describe("fetchUserinfo", () => {
         wallet_address: "0x3c6f9e2d5a8b1c4f7e0d3a6b9c2f5e8d1a4b7c0e",
         wallet_network: "mezo",
         discord_avatar_url: null,
+        discord_joined_at: "2025-03-04T15:30:00.000Z",
         extra: "ignored",
       }),
     )
@@ -202,6 +203,7 @@ describe("fetchUserinfo", () => {
       wallet_address: "0x3c6f9e2d5a8b1c4f7e0d3a6b9c2f5e8d1a4b7c0e",
       wallet_network: "mezo",
       discord_avatar_url: null,
+      discord_joined_at: "2025-03-04T15:30:00.000Z",
     })
     expect(calls[0]?.[1].headers.Authorization).toBe("Bearer at")
   })
@@ -260,6 +262,31 @@ describe("verifyIdToken", () => {
     const token = await sign({})
     await expect(
       verifyIdToken(token, { clientId, nonce: "other", jwks }),
+    ).rejects.toThrow(/nonce/)
+  })
+
+  it("verifies a refreshed ID token without a nonce when nonce is null", async () => {
+    const refreshed = await sign({
+      nonce: undefined,
+      discord_joined_at: null,
+    })
+    const claims = await verifyIdToken(refreshed, {
+      clientId,
+      nonce: null,
+      jwks,
+    })
+    expect(claims).toMatchObject({
+      sub: subject,
+      nonce: null,
+      discord_joined_at: null,
+    })
+    // A string nonce still requires the claim.
+    await expect(
+      verifyIdToken(refreshed, { clientId, nonce: "n-1", jwks }),
+    ).rejects.toThrow(/nonce/)
+    // nonce: null rejects a token that carries one.
+    await expect(
+      verifyIdToken(await sign({}), { clientId, nonce: null, jwks }),
     ).rejects.toThrow(/nonce/)
   })
 

@@ -149,8 +149,22 @@ claims.wallet_address // with the `wallet` scope
 // 3. Later
 const profile = await fetchUserinfo({ accessToken: tokens.accessToken })
 const next = await refreshTokens({ clientId, refreshToken: tokens.refreshToken ?? "" })
+// Refreshed ID tokens carry no nonce (OIDC Core 12.2): verify with `nonce: null`.
+const refreshed = await verifyIdToken(next.idToken ?? "", { clientId, nonce: null })
 await revokeToken({ clientId, token: next.refreshToken ?? "", tokenTypeHint: "refresh_token" })
 ```
+
+| Scope                | Claims                                                                | Review |
+| -------------------- | --------------------------------------------------------------------- | ------ |
+| `openid`             | `sub`                                                                 | —      |
+| `wallet`             | `wallet_address`, `wallet_network`                                    | —      |
+| `discord:id`         | `discord_id`                                                          | Yes    |
+| `discord:profile`    | `discord_username`, `discord_display_name`, `discord_avatar_url`      | Yes    |
+| `discord:membership` | `discord_joined_at` (ISO 8601 UTC, `null` when unknown)               | Yes    |
+
+Discord claims are released only while the wallet's Discord link is
+unchanged. `nonce: string` requires a matching `nonce` claim; `nonce: null`
+requires none.
 
 OAuth failures throw `OidcError` (`status`, `error`, `errorDescription`).
 Refresh tokens rotate: always store the newest one. Every helper accepts
