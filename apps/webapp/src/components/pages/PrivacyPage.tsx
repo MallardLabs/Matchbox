@@ -6,7 +6,7 @@ import type { ReactNode } from "react"
  * #matchbox-id) that the other apps link to.
  */
 
-const updated = "October 27, 2026"
+const updated = "November 5, 2026"
 const contact = "contact@trellium.org"
 
 const products = [
@@ -208,9 +208,10 @@ export default function PrivacyPage(): JSX.Element {
           <li>
             When you use the bot, we receive your Discord user ID, username,
             display name, avatar and server ID. To link a wallet, you sign a
-            message with it on the Matchbox app. We store the link and the
-            server roles we granted. Link requests expire after 15 minutes and
-            are deleted afterwards.
+            message with it on the Matchbox app. We store the link, the date you
+            joined the Mezo Discord server (read from Discord when you link and
+            refreshed when you use the bot) and the server roles we granted.
+            Link requests expire after 15 minutes and are deleted afterwards.
           </li>
           <li>
             We use the link to add or remove server roles, which means checking
@@ -224,8 +225,9 @@ export default function PrivacyPage(): JSX.Element {
           </li>
           <li>
             You can unlink at any time from the bot or the Matchbox app. That
-            deletes the link and, while Mezo Academy points are running, removes
-            the roles. Discord processes your data under its own privacy policy.
+            deletes the link and its join date and, while Mezo Academy points
+            are running, removes the roles. Discord processes your data under
+            its own privacy policy.
           </li>
         </List>
       </Section>
@@ -330,9 +332,10 @@ export default function PrivacyPage(): JSX.Element {
           </li>
           <li>
             Apps receive only what you approve: your wallet address and network,
-            and, if offered, your Discord ID or Discord username, display name
-            and avatar. What an app does with that data is governed by the app's
-            own privacy policy, linked on the approval screen.
+            and, if offered, your Discord ID, your Discord username, display
+            name and avatar, or the date you joined the Mezo Discord server.
+            What an app does with that data is governed by the app's own privacy
+            policy, linked on the approval screen.
           </li>
           <li>
             You can see and revoke app access at id.matchbox.markets; the app's
