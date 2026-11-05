@@ -131,9 +131,10 @@ member holds into `granted_roles` so syncs can manage it again.
      supabase/functions/discord-interactions/register-commands.ts
    ```
 7. **Schedule reconciliation** (keeps roles current as points change). Use the
-   Dashboard schedule on `discord-reconcile-roles`, or pg_cron (see Option 2 below)
-   pointed at `.../functions/v1/discord-reconcile-roles`, e.g. hourly `0 * * * *`.
-   Keep it scheduled while Academy is off too: it backfills `discord_joined_at`.
+   pg_cron job `discord-reconcile-roles-hourly` (`7 * * * *`, migration
+   `20261105000002_discord_reconcile_roles_cron.sql`, Vault `project_url` and
+   `service_role_key`). Keep it scheduled while Academy is off too: it
+   backfills `discord_joined_at`.
    For one-off manual cleanup, run `/poke-roles` in Discord.
 
 ### `manage-saved-profile`
