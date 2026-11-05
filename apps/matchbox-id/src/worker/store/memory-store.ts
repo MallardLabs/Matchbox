@@ -58,6 +58,7 @@ export const memorySeed = {
     username: "matchbox-dev",
     globalName: "Matchbox Dev",
     avatarHash: null,
+    joinedAt: "2025-03-04T15:30:00.000Z",
   },
 } as const
 
@@ -158,9 +159,21 @@ export async function createMemoryIdStore(options: {
     clientId: memorySeed.liveClientId,
     clientType: "confidential",
     reviewState: "approved",
-    requestedScopes: ["openid", "wallet", "discord:id", "discord:profile"],
-    approvedScopes: ["openid", "wallet", "discord:id", "discord:profile"],
-    optionalScopes: ["discord:id", "discord:profile"],
+    requestedScopes: [
+      "openid",
+      "wallet",
+      "discord:id",
+      "discord:profile",
+      "discord:membership",
+    ],
+    approvedScopes: [
+      "openid",
+      "wallet",
+      "discord:id",
+      "discord:profile",
+      "discord:membership",
+    ],
+    optionalScopes: ["discord:id", "discord:profile", "discord:membership"],
     scopeVersion: 1,
     sectorId: memorySeed.liveEnvironmentId,
   })
@@ -172,7 +185,13 @@ export async function createMemoryIdStore(options: {
     clientId: memorySeed.testClientId,
     clientType: "public",
     reviewState: "development",
-    requestedScopes: ["openid", "wallet", "discord:id", "discord:profile"],
+    requestedScopes: [
+      "openid",
+      "wallet",
+      "discord:id",
+      "discord:profile",
+      "discord:membership",
+    ],
     approvedScopes: ["openid", "wallet"],
     optionalScopes: [],
     scopeVersion: 1,

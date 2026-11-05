@@ -44,6 +44,8 @@ describe("discovery and JWKS", () => {
     )
     expect(doc.issuer).toBe("https://id.test")
     expect(doc.scopes_supported).toContain("discord:id")
+    expect(doc.scopes_supported).toContain("discord:membership")
+    expect(doc.claims_supported).toContain("discord_joined_at")
     expect(doc.code_challenge_methods_supported).toEqual(["S256"])
 
     const disabled = await createHarness({ flags: { discordClaims: false } })
@@ -54,6 +56,7 @@ describe("discovery and JWKS", () => {
     )
     expect(off.scopes_supported).toEqual(["openid", "wallet"])
     expect(off.claims_supported).not.toContain("discord_id")
+    expect(off.claims_supported).not.toContain("discord_joined_at")
   })
 
   it("serves public keys only", async () => {
@@ -368,6 +371,11 @@ describe("authorize validation", () => {
       scope: "openid discord:id",
     })
     expect(unapproved.searchParams.get("error")).toBe("invalid_scope")
+    const membership = await authorize(harness, null, {
+      pkce: await pkce(),
+      scope: "openid discord:membership",
+    })
+    expect(membership.searchParams.get("error")).toBe("invalid_scope")
   })
 
   it("refuses suspended apps", async () => {
@@ -604,7 +612,7 @@ describe("claims", () => {
       pkce: challenge,
       clientId: memorySeed.liveClientId,
       redirectUri: memorySeed.liveRedirectUris[0],
-      scope: "openid wallet discord:id discord:profile",
+      scope: "openid wallet discord:id discord:profile discord:membership",
     })
     const response = await tokenRequest(harness, {
       grant_type: "authorization_code",
@@ -615,6 +623,8 @@ describe("claims", () => {
       client_secret: memorySeed.liveClientSecret,
     })
     const tokens = tokenResponseSchema.parse(await response.json())
+    const idToken = idTokenClaimsSchema.parse(decodeJwt(tokens.id_token ?? ""))
+    expect(idToken.discord_joined_at).toBe(memorySeed.devDiscord.joinedAt)
     const info = userinfoResponseSchema.parse(
       await (await userinfo(harness, tokens.access_token)).json(),
     )
@@ -623,6 +633,7 @@ describe("claims", () => {
       discord_id: memorySeed.devDiscord.discordUserId,
       discord_username: memorySeed.devDiscord.username,
       discord_display_name: memorySeed.devDiscord.globalName,
+      discord_joined_at: memorySeed.devDiscord.joinedAt,
     })
 
     harness.deps.flags.discordClaims = false
@@ -630,6 +641,7 @@ describe("claims", () => {
       await (await userinfo(harness, tokens.access_token)).json(),
     )
     expect(withoutDiscord.discord_id).toBeUndefined()
+    expect(withoutDiscord).not.toHaveProperty("discord_joined_at")
     expect(withoutDiscord.wallet_address).toBe(memorySeed.devWallet)
     // Kill switch: optional Discord scopes are ignored like unknown ones,
     // required ones cannot be granted.
@@ -648,6 +660,51 @@ describe("claims", () => {
       scope: "openid discord:id",
     })
     expect(refused.searchParams.get("error")).toBe("invalid_scope")
+  })
+
+  it("releases discord_joined_at as null when the join date is unknown", async () => {
+    const harness = await createHarness()
+    const cookie = await signIn(harness)
+    const challenge = await pkce()
+    harness.store.admin.setDiscordLink(
+      memorySeed.devWallet,
+      { ...memorySeed.devDiscord, joinedAt: null },
+      harness.clock.now,
+    )
+    const code = await obtainCode(harness, cookie, {
+      pkce: challenge,
+      clientId: memorySeed.liveClientId,
+      redirectUri: memorySeed.liveRedirectUris[0],
+      scope: "openid discord:membership",
+    })
+    const response = await tokenRequest(harness, {
+      grant_type: "authorization_code",
+      code,
+      code_verifier: challenge.verifier,
+      redirect_uri: memorySeed.liveRedirectUris[0],
+      client_id: memorySeed.liveClientId,
+      client_secret: memorySeed.liveClientSecret,
+    })
+    const tokens = tokenResponseSchema.parse(await response.json())
+    expect(tokens.scope).toBe("openid discord:membership")
+    const idToken = idTokenClaimsSchema.parse(decodeJwt(tokens.id_token ?? ""))
+    expect(idToken.discord_joined_at).toBeNull()
+    const info = userinfoResponseSchema.parse(
+      await (await userinfo(harness, tokens.access_token)).json(),
+    )
+    expect(info.discord_joined_at).toBeNull()
+    expect(info).not.toHaveProperty("discord_id")
+
+    // The bot backfills the date: same Discord user, grant stays live.
+    harness.store.admin.setDiscordLink(
+      memorySeed.devWallet,
+      memorySeed.devDiscord,
+      harness.clock.now,
+    )
+    const filled = userinfoResponseSchema.parse(
+      await (await userinfo(harness, tokens.access_token)).json(),
+    )
+    expect(filled.discord_joined_at).toBe(memorySeed.devDiscord.joinedAt)
   })
 
   it("invalidates Discord grants when the link changes", async () => {

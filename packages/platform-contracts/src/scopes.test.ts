@@ -46,6 +46,7 @@ describe("enabledOidcScopes", () => {
       "wallet",
       "discord:id",
       "discord:profile",
+      "discord:membership",
     ])
   })
 })

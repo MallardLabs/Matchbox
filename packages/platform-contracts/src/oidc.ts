@@ -211,6 +211,8 @@ const releasedClaimFields = {
   discord_username: z.string().optional(),
   discord_display_name: z.string().nullable().optional(),
   discord_avatar_url: z.string().nullable().optional(),
+  /** ISO 8601 UTC time the user joined the Mezo Discord server. */
+  discord_joined_at: z.string().nullable().optional(),
 }
 
 export const userinfoResponseSchema = z.object({

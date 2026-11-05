@@ -130,6 +130,7 @@ export type ReleasedClaims = {
   discord_username?: string
   discord_display_name?: string | null
   discord_avatar_url?: string | null
+  discord_joined_at?: string | null
 }
 
 /**
@@ -166,6 +167,8 @@ export function releasedClaims(input: {
       if (link.username !== null) claims.discord_username = link.username
       claims.discord_display_name = link.globalName
       claims.discord_avatar_url = discordAvatarUrl(link)
+    } else if (scope === "discord:membership" && link !== null) {
+      claims.discord_joined_at = link.joinedAt
     }
   }
   // Last line of defence: nothing a declined scope would release.
@@ -195,5 +198,7 @@ export function claimPreviewValue(input: {
       return link?.globalName ?? null
     case "discord_avatar_url":
       return link === null ? null : discordAvatarUrl(link)
+    case "discord_joined_at":
+      return link?.joinedAt ?? null
   }
 }

@@ -79,6 +79,24 @@ const discordProfile: ConsentScope = {
   previouslyDeclined: true,
 }
 
+const discordMembership: ConsentScope = {
+  scope: "discord:membership",
+  label: "Mezo Discord membership",
+  description: "When you joined the Mezo Discord server",
+  claims: [
+    {
+      claim: "discord_joined_at",
+      label: "Joined Mezo Discord",
+      value: "2025-03-04T23:30:00.000Z",
+    },
+  ],
+  available: true,
+  unavailableReason: null,
+  previouslyGranted: false,
+  requirement: "optional",
+  previouslyDeclined: false,
+}
+
 function request(
   overrides: Partial<AuthorizationRequestView> = {},
 ): AuthorizationRequestView {
@@ -220,5 +238,35 @@ describe("ConsentView", () => {
     expect(screen.getByText("Unavailable")).toBeInTheDocument()
     expect(screen.getByRole("button", { name: "Allow" })).toBeDisabled()
     expect(screen.getByRole("button", { name: "Cancel" })).toBeEnabled()
+  })
+
+  it("shows the Discord join date in UTC, or a dash when unknown", () => {
+    const { unmount } = renderConsent(
+      request({ scopes: [openid, discordMembership] }),
+    )
+    const joined = screen.getByText("Mar 4, 2025")
+    expect(joined).toHaveAttribute("datetime", "2025-03-04T23:30:00.000Z")
+    expect(screen.getByText("Joined")).toBeInTheDocument()
+    unmount()
+
+    renderConsent(
+      request({
+        scopes: [
+          openid,
+          {
+            ...discordMembership,
+            claims: [
+              {
+                claim: "discord_joined_at",
+                label: "Joined Mezo Discord",
+                value: null,
+              },
+            ],
+          },
+        ],
+      }),
+    )
+    expect(screen.getByText("Joined")).toBeInTheDocument()
+    expect(screen.getByText("—")).toBeInTheDocument()
   })
 })

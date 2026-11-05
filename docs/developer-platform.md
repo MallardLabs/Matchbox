@@ -19,7 +19,7 @@ of truth). Per-app detail: [matchbox-id](../apps/matchbox-id/README.md),
 | `packages/platform-contracts` | `@repo/platform-contracts` | —                            | —                            | Zod schemas, OpenAPI document, scopes, rate-limit policies                       |
 | `packages/platform-server`    | `@repo/platform-server`    | —                            | —                            | Worker helpers: Supabase admin, flags, crypto, middleware, `RateLimiter` DO      |
 | `packages/logger`             | `@repo/logger`             | —                            | —                            | Structured logger                                                                |
-| `packages/developer-sdk`      | `@matchbox-dev/sdk`    | —                            | —                            | API client + `./oidc` helpers (1.0.0-beta.1)                                     |
+| `packages/developer-sdk`      | `@matchbox-dev/sdk`    | —                            | —                            | API client + `./oidc` helpers (1.0.0-beta.3)                                     |
 
 Migrations (apply in order; additive except 5, which drops the unused
 passkey tables):
@@ -81,8 +81,8 @@ api.matchbox.markets        → Worker matchbox-developer-api      Hono, DO Rate
 - `workers_dev: true` is set for the console and API; `matchbox-id` does not
   set it.
 - Existing tables v2 reads: `gauge_profiles`, `validator_profiles` (via the
-  view), `discord_wallet_links` (Discord claims; the trigger is created only if
-  the table exists).
+  view), `discord_wallet_links` (Discord claims, incl. `discord_joined_at`
+  for `discord:membership`; the trigger is created only if the table exists).
 
 ## 3. Feature flags and rollout order
 
@@ -464,9 +464,10 @@ prompt), rotate and revoke it, open `/admin`.
    for confidential clients, then use `@matchbox-dev/sdk/oidc`:
    `createPkcePair`, `createState`, `createNonce`, `buildAuthorizeUrl`,
    `exchangeCode`, `verifyIdToken`, `fetchUserinfo`, `refreshTokens`,
-   `revokeToken`. Scopes `openid`, `wallet`; `discord:id` and
-   `discord:profile` need a manual review. Refresh tokens rotate: always store
-   the newest.
+   `revokeToken`. Scopes `openid`, `wallet`; `discord:id`, `discord:profile`
+   and `discord:membership` (`discord_joined_at`) need a manual review.
+   Refresh tokens rotate: always store the newest; verify refreshed ID tokens
+   (no `nonce`) with `nonce: null`.
 
 Full reference: the console Docs section and
 [packages/developer-sdk/README.md](../packages/developer-sdk/README.md).
