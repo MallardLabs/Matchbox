@@ -32,9 +32,9 @@ pnpm dev
 set `GOOGLE_CLIENT_ID` to use the real Google button. Memory mode is refused when
 `ENVIRONMENT=production`. Seed (`src/worker/store/seed.ts`): account
 `dev@matchbox.local` (staff `reviewer`), org "Mallard Labs", an approved live
-gauge-profile app, an app with an open `discord:profile` review and one
-whose `discord:id` request came back with a reviewer note. Use the
-dev sign-in button (`POST /api/auth/dev-sign-in`, memory mode outside
+gauge-profile app, an app with an open review for `discord:profile` and
+optional `discord:membership`, and one whose `discord:id` request came back
+with a reviewer note. Use the dev sign-in button (`POST /api/auth/dev-sign-in`, memory mode outside
 production only). Usage data is synthetic unless `CF_ACCOUNT_ID` and
 `CF_ANALYTICS_TOKEN` are set.
 

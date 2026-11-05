@@ -285,6 +285,37 @@ describe("re-consent and optional scopes", () => {
     )
     expect(narrowed.optionalScopes).toEqual([])
   })
+
+  it("counts active grants for every Matchbox ID scope", async () => {
+    const { harness, live, cookie } = await ownerContext()
+    const at = harness.now().toISOString()
+    for (const revokedAt of [null, at]) {
+      harness.store.seedGrant({
+        environmentId: live.id,
+        scopes: ["openid", "discord:membership"],
+        createdAt: at,
+        revokedAt,
+        revokedReason: revokedAt === null ? null : "user-revoked",
+        scopeVersion: 1,
+      })
+    }
+    const from = new Date(harness.now().getTime() - 30 * day).toISOString()
+    const stats = await harness.json(
+      await harness.request(
+        "GET",
+        `/api/environments/${live.id}/oauth?from=${from}&to=${at}`,
+        { cookie },
+      ),
+      oauthStatsResponseSchema,
+    )
+    expect(stats.grantsByScope).toEqual([
+      { scope: "openid", activeGrants: 1 },
+      { scope: "wallet", activeGrants: 0 },
+      { scope: "discord:id", activeGrants: 0 },
+      { scope: "discord:profile", activeGrants: 0 },
+      { scope: "discord:membership", activeGrants: 1 },
+    ])
+  })
 })
 
 describe("admin review stats", () => {

@@ -32,7 +32,7 @@ const guideHints: Record<DocPageSlug, string> = {
 
 const guideKeywords: Record<DocPageSlug, string> = {
   auth: "api key secret publishable bearer authorization origin cidr rotate",
-  oidc: "openid oauth sign in login pkce token userinfo redirect consent claims discord wallet",
+  oidc: "openid oauth sign in login pkce token userinfo redirect consent claims discord membership joined wallet",
   "rate-limits": "quota limit burst retry-after ratelimit",
   errors: "error code status problem request id",
   pagination: "cursor next page limit",

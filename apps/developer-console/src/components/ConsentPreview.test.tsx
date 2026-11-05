@@ -38,4 +38,21 @@ describe("claimDisplayValue", () => {
       }),
     ).toBe("—")
   })
+
+  it("formats the Discord join date in UTC", () => {
+    expect(
+      claimDisplayValue({
+        claim: "discord_joined_at",
+        label: "Joined Mezo Discord",
+        value: "2024-03-04T00:00:00.000Z",
+      }),
+    ).toBe("Mar 4, 2024")
+    expect(
+      claimDisplayValue({
+        claim: "discord_joined_at",
+        label: "Joined Mezo Discord",
+        value: null,
+      }),
+    ).toBe("—")
+  })
 })
