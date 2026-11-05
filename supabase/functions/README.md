@@ -33,13 +33,34 @@ reward-floor cull for that semester's window.
 - **`discord-reconcile-roles`** — scheduled job that re-checks every linked member's
   points per semester and adds/removes roles so they stay correct between `/matchbox`
   runs. **Not public** — schedule with pg_cron using the service-role key (default
-  `verify_jwt`). Fetches each window's leaderboard once for efficiency.
+  `verify_jwt`). Fetches each window's leaderboard once for efficiency. Each run
+  first backfills guild join times (below), Academy on or off.
 
 Shared helpers live in `_shared/discord.ts` (Ed25519 verify, REST, role add/remove,
-avatar URL) and `_shared/discordLink.ts` (signed-message format, token/nonce, points
-lookup, semester role reconciliation). Data lives in `discord_wallet_links`,
-`discord_link_tokens`, and `discord_semesters` (see
+guild member read, avatar URL) and `_shared/discordLink.ts` (signed-message format,
+token/nonce, points lookup, semester role reconciliation). Data lives in
+`discord_wallet_links`, `discord_link_tokens`, and `discord_semesters` (see
 `supabase/migrations/20260529000001_create_discord_links.sql`).
+
+**Guild join time (`discord_wallet_links.discord_joined_at`):** when the linked
+member joined the link's guild (`guild_id`, else `DISCORD_GUILD_ID`), from Discord's
+guild member `joined_at`. Matchbox ID releases it as the `discord_joined_at` claim
+(ISO 8601 UTC, or null) to apps the user approves for the `discord:membership`
+scope. It is written by:
+- `discord-link` verify, from the same member read that adopts held roles. Null if
+  the member isn't in the guild; left untouched if Discord can't be read.
+- `discord-interactions`, in the background, when a linked member runs `/matchbox`
+  inside that guild and the interaction's `member.joined_at` differs from the
+  stored value.
+- `discord-reconcile-roles`, which reads up to 50 links with no join time per run
+  (oldest `updated_at` first, one at a time). Members who left, or links with no
+  guild to ask, are written null anyway so the `updated_at` trigger sends them to
+  the back of the queue. The response carries
+  `joinedAt: { backfilled, skipped, failed }`.
+
+Writing only `discord_joined_at` does not revoke Matchbox ID grants: the revocation
+triggers fire on `wallet_address` / `discord_user_id` changes and deletes. See
+`supabase/migrations/20261105000001_discord_membership_scope.sql`.
 
 **Semesters (seasons):** each row in `discord_semesters` defines a fixed point window
 (`from_ts`/`to_ts`, unix seconds, Thursday-aligned) and the `role_id` to grant.
@@ -62,8 +83,9 @@ linked members immediately.
 **Academy off (the default):** the webapp's Academy scoring routes answer 410, so
 points, roles and share cards only run when the `ACADEMY_ENABLED` secret is `true`.
 Without it, `/matchbox` links, unlinks and relinks wallets and points members to
-id.matchbox.markets for app access; `/poke-roles` and `discord-reconcile-roles`
-skip, and roles already granted are left in place. Unlinking keeps them too, since
+id.matchbox.markets for app access; `/poke-roles` and the role sync in
+`discord-reconcile-roles` skip (the join-time backfill still runs), and roles
+already granted are left in place. Unlinking keeps them too, since
 nothing could grant them back, and the next link adopts any bot-managed role the
 member holds into `granted_roles` so syncs can manage it again.
 
@@ -111,6 +133,7 @@ member holds into `granted_roles` so syncs can manage it again.
 7. **Schedule reconciliation** (keeps roles current as points change). Use the
    Dashboard schedule on `discord-reconcile-roles`, or pg_cron (see Option 2 below)
    pointed at `.../functions/v1/discord-reconcile-roles`, e.g. hourly `0 * * * *`.
+   Keep it scheduled while Academy is off too: it backfills `discord_joined_at`.
    For one-off manual cleanup, run `/poke-roles` in Discord.
 
 ### `manage-saved-profile`

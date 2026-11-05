@@ -119,20 +119,63 @@ export async function removeGuildRole(args: {
   return res.ok || res.status === 404
 }
 
-// Role IDs a member holds in a guild.
-export async function getMemberRoles(args: {
+// A guild member's role IDs and when they joined the guild (ISO 8601 UTC).
+export type GuildMember = {
+  roles: string[]
+  joinedAt: string | null
+}
+
+// Normalise Discord's `joined_at` (ISO 8601 with offset, possibly null) to an
+// ISO 8601 UTC string, or null when absent or unparseable.
+export function normalizeJoinedAt(value: unknown): string | null {
+  if (typeof value !== "string") return null
+  const ms = Date.parse(value)
+  return Number.isNaN(ms) ? null : new Date(ms).toISOString()
+}
+
+// Discord JSON error code for "Unknown Member" (a 404 that means the user is
+// not in the guild, unlike e.g. Unknown Guild).
+const UNKNOWN_MEMBER_CODE = 10007
+
+// Longest rate-limit wait honoured before giving up on a member read.
+const MAX_RETRY_AFTER_MS = 5_000
+
+// A member's roles and join time in a guild. Null when the user is not in the
+// guild (404 Unknown Member); throws on any other failure. Retries once after
+// a short 429.
+export async function getGuildMember(args: {
   guildId: string
   userId: string
-}): Promise<string[]> {
-  const res = await discordRequest(
-    "GET",
-    `/guilds/${args.guildId}/members/${args.userId}`,
-  )
+}): Promise<GuildMember | null> {
+  const path = `/guilds/${args.guildId}/members/${args.userId}`
+  let res = await discordRequest("GET", path)
+  if (res.status === 429) {
+    const body = await res.json().catch(() => null)
+    const waitMs = Math.ceil(Number(body?.retry_after ?? 1) * 1000)
+    if (!(waitMs <= MAX_RETRY_AFTER_MS)) {
+      throw new Error(`getGuildMember rate limited (retry after ${waitMs}ms)`)
+    }
+    await new Promise((resolve) => setTimeout(resolve, waitMs))
+    res = await discordRequest("GET", path)
+  }
   if (!res.ok) {
-    throw new Error(`getMemberRoles failed (${res.status}): ${await res.text()}`)
+    const text = await res.text()
+    if (res.status === 404) {
+      let code: unknown = null
+      try {
+        code = JSON.parse(text)?.code
+      } catch (_err) {
+        // not JSON: treat as a failure below
+      }
+      if (code === UNKNOWN_MEMBER_CODE) return null
+    }
+    throw new Error(`getGuildMember failed (${res.status}): ${text}`)
   }
   const member = await res.json()
-  return Array.isArray(member?.roles) ? member.roles : []
+  return {
+    roles: Array.isArray(member?.roles) ? member.roles : [],
+    joinedAt: normalizeJoinedAt(member?.joined_at),
+  }
 }
 
 // Edit the original (deferred) interaction reply via the interaction webhook.
