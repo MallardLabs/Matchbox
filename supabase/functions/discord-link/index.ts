@@ -26,6 +26,7 @@ import {
   checkDiscordMember,
   getActiveSemesters,
   heldManagedRoles,
+  lookupGuildMember,
   pointsFromWad,
   randomNonce,
   reconcileRoles,
@@ -578,9 +579,13 @@ Deno.serve(async (req) => {
       .select("granted_roles")
       .eq("discord_user_id", tokenRow.discord_user_id)
       .maybeSingle()
-    const heldRoles = await heldManagedRoles({
+    // One member read serves the held roles and the guild join time.
+    const memberLookup = await lookupGuildMember({
       guildId: tokenRow.guild_id,
       userId: tokenRow.discord_user_id,
+    })
+    const heldRoles = heldManagedRoles({
+      lookup: memberLookup,
       semesters: await getActiveSemesters(supabase),
     })
     const priorGrantedRoles: string[] = [
@@ -599,6 +604,11 @@ Deno.serve(async (req) => {
           guild_id: tokenRow.guild_id,
           granted_roles: priorGrantedRoles,
           verified_at: new Date().toISOString(),
+          // Null if they're not in the guild. Left out when Discord couldn't
+          // say, so a stored join time survives; the reconcile cron backfills.
+          ...(memberLookup.ok
+            ? { discord_joined_at: memberLookup.member?.joinedAt ?? null }
+            : {}),
         },
         { onConflict: "discord_user_id" },
       )

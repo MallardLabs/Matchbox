@@ -18,10 +18,21 @@ export type ConsentAudience = "new" | "returning"
 
 const sampleWallet = "0x3D41…9DC3"
 
+const joinedDate = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
+  year: "numeric",
+  timeZone: "UTC",
+})
+
 /** Short form of a sample claim value, as the consent screen shows it. */
 export function claimDisplayValue(claim: ClaimPreview): string {
   const value = claim.value
   if (value === null || value === "") return "—"
+  if (claim.claim === "discord_joined_at") {
+    const date = new Date(value)
+    return Number.isNaN(date.getTime()) ? value : joinedDate.format(date)
+  }
   if (/^0x[0-9a-fA-F]{40}$/.test(value)) return shortenAddress(value)
   if (/^https?:\/\//.test(value)) {
     try {

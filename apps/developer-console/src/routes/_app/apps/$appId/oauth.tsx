@@ -53,6 +53,7 @@ const consentCopy: Record<OidcClaim, string> = {
   discord_username: "Username",
   discord_display_name: "Display name",
   discord_avatar_url: "Avatar",
+  discord_joined_at: "Joined",
 }
 
 function OAuthPanel({

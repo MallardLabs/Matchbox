@@ -117,6 +117,7 @@ const previewValues = {
   discord_username: "example",
   discord_display_name: "Example",
   discord_avatar_url: "https://cdn.discordapp.com/embed/avatars/0.png",
+  discord_joined_at: "2024-03-04T00:00:00.000Z",
 } as const satisfies Record<OidcClaim, string | null>
 
 function consentPreview(

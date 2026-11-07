@@ -13,6 +13,7 @@ import {
   InteractionResponseType,
   InteractionType,
   MessageFlags,
+  normalizeJoinedAt,
   verifyDiscordSignature,
 } from "../_shared/discord.ts"
 import {
@@ -20,6 +21,7 @@ import {
   buildSetQualifier,
   type DiscordWalletLink,
   getActiveSemesters,
+  linkGuildId,
   linkTokenExpiry,
   pointsFromWad,
   randomNonce,
@@ -42,6 +44,25 @@ type DiscordUser = {
   username?: string
   global_name?: string | null
   avatar?: string | null
+}
+
+// Guild member object Discord attaches to interactions run inside a server.
+// https://discord.com/developers/docs/resources/guild#guild-member-object
+type InteractionMember = {
+  user?: DiscordUser
+  permissions?: string
+  joined_at?: string | null
+}
+
+// The interaction fields this endpoint reads.
+// https://discord.com/developers/docs/interactions/receiving-and-responding#interaction-object
+type Interaction = {
+  type: number
+  token: string
+  guild_id?: string
+  member?: InteractionMember
+  user?: DiscordUser
+  data?: { name?: string; custom_id?: string }
 }
 
 const ADMINISTRATOR_PERMISSION = 1n << 3n
@@ -489,6 +510,28 @@ function runBackground(promise: Promise<unknown>): void {
   }
 }
 
+// Store the guild join time the interaction carries when it is for the link's
+// guild and differs from the stored one. Only discord_joined_at is written, so
+// the grant-revocation triggers don't fire.
+async function syncJoinedAt(args: {
+  supabase: SupabaseClient
+  link: DiscordWalletLink
+  guildId: string | null
+  member: InteractionMember | undefined
+}): Promise<void> {
+  const { supabase, link, guildId, member } = args
+  if (!guildId || guildId !== linkGuildId(link.guild_id)) return
+  const joinedAt = normalizeJoinedAt(member?.joined_at)
+  if (!joinedAt) return
+  const stored = link.discord_joined_at ? Date.parse(link.discord_joined_at) : null
+  if (stored === Date.parse(joinedAt)) return
+  const { error } = await supabase
+    .from("discord_wallet_links")
+    .update({ discord_joined_at: joinedAt })
+    .eq("discord_user_id", link.discord_user_id)
+  if (error) console.error("discord_joined_at update error:", error)
+}
+
 Deno.serve(async (req) => {
   const cors = handleCors(req)
   if (cors) return cors
@@ -510,7 +553,7 @@ Deno.serve(async (req) => {
     return new Response("invalid request signature", { status: 401 })
   }
 
-  const interaction = JSON.parse(rawBody)
+  const interaction: Interaction = JSON.parse(rawBody)
 
   if (interaction.type === InteractionType.PING) {
     return jsonResponse({ type: InteractionResponseType.PONG })
@@ -569,7 +612,9 @@ Deno.serve(async (req) => {
 
     const { data: link } = await supabase
       .from("discord_wallet_links")
-      .select("discord_user_id, wallet_address, guild_id, granted_roles")
+      .select(
+        "discord_user_id, wallet_address, guild_id, granted_roles, discord_joined_at",
+      )
       .eq("discord_user_id", user.id)
       .maybeSingle()
 
@@ -587,6 +632,10 @@ Deno.serve(async (req) => {
         ),
       )
     }
+
+    runBackground(
+      syncJoinedAt({ supabase, link, guildId, member: interaction.member }),
+    )
 
     // Linked, with no points to fetch: answer straight away.
     if (!academyEnabled()) {

@@ -198,6 +198,7 @@ const discordLinkRowSchema = z
     discord_username: z.string().nullable(),
     discord_global_name: z.string().nullable(),
     discord_avatar: z.string().nullable(),
+    discord_joined_at: nullableDateSchema,
   })
   .transform((row) => ({
     discordUserId: row.discord_user_id,
@@ -205,6 +206,11 @@ const discordLinkRowSchema = z
     username: row.discord_username,
     globalName: row.discord_global_name,
     avatarHash: row.discord_avatar,
+    joinedAt:
+      row.discord_joined_at === null ||
+      Number.isNaN(row.discord_joined_at.getTime())
+        ? null
+        : iso(row.discord_joined_at),
   }))
 
 const authorizationRequestRowSchema = z
@@ -681,7 +687,7 @@ export default function createSupabaseIdStore(
       const { data, error } = await supabase
         .from("discord_wallet_links")
         .select(
-          "discord_user_id, wallet_address, discord_username, discord_global_name, discord_avatar",
+          "discord_user_id, wallet_address, discord_username, discord_global_name, discord_avatar, discord_joined_at",
         )
         .eq("wallet_address", walletAddress)
         .maybeSingle()

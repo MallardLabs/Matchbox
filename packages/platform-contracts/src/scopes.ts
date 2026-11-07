@@ -9,6 +9,7 @@ export const oidcScopeSchema = z.enum([
   "wallet",
   "discord:id",
   "discord:profile",
+  "discord:membership",
 ])
 
 export type OidcScope = z.infer<typeof oidcScopeSchema>
@@ -29,6 +30,7 @@ export const oidcClaimSchema = z.enum([
   "discord_username",
   "discord_display_name",
   "discord_avatar_url",
+  "discord_joined_at",
 ])
 
 export type OidcClaim = z.infer<typeof oidcClaimSchema>
@@ -94,6 +96,15 @@ export const scopeDefinitions = {
     requiresReview: true,
     optionalAllowed: true,
   },
+  "discord:membership": {
+    scope: "discord:membership",
+    kind: "oidc",
+    label: "Mezo Discord membership",
+    consentDescription: "When you joined the Mezo Discord server",
+    claims: ["discord_joined_at"],
+    requiresReview: true,
+    optionalAllowed: true,
+  },
 } as const satisfies {
   [Scope in PlatformScope]: ScopeDefinition & { scope: Scope }
 }
@@ -106,6 +117,7 @@ export const claimLabels = {
   discord_username: "Discord username",
   discord_display_name: "Discord display name",
   discord_avatar_url: "Discord avatar",
+  discord_joined_at: "Joined Mezo Discord",
 } as const satisfies Record<OidcClaim, string>
 
 export function isDiscordScope(scope: PlatformScope): boolean {

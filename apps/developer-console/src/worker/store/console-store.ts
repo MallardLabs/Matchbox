@@ -19,7 +19,12 @@ import type {
   NetworkSlug,
 } from "@repo/platform-contracts/network"
 import type { EndpointClass } from "@repo/platform-contracts/rate-limits"
-import type { OidcScope, PlatformScope } from "@repo/platform-contracts/scopes"
+import {
+  type OidcScope,
+  type PlatformScope,
+  oidcScopeSchema,
+} from "@repo/platform-contracts/scopes"
+import { z } from "zod"
 import type { PinnedLogo } from "../logo-pin"
 
 /**
@@ -267,6 +272,15 @@ export type OAuthStatsRecord = {
   activeGrantsByScope: Record<OidcScope, number>
   /** Active grants consented below the environment's scope version. */
   awaitingReconsent: { count: number; oldestScopeVersion: number | null }
+}
+
+const scopeCountsSchema = z.record(oidcScopeSchema, z.number().int())
+
+/** A zero count for every OIDC scope in the contract. */
+export function emptyScopeCounts(): Record<OidcScope, number> {
+  return scopeCountsSchema.parse(
+    Object.fromEntries(oidcScopeSchema.options.map((scope) => [scope, 0])),
+  )
 }
 
 /** A review with the app and environment it belongs to. */

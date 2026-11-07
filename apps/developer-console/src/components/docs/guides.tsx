@@ -267,6 +267,10 @@ function OidcGuide(): ReactElement {
           ))}
         </Table.Body>
       </Table.Root>
+      <P>
+        <C>discord_joined_at</C>: when the linked Discord account joined the
+        Mezo Discord server, ISO 8601 UTC; <C>null</C> when unknown.
+      </P>
       <H2>Lifetimes</H2>
       <Table.Root density="compact">
         <Table.Body>

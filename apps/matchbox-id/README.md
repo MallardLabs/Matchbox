@@ -40,7 +40,7 @@ pnpm dev
   `https://localhost:5174/callback`; dev secret in the seed file; Discord
   scopes optional).
 - Wallet `0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266` (Hardhat account #0)
-  with a linked Discord. No dev sign-in: SIWE needs a wallet signature.
+  with a linked Discord (joined Mezo Discord 2025-03-04). No dev sign-in: SIWE needs a wallet signature.
 
 ## Configuration
 
@@ -54,6 +54,18 @@ Vars (`wrangler.jsonc`): `ENVIRONMENT`, `ISSUER`, `MATCHBOX_ID_ENABLED`,
   ones are ignored and required ones fail with `invalid_scope`.
 
 ## Scopes and consent
+
+| Scope                | Claims                                                           |
+| -------------------- | ---------------------------------------------------------------- |
+| `openid`             | `sub` (pairwise)                                                 |
+| `wallet`             | `wallet_address`, `wallet_network`                               |
+| `discord:id`         | `discord_id`                                                     |
+| `discord:profile`    | `discord_username`, `discord_display_name`, `discord_avatar_url` |
+| `discord:membership` | `discord_joined_at` (ISO 8601 UTC or `null`)                     |
+
+Discord claims come from `discord_wallet_links` (`discord_user_id`,
+`discord_username`, `discord_global_name`, `discord_avatar`,
+`discord_joined_at`) and need an approved review.
 
 - Unknown `scope` values are ignored (OIDC Core §3.1.2.1); `openid` is
   required. A known scope the environment is not approved for fails with

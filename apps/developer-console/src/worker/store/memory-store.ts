@@ -26,6 +26,7 @@ import {
   type SessionRecord,
   StoreConflictError,
   type VerifiedLogoRecord,
+  emptyScopeCounts,
 } from "./console-store"
 
 /** A grant row as the memory store keeps it (for OAuth stats only). */
@@ -851,12 +852,7 @@ export default function createMemoryStore(
           "scope-changed": 0,
           "account-disabled": 0,
         },
-        activeGrantsByScope: {
-          openid: 0,
-          wallet: 0,
-          "discord:id": 0,
-          "discord:profile": 0,
-        },
+        activeGrantsByScope: emptyScopeCounts(),
         awaitingReconsent: { count: 0, oldestScopeVersion: null },
       }
       const stale = active.filter(

@@ -60,7 +60,32 @@ function websiteHost(url: string): string {
   }
 }
 
+const joinedDateFormat = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
+  year: "numeric",
+  timeZone: "UTC",
+})
+
+/** "Mar 4, 2025" (UTC); the raw value if it is not a date. */
+function formatJoinedDate(value: string): string {
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? value : joinedDateFormat.format(date)
+}
+
+/** Claims shown even without a value (as "—") while their scope is available. */
+const alwaysShownClaims: ReadonlySet<ClaimPreview["claim"]> = new Set([
+  "discord_joined_at",
+])
+
 function ClaimValue({ claim }: { claim: ClaimPreview }): ReactElement | null {
+  if (claim.claim === "discord_joined_at") {
+    return claim.value === null ? (
+      <span className="text-secondary">—</span>
+    ) : (
+      <time dateTime={claim.value}>{formatJoinedDate(claim.value)}</time>
+    )
+  }
   if (claim.value === null) return null
   if (claim.claim === "wallet_address") {
     return (
@@ -99,6 +124,7 @@ const claimLabels: Partial<Record<ClaimPreview["claim"], string>> = {
   discord_username: "Username",
   discord_display_name: "Display name",
   discord_avatar_url: "Avatar",
+  discord_joined_at: "Joined",
 }
 
 function ScopeRow({
@@ -116,7 +142,10 @@ function ScopeRow({
   const optional = isOptional(scope)
   const isNew = !scope.previouslyGranted && scope.previouslyDeclined !== true
   const shown = scope.claims.filter(
-    (claim) => claim.claim !== "sub" && claim.value !== null,
+    (claim) =>
+      claim.claim !== "sub" &&
+      (claim.value !== null ||
+        (scope.available && alwaysShownClaims.has(claim.claim))),
   )
   return (
     <li className="flex flex-col gap-2 border-t border-line py-3">

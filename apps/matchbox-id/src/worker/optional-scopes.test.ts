@@ -163,6 +163,67 @@ describe("optional scopes", () => {
     })
   })
 
+  it("previews and releases discord:membership only when switched on", async () => {
+    const harness = await createHarness()
+    const cookie = await signIn(harness)
+    const challenge = await pkce()
+    const scope = "openid discord:id discord:membership"
+    const location = await authorize(harness, cookie, {
+      pkce: challenge,
+      ...live,
+      scope,
+    })
+    const { requestId, view } = await consentView(harness, cookie, location)
+    expect(view.scopes[2]).toMatchObject({
+      scope: "discord:membership",
+      requirement: "optional",
+      available: true,
+      claims: [
+        {
+          claim: "discord_joined_at",
+          label: "Joined Mezo Discord",
+          value: memorySeed.devDiscord.joinedAt,
+        },
+      ],
+    })
+    const callback = await decide(harness, cookie, requestId, "approve", [
+      "discord:membership",
+    ])
+    const tokens = await exchangeLive(
+      harness,
+      callback.searchParams.get("code") ?? "",
+      challenge,
+    )
+    expect(tokens.scope).toBe("openid discord:id")
+    const idToken = idTokenClaimsSchema.parse(decodeJwt(tokens.id_token ?? ""))
+    expect(idToken).not.toHaveProperty("discord_joined_at")
+    const claims = await userinfoClaims(harness, tokens.access_token)
+    expect(claims).not.toHaveProperty("discord_joined_at")
+
+    const forced = await authorize(harness, cookie, {
+      pkce: challenge,
+      ...live,
+      scope,
+      prompt: "consent",
+    })
+    const again = await consentView(harness, cookie, forced)
+    const approved = await decide(
+      harness,
+      cookie,
+      again.requestId,
+      "approve",
+      [],
+    )
+    const widened = await exchangeLive(
+      harness,
+      approved.searchParams.get("code") ?? "",
+      challenge,
+    )
+    expect(
+      (await userinfoClaims(harness, widened.access_token)).discord_joined_at,
+    ).toBe(memorySeed.devDiscord.joinedAt)
+  })
+
   it("answers access_denied when a required scope is declined", async () => {
     const harness = await createHarness()
     const cookie = await signIn(harness)
@@ -379,6 +440,7 @@ describe("optional scopes", () => {
         username: "other",
         globalName: null,
         avatarHash: null,
+        joinedAt: null,
       },
       harness.clock.now,
     )

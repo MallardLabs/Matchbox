@@ -110,6 +110,8 @@ export type DiscordLinkRecord = {
   username: string | null
   globalName: string | null
   avatarHash: string | null
+  /** ISO 8601 UTC time the user joined the Mezo Discord server. */
+  joinedAt: string | null
 }
 
 export type AuthorizationRequestRecord = {

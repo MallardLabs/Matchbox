@@ -8,7 +8,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 import {
   addGuildRole,
   discordOAuthUserId,
-  getMemberRoles,
+  type GuildMember,
+  getGuildMember,
   removeGuildRole,
 } from "./discord.ts"
 
@@ -24,6 +25,8 @@ export type DiscordWalletLink = {
   wallet_address: string
   guild_id: string | null
   granted_roles: string[]
+  // When the member joined guild_id (ISO 8601); only selected where needed.
+  discord_joined_at?: string | null
 }
 
 // A semester window with a role to grant (role_id guaranteed present).
@@ -383,11 +386,19 @@ export async function reconcileRoles(args: {
     }
   }
 
+  // Write only when the set changed: every write bumps updated_at, which orders
+  // the discord_joined_at backfill in discord-reconcile-roles.
   const grantedRoles = [...granted]
-  await supabase
-    .from("discord_wallet_links")
-    .update({ granted_roles: grantedRoles })
-    .eq("discord_user_id", link.discord_user_id)
+  const before = new Set(link.granted_roles ?? [])
+  if (
+    grantedRoles.length !== before.size ||
+    grantedRoles.some((roleId) => !before.has(roleId))
+  ) {
+    await supabase
+      .from("discord_wallet_links")
+      .update({ granted_roles: grantedRoles })
+      .eq("discord_user_id", link.discord_user_id)
+  }
 
   return {
     grantedRoles,
@@ -419,24 +430,43 @@ export async function revokeAllRoles(args: {
   }
 }
 
+// The guild a link belongs to: the one /matchbox ran in, else the bot's home
+// guild.
+export function linkGuildId(guildId: string | null): string | null {
+  return guildId ?? Deno.env.get("DISCORD_GUILD_ID") ?? null
+}
+
+// A member read from Discord. `member` is null when they are not in the guild;
+// `ok: false` when Discord can't say (no guild configured, or the read failed).
+export type GuildMemberLookup =
+  | { ok: true; member: GuildMember | null }
+  | { ok: false }
+
+export async function lookupGuildMember(args: {
+  guildId: string | null
+  userId: string
+}): Promise<GuildMemberLookup> {
+  const guildId = linkGuildId(args.guildId)
+  if (!guildId) return { ok: false }
+  try {
+    const member = await getGuildMember({ guildId, userId: args.userId })
+    return { ok: true, member }
+  } catch (err) {
+    console.warn("lookupGuildMember:", err)
+    return { ok: false }
+  }
+}
+
 // Bot-managed roles a member already holds. Unlinking while Academy points are
 // off keeps the member's roles, so a relink adopts them back into granted_roles
 // instead of leaving them where no sync can reach. Empty if Discord can't say.
-export async function heldManagedRoles(args: {
-  guildId: string | null
-  userId: string
+export function heldManagedRoles(args: {
+  lookup: GuildMemberLookup
   semesters: Semester[]
-}): Promise<string[]> {
-  const guildId = args.guildId ?? Deno.env.get("DISCORD_GUILD_ID")
-  if (!guildId) return []
+}): string[] {
+  if (!args.lookup.ok || !args.lookup.member) return []
   const managed = new Set<string>(args.semesters.map((s) => s.role_id))
   const roleId = Deno.env.get("DISCORD_ROLE_ID")
   if (roleId) managed.add(roleId)
-  try {
-    const held = await getMemberRoles({ guildId, userId: args.userId })
-    return held.filter((role) => managed.has(role))
-  } catch (err) {
-    console.warn("heldManagedRoles:", err)
-    return []
-  }
+  return args.lookup.member.roles.filter((role) => managed.has(role))
 }

@@ -137,7 +137,8 @@ only as `HMAC-SHA256(pepper, value)` hex (`*_hash`).
 Trigger `mbx_id_invalidate_discord_grants` on `discord_wallet_links`
 (AFTER UPDATE OF wallet_address, discord_user_id OR DELETE): revoke active
 grants that contain a `discord:*` scope for the old wallet, reason
-`discord-link-changed`, and revoke their refresh/access tokens.
+`discord-link-changed`, and revoke their refresh/access tokens. Backfilling
+`discord_joined_at` does not fire it.
 
 ### 4.2 Developer console (`mbx_dev_*`)
 
@@ -245,8 +246,8 @@ Additions to the column lists above, all additive:
 
 - `mbx_dev_environments.optional_scopes text[] not null default '{}'` —
   requested OIDC scopes users may decline at consent. CHECKs: values in
-  `wallet`, `discord:id`, `discord:profile` (`openid` and API key scopes are
-  always required) and `optional_scopes <@ requested_scopes` (write both
+  `wallet`, `discord:id`, `discord:profile` (+ `discord:membership` from
+  `20261105000001`; `openid` and API key scopes are always required) and `optional_scopes <@ requested_scopes` (write both
   columns in the same UPDATE when removing a scope).
 - `mbx_id_grants.declined_scopes text[] not null default '{}'` — optional
   scopes the user switched off; CHECK disjoint from `scopes`, which stays the
@@ -260,7 +261,8 @@ Additions to the column lists above, all additive:
 - `network.ts` — `networkSlugSchema = z.enum(["mezo","mezo-testnet"])`,
   chain ids 31612 / 31611, `environmentKindSchema`, env↔network map.
 - `scopes.ts` — API key scopes: `gauge-profiles:read`. OIDC scopes:
-  `openid`, `wallet`, `discord:id`, `discord:profile`. Each scope has label,
+  `openid`, `wallet`, `discord:id`, `discord:profile`, `discord:membership`.
+  Each scope has label,
   consent description, claims, `requiresReview` (discord scopes: true).
 - `errors.ts` — `errorBodySchema = { error: { code, message, requestId,
   docsUrl, issues? } }` (`issues: [{ path, message }]` only for validation
@@ -548,7 +550,9 @@ Add table `mbx_id_authorization_requests` — `id`, `environment_id`,
 Claims: `sub` (pairwise per `sector_id`), `wallet_address` (+
 `wallet_network`) for `wallet`, `discord_id` for `discord:id`,
 `discord_username`, `discord_display_name`, `discord_avatar_url` for
-`discord:profile`. ID token: `iss`, `aud` = client_id, `sub`, `iat`, `exp`
+`discord:profile`, `discord_joined_at` (ISO 8601 UTC from
+`discord_wallet_links.discord_joined_at`, `null` when unknown) for
+`discord:membership`. ID token: `iss`, `aud` = client_id, `sub`, `iat`, `exp`
 (10 min), `auth_time`, `nonce`, `azp`, and requested claims. `discord:*`
 scopes require an approved review and a linked Discord; when no link exists,
 consent shows the scope as unavailable with the Discord bot link instructions

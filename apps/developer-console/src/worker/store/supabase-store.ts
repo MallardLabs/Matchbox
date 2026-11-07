@@ -38,6 +38,7 @@ import {
   type OrganizationReviewRecord,
   type ReviewLogoRecord,
   StoreConflictError,
+  emptyScopeCounts,
 } from "./console-store"
 
 /** `ConsoleStore` over the `mbx_dev_*` tables (service role). */
@@ -1628,12 +1629,7 @@ export default function createSupabaseStore(
           "scope-changed": 0,
           "account-disabled": 0,
         },
-        activeGrantsByScope: {
-          openid: 0,
-          wallet: 0,
-          "discord:id": 0,
-          "discord:profile": 0,
-        },
+        activeGrantsByScope: emptyScopeCounts(),
         awaitingReconsent: {
           count: countOf("awaiting re-consent", stale),
           oldestScopeVersion: oldest.success

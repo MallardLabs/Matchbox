@@ -6,6 +6,10 @@ import {
   submitReviewResponseSchema,
 } from "@repo/platform-contracts/console"
 import { errorBodySchema } from "@repo/platform-contracts/errors"
+import {
+  isDiscordScope,
+  oidcScopeSchema,
+} from "@repo/platform-contracts/scopes"
 import { describe, expect, it } from "vitest"
 import { evaluateSubmission } from "./review-policy"
 import { createHarness } from "./test/harness"
@@ -254,6 +258,35 @@ describe("review submission", () => {
     expect(environment.reviewState).toBe("development")
   })
 
+  it("opens a manual review for discord:membership as an optional scope", async () => {
+    const context = await ownerContext()
+    const saved = await context.harness.json(
+      await context.harness.request(
+        "PUT",
+        `/api/environments/${context.test.id}/scopes`,
+        {
+          cookie: context.cookie,
+          body: {
+            requestedScopes: ["openid", "discord:membership"],
+            optionalScopes: ["discord:membership"],
+          },
+        },
+      ),
+      environmentSchema,
+    )
+    expect(saved.optionalScopes).toEqual(["discord:membership"])
+    const body = await context.harness.json(
+      await submit(context, context.test.id),
+      submitReviewResponseSchema,
+    )
+    expect(body.autoApproved).toBe(false)
+    expect(body.environment.approvedScopes).toEqual([])
+    expect(body.environment.openReview?.requestedScopes).toEqual([
+      "openid",
+      "discord:membership",
+    ])
+  })
+
   it("keeps approved scopes working while a scope increase is reviewed", async () => {
     const context = await ownerContext()
     await requestScopes(context, context.live.id, ["gauge-profiles:read"])
@@ -311,6 +344,18 @@ describe("review submission", () => {
         },
       }).autoApprove,
     ).toBe(true)
+    for (const scope of oidcScopeSchema.options.filter(isDiscordScope)) {
+      expect(
+        evaluateSubmission({
+          ...base,
+          environment: {
+            kind: "test",
+            requestedScopes: ["openid", scope],
+            approvedScopes: [],
+          },
+        }).autoApprove,
+      ).toBe(false)
+    }
   })
 })
 

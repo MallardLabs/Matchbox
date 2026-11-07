@@ -17,7 +17,7 @@ export const demoAccountEmail = "dev@matchbox.local"
  * Demo data for `PLATFORM_STORE=memory`: one developer account (sign in with
  * `POST /api/auth/dev-sign-in`; Google sign-in cannot be seeded), the "Mallard
  * Labs" org, one approved live gauge-profile app and one app with a
- * `discord:profile` review open.
+ * `discord:profile` and optional `discord:membership` review open.
  */
 export default async function seedDemoData(
   store: MemoryConsoleStore,
@@ -184,10 +184,13 @@ export default async function seedDemoData(
     approved: ["openid", "wallet"],
   })
   const hubLive = await environment(hubApp, "live", {
-    requested: ["openid", "wallet", "discord:profile"],
+    requested: ["openid", "wallet", "discord:profile", "discord:membership"],
     approved: [],
   })
-  await store.updateEnvironment(hubLive.id, { reviewState: "submitted" })
+  await store.updateEnvironment(hubLive.id, {
+    reviewState: "submitted",
+    optionalScopes: ["discord:membership"],
+  })
   await store.replaceRedirectUris(hubTest.id, [
     "http://localhost:3000/auth/callback",
   ])
@@ -196,10 +199,16 @@ export default async function seedDemoData(
   ])
   const review = await store.createReview({
     environmentId: hubLive.id,
-    requestedScopes: ["openid", "wallet", "discord:profile"],
+    requestedScopes: [
+      "openid",
+      "wallet",
+      "discord:profile",
+      "discord:membership",
+    ],
     state: "open",
     submitterId: account.id,
-    submitterNote: "Show Discord names next to validator profiles.",
+    submitterNote:
+      "Show Discord names and join dates next to validator profiles.",
     reviewerId: null,
     reviewerNote: null,
     decidedAt: null,
