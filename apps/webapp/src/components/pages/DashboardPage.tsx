@@ -2,6 +2,7 @@ import { AnimatedNumber } from "@/components/AnimatedNumber"
 import GaugeCard from "@/components/GaugeCard"
 import MarqueeText from "@/components/MarqueeText"
 import PaginationControls from "@/components/PaginationControls"
+import ProLaunchBanner from "@/components/ProLaunchBanner"
 import { SpringIn } from "@/components/SpringIn"
 import { TokenIcon } from "@/components/TokenIcon"
 import Tooltip from "@/components/Tooltip"
@@ -1782,6 +1783,7 @@ export default function DashboardPage(): JSX.Element {
   return (
     <>
       <div className="flex flex-col gap-6">
+        <ProLaunchBanner />
         <header>
           <h1 className="mb-2 text-2xl font-semibold text-[var(--content-primary)]">
             <span className="text-[#F7931A]">$</span> dashboard --status
