@@ -1016,3 +1016,253 @@
     animation: none;
   }
 }
+
+/* ============================================
+   MATCHBOX PRO LAUNCH BANNER
+   The palette of Pro itself, not Classic tokens
+   ============================================ */
+
+.pro-banner {
+  --pb-soft: #f2f2f0;
+  --pb-ink: #0e0f0c;
+  --pb-sec: #6a6c68;
+  --pb-edge: rgba(14, 15, 12, 0.08);
+  --pb-shadow: rgba(14, 15, 12, 0.16);
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-height: 240px;
+  overflow: hidden;
+  border-radius: 24px;
+  background: var(--pb-soft);
+  color: var(--pb-ink);
+  padding: 28px 40px;
+  -webkit-font-smoothing: antialiased;
+}
+
+.dark-mode .pro-banner {
+  --pb-soft: #221e19;
+  --pb-ink: #f6f1ea;
+  --pb-sec: #aea497;
+  --pb-edge: rgba(255, 255, 255, 0.1);
+  --pb-shadow: rgba(0, 0, 0, 0.5);
+}
+
+/* Classic sets IBM Plex Mono on every element: name the banner's faces. */
+.pro-banner,
+.pro-banner * {
+  font-family: var(--pb-font), system-ui, sans-serif;
+}
+
+.pro-banner .pro-banner-lockup,
+.pro-banner .pro-banner-lockup * {
+  font-family: var(--pb-mono), monospace;
+}
+
+.pro-banner-copy {
+  position: relative;
+  z-index: 1;
+  width: 440px;
+  max-width: 100%;
+}
+
+.pro-banner-lockup {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 13px;
+  font-weight: 380;
+  font-stretch: 112.5%;
+  letter-spacing: 0.03em;
+  line-height: 1;
+}
+
+.pro-banner-lockup span {
+  color: var(--pb-sec);
+}
+
+/* matchbox.png carries the wordmark too: show the box alone. */
+.pro-banner-mark {
+  width: 33px;
+  height: 16px;
+  object-fit: cover;
+  object-position: left center;
+  image-rendering: crisp-edges;
+}
+
+.dark-mode .pro-banner-mark {
+  filter: invert(1);
+}
+
+.pro-banner-headline {
+  margin-top: 14px;
+  font-size: 32px;
+  font-weight: 650;
+  line-height: 1.12;
+  letter-spacing: -0.02em;
+}
+
+.pro-banner-lines {
+  position: relative;
+  height: 26px;
+  margin-top: 9px;
+  color: var(--pb-sec);
+  font-size: 16px;
+}
+
+.pro-banner-lines li {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  white-space: nowrap;
+  opacity: 0;
+  animation: pro-banner-line 24s infinite;
+}
+
+@keyframes pro-banner-line {
+  0% {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  2%,
+  15% {
+    opacity: 1;
+    transform: none;
+  }
+  16.6%,
+  100% {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+
+.pro-banner-stuart {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--pb-ink);
+  font-weight: 650;
+}
+
+.pro-banner-stuart-disc {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  flex: none;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--pb-ink);
+}
+
+.pro-banner-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.pro-banner-open {
+  display: inline-flex;
+  height: 40px;
+  align-items: center;
+  border-radius: 20px;
+  background: #f7931a;
+  color: #1a1206;
+  padding: 0 18px;
+  font-size: 15px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.pro-banner-open:hover {
+  background: #e98509;
+}
+
+.pro-banner-later {
+  height: 40px;
+  padding: 0 6px;
+  color: var(--pb-ink);
+  font-size: 15px;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.pro-banner-open:focus-visible,
+.pro-banner-later:focus-visible,
+.pro-banner-close:focus-visible {
+  outline: 2px solid var(--pb-ink);
+  outline-offset: 2px;
+}
+
+.pro-banner-window {
+  position: absolute;
+  top: 30px;
+  left: 500px;
+  width: 660px;
+  overflow: hidden;
+  border-radius: 14px;
+  box-shadow: 0 0 0 1px var(--pb-edge), 0 24px 60px var(--pb-shadow);
+}
+
+.pro-banner-window img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.pro-banner-window .pro-banner-shot-dark,
+.dark-mode .pro-banner-window .pro-banner-shot-light {
+  display: none;
+}
+
+.dark-mode .pro-banner-window .pro-banner-shot-dark {
+  display: block;
+}
+
+.pro-banner-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 2;
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--pb-soft);
+  color: var(--pb-sec);
+}
+
+/* Below the width where the window fits beside the copy, copy only. */
+@media (max-width: 899px) {
+  .pro-banner {
+    min-height: 0;
+    padding: 24px;
+  }
+
+  .pro-banner-window {
+    display: none;
+  }
+
+  .pro-banner-headline {
+    font-size: 28px;
+  }
+
+  .pro-banner-lines {
+    font-size: 15px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pro-banner-lines li {
+    animation: none;
+  }
+
+  .pro-banner-lines li:first-child {
+    opacity: 1;
+  }
+}
