@@ -20,10 +20,6 @@ const BASE_RPC_URLS = [
   "https://base-rpc.publicnode.com",
 ].filter((url): url is string => Boolean(url))
 
-const CURVE_POOL_ADDRESS = getAddress(
-  "0xb5571e76693ba60110b5811dd650ffefce1c955f",
-)
-
 export type VenueLiquidity = {
   tvlUsd: string | null
   composition: { token: string; amount: string }[]
@@ -61,7 +57,14 @@ const curveVolumesSchema = z.object({
   }),
 })
 
-async function fetchCurveLiquidity(): Promise<VenueLiquidity> {
+type CurveData = {
+  pools: z.infer<typeof curvePoolsSchema>["data"]["poolData"]
+  volumes: z.infer<typeof curveVolumesSchema>["data"]["pools"] | null
+}
+
+// Curve serves every Ethereum pool in one list, so a refresh fetches it once
+// and each Curve gauge picks its own pool out of it.
+async function fetchCurveData(): Promise<CurveData> {
   const [poolsRes, volumesRes] = await Promise.all([
     fetch("https://api.curve.finance/v1/getPools/all/ethereum", {
       cache: "no-store",
@@ -72,17 +75,23 @@ async function fetchCurveLiquidity(): Promise<VenueLiquidity> {
   ])
   if (!poolsRes.ok) throw new Error(`curve pools ${poolsRes.status}`)
   const pools = curvePoolsSchema.parse(await poolsRes.json())
-  const pool = pools.data.poolData.find(
-    (p) => p.address.toLowerCase() === CURVE_POOL_ADDRESS.toLowerCase(),
-  )
-  if (!pool) throw new Error("curve pool not found")
+  // Volume is a nice-to-have: a bad volumes reply must not cost every Curve
+  // gauge its TVL.
+  const parsedVolumes = volumesRes.ok
+    ? curveVolumesSchema.safeParse(await volumesRes.json().catch(() => null))
+    : null
+  const volumes = parsedVolumes?.success ? parsedVolumes.data.data.pools : null
+  return { pools: pools.data.poolData, volumes }
+}
+
+function curveLiquidity(data: CurveData, poolAddress: Address): VenueLiquidity {
+  const key = poolAddress.toLowerCase()
+  const pool = data.pools.find((p) => p.address.toLowerCase() === key)
+  if (!pool) throw new Error(`curve pool ${poolAddress} not found`)
 
   let volume24hUsd: string | null = null
-  if (volumesRes.ok) {
-    const volumes = curveVolumesSchema.parse(await volumesRes.json())
-    const row = volumes.data.pools.find(
-      (p) => p.address.toLowerCase() === CURVE_POOL_ADDRESS.toLowerCase(),
-    )
+  if (data.volumes !== null) {
+    const row = data.volumes.find((p) => p.address.toLowerCase() === key)
     volume24hUsd = row?.volumeUSD != null ? String(row.volumeUSD) : null
   }
 
@@ -303,6 +312,7 @@ function estimateTvlUsd(
 export async function fetchMezoGaugesLiquidity(): Promise<MezoGaugesLiquidity> {
   const gaugeEntries = Object.entries(MEZO_GAUGES)
   const result: MezoGaugesLiquidity = {}
+  let curveData: Promise<CurveData> | undefined
 
   const llamaPools = await fetchLlamaPools().catch((error) => {
     logger.warn({
@@ -316,7 +326,9 @@ export async function fetchMezoGaugesLiquidity(): Promise<MezoGaugesLiquidity> {
     gaugeEntries.map(async ([gauge, config]) => {
       try {
         if (config.protocol === "Curve") {
-          result[gauge] = await fetchCurveLiquidity()
+          if (!config.poolAddress) throw new Error("curve gauge has no pool")
+          curveData ??= fetchCurveData()
+          result[gauge] = curveLiquidity(await curveData, config.poolAddress)
           return
         }
 

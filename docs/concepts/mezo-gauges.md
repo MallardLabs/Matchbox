@@ -16,6 +16,7 @@ MUSD liquidity on external venues:
 | MEZO/MUSD | Aerodrome | Base |
 | MUSD/USDC | Uniswap v4 | Ethereum |
 | MUSD/USDC/USDT | Curve | Ethereum |
+| bdUSD/MUSD | Curve | Ethereum |
 
 Vote windows follow the Thursday-aligned Mezo epoch clock and close at
 Wednesday 23:00 UTC. Voting happens on

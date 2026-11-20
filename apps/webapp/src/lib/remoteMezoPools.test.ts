@@ -24,7 +24,7 @@ test("maps Mezo venue networks onto GeckoTerminal slugs", () => {
 
 test("every catalog gauge has a GeckoTerminal pool id", () => {
   const lookups = mezoGaugeVenueLookups()
-  assert.equal(lookups.length, 4)
+  assert.equal(lookups.length, 5)
   for (const lookup of lookups) {
     assert.match(lookup.geckoPoolId, /^0x[0-9a-fA-F]+$/)
     assert.equal(

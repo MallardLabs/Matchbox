@@ -18,7 +18,7 @@ const VOTE_EPOCH_END = new Date("2026-09-03T00:00:00Z")
 
 test("catalog keys are checksummed EIP-55 addresses", () => {
   const keys = Object.keys(MEZO_GAUGES)
-  assert.equal(keys.length, 4)
+  assert.equal(keys.length, 5)
   for (const address of keys) {
     assert.equal(address, getAddress(address))
   }
@@ -27,6 +27,7 @@ test("catalog keys are checksummed EIP-55 addresses", () => {
     getAddress("0x4440A9b2954cB98416C0122e2ea996C46555F4B6"),
     getAddress("0x2ced96e759ab481210d41c567eee5c42edb59a1d"),
     getAddress("0xc39a294024dca62f579c49d7c83a6c831d4976d0"),
+    getAddress("0xfee9aa9146E95D233e1b2b48bda69a3bC4E268c1"),
   ]
   expected.sort()
   assert.deepEqual([...mezoGaugeAddresses()].sort(), expected)
@@ -111,7 +112,7 @@ test("reuses mUSDC and mUSDT artwork for unlabeled USDC and USDT", () => {
 
 test("attaches GeckoTerminal venue ids for every catalog gauge", () => {
   const lookups = mezoGaugeVenueLookups()
-  assert.equal(lookups.length, 4)
+  assert.equal(lookups.length, 5)
   for (const lookup of lookups) {
     const identity = MEZO_GAUGES[lookup.gauge]
     assert.notEqual(identity, undefined)
