@@ -75,9 +75,12 @@ async function fetchCurveData(): Promise<CurveData> {
   ])
   if (!poolsRes.ok) throw new Error(`curve pools ${poolsRes.status}`)
   const pools = curvePoolsSchema.parse(await poolsRes.json())
-  const volumes = volumesRes.ok
-    ? curveVolumesSchema.parse(await volumesRes.json()).data.pools
+  // Volume is a nice-to-have: a bad volumes reply must not cost every Curve
+  // gauge its TVL.
+  const parsedVolumes = volumesRes.ok
+    ? curveVolumesSchema.safeParse(await volumesRes.json().catch(() => null))
     : null
+  const volumes = parsedVolumes?.success ? parsedVolumes.data.data.pools : null
   return { pools: pools.data.poolData, volumes }
 }
 
