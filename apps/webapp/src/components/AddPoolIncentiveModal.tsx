@@ -204,12 +204,7 @@ export default function AddPoolIncentiveModal({
 
   const deltaUsd = useMemo(() => {
     if (!incentiveToken || parsedAmount <= 0n) return 0
-    const price = getTokenUsdPrice(
-      incentiveToken.address,
-      incentiveToken.symbol,
-      btcPrice,
-      mezoPrice,
-    )
+    const price = getTokenUsdPrice(incentiveToken.address, btcPrice, mezoPrice)
     if (price === null) return 0
     const amountNum = Number(formatUnits(parsedAmount, incentiveToken.decimals))
     return amountNum * price

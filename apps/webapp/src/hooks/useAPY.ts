@@ -94,10 +94,7 @@ export function useGaugeAPY(
         entry.gaugeAddress.toLowerCase() === gaugeAddress.toLowerCase(),
     )
     return (gauge?.rewardTokens ?? [])
-      .filter(
-        (token) =>
-          getTokenPriceType(token.tokenAddress, token.symbol) === "unknown",
-      )
+      .filter((token) => getTokenPriceType(token.tokenAddress) === "unknown")
       .map((token) => token.tokenAddress)
   }, [gaugeAddress, topology])
   const { prices: dexPrices, isLoading: isLoadingDex } =
@@ -117,12 +114,7 @@ export function useGaugeAPY(
         const amount = BigInt(token.epochAmount)
         const tokenAmount = Number(amount) / 10 ** token.decimals
         const price =
-          getTokenUsdPrice(
-            token.tokenAddress,
-            token.symbol,
-            btcPrice,
-            mezoPrice,
-          ) ??
+          getTokenUsdPrice(token.tokenAddress, btcPrice, mezoPrice) ??
           dexPrices.get(token.tokenAddress.toLowerCase()) ??
           null
         const usdValue = price !== null ? tokenAmount * price : 0
@@ -197,10 +189,7 @@ export function useGaugesAPY(
       if (!gaugeAddresses.has(gauge.gaugeAddress.toLowerCase())) continue
 
       for (const rewardToken of gauge.rewardTokens) {
-        if (
-          getTokenPriceType(rewardToken.tokenAddress, rewardToken.symbol) ===
-          "unknown"
-        ) {
+        if (getTokenPriceType(rewardToken.tokenAddress) === "unknown") {
           addresses.push(rewardToken.tokenAddress)
         }
       }
@@ -225,12 +214,7 @@ export function useGaugesAPY(
 
         const tokenAmount = Number(amount) / 10 ** rewardToken.decimals
         const price =
-          getTokenUsdPrice(
-            rewardToken.tokenAddress,
-            rewardToken.symbol,
-            btcPrice,
-            mezoPrice,
-          ) ??
+          getTokenUsdPrice(rewardToken.tokenAddress, btcPrice, mezoPrice) ??
           dexPrices.get(rewardToken.tokenAddress.toLowerCase()) ??
           null
         const usdValue = price !== null ? tokenAmount * price : 0

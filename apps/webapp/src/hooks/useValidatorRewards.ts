@@ -73,8 +73,7 @@ export function useValidatorGaugeIncentives(options: EnabledOption = {}): {
       validatorGauges.flatMap((gauge) =>
         gauge.rewardTokens
           .filter(
-            (token) =>
-              getTokenPriceType(token.tokenAddress, token.symbol) === "unknown",
+            (token) => getTokenPriceType(token.tokenAddress) === "unknown",
           )
           .map((token) => token.tokenAddress),
       ),
@@ -97,12 +96,7 @@ export function useValidatorGaugeIncentives(options: EnabledOption = {}): {
 
         const tokenAmount = Number(amount) / 10 ** rewardToken.decimals
         const price =
-          getTokenUsdPrice(
-            rewardToken.tokenAddress,
-            rewardToken.symbol,
-            btcPrice,
-            mezoPrice,
-          ) ??
+          getTokenUsdPrice(rewardToken.tokenAddress, btcPrice, mezoPrice) ??
           dexPrices.get(rewardToken.tokenAddress.toLowerCase()) ??
           null
         const usdValue = price !== null ? tokenAmount * price : 0

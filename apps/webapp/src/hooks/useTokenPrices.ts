@@ -68,14 +68,10 @@ function normalizeAddresses(addresses: readonly string[]): Address[] {
   return normalized
 }
 
-function getDexPricedAddresses(
-  tokens: { address: string; symbol?: string }[],
-): Address[] {
+function getDexPricedAddresses(tokens: { address: string }[]): Address[] {
   return normalizeAddresses(
     tokens
-      .filter(
-        (token) => getTokenPriceType(token.address, token.symbol) === "unknown",
-      )
+      .filter((token) => getTokenPriceType(token.address) === "unknown")
       .map((token) => token.address),
   )
 }
@@ -151,11 +147,12 @@ export function useDexTokenPrices(addresses: readonly string[]): {
 /**
  * Hook to get USD prices for multiple tokens
  *
- * Uses the token registry to determine pricing type:
+ * Uses the token registry, by address only, to determine pricing type:
  * - Stablecoins: $1.00
  * - BTC-pegged: BTC price from oracle
  * - MEZO: MEZO price from the shared Aerodrome feed
- * - Unknown: Mezo DEX price from GeckoTerminal when available
+ * - Not in the registry: Mezo DEX price from GeckoTerminal when available
+ * A token's symbol never sets its price.
  */
 export function useTokenPrices(
   tokens: { address: Address; symbol: string }[],
@@ -173,12 +170,7 @@ export function useTokenPrices(
     const priceMap = new Map<string, number | null>()
 
     for (const token of tokens) {
-      const staticPrice = getTokenUsdPrice(
-        token.address,
-        token.symbol,
-        btcPrice,
-        mezoPrice,
-      )
+      const staticPrice = getTokenUsdPrice(token.address, btcPrice, mezoPrice)
       const price =
         staticPrice ?? dexPrices.get(token.address.toLowerCase()) ?? null
       priceMap.set(token.address.toLowerCase(), price)
@@ -196,10 +188,7 @@ export function useTokenPrices(
 /**
  * Get the USD price for a single token
  */
-export function useTokenPrice(
-  address: Address | undefined,
-  symbol?: string,
-): {
+export function useTokenPrice(address: Address | undefined): {
   price: number | null
   isLoading: boolean
 } {
@@ -207,10 +196,8 @@ export function useTokenPrice(
   const { price: mezoPrice, isLoading: isLoadingMezo } = useMezoPrice()
   const dexAddresses = useMemo(
     () =>
-      address && getTokenPriceType(address, symbol) === "unknown"
-        ? [address]
-        : [],
-    [address, symbol],
+      address && getTokenPriceType(address) === "unknown" ? [address] : [],
+    [address],
   )
   const { prices: dexPrices, isLoading: isLoadingDex } =
     useDexTokenPrices(dexAddresses)
@@ -218,11 +205,11 @@ export function useTokenPrice(
   const price = useMemo(() => {
     if (!address) return null
     return (
-      getTokenUsdPrice(address, symbol, btcPrice, mezoPrice) ??
+      getTokenUsdPrice(address, btcPrice, mezoPrice) ??
       dexPrices.get(address.toLowerCase()) ??
       null
     )
-  }, [address, symbol, btcPrice, mezoPrice, dexPrices])
+  }, [address, btcPrice, mezoPrice, dexPrices])
 
   return {
     price,
@@ -273,7 +260,7 @@ export function useTokenValues(
     let total = 0
     const values: TokenValueResult[] = tokens.map((token) => {
       const priceUsd =
-        getTokenUsdPrice(token.address, token.symbol, btcPrice, mezoPrice) ??
+        getTokenUsdPrice(token.address, btcPrice, mezoPrice) ??
         dexPrices.get(token.address.toLowerCase()) ??
         null
       const valueUsd = getTokenValueUsd(token.amount, token.decimals, priceUsd)

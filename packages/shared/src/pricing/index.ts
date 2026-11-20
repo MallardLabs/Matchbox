@@ -42,6 +42,12 @@ export type TokenRegistryEntry = {
  * Known token addresses mapped to their pricing configuration.
  * Addresses are stored lowercase for case-insensitive lookups.
  *
+ * This registry is the only source of peg prices. A token is priced as a
+ * stablecoin, as BTC or as MEZO only when its ADDRESS is listed here. Its
+ * symbol never sets a price: incentive tokens are permissionless, so anyone
+ * can deploy a worthless token called "FAKEBTC" or "xUSD" and bribe a gauge
+ * with it.
+ *
  * To add a new token:
  * 1. Add its address (lowercase) as the key
  * 2. Set the symbol and priceType
@@ -65,11 +71,6 @@ const TOKEN_REGISTRY: Record<string, TokenRegistryEntry> = {
   // ============================================================================
 
   // MUSD — Mezo USD (testnet / mainnet per Mezo docs)
-  "0x118917a40fa1cd7a13db0ef56c86de7973ac503": {
-    symbol: "MUSD",
-    priceType: "stablecoin",
-    fixedPrice: 1.0,
-  },
   "0x118917a40faf1cd7a13db0ef56c86de7973ac503": {
     symbol: "MUSD",
     priceType: "stablecoin",
@@ -81,7 +82,7 @@ const TOKEN_REGISTRY: Record<string, TokenRegistryEntry> = {
     fixedPrice: 1.0,
   },
 
-  // Bridged stablecoins on Mezo (same Mezo address on testnet and mainnet).
+  // Bridged stablecoins on Mezo mainnet (Mezo docs, "Contracts reference").
   // Registry symbols use lowercase "m" — mUSDC / mUSDT — not USDC / USDT.
   "0x04671c72aab5ac02a03c1098314b1bb6b560c197": {
     symbol: "mUSDC",
@@ -90,6 +91,11 @@ const TOKEN_REGISTRY: Record<string, TokenRegistryEntry> = {
   },
   "0xeb5a5d39de4ea42c2aa6a57eca2894376683bb8e": {
     symbol: "mUSDT",
+    priceType: "stablecoin",
+    fixedPrice: 1.0,
+  },
+  "0xdf6542260a9f768f07030e4895083f804241f4c4": {
+    symbol: "mUSDe",
     priceType: "stablecoin",
     fixedPrice: 1.0,
   },
@@ -136,152 +142,68 @@ const TOKEN_REGISTRY: Record<string, TokenRegistryEntry> = {
     symbol: "sBTC",
     priceType: "btc-pegged",
   },
+
+  // Bridged BTC wrappers on Mezo mainnet (Mezo docs, "Contracts reference")
+  "0x6a7cd8e1384d49f502b4a4ce9ac9eb320835c5d7": {
+    symbol: "mcbBTC",
+    priceType: "btc-pegged",
+  },
+  "0x812fcc0bb8c207fd8d6165a7a1173037f43b2db8": {
+    symbol: "mFBTC",
+    priceType: "btc-pegged",
+  },
+  "0xa10ad2570ea7b93d19fdae6bd7189ff4929bc747": {
+    symbol: "mSolvBTC",
+    priceType: "btc-pegged",
+  },
+  "0x29fa8f46cbb9562b87773c8f50a7f9f27178261c": {
+    symbol: "mswBTC",
+    priceType: "btc-pegged",
+  },
+  "0xdf708431162ba247ddae362d2c919e0fbafcf9de": {
+    symbol: "mxSolvBTC",
+    priceType: "btc-pegged",
+  },
 }
 
 /**
- * Common stablecoin symbols that should be treated as $1 USD
- * Used as a fallback when a token isn't in the registry
- */
-const STABLECOIN_SYMBOLS = new Set([
-  "USDC",
-  "USDT",
-  "DAI",
-  "BUSD",
-  "TUSD",
-  "USDP",
-  "GUSD",
-  "FRAX",
-  "LUSD",
-  "SUSD",
-  "MIM",
-  "MUSD",
-  // Uppercase forms for symbol fallback (on-chain symbols are mUSDC / mUSDT)
-  "MUSDC",
-  "MUSDT",
-  "USD",
-  "USDC.E",
-  "USDT.E",
-])
-
-/**
- * Common BTC-pegged token symbols
- * Used as a fallback when a token isn't in the registry
- */
-const BTC_PEGGED_SYMBOLS = new Set([
-  "WBTC",
-  "TBTC",
-  "SBTC",
-  "BTCB",
-  "RENBTC",
-  "HBTC",
-  "OBTC",
-  "PBTC",
-  "IMBTC",
-  "BTC",
-])
-
-function normalizeTokenSymbol(symbol?: string): string | undefined {
-  if (!symbol) return undefined
-
-  const normalized = symbol.trim().toUpperCase()
-  return normalized.length > 0 ? normalized : undefined
-}
-
-function isStablecoinSymbol(symbol: string): boolean {
-  if (STABLECOIN_SYMBOLS.has(symbol)) {
-    return true
-  }
-
-  return (
-    symbol.includes("USD") || symbol.endsWith("USDC") || symbol.endsWith("USDT")
-  )
-}
-
-function isBtcPeggedSymbol(symbol: string): boolean {
-  if (BTC_PEGGED_SYMBOLS.has(symbol)) {
-    return true
-  }
-
-  return symbol === "BTC" || symbol.endsWith("BTC") || symbol.startsWith("BTC")
-}
-
-/**
- * Get token info from the registry by address
+ * Get token info from the registry by address (any letter case)
  */
 export function getTokenFromRegistry(
   address: string,
 ): TokenRegistryEntry | undefined {
-  return TOKEN_REGISTRY[address.toLowerCase()]
+  const key = address.trim().toLowerCase()
+  return Object.hasOwn(TOKEN_REGISTRY, key) ? TOKEN_REGISTRY[key] : undefined
 }
 
 /**
- * Determine the price type for a token based on address and symbol
- *
- * Priority:
- * 1. Check address in registry
- * 2. Check if symbol matches known stablecoin patterns
- * 3. Check if symbol matches known BTC-pegged patterns
- * 4. Return "unknown" if no match
+ * The price type of a token, from its registry entry. A token that is not in
+ * the registry is "unknown", whatever its symbol says.
  */
-export function getTokenPriceType(
-  address: string,
-  symbol?: string,
-): TokenPriceType {
-  // First, check the registry by address
-  const registryEntry = getTokenFromRegistry(address)
-  if (registryEntry) {
-    return registryEntry.priceType
-  }
-
-  // If symbol is provided, try to infer the type
-  const normalizedSymbol = normalizeTokenSymbol(symbol)
-  if (normalizedSymbol) {
-    const upperSymbol = normalizedSymbol
-
-    // Check for MEZO token by symbol
-    if (upperSymbol === "MEZO") {
-      return "mezo"
-    }
-
-    // Check for stablecoins by symbol
-    if (isStablecoinSymbol(upperSymbol)) {
-      return "stablecoin"
-    }
-
-    // Check for BTC-pegged tokens by symbol
-    if (isBtcPeggedSymbol(upperSymbol)) {
-      return "btc-pegged"
-    }
-  }
-
-  return "unknown"
+export function getTokenPriceType(address: string): TokenPriceType {
+  return getTokenFromRegistry(address)?.priceType ?? "unknown"
 }
 
 /**
- * Get the USD price for a token given reference prices
+ * Get the USD price for a token given reference prices. Looks the token up by
+ * address only.
  *
  * @param address - Token contract address
- * @param symbol - Token symbol (optional, used for fallback identification)
  * @param btcPrice - Current BTC price in USD
  * @param mezoPrice - Current MEZO price in USD
- * @returns USD price per token, or null if unknown
+ * @returns USD price per token, or null when the token is not in the registry
+ *   or its reference price is unavailable
  */
 export function getTokenUsdPrice(
   address: string,
-  symbol: string | undefined,
   btcPrice: number | null,
   mezoPrice: number | null,
 ): number | null {
   const registryEntry = getTokenFromRegistry(address)
+  if (registryEntry === undefined) return null
+  if (registryEntry.fixedPrice !== undefined) return registryEntry.fixedPrice
 
-  // If in registry with a fixed price, use it
-  if (registryEntry?.fixedPrice !== undefined) {
-    return registryEntry.fixedPrice
-  }
-
-  const priceType = getTokenPriceType(address, symbol)
-
-  switch (priceType) {
+  switch (registryEntry.priceType) {
     case "stablecoin":
       return 1.0
     case "btc-pegged":
@@ -294,17 +216,17 @@ export function getTokenUsdPrice(
 }
 
 /**
- * Check if a token is a known stablecoin
+ * Check if a token is a registered stablecoin
  */
-export function isStablecoin(address: string, symbol?: string): boolean {
-  return getTokenPriceType(address, symbol) === "stablecoin"
+export function isStablecoin(address: string): boolean {
+  return getTokenPriceType(address) === "stablecoin"
 }
 
 /**
- * Check if a token is BTC-pegged
+ * Check if a token is a registered BTC-pegged token
  */
-export function isBtcPegged(address: string, symbol?: string): boolean {
-  return getTokenPriceType(address, symbol) === "btc-pegged"
+export function isBtcPegged(address: string): boolean {
+  return getTokenPriceType(address) === "btc-pegged"
 }
 
 // ============================================================================

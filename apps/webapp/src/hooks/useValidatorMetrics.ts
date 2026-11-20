@@ -187,13 +187,10 @@ export function useValidatorMetrics(validators: Validator[]): {
 
   const dexAddresses = useMemo(
     () =>
-      resolvedSlots.flatMap(({ token }) => {
-        const metadata = tokenMetadata.get(token.toLowerCase())
-        return getTokenPriceType(token, metadata?.symbol) === "unknown"
-          ? [token]
-          : []
-      }),
-    [resolvedSlots, tokenMetadata],
+      resolvedSlots.flatMap(({ token }) =>
+        getTokenPriceType(token) === "unknown" ? [token] : [],
+      ),
+    [resolvedSlots],
   )
   const { prices: dexPrices, isLoading: isLoadingDex } =
     useDexTokenPrices(dexAddresses)
@@ -217,7 +214,7 @@ export function useValidatorMetrics(validators: Validator[]): {
         decimals: 18,
       }
       const price =
-        getTokenUsdPrice(slot.token, metadata.symbol, btcPrice, mezoPrice) ??
+        getTokenUsdPrice(slot.token, btcPrice, mezoPrice) ??
         dexPrices.get(slot.token.toLowerCase()) ??
         null
       const valueMicroUsd =
