@@ -90,6 +90,19 @@ export const MEZO_GAUGES: Record<Address, MezoGaugeIdentity> = {
     merklUrl: "https://app.merkl.xyz/opportunities/3555713731488585898",
     merklOpportunityId: "3555713731488585898",
   },
+  [getAddress("0xfee9aa9146E95D233e1b2b48bda69a3bC4E268c1")]: {
+    name: "bdUSD/MUSD",
+    protocol: "Curve",
+    network: "ethereum",
+    tokens: ["bdUSD", "MUSD"],
+    protocolUrl: "https://www.curve.finance/",
+    poolUrl:
+      "https://www.curve.finance/dex/ethereum/pools/0x21a4d8582fC64d7712A60ca82Ade57f33EBD3ed4",
+    action: "Incentivize liquidity providers on this pool gauge through Merkl",
+    distributionEpochOffset: 1,
+    geckoPoolId: "0x21a4d8582fc64d7712a60ca82ade57f33ebd3ed4",
+    poolAddress: getAddress("0x21a4d8582fC64d7712A60ca82Ade57f33EBD3ed4"),
+  },
 }
 
 export function mezoGaugeAddresses(): Address[] {

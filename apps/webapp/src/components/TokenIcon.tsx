@@ -4,6 +4,7 @@ const TOKEN_ICON_MAP: Record<string, string> = {
   TBTC: "/token icons/Bitcoin.svg",
   MEZO: "/token icons/Mezo.svg",
   MUSD: "/token icons/MUSD.svg",
+  bdUSD: "/token icons/bdUSD.png",
   SATS: "/token icons/Satoshi.svg",
   sMUSD: "/token icons/MUSD.svg",
   // Mezo bridged stables — keep lowercase "m" prefix; do not resolve via toUpperCase()
