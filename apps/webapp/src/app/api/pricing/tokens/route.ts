@@ -1,3 +1,4 @@
+import { trustedMarketPrice } from "@repo/shared/pricing"
 import { getAddress } from "viem"
 
 export { handler as GET, handler as OPTIONS }
@@ -163,10 +164,15 @@ async function handler(request: Request) {
       const entry = priceByAddress.get(address.toLowerCase())
       if (!entry) continue
 
-      const price = parseUsdNumber(token.attributes?.price_usd)
+      const quoted = parseUsdNumber(token.attributes?.price_usd)
+      const reserveUsd = parseUsdNumber(token.attributes?.total_reserve_in_usd)
+      // A thin pool's price can be set by anyone for little money: it is
+      // reported as no price. The source stays one a page loaded before
+      // this change already accepts.
+      const price = trustedMarketPrice(quoted, reserveUsd)
       entry.price = price
       entry.source = price === null ? "unavailable" : "geckoterminal"
-      entry.reserveUsd = parseUsdNumber(token.attributes?.total_reserve_in_usd)
+      entry.reserveUsd = reserveUsd
       entry.volume24hUsd = parseUsdNumber(token.attributes?.volume_usd?.h24)
     }
 
