@@ -243,24 +243,13 @@ export function usePoolsIncentivesApr(pools: Pool[]): {
     const addresses: Address[] = []
 
     for (const { token } of resolvedSlots) {
-      const lower = token.toLowerCase()
-      const known = knownTokens.find((t) => t.address.toLowerCase() === lower)
-      let symbol = known?.symbol
-
-      if (!known) {
-        const unknownIdx = unknownTokens.findIndex(
-          (t) => t.toLowerCase() === lower,
-        )
-        symbol = metaData?.[unknownIdx * 2]?.result as string | undefined
-      }
-
-      if (getTokenPriceType(token, symbol) === "unknown") {
+      if (getTokenPriceType(token) === "unknown") {
         addresses.push(token)
       }
     }
 
     return addresses
-  }, [resolvedSlots, knownTokens, unknownTokens, metaData])
+  }, [resolvedSlots])
   const { prices: dexPrices, isLoading: isLoadingDex } =
     useDexTokenPrices(dexAddresses)
 
@@ -310,7 +299,7 @@ export function usePoolsIncentivesApr(pools: Pool[]): {
 
       const d = decimals ?? 18
       const price =
-        getTokenUsdPrice(slot.token, symbol, btcPrice, mezoPrice) ??
+        getTokenUsdPrice(slot.token, btcPrice, mezoPrice) ??
         dexPrices.get(slot.token.toLowerCase()) ??
         null
       const entry = m.get(slot.pool.address.toLowerCase())

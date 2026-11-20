@@ -66,12 +66,7 @@ export default function PoolDetailPage({
         .filter((i) => i.amount > 0n)
         .map((i) => {
           const amountNum = Number(formatUnits(i.amount, i.decimals))
-          const priceUsd = getTokenUsdPrice(
-            i.tokenAddress,
-            i.symbol,
-            btcPrice,
-            mezoPrice,
-          )
+          const priceUsd = getTokenUsdPrice(i.tokenAddress, btcPrice, mezoPrice)
           const usdValue = priceUsd !== null ? amountNum * priceUsd : 0
           return { ...i, amountNum, usdValue }
         }),

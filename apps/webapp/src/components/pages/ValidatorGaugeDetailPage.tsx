@@ -403,12 +403,7 @@ export default function ValidatorGaugeDetailPage({
     let totalMicroUsd = 0n
     let allPriced = true
     for (const item of currentIncentives) {
-      const price = getTokenUsdPrice(
-        item.tokenAddress,
-        item.symbol,
-        btcPrice,
-        mezoPrice,
-      )
+      const price = getTokenUsdPrice(item.tokenAddress, btcPrice, mezoPrice)
       if (price === null) {
         allPriced = false
         continue

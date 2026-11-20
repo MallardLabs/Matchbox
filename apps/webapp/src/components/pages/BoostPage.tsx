@@ -325,12 +325,7 @@ export default function BoostPage(): JSX.Element {
       for (const reward of bribe.rewards) {
         const tokenAmount = Number(reward.earned) / 10 ** reward.decimals
         const price =
-          getTokenUsdPrice(
-            reward.tokenAddress,
-            reward.symbol,
-            btcPrice,
-            mezoPrice,
-          ) ?? 0
+          getTokenUsdPrice(reward.tokenAddress, btcPrice, mezoPrice) ?? 0
         usdValue += tokenAmount * price
       }
       const existing = map.get(tokenIdKey) ?? 0

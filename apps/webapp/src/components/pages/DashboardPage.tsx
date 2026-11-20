@@ -676,12 +676,8 @@ function ClaimableRewardRow({
                 const tokenAmount =
                   Number(reward.amount) / 10 ** reward.decimals
                 const price =
-                  getTokenUsdPrice(
-                    reward.tokenAddress,
-                    reward.symbol,
-                    btcPrice,
-                    mezoPrice,
-                  ) ?? 0
+                  getTokenUsdPrice(reward.tokenAddress, btcPrice, mezoPrice) ??
+                  0
                 const usdValue = tokenAmount * price
 
                 return (
@@ -941,8 +937,7 @@ function sumClaimableTotalsUsd(
   let total = 0
   for (const [tokenAddress, info] of totals.entries()) {
     const tokenAmount = Number(info.amount) / 10 ** info.decimals
-    const price =
-      getTokenUsdPrice(tokenAddress, info.symbol, btcPrice, mezoPrice) ?? 0
+    const price = getTokenUsdPrice(tokenAddress, btcPrice, mezoPrice) ?? 0
     total += tokenAmount * price
   }
   return total
@@ -960,12 +955,7 @@ function claimableUsdByTokenId(
     for (const reward of bribe.rewards) {
       const tokenAmount = Number(reward.earned) / 10 ** reward.decimals
       const price =
-        getTokenUsdPrice(
-          reward.tokenAddress,
-          reward.symbol,
-          btcPrice,
-          mezoPrice,
-        ) ?? 0
+        getTokenUsdPrice(reward.tokenAddress, btcPrice, mezoPrice) ?? 0
       usdValue += tokenAmount * price
     }
     map.set(tokenIdKey, (map.get(tokenIdKey) ?? 0) + usdValue)
@@ -1858,7 +1848,6 @@ export default function DashboardPage(): JSX.Element {
                                 const price =
                                   getTokenUsdPrice(
                                     tokenAddr,
-                                    info.symbol,
                                     btcPrice,
                                     mezoPrice,
                                   ) ?? 0

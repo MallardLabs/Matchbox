@@ -639,6 +639,9 @@ importers:
       typescript:
         specifier: ^5.7.2
         version: 5.9.3
+      vitest:
+        specifier: ^2.1.9
+        version: 2.1.9(@types/node@24.13.2)(jsdom@25.0.1(bufferutil@4.0.9)(canvas@3.2.1)(utf-8-validate@5.0.10))(terser@5.16.9)
 
   packages/typescript-config: {}
 

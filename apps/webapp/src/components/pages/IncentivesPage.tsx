@@ -68,12 +68,7 @@ function getIncentiveUsdValue(
   btcPrice: number | null,
   mezoPrice: number | null,
 ): number | null {
-  const priceUsd = getTokenUsdPrice(
-    incentive.tokenAddress,
-    incentive.symbol,
-    btcPrice,
-    mezoPrice,
-  )
+  const priceUsd = getTokenUsdPrice(incentive.tokenAddress, btcPrice, mezoPrice)
   return getTokenValueUsd(incentive.amount, incentive.decimals, priceUsd)
 }
 

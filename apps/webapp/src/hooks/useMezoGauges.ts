@@ -276,12 +276,7 @@ export default function useMezoGauges(): {
         symbol: `${slot.token.slice(0, 6)}…`,
         decimals: 18,
       }
-      const price = getTokenUsdPrice(
-        slot.token,
-        metadata.symbol,
-        btcPrice,
-        mezoPrice,
-      )
+      const price = getTokenUsdPrice(slot.token, btcPrice, mezoPrice)
       const valueMicroUsd =
         price === null
           ? null
