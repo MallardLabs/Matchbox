@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest"
 import {
+  MIN_MARKET_RESERVE_USD,
   getTokenFromRegistry,
   getTokenPriceType,
   getTokenUsdPrice,
   isBtcPegged,
   isStablecoin,
+  trustedMarketPrice,
 } from "./index"
 
 const btcPrice = 97_000
@@ -138,5 +140,22 @@ describe("getTokenPriceType", () => {
     expect(getTokenPriceType(mezo.address)).toBe("mezo")
     expect(isBtcPegged(mSolvBtc.address)).toBe(true)
     expect(isStablecoin(mUsdc.address)).toBe(true)
+  })
+})
+
+describe("trustedMarketPrice", () => {
+  it("keeps a price whose pools hold at least the minimum", () => {
+    expect(trustedMarketPrice(1.02, MIN_MARKET_RESERVE_USD)).toBe(1.02)
+    expect(trustedMarketPrice(0.5, 2_500_000)).toBe(0.5)
+  })
+
+  it("drops a price from a thin pool, however high", () => {
+    expect(trustedMarketPrice(71_954, 16.81)).toBeNull()
+    expect(trustedMarketPrice(3, MIN_MARKET_RESERVE_USD - 0.01)).toBeNull()
+  })
+
+  it("drops a price whose reserve is unknown, and keeps no price as none", () => {
+    expect(trustedMarketPrice(1, null)).toBeNull()
+    expect(trustedMarketPrice(null, 1_000_000)).toBeNull()
   })
 })

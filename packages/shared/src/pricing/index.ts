@@ -336,3 +336,24 @@ export function getPythOracleAddress(chainId: SupportedChainId): Address {
 export function isMezoToken(address: string): boolean {
   return address.toLowerCase() === MEZO_TOKEN_ADDRESS.toLowerCase()
 }
+
+/**
+ * The least pool reserve, in USD, a market price needs before it is used.
+ * A token's own thin pool can be pushed to any price for a few hundred
+ * dollars, and that price then inflates a gauge's incentives and APY. The
+ * reserve counts both sides of the pool at the quoted price, so this is
+ * about half of it in real money.
+ */
+export const MIN_MARKET_RESERVE_USD = 10_000
+
+/**
+ * A market price, or null when the pools behind it hold too little (or an
+ * unknown amount) for the price to be trusted.
+ */
+export function trustedMarketPrice(
+  price: number | null,
+  reserveUsd: number | null,
+): number | null {
+  if (price === null || reserveUsd === null) return null
+  return reserveUsd >= MIN_MARKET_RESERVE_USD ? price : null
+}
