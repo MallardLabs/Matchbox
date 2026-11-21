@@ -202,7 +202,11 @@ export default function MezoGaugesVotingPage(): JSX.Element {
       refetchInterval: (query) => singleReadRefetchInterval(query.state),
     },
   })
-  const { data: epochNext, refetch: refetchEpochNext } = useReadContract({
+  const {
+    data: epochNext,
+    isLoading: isLoadingEpochNext,
+    refetch: refetchEpochNext,
+  } = useReadContract({
     ...contracts.thirdPartyVoter,
     functionName: "epochNext",
     args: [currentEpochTimestamp],
@@ -437,12 +441,17 @@ export default function MezoGaugesVotingPage(): JSX.Element {
           usedWeight: voteState?.usedWeight,
           hasVotedThisEpoch: votedThisEpoch,
           canVote: votedThisEpoch === false && isInVotingWindow,
-          isLoadingUsedWeight: isLoadingLockVoteState,
+          // Can Vote also waits on the epoch reads: until they return it is
+          // loading, not unavailable.
+          isLoadingUsedWeight:
+            isLoadingLockVoteState || isLoadingEpochStart || isLoadingEpochNext,
         }
       }),
     [
       epochStart,
       isInVotingWindow,
+      isLoadingEpochNext,
+      isLoadingEpochStart,
       isLoadingLockVoteState,
       lockVoteStateByToken,
       locks,

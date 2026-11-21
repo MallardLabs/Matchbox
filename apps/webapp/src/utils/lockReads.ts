@@ -244,3 +244,38 @@ export function singleReadRefetchInterval(state: {
 }): number | false {
   return state.status === "error" ? LOCK_READ_RETRY_INTERVAL_MS : false
 }
+
+export type CanVoteCell =
+  | "loading"
+  | "vote-now"
+  | "voted"
+  | "unavailable"
+  | "window-closed"
+
+/**
+ * What a lock card's Can Vote cell shows. A read that is still pending shows
+ * the loading state, never "Unavailable": that is only for reads that failed.
+ */
+export function getCanVoteCell({
+  isLoading,
+  canVote,
+  hasVotedThisEpoch,
+}: {
+  isLoading: boolean
+  canVote: boolean
+  hasVotedThisEpoch: boolean | undefined
+}): CanVoteCell {
+  if (isLoading) {
+    return "loading"
+  }
+
+  if (canVote) {
+    return "vote-now"
+  }
+
+  if (hasVotedThisEpoch === undefined) {
+    return "unavailable"
+  }
+
+  return hasVotedThisEpoch ? "voted" : "window-closed"
+}

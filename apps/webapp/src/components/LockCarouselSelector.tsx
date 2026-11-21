@@ -1,6 +1,7 @@
 import { LockStatusTag, UnavailableValue } from "@/components/LockUnavailable"
 import MarqueeText from "@/components/MarqueeText"
 import { TokenIcon } from "@/components/TokenIcon"
+import { getCanVoteCell } from "@/utils/lockReads"
 import { Card } from "@mezo-org/mezo-clay"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { formatUnits } from "viem"
@@ -119,6 +120,11 @@ function DashboardVeMEZOCard({
   isSelected: boolean
 }) {
   const unlockDate = lock.end ? new Date(Number(lock.end) * 1000) : null
+  const canVoteCell = getCanVoteCell({
+    isLoading: lock.isLoadingUsedWeight ?? false,
+    canVote: lock.canVote ?? false,
+    hasVotedThisEpoch: lock.hasVotedThisEpoch,
+  })
 
   const hasClaimable =
     lock.claimableUSD !== null &&
@@ -285,17 +291,17 @@ function DashboardVeMEZOCard({
           <p className="mb-1 text-2xs uppercase tracking-wider text-[var(--content-secondary)]">
             Can Vote
           </p>
-          {lock.isLoadingUsedWeight ? (
+          {canVoteCell === "loading" ? (
             <span className="text-sm text-[var(--content-tertiary)]">—</span>
-          ) : lock.canVote ? (
+          ) : canVoteCell === "vote-now" ? (
             <span className="text-sm font-medium text-[var(--positive)]">
               Vote Now
             </span>
-          ) : lock.hasVotedThisEpoch ? (
+          ) : canVoteCell === "voted" ? (
             <span className="text-sm font-medium text-[var(--content-tertiary)]">
               Voted
             </span>
-          ) : lock.hasVotedThisEpoch === undefined ? (
+          ) : canVoteCell === "unavailable" ? (
             <UnavailableValue className="text-sm font-medium" />
           ) : (
             <span className="text-sm font-medium text-[var(--warning)]">

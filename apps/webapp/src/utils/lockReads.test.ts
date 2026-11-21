@@ -5,6 +5,7 @@ import {
   LOCK_DATA_UNAVAILABLE_REASON,
   LOCK_READ_RETRY_INTERVAL_MS,
   ballotPrefillDecision,
+  getCanVoteCell,
   getLockActionBlockReason,
   getLockStatus,
   hasFailedRead,
@@ -311,4 +312,52 @@ test("a failed epoch read is re-read on a timer until it returns", () => {
   )
   assert.equal(singleReadRefetchInterval({ status: "pending" }), false)
   assert.equal(singleReadRefetchInterval({ status: "success" }), false)
+})
+
+test("the Can Vote cell shows loading, not Unavailable, while a read is pending", () => {
+  // MEZO Gauges: lastVoted returned but epochStart is still loading, so
+  // hasVotedThisEpoch is not known yet.
+  assert.equal(
+    getCanVoteCell({
+      isLoading: true,
+      canVote: false,
+      hasVotedThisEpoch: undefined,
+    }),
+    "loading",
+  )
+})
+
+test("the Can Vote cell shows Unavailable only once a read has failed", () => {
+  assert.equal(
+    getCanVoteCell({
+      isLoading: false,
+      canVote: false,
+      hasVotedThisEpoch: undefined,
+    }),
+    "unavailable",
+  )
+  assert.equal(
+    getCanVoteCell({
+      isLoading: false,
+      canVote: true,
+      hasVotedThisEpoch: false,
+    }),
+    "vote-now",
+  )
+  assert.equal(
+    getCanVoteCell({
+      isLoading: false,
+      canVote: false,
+      hasVotedThisEpoch: true,
+    }),
+    "voted",
+  )
+  assert.equal(
+    getCanVoteCell({
+      isLoading: false,
+      canVote: false,
+      hasVotedThisEpoch: false,
+    }),
+    "window-closed",
+  )
 })
