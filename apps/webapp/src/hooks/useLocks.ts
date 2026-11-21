@@ -2,6 +2,7 @@ import { getContractConfig } from "@/config/contracts"
 import { QUERY_PROFILES } from "@/config/queryProfiles"
 import { useNetwork } from "@/contexts/NetworkContext"
 import { useGatedWriteContract } from "@/hooks/useGatedWalletWrites"
+import { toLockReadFields } from "@/utils/lockReads"
 import { useEffect } from "react"
 import {
   useAccount,
@@ -18,6 +19,8 @@ type Lock = {
   boost: bigint
   votingPower: bigint
   unboostedVotingPower: bigint
+  /** False when the lock reads failed or are pending: show it as unavailable. */
+  hasLockData: boolean
 }
 
 type VeMEZOLock = Omit<Lock, "managedTokenId" | "unboostedVotingPower">
@@ -95,10 +98,10 @@ export function useVeBTCLocks() {
 
   const locks: Lock[] =
     tokenIdList.map((tokenId, i) => {
-      const lockedResult = lockData?.[i * 4]?.result as
-        | { amount: bigint; end: bigint; isPermanent: boolean; boost: bigint }
-        | undefined
-      const votingPower = lockData?.[i * 4 + 1]?.result as bigint | undefined
+      const lockFields = toLockReadFields(
+        lockData?.[i * 4],
+        lockData?.[i * 4 + 1],
+      )
       const unboostedVotingPower = lockData?.[i * 4 + 2]?.result as
         | bigint
         | undefined
@@ -112,11 +115,7 @@ export function useVeBTCLocks() {
           managedTokenIdResult && managedTokenIdResult > 0n
             ? managedTokenIdResult
             : undefined,
-        amount: lockedResult?.amount ?? 0n,
-        end: lockedResult?.end ?? 0n,
-        isPermanent: lockedResult?.isPermanent ?? false,
-        boost: lockedResult?.boost ?? 0n,
-        votingPower: votingPower ?? 0n,
+        ...lockFields,
         unboostedVotingPower: unboostedVotingPower ?? 0n,
       }
     }) ?? []
@@ -196,18 +195,9 @@ export function useVeMEZOLocks(): {
 
   const locks: VeMEZOLock[] =
     tokenIdList.map((tokenId, i) => {
-      const lockedResult = lockData?.[i * 2]?.result as
-        | { amount: bigint; end: bigint; isPermanent: boolean; boost: bigint }
-        | undefined
-      const votingPower = lockData?.[i * 2 + 1]?.result as bigint | undefined
-
       return {
         tokenId,
-        amount: lockedResult?.amount ?? 0n,
-        end: lockedResult?.end ?? 0n,
-        isPermanent: lockedResult?.isPermanent ?? false,
-        boost: lockedResult?.boost ?? 0n,
-        votingPower: votingPower ?? 0n,
+        ...toLockReadFields(lockData?.[i * 2], lockData?.[i * 2 + 1]),
       }
     }) ?? []
 

@@ -55,6 +55,8 @@ const sourceFiles = [
   "src/utils/walletWriteChainId.test.ts",
   "src/utils/walletNetwork.ts",
   "src/utils/walletNetwork.test.ts",
+  "src/utils/lockReads.ts",
+  "src/utils/lockReads.test.ts",
 ]
 
 const testEntries = [
@@ -77,6 +79,7 @@ const testEntries = [
   "lib/mezoActivity/warehouse.test.js",
   "utils/walletWriteChainId.test.js",
   "utils/walletNetwork.test.js",
+  "utils/lockReads.test.js",
 ]
 
 rmSync(outDir, { recursive: true, force: true })
