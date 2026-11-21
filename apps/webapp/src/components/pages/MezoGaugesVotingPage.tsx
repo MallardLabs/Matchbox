@@ -16,6 +16,7 @@ import useMezoGauges, { type MezoGaugeRow } from "@/hooks/useMezoGauges"
 import { useMezoPrice } from "@/hooks/useMezoPrice"
 import { resolveMezoGaugeUnpairEligibility } from "@/lib/mezoGaugeUnpair"
 import {
+  ballotPrefillDecision,
   getLockActionBlockReason,
   hasFailedRead,
   hasUnavailableLock,
@@ -168,6 +169,9 @@ export default function MezoGaugesVotingPage(): JSX.Element {
     useState<RewardOptimizerFeedback | null>(null)
   const multiVote = useMezoGaugeVoting()
   const restoredLockKey = useRef("")
+  // The selection the member last edited the ballot under: the prefill never
+  // replaces those edits, even when a failed read recovers later.
+  const ballotEditedLockKey = useRef<string | null>(null)
   const unpairCleanupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   )
@@ -237,30 +241,41 @@ export default function MezoGaugesVotingPage(): JSX.Element {
     })
     return result
   }, [lockVoteResults, locks])
-  const selectedLockStates = selectedLocks.map((lock) => {
-    const lastVoted = lockVoteStateByToken.get(
-      lock.tokenId.toString(),
-    )?.lastVoted
-    const votedThisEpoch =
-      epochStart === undefined || lastVoted === undefined
-        ? undefined
-        : lastVoted >= epochStart
-    return {
-      lock,
-      votedThisEpoch,
-      usedWeight: lockVoteStateByToken.get(lock.tokenId.toString())?.usedWeight,
-      eligible: votedThisEpoch === false && isInVotingWindow,
-    }
-  })
-  const eligibleLocks = selectedLockStates.flatMap((state) =>
-    state.eligible ? [state.lock] : [],
+  // Memoised so the ballot prefill below, which depends on what is derived
+  // from these, runs when the reads change rather than on every render.
+  const selectedLockStates = useMemo(
+    () =>
+      selectedLocks.map((lock) => {
+        const lastVoted = lockVoteStateByToken.get(
+          lock.tokenId.toString(),
+        )?.lastVoted
+        const votedThisEpoch =
+          epochStart === undefined || lastVoted === undefined
+            ? undefined
+            : lastVoted >= epochStart
+        return {
+          lock,
+          votedThisEpoch,
+          usedWeight: lockVoteStateByToken.get(lock.tokenId.toString())
+            ?.usedWeight,
+          eligible: votedThisEpoch === false && isInVotingWindow,
+        }
+      }),
+    [epochStart, isInVotingWindow, lockVoteStateByToken, selectedLocks],
+  )
+  const eligibleLocks = useMemo(
+    () =>
+      selectedLockStates.flatMap((state) =>
+        state.eligible ? [state.lock] : [],
+      ),
+    [selectedLockStates],
   )
   const alreadyVotedCount = selectedLockStates.filter(
     (state) => state.votedThisEpoch === true,
   ).length
   const allocationsReadOnly =
     selectedLocks.length > 0 && alreadyVotedCount === selectedLocks.length
-  const aliveRows = rows ?? []
+  const aliveRows = useMemo(() => rows ?? [], [rows])
   const {
     data: selectedVoteResults,
     isLoading: isLoadingSelectedVotes,
@@ -437,21 +452,42 @@ export default function MezoGaugesVotingPage(): JSX.Element {
     ])
   }
 
+  // "Try again" re-reads without clearing restoredLockKey: clearing it would
+  // reload the on-chain prior votes over the ballot the member is editing.
   async function refetchLockData() {
-    await Promise.allSettled([refetchLocks(), refetchMezoGaugeVoteState()])
+    await Promise.allSettled([
+      refetchLocks(),
+      refetchGauges(),
+      refetchLockVoteState(),
+      refetchSelectedVotes(),
+    ])
   }
 
   const selectedLockKey = selectedLocks
     .map((lock) => lock.tokenId.toString())
     .join(",")
 
+  function markBallotEdited() {
+    ballotEditedLockKey.current = selectedLockKey
+  }
+
   useEffect(() => {
-    // Prefill only from reads that returned, or the ballot shows a partial
-    // prior vote and never refreshes once the reads recover.
-    if (isLoadingSelectedGaugeState || !rows || selectedReadsFailed) return
-    if (selectedLockKey === restoredLockKey.current) return
+    if (selectedLockKey === "") {
+      restoredLockKey.current = ""
+      return
+    }
+    // Prefill only from reads that returned, and only while the member has not
+    // edited the ballot under this selection.
+    const decision = ballotPrefillDecision({
+      selectionKey: selectedLockKey,
+      prefilledSelectionKey: restoredLockKey.current,
+      editedSelectionKey: ballotEditedLockKey.current,
+      isLoading: isLoadingSelectedGaugeState,
+      hasRows: rows !== undefined,
+      readsFailed: selectedReadsFailed,
+    })
+    if (decision !== "prefill" || !rows) return
     restoredLockKey.current = selectedLockKey
-    if (selectedLockKey === "") return
     const nextAllocations: Record<string, string> = {}
     const nextSelected = new Set<string>()
     for (const row of rows) {
@@ -542,6 +578,7 @@ export default function MezoGaugesVotingPage(): JSX.Element {
 
   function toggleLock(index: number) {
     setOptimizerFeedback(null)
+    ballotEditedLockKey.current = null
     setSelectedLockIndexes((current) => {
       const next = new Set(current)
       if (next.has(index)) next.delete(index)
@@ -553,12 +590,14 @@ export default function MezoGaugesVotingPage(): JSX.Element {
   function updateAllocation(gaugeAddress: string, value: string) {
     if (allocationsReadOnly) return
     setOptimizerFeedback(null)
+    markBallotEdited()
     setAllocations((current) => ({ ...current, [gaugeAddress]: value }))
   }
 
   function toggleGauge(row: MezoGaugeRow) {
     if (allocationsReadOnly) return
     setOptimizerFeedback(null)
+    markBallotEdited()
     setSelectedGaugeAddresses((current) => {
       const next = new Set(current)
       if (next.has(row.gauge)) {
@@ -578,6 +617,7 @@ export default function MezoGaugesVotingPage(): JSX.Element {
 
   function clearCart() {
     setOptimizerFeedback(null)
+    markBallotEdited()
     setSelectedGaugeAddresses(new Set())
     setAllocations({})
     multiVote.clear()
@@ -586,6 +626,7 @@ export default function MezoGaugesVotingPage(): JSX.Element {
   function voteEquallyAcrossAll() {
     if (allocationsReadOnly || aliveRows.length === 0) return
     setOptimizerFeedback(null)
+    markBallotEdited()
     const weights = equalVoteBasisPoints(aliveRows.length)
     const nextAllocations: Record<string, string> = {}
     const nextSelected = new Set<string>()
@@ -600,6 +641,7 @@ export default function MezoGaugesVotingPage(): JSX.Element {
   }
 
   function applyOptimizedAllocation(result: RewardOptimizerResult) {
+    markBallotEdited()
     const rowByGauge = new Map(
       aliveRows.map((row) => [row.gauge.toLowerCase(), row]),
     )
@@ -657,6 +699,7 @@ export default function MezoGaugesVotingPage(): JSX.Element {
     )
     if (result.successCount > 0) await refetchMezoGaugeVoteState()
     if (result.errorCount === 0) {
+      ballotEditedLockKey.current = null
       setCartOpen(false)
       setSelectedGaugeAddresses(new Set())
       setAllocations({})
@@ -673,6 +716,7 @@ export default function MezoGaugesVotingPage(): JSX.Element {
     const result = await multiVote.resetAll(unpairableTokenIds)
     await refetchMezoGaugeVoteState()
     if (result.errorCount === 0) {
+      ballotEditedLockKey.current = null
       setSelectedGaugeAddresses(new Set())
       setAllocations({})
       setOptimizerFeedback(null)

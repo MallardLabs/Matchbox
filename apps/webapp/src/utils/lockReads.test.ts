@@ -4,6 +4,7 @@ import { test } from "node:test"
 import {
   LOCK_DATA_UNAVAILABLE_REASON,
   LOCK_READ_RETRY_INTERVAL_MS,
+  ballotPrefillDecision,
   getLockActionBlockReason,
   getLockStatus,
   hasFailedRead,
@@ -236,5 +237,68 @@ test("lock reads that all returned stop polling", () => {
   assert.equal(
     lockReadRefetchInterval({ status: "pending", data: undefined }),
     false,
+  )
+})
+
+// veMEZO #191 selected; the ballot reads have returned unless a case says so.
+const prefillBase = {
+  selectionKey: "191",
+  prefilledSelectionKey: "",
+  editedSelectionKey: null,
+  isLoading: false,
+  hasRows: true,
+  readsFailed: false,
+}
+
+test("a new selection prefills the ballot once its reads return", () => {
+  assert.equal(ballotPrefillDecision(prefillBase), "prefill")
+  assert.equal(
+    ballotPrefillDecision({ ...prefillBase, prefilledSelectionKey: "191" }),
+    "keep-ballot",
+  )
+})
+
+test("the ballot waits while the selected reads load or failed", () => {
+  assert.equal(
+    ballotPrefillDecision({ ...prefillBase, isLoading: true }),
+    "wait",
+  )
+  assert.equal(
+    ballotPrefillDecision({ ...prefillBase, hasRows: false }),
+    "wait",
+  )
+  assert.equal(
+    ballotPrefillDecision({ ...prefillBase, readsFailed: true }),
+    "wait",
+  )
+})
+
+test("a late recovery of failed reads keeps the ballot the member typed", () => {
+  // The votes read failed, so nothing was prefilled, and the member edited.
+  const edited = { ...prefillBase, editedSelectionKey: "191" }
+
+  assert.equal(
+    ballotPrefillDecision({ ...edited, readsFailed: true }),
+    "keep-ballot",
+  )
+  assert.equal(ballotPrefillDecision(edited), "keep-ballot")
+})
+
+test("an edit under one selection does not stop the next selection prefilling", () => {
+  assert.equal(
+    ballotPrefillDecision({
+      ...prefillBase,
+      selectionKey: "64,191",
+      prefilledSelectionKey: "191",
+      editedSelectionKey: "191",
+    }),
+    "prefill",
+  )
+})
+
+test("an empty selection never prefills", () => {
+  assert.equal(
+    ballotPrefillDecision({ ...prefillBase, selectionKey: "" }),
+    "keep-ballot",
   )
 })

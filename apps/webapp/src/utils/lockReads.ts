@@ -193,3 +193,43 @@ export function selectedLockReadsFailed({
     )
   )
 }
+
+export type BallotPrefillDecision = "prefill" | "wait" | "keep-ballot"
+
+/**
+ * Whether a voting page should load the selected locks' prior votes into the
+ * ballot now.
+ *
+ * The ballot is prefilled once per selection, and only while the member has
+ * not edited it under that selection: a refetch or a late recovery from failed
+ * reads must never replace what they typed. Prefill waits while the reads are
+ * loading or failed, so it never fills from fallback zeros.
+ */
+export function ballotPrefillDecision({
+  selectionKey,
+  prefilledSelectionKey,
+  editedSelectionKey,
+  isLoading,
+  hasRows,
+  readsFailed,
+}: {
+  /** The selected token ids, joined; "" when nothing is selected. */
+  selectionKey: string
+  /** The selection the ballot was last prefilled for. */
+  prefilledSelectionKey: string
+  /** The selection the member last edited the ballot under, or null. */
+  editedSelectionKey: string | null
+  isLoading: boolean
+  hasRows: boolean
+  readsFailed: boolean
+}): BallotPrefillDecision {
+  if (
+    selectionKey === "" ||
+    selectionKey === prefilledSelectionKey ||
+    selectionKey === editedSelectionKey
+  ) {
+    return "keep-ballot"
+  }
+
+  return isLoading || !hasRows || readsFailed ? "wait" : "prefill"
+}
