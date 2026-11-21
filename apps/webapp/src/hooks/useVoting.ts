@@ -8,6 +8,7 @@ import {
 } from "@/hooks/useGatedWalletWrites"
 import { useGaugeTopology } from "@/hooks/useGaugeTopology"
 import { chunkArray } from "@/utils/chunk"
+import { hasFailedRead, lockReadRefetchInterval } from "@/utils/lockReads"
 import { useQuery } from "@tanstack/react-query"
 import { useCallback, useMemo } from "react"
 import type { Address, Hex } from "viem"
@@ -174,6 +175,7 @@ export function useBatchVoteState(tokenIds: bigint[]): {
     })),
     query: {
       ...QUERY_PROFILES.SHORT_CACHE,
+      refetchInterval: (query) => lockReadRefetchInterval(query.state),
       enabled: isNetworkReady && tokenIds.length > 0,
     },
   })
@@ -191,6 +193,7 @@ export function useBatchVoteState(tokenIds: bigint[]): {
     })),
     query: {
       ...QUERY_PROFILES.SHORT_CACHE,
+      refetchInterval: (query) => lockReadRefetchInterval(query.state),
       enabled: isNetworkReady && tokenIds.length > 0,
     },
   })
@@ -819,6 +822,11 @@ export function useAllVoteAllocations(
 ): {
   allocationsByToken: Map<string, VoteAllocation[]>
   aggregatedAllocations: VoteAllocation[]
+  /**
+   * Token ids with a failed `votes` read: their allocations above are missing
+   * gauges, not empty, so nothing may be built from them.
+   */
+  unavailableTokenIds: ReadonlySet<string>
   isLoading: boolean
   refetch: () => Promise<void>
 } {
@@ -826,7 +834,7 @@ export function useAllVoteAllocations(
   const contracts = getContractConfig(chainId)
 
   // Query votes for all tokenId + gauge combinations
-  const { data, isLoading, refetch } = useReadContracts({
+  const { data, isLoading, isError, refetch } = useReadContracts({
     contracts: tokenIds.flatMap((tokenId) =>
       gaugeAddresses.map((gaugeAddress) => ({
         ...contracts.boostVoter,
@@ -836,6 +844,7 @@ export function useAllVoteAllocations(
     ),
     query: {
       ...QUERY_PROFILES.SHORT_CACHE,
+      refetchInterval: (query) => lockReadRefetchInterval(query.state),
       enabled:
         isNetworkReady && tokenIds.length > 0 && gaugeAddresses.length > 0,
     },
@@ -881,9 +890,25 @@ export function useAllVoteAllocations(
     )
   }, [data, tokenIds, gaugeAddresses])
 
+  const unavailableTokenIds = useMemo(() => {
+    const unavailable = new Set<string>()
+    if (isLoading || gaugeAddresses.length === 0) return unavailable
+    tokenIds.forEach((tokenId, tokenIndex) => {
+      const reads = data?.slice(
+        tokenIndex * gaugeAddresses.length,
+        (tokenIndex + 1) * gaugeAddresses.length,
+      )
+      if (isError || hasFailedRead(reads)) {
+        unavailable.add(tokenId.toString())
+      }
+    })
+    return unavailable
+  }, [data, gaugeAddresses.length, isError, isLoading, tokenIds])
+
   return {
     allocationsByToken,
     aggregatedAllocations,
+    unavailableTokenIds,
     isLoading,
     refetch: async () => {
       await refetch()
