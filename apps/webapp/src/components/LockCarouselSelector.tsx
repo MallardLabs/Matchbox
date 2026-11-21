@@ -1,6 +1,8 @@
+import { LockStatusTag, UnavailableValue } from "@/components/LockUnavailable"
 import MarqueeText from "@/components/MarqueeText"
 import { TokenIcon } from "@/components/TokenIcon"
-import { Card, Tag } from "@mezo-org/mezo-clay"
+import { getCanVoteCell } from "@/utils/lockReads"
+import { Card } from "@mezo-org/mezo-clay"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { formatUnits } from "viem"
 
@@ -69,6 +71,8 @@ export interface LockItem {
   votingPower: bigint
   isPermanent?: boolean
   end?: bigint
+  /** False when the lock reads failed: amounts and status are unavailable. */
+  hasLockData: boolean
 }
 
 // Extended lock data for rich cards
@@ -116,7 +120,11 @@ function DashboardVeMEZOCard({
   isSelected: boolean
 }) {
   const unlockDate = lock.end ? new Date(Number(lock.end) * 1000) : null
-  const isExpired = unlockDate ? unlockDate < new Date() : false
+  const canVoteCell = getCanVoteCell({
+    isLoading: lock.isLoadingUsedWeight ?? false,
+    canVote: lock.canVote ?? false,
+    hasVotedThisEpoch: lock.hasVotedThisEpoch,
+  })
 
   const hasClaimable =
     lock.claimableUSD !== null &&
@@ -209,12 +217,13 @@ function DashboardVeMEZOCard({
             )
           )}
         </div>
-        <Tag
-          closeable={false}
-          color={lock.isPermanent ? "green" : isExpired ? "red" : "yellow"}
-        >
-          {lock.isPermanent ? "Permanent" : isExpired ? "Expired" : "Active"}
-        </Tag>
+        <LockStatusTag
+          lock={{
+            end: lock.end ?? 0n,
+            isPermanent: lock.isPermanent ?? false,
+            hasLockData: lock.hasLockData,
+          }}
+        />
       </div>
 
       {/* Stats grid */}
@@ -226,7 +235,11 @@ function DashboardVeMEZOCard({
           <div className="flex items-center gap-1.5">
             <TokenIcon symbol="MEZO" size={16} />
             <span className="font-mono text-sm font-medium tabular-nums text-[var(--content-primary)]">
-              {formatTokenValue(lock.amount, 18)}
+              {lock.hasLockData ? (
+                formatTokenValue(lock.amount, 18)
+              ) : (
+                <UnavailableValue />
+              )}
             </span>
           </div>
         </div>
@@ -235,7 +248,11 @@ function DashboardVeMEZOCard({
             Voting Power
           </p>
           <span className="font-mono text-sm font-medium tabular-nums text-[var(--content-primary)]">
-            {formatTokenValue(lock.votingPower, 18)}
+            {lock.hasLockData ? (
+              formatTokenValue(lock.votingPower, 18)
+            ) : (
+              <UnavailableValue />
+            )}
           </span>
         </div>
         <div>
@@ -262,7 +279,11 @@ function DashboardVeMEZOCard({
                     : "text-[var(--content-primary)]"
               }`}
             >
-              {lock.usedWeight ? formatTokenValue(lock.usedWeight, 18) : "0"}
+              {lock.usedWeight === undefined ? (
+                <UnavailableValue />
+              ) : (
+                formatTokenValue(lock.usedWeight, 18)
+              )}
             </span>
           )}
         </div>
@@ -270,16 +291,18 @@ function DashboardVeMEZOCard({
           <p className="mb-1 text-2xs uppercase tracking-wider text-[var(--content-secondary)]">
             Can Vote
           </p>
-          {lock.isLoadingUsedWeight ? (
+          {canVoteCell === "loading" ? (
             <span className="text-sm text-[var(--content-tertiary)]">—</span>
-          ) : lock.canVote ? (
+          ) : canVoteCell === "vote-now" ? (
             <span className="text-sm font-medium text-[var(--positive)]">
               Vote Now
             </span>
-          ) : lock.hasVotedThisEpoch ? (
+          ) : canVoteCell === "voted" ? (
             <span className="text-sm font-medium text-[var(--content-tertiary)]">
               Voted
             </span>
+          ) : canVoteCell === "unavailable" ? (
+            <UnavailableValue className="text-sm font-medium" />
           ) : (
             <span className="text-sm font-medium text-[var(--warning)]">
               Window Closed
@@ -292,7 +315,13 @@ function DashboardVeMEZOCard({
       <div className="mt-auto border-t border-[var(--border)] pt-3">
         <p className="text-xs text-[var(--content-secondary)]">
           Unlocks:{" "}
-          {lock.isPermanent ? "Never" : unlockDate?.toLocaleDateString()}
+          {!lock.hasLockData ? (
+            <UnavailableValue />
+          ) : lock.isPermanent ? (
+            "Never"
+          ) : (
+            unlockDate?.toLocaleDateString()
+          )}
         </p>
       </div>
     </div>
@@ -308,7 +337,6 @@ function DashboardVeBTCCard({
   isSelected: boolean
 }) {
   const unlockDate = lock.end ? new Date(Number(lock.end) * 1000) : null
-  const isExpired = unlockDate ? unlockDate < new Date() : false
 
   return (
     <div className="flex h-full flex-col">
@@ -375,12 +403,13 @@ function DashboardVeBTCCard({
               )}
           </div>
         </div>
-        <Tag
-          closeable={false}
-          color={lock.isPermanent ? "green" : isExpired ? "red" : "yellow"}
-        >
-          {lock.isPermanent ? "Permanent" : isExpired ? "Expired" : "Active"}
-        </Tag>
+        <LockStatusTag
+          lock={{
+            end: lock.end ?? 0n,
+            isPermanent: lock.isPermanent ?? false,
+            hasLockData: lock.hasLockData,
+          }}
+        />
       </div>
 
       {/* Stats grid */}
@@ -392,7 +421,11 @@ function DashboardVeBTCCard({
           <div className="flex items-center gap-1.5">
             <TokenIcon symbol="BTC" size={16} />
             <span className="font-mono text-sm font-medium tabular-nums text-[var(--content-primary)]">
-              {formatTokenValue(lock.amount, 18)}
+              {lock.hasLockData ? (
+                formatTokenValue(lock.amount, 18)
+              ) : (
+                <UnavailableValue />
+              )}
             </span>
           </div>
         </div>
@@ -401,7 +434,11 @@ function DashboardVeBTCCard({
             Voting Power
           </p>
           <span className="font-mono text-sm font-medium tabular-nums text-[var(--content-primary)]">
-            {formatTokenValue(lock.votingPower, 18)}
+            {lock.hasLockData ? (
+              formatTokenValue(lock.votingPower, 18)
+            ) : (
+              <UnavailableValue />
+            )}
           </span>
         </div>
         <div>
@@ -438,7 +475,13 @@ function DashboardVeBTCCard({
       <div className="mt-auto border-t border-[var(--border)] pt-3">
         <p className="text-xs text-[var(--content-secondary)]">
           Unlocks:{" "}
-          {lock.isPermanent ? "Never" : unlockDate?.toLocaleDateString()}
+          {!lock.hasLockData ? (
+            <UnavailableValue />
+          ) : lock.isPermanent ? (
+            "Never"
+          ) : (
+            unlockDate?.toLocaleDateString()
+          )}
         </p>
       </div>
     </div>
@@ -457,7 +500,6 @@ function SimpleDashboardCard({
 }) {
   const tokenSymbol = lockType === "veMEZO" ? "MEZO" : "BTC"
   const unlockDate = lock.end ? new Date(Number(lock.end) * 1000) : null
-  const isExpired = unlockDate ? unlockDate < new Date() : false
 
   return (
     <div className="flex h-full flex-col">
@@ -485,12 +527,13 @@ function SimpleDashboardCard({
             </div>
           )}
         </div>
-        <Tag
-          closeable={false}
-          color={lock.isPermanent ? "green" : isExpired ? "red" : "yellow"}
-        >
-          {lock.isPermanent ? "Permanent" : isExpired ? "Expired" : "Active"}
-        </Tag>
+        <LockStatusTag
+          lock={{
+            end: lock.end ?? 0n,
+            isPermanent: lock.isPermanent ?? false,
+            hasLockData: lock.hasLockData,
+          }}
+        />
       </div>
 
       {/* Stats */}
@@ -502,7 +545,11 @@ function SimpleDashboardCard({
           <div className="flex items-center gap-1.5">
             <TokenIcon symbol={tokenSymbol} size={16} />
             <span className="font-mono text-sm font-medium tabular-nums text-[var(--content-primary)]">
-              {formatTokenValue(lock.amount, 18)}
+              {lock.hasLockData ? (
+                formatTokenValue(lock.amount, 18)
+              ) : (
+                <UnavailableValue />
+              )}
             </span>
           </div>
         </div>
@@ -511,7 +558,11 @@ function SimpleDashboardCard({
             Voting Power
           </p>
           <span className="font-mono text-sm font-medium tabular-nums text-[var(--content-primary)]">
-            {formatTokenValue(lock.votingPower, 18)}
+            {lock.hasLockData ? (
+              formatTokenValue(lock.votingPower, 18)
+            ) : (
+              <UnavailableValue />
+            )}
           </span>
         </div>
       </div>
@@ -520,7 +571,13 @@ function SimpleDashboardCard({
       <div className="mt-auto border-t border-[var(--border)] pt-3">
         <p className="text-xs text-[var(--content-secondary)]">
           Unlocks:{" "}
-          {lock.isPermanent ? "Never" : unlockDate?.toLocaleDateString()}
+          {!lock.hasLockData ? (
+            <UnavailableValue />
+          ) : lock.isPermanent ? (
+            "Never"
+          ) : (
+            unlockDate?.toLocaleDateString()
+          )}
         </p>
       </div>
     </div>

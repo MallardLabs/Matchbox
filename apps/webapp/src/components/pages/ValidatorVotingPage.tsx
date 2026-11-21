@@ -1,4 +1,5 @@
 import { LockCarouselSelector } from "@/components/LockCarouselSelector"
+import { LockDataUnavailableNotice } from "@/components/LockUnavailable"
 import PaginationControls from "@/components/PaginationControls"
 import RewardOptimizerPanel, {
   type RewardOptimizerFeedback,
@@ -16,6 +17,15 @@ import {
 } from "@/hooks/useValidatorProfiles"
 import useValidators from "@/hooks/useValidators"
 import type { Validator } from "@/lib/validators"
+import {
+  getLockActionBlockReason,
+  hasFailedRead,
+  hasUnavailableLock,
+  lockReadRefetchInterval,
+  optimizerInputFingerprint,
+  selectedLockReadsFailed,
+  singleReadRefetchInterval,
+} from "@/utils/lockReads"
 import {
   type RewardOptimizerResult,
   calculateAnnualizedReturnBasisPoints,
@@ -155,7 +165,12 @@ export default function ValidatorVotingPage(): JSX.Element {
   const { chainId } = useNetwork()
   const { isConnected } = useAccount()
   const contracts = getContractConfig(chainId)
-  const { locks, isLoading: isLoadingLocks } = useVeBTCLocks()
+  const {
+    locks,
+    isLoading: isLoadingLocks,
+    lockListUnavailable,
+    refetch: refetchLocks,
+  } = useVeBTCLocks()
   const {
     votableValidators,
     totalWeight,
@@ -196,20 +211,35 @@ export default function ValidatorVotingPage(): JSX.Element {
     () => BigInt(Math.floor(Date.now() / 60_000) * 60),
     [],
   )
-  const { data: epochStart, isLoading: isLoadingEpochStart } = useReadContract({
+  // Eligibility is gated on this read, so it is re-read while it failed and
+  // "Try again" re-reads it too.
+  const {
+    data: epochStart,
+    isLoading: isLoadingEpochStart,
+    refetch: refetchEpochStart,
+  } = useReadContract({
     ...contracts.validatorsVoter,
     functionName: "epochStart",
     args: [currentEpochTimestamp],
+    query: {
+      refetchInterval: (query) => singleReadRefetchInterval(query.state),
+    },
   })
-  const { data: lastVotedResults, isLoading: isLoadingLastVoted } =
-    useReadContracts({
-      contracts: selectedLocks.map((lock) => ({
-        ...contracts.validatorsVoter,
-        functionName: "lastVoted" as const,
-        args: [lock.tokenId] as const,
-      })),
-      query: { enabled: selectedLocks.length > 0 },
-    })
+  const {
+    data: lastVotedResults,
+    isLoading: isLoadingLastVoted,
+    refetch: refetchLastVoted,
+  } = useReadContracts({
+    contracts: selectedLocks.map((lock) => ({
+      ...contracts.validatorsVoter,
+      functionName: "lastVoted" as const,
+      args: [lock.tokenId] as const,
+    })),
+    query: {
+      enabled: selectedLocks.length > 0,
+      refetchInterval: (query) => lockReadRefetchInterval(query.state),
+    },
+  })
   const selectedLockStates = selectedLocks.map((lock, index) => {
     const lastVoted = lastVotedResults?.[index]?.result as bigint | undefined
     return {
@@ -226,33 +256,79 @@ export default function ValidatorVotingPage(): JSX.Element {
   const {
     data: selectedUsedWeightResults,
     isLoading: isLoadingSelectedUsedWeights,
+    refetch: refetchSelectedUsedWeights,
   } = useReadContracts({
     contracts: selectedLocks.map((lock) => ({
       ...contracts.validatorsVoter,
       functionName: "usedWeights" as const,
       args: [lock.tokenId] as const,
     })),
-    query: { enabled: selectedLocks.length > 0 },
+    query: {
+      enabled: selectedLocks.length > 0,
+      refetchInterval: (query) => lockReadRefetchInterval(query.state),
+    },
   })
-  const { data: selectedVoteResults, isLoading: isLoadingSelectedVotes } =
-    useReadContracts({
-      contracts: selectedLocks.flatMap((lock) =>
-        votableValidators.map((validator) => ({
-          ...contracts.validatorsVoter,
-          functionName: "votes" as const,
-          args: [lock.tokenId, validator.gauge] as const,
-        })),
-      ),
-      query: {
-        enabled: selectedLocks.length > 0 && votableValidators.length > 0,
-      },
-    })
+  const {
+    data: selectedVoteResults,
+    isLoading: isLoadingSelectedVotes,
+    isError: isSelectedVotesError,
+    refetch: refetchSelectedVotes,
+  } = useReadContracts({
+    contracts: selectedLocks.flatMap((lock) =>
+      votableValidators.map((validator) => ({
+        ...contracts.validatorsVoter,
+        functionName: "votes" as const,
+        args: [lock.tokenId, validator.gauge] as const,
+      })),
+    ),
+    query: {
+      enabled: selectedLocks.length > 0 && votableValidators.length > 0,
+      refetchInterval: (query) => lockReadRefetchInterval(query.state),
+    },
+  })
   const isLoadingSelectedValidatorState =
     selectedLocks.length > 0 &&
     (isLoadingEpochStart ||
       isLoadingLastVoted ||
       isLoadingSelectedUsedWeights ||
       isLoadingSelectedVotes)
+
+  // A selected lock whose lock, last-vote, used-weight or prior-vote reads
+  // failed blocks every action below: each would be built from fallback zeros.
+  const selectedReadsFailed = selectedLockReadsFailed({
+    isLoading: isLoadingSelectedValidatorState,
+    voteStates: selectedLocks.map((_lock, index) => {
+      const lastVoted = lastVotedResults?.[index]?.result as bigint | undefined
+      const usedWeight = selectedUsedWeightResults?.[index]?.result as
+        | bigint
+        | undefined
+      return {
+        hasVotedThisEpoch:
+          epochStart === undefined || lastVoted === undefined
+            ? undefined
+            : lastVoted >= epochStart,
+        usedWeight,
+      }
+    }),
+    priorVotesFailed:
+      votableValidators.length > 0 &&
+      (isSelectedVotesError || hasFailedRead(selectedVoteResults)),
+  })
+  const lockActionBlockReason = getLockActionBlockReason({
+    locks: selectedLocks,
+    readsFailed: selectedReadsFailed,
+  })
+  const showLockDataNotice =
+    lockListUnavailable || hasUnavailableLock(locks) || selectedReadsFailed
+  async function refetchLockData() {
+    await Promise.allSettled([
+      refetchLocks(),
+      refetchEpochStart(),
+      refetchLastVoted(),
+      refetchSelectedUsedWeights(),
+      refetchSelectedVotes(),
+    ])
+  }
 
   const selectedVotesByGauge = useMemo(() => {
     const result = new Map<
@@ -316,18 +392,15 @@ export default function ValidatorVotingPage(): JSX.Element {
 
     return { optimizerGauges, unpricedIncentiveCount }
   }, [selectedVotesByGauge, validatorMetrics, votableValidators])
+  // Leaves voting power out: it decays, so a background re-read of a failing
+  // lock would otherwise clear the optimizer's result every 15 seconds.
   const validatorOptimizerInputFingerprint = useMemo(
     () =>
-      [
-        ...eligibleLocks.map(
-          (lock) => `${lock.tokenId.toString()}:${lock.votingPower.toString()}`,
-        ),
-        ...validatorOptimizerData.optimizerGauges.map(
-          (gauge) =>
-            `${gauge.id}:${gauge.existingWeight.toString()}:${gauge.incentiveValueMicroUsd.toString()}`,
-        ),
-        btcPriceUsd ?? "unpriced",
-      ].join("|"),
+      optimizerInputFingerprint({
+        lockIds: eligibleLocks.map((lock) => lock.tokenId),
+        gauges: validatorOptimizerData.optimizerGauges,
+        price: btcPriceUsd ?? "unpriced",
+      }),
     [btcPriceUsd, eligibleLocks, validatorOptimizerData],
   )
 
@@ -433,6 +506,7 @@ export default function ValidatorVotingPage(): JSX.Element {
   const isAllocationValid = allocationTotal === 10_000n
   const canVote =
     isConnected &&
+    lockActionBlockReason === null &&
     eligibleLocks.length > 0 &&
     allocationEntries.length === selectedValidators.length &&
     allocationEntries.length > 0 &&
@@ -502,6 +576,7 @@ export default function ValidatorVotingPage(): JSX.Element {
   }
 
   function optimizeValidatorAllocation() {
+    if (lockActionBlockReason) return
     const votingPowers = eligibleLocks.map((lock) => lock.votingPower)
     const result = optimizeRewardAllocations({
       gauges: validatorOptimizerData.optimizerGauges,
@@ -611,6 +686,8 @@ export default function ValidatorVotingPage(): JSX.Element {
             </p>
           </div>
         </Card>
+      ) : locks.length === 0 && lockListUnavailable ? (
+        <LockDataUnavailableNotice onRetry={refetchLockData} />
       ) : locks.length === 0 ? (
         <Card withBorder overrides={{}}>
           <div className="p-10 text-center">
@@ -629,7 +706,10 @@ export default function ValidatorVotingPage(): JSX.Element {
         </Card>
       ) : (
         <Card withBorder overrides={{}}>
-          <div className="py-4">
+          <div className="flex flex-col gap-4 py-4">
+            {showLockDataNotice && (
+              <LockDataUnavailableNotice onRetry={refetchLockData} />
+            )}
             <LockCarouselSelector
               locks={locks}
               selectedIndex={undefined}
@@ -643,7 +723,7 @@ export default function ValidatorVotingPage(): JSX.Element {
         </Card>
       )}
 
-      {selectedLocks.length > eligibleLocks.length && (
+      {selectedLocks.length > eligibleLocks.length && !selectedReadsFailed && (
         <p className="rounded-lg border border-[var(--warning)] p-3 text-pretty text-xs text-[var(--warning)]">
           {selectedLocks.length - eligibleLocks.length} selected NFT
           {selectedLocks.length - eligibleLocks.length === 1
@@ -693,13 +773,17 @@ export default function ValidatorVotingPage(): JSX.Element {
 
               <RewardOptimizerPanel
                 assetLabel="veBTC"
-                disabled={eligibleLocks.length === 0}
+                disabled={
+                  eligibleLocks.length === 0 || lockActionBlockReason !== null
+                }
                 disabledMessage={
                   selectedLocks.length === 0
                     ? "Select at least one veBTC NFT to calculate an optimized ballot."
-                    : isLoadingSelectedValidatorState
-                      ? "Loading the selected NFTs and their prior allocations."
-                      : "None of the selected veBTC NFTs are eligible to vote in this epoch."
+                    : lockActionBlockReason
+                      ? lockActionBlockReason
+                      : isLoadingSelectedValidatorState
+                        ? "Loading the selected NFTs and their prior allocations."
+                        : "None of the selected veBTC NFTs are eligible to vote in this epoch."
                 }
                 isLoading={
                   isLoadingValidatorMetrics || isLoadingSelectedValidatorState
@@ -966,13 +1050,21 @@ export default function ValidatorVotingPage(): JSX.Element {
               </p>
             )}
 
+            {lockActionBlockReason && (
+              <p className="text-pretty text-xs text-[var(--content-secondary)]">
+                {lockActionBlockReason}
+              </p>
+            )}
+
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex flex-wrap gap-2">
                 <Button
                   kind="secondary"
                   size="small"
                   disabled={
-                    selectedLocks.length === 0 || multiVote.isInProgress
+                    selectedLocks.length === 0 ||
+                    lockActionBlockReason !== null ||
+                    multiVote.isInProgress
                   }
                   onClick={() =>
                     void multiVote.pokeAll(
@@ -986,7 +1078,9 @@ export default function ValidatorVotingPage(): JSX.Element {
                   kind="secondary"
                   size="small"
                   disabled={
-                    selectedLocks.length === 0 || multiVote.isInProgress
+                    selectedLocks.length === 0 ||
+                    lockActionBlockReason !== null ||
+                    multiVote.isInProgress
                   }
                   onClick={() =>
                     void multiVote.resetAll(
@@ -1001,6 +1095,7 @@ export default function ValidatorVotingPage(): JSX.Element {
                 {multiVote.canExportSafeBatch && eligibleLocks.length > 1 && (
                   <Button
                     kind="secondary"
+                    disabled={lockActionBlockReason !== null}
                     onClick={() =>
                       void multiVote.exportVoteBatch(
                         eligibleLocks.map((lock) => lock.tokenId),
@@ -1015,6 +1110,7 @@ export default function ValidatorVotingPage(): JSX.Element {
                 {multiVote.canCopyBatchJson && eligibleLocks.length > 1 && (
                   <Button
                     kind="tertiary"
+                    disabled={lockActionBlockReason !== null}
                     onClick={() =>
                       void multiVote.copyVoteBatchJson(
                         eligibleLocks.map((lock) => lock.tokenId),
@@ -1042,7 +1138,11 @@ export default function ValidatorVotingPage(): JSX.Element {
                 ) && (
                   <Button
                     kind="secondary"
-                    disabled={!isAllocationValid || multiVote.isInProgress}
+                    disabled={
+                      lockActionBlockReason !== null ||
+                      !isAllocationValid ||
+                      multiVote.isInProgress
+                    }
                     onClick={() =>
                       void multiVote.voteAll(
                         multiVote.lockStates
