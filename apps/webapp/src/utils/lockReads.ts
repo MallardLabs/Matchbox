@@ -233,3 +233,14 @@ export function ballotPrefillDecision({
 
   return isLoading || !hasRows || readsFailed ? "wait" : "prefill"
 }
+
+/**
+ * `refetchInterval` for a single `useReadContract` read the lock gates depend
+ * on, such as the epoch reads: poll again only while it errored, so "Lock data
+ * unavailable" clears without a reload once the RPC recovers.
+ */
+export function singleReadRefetchInterval(state: {
+  status: string
+}): number | false {
+  return state.status === "error" ? LOCK_READ_RETRY_INTERVAL_MS : false
+}

@@ -23,6 +23,7 @@ import {
   hasUnavailableLock,
   lockReadRefetchInterval,
   selectedLockReadsFailed,
+  singleReadRefetchInterval,
 } from "@/utils/lockReads"
 import {
   type RewardOptimizerResult,
@@ -209,10 +210,19 @@ export default function ValidatorVotingPage(): JSX.Element {
     () => BigInt(Math.floor(Date.now() / 60_000) * 60),
     [],
   )
-  const { data: epochStart, isLoading: isLoadingEpochStart } = useReadContract({
+  // Eligibility is gated on this read, so it is re-read while it failed and
+  // "Try again" re-reads it too.
+  const {
+    data: epochStart,
+    isLoading: isLoadingEpochStart,
+    refetch: refetchEpochStart,
+  } = useReadContract({
     ...contracts.validatorsVoter,
     functionName: "epochStart",
     args: [currentEpochTimestamp],
+    query: {
+      refetchInterval: (query) => singleReadRefetchInterval(query.state),
+    },
   })
   const {
     data: lastVotedResults,
@@ -312,6 +322,7 @@ export default function ValidatorVotingPage(): JSX.Element {
   async function refetchLockData() {
     await Promise.allSettled([
       refetchLocks(),
+      refetchEpochStart(),
       refetchLastVoted(),
       refetchSelectedUsedWeights(),
       refetchSelectedVotes(),

@@ -11,6 +11,7 @@ import {
   hasUnavailableLock,
   lockReadRefetchInterval,
   selectedLockReadsFailed,
+  singleReadRefetchInterval,
   sumLockField,
   toLockReadFields,
 } from "./lockReads"
@@ -301,4 +302,13 @@ test("an empty selection never prefills", () => {
     ballotPrefillDecision({ ...prefillBase, selectionKey: "" }),
     "keep-ballot",
   )
+})
+
+test("a failed epoch read is re-read on a timer until it returns", () => {
+  assert.equal(
+    singleReadRefetchInterval({ status: "error" }),
+    LOCK_READ_RETRY_INTERVAL_MS,
+  )
+  assert.equal(singleReadRefetchInterval({ status: "pending" }), false)
+  assert.equal(singleReadRefetchInterval({ status: "success" }), false)
 })

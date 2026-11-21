@@ -8,7 +8,11 @@ import {
 } from "@/hooks/useGatedWalletWrites"
 import { useGaugeTopology } from "@/hooks/useGaugeTopology"
 import { chunkArray } from "@/utils/chunk"
-import { hasFailedRead, lockReadRefetchInterval } from "@/utils/lockReads"
+import {
+  hasFailedRead,
+  lockReadRefetchInterval,
+  singleReadRefetchInterval,
+} from "@/utils/lockReads"
 import { useQuery } from "@tanstack/react-query"
 import { useCallback, useMemo } from "react"
 import type { Address, Hex } from "viem"
@@ -156,6 +160,9 @@ export function useBatchVoteState(tokenIds: bigint[]): {
     query: {
       ...QUERY_PROFILES.SHORT_CACHE,
       enabled: isNetworkReady,
+      // Every lock's vote state is derived from this read: re-read it while it
+      // failed, like the per-lock reads below.
+      refetchInterval: (query) => singleReadRefetchInterval(query.state),
     },
   })
 

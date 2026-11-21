@@ -22,6 +22,7 @@ import {
   hasUnavailableLock,
   lockReadRefetchInterval,
   selectedLockReadsFailed,
+  singleReadRefetchInterval,
   sumLockField,
 } from "@/utils/lockReads"
 import {
@@ -187,15 +188,27 @@ export default function MezoGaugesVotingPage(): JSX.Element {
     () => BigInt(Math.floor(Date.now() / 60_000) * 60),
     [],
   )
-  const { data: epochStart, isLoading: isLoadingEpochStart } = useReadContract({
+  // Voting is gated on both epoch reads, so each is re-read while it failed
+  // and "Try again" re-reads them too.
+  const {
+    data: epochStart,
+    isLoading: isLoadingEpochStart,
+    refetch: refetchEpochStart,
+  } = useReadContract({
     ...contracts.thirdPartyVoter,
     functionName: "epochStart",
     args: [currentEpochTimestamp],
+    query: {
+      refetchInterval: (query) => singleReadRefetchInterval(query.state),
+    },
   })
-  const { data: epochNext } = useReadContract({
+  const { data: epochNext, refetch: refetchEpochNext } = useReadContract({
     ...contracts.thirdPartyVoter,
     functionName: "epochNext",
     args: [currentEpochTimestamp],
+    query: {
+      refetchInterval: (query) => singleReadRefetchInterval(query.state),
+    },
   })
   const currentTime = BigInt(Math.floor(Date.now() / 1000))
   const epochVoteStart =
@@ -458,6 +471,8 @@ export default function MezoGaugesVotingPage(): JSX.Element {
     await Promise.allSettled([
       refetchLocks(),
       refetchGauges(),
+      refetchEpochStart(),
+      refetchEpochNext(),
       refetchLockVoteState(),
       refetchSelectedVotes(),
     ])
