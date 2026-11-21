@@ -11,6 +11,7 @@ import {
   hasFailedRead,
   hasUnavailableLock,
   lockReadRefetchInterval,
+  optimizerInputFingerprint,
   selectedLockReadsFailed,
   singleReadRefetchInterval,
   sumLockField,
@@ -359,5 +360,60 @@ test("the Can Vote cell shows Unavailable only once a read has failed", () => {
       hasVotedThisEpoch: false,
     }),
     "window-closed",
+  )
+})
+
+const optimizerGauge = {
+  id: "0x64e5",
+  existingWeight: 1_200_000_000_000_000_000_000n,
+  incentiveValueMicroUsd: 2_500_000_000n,
+}
+
+test("a background re-read that only decays voting power keeps the optimizer result", () => {
+  // The 15 second re-read of a failing lock returns the same locks and gauges;
+  // only the voting power has decayed, and that is not an input here.
+  const before = optimizerInputFingerprint({
+    lockIds: [191n, 64n],
+    gauges: [optimizerGauge],
+    price: "0.31",
+  })
+  const after = optimizerInputFingerprint({
+    lockIds: [191n, 64n],
+    gauges: [{ ...optimizerGauge }],
+    price: "0.31",
+  })
+
+  assert.equal(after, before)
+})
+
+test("a change of eligible locks, gauge weight, incentives or price clears it", () => {
+  const base = {
+    lockIds: [191n, 64n],
+    gauges: [optimizerGauge],
+    price: "0.31",
+  }
+  const before = optimizerInputFingerprint(base)
+
+  assert.notEqual(
+    optimizerInputFingerprint({ ...base, lockIds: [191n] }),
+    before,
+  )
+  assert.notEqual(
+    optimizerInputFingerprint({
+      ...base,
+      gauges: [{ ...optimizerGauge, existingWeight: 0n }],
+    }),
+    before,
+  )
+  assert.notEqual(
+    optimizerInputFingerprint({
+      ...base,
+      gauges: [{ ...optimizerGauge, incentiveValueMicroUsd: 0n }],
+    }),
+    before,
+  )
+  assert.notEqual(
+    optimizerInputFingerprint({ ...base, price: "unpriced" }),
+    before,
   )
 })

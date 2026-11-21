@@ -21,6 +21,7 @@ import {
   hasFailedRead,
   hasUnavailableLock,
   lockReadRefetchInterval,
+  optimizerInputFingerprint,
   selectedLockReadsFailed,
   singleReadRefetchInterval,
   sumLockField,
@@ -547,25 +548,22 @@ export default function MezoGaugesVotingPage(): JSX.Element {
     return { optimizerGauges, unpricedIncentiveCount }
   }, [aliveRows, selectedVotesByGauge])
 
-  const optimizerInputFingerprint = useMemo(
+  // Leaves voting power out: it decays, so a background re-read of a failing
+  // lock would otherwise clear the optimizer's result every 15 seconds.
+  const mezoGaugeOptimizerInputFingerprint = useMemo(
     () =>
-      [
-        ...eligibleLocks.map(
-          (lock) => `${lock.tokenId.toString()}:${lock.votingPower.toString()}`,
-        ),
-        ...optimizerData.optimizerGauges.map(
-          (gauge) =>
-            `${gauge.id}:${gauge.existingWeight.toString()}:${gauge.incentiveValueMicroUsd.toString()}`,
-        ),
-        mezoPrice === null ? "unpriced" : String(mezoPrice),
-      ].join("|"),
+      optimizerInputFingerprint({
+        lockIds: eligibleLocks.map((lock) => lock.tokenId),
+        gauges: optimizerData.optimizerGauges,
+        price: mezoPrice === null ? "unpriced" : String(mezoPrice),
+      }),
     [eligibleLocks, mezoPrice, optimizerData],
   )
 
   useEffect(() => {
-    void optimizerInputFingerprint
+    void mezoGaugeOptimizerInputFingerprint
     setOptimizerFeedback(null)
-  }, [optimizerInputFingerprint])
+  }, [mezoGaugeOptimizerInputFingerprint])
 
   const selectedRows = useMemo(
     () => aliveRows.filter((row) => selectedGaugeAddresses.has(row.gauge)),

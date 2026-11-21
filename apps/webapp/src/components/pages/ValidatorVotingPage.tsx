@@ -22,6 +22,7 @@ import {
   hasFailedRead,
   hasUnavailableLock,
   lockReadRefetchInterval,
+  optimizerInputFingerprint,
   selectedLockReadsFailed,
   singleReadRefetchInterval,
 } from "@/utils/lockReads"
@@ -391,18 +392,15 @@ export default function ValidatorVotingPage(): JSX.Element {
 
     return { optimizerGauges, unpricedIncentiveCount }
   }, [selectedVotesByGauge, validatorMetrics, votableValidators])
+  // Leaves voting power out: it decays, so a background re-read of a failing
+  // lock would otherwise clear the optimizer's result every 15 seconds.
   const validatorOptimizerInputFingerprint = useMemo(
     () =>
-      [
-        ...eligibleLocks.map(
-          (lock) => `${lock.tokenId.toString()}:${lock.votingPower.toString()}`,
-        ),
-        ...validatorOptimizerData.optimizerGauges.map(
-          (gauge) =>
-            `${gauge.id}:${gauge.existingWeight.toString()}:${gauge.incentiveValueMicroUsd.toString()}`,
-        ),
-        btcPriceUsd ?? "unpriced",
-      ].join("|"),
+      optimizerInputFingerprint({
+        lockIds: eligibleLocks.map((lock) => lock.tokenId),
+        gauges: validatorOptimizerData.optimizerGauges,
+        price: btcPriceUsd ?? "unpriced",
+      }),
     [btcPriceUsd, eligibleLocks, validatorOptimizerData],
   )
 

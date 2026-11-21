@@ -279,3 +279,33 @@ export function getCanVoteCell({
 
   return hasVotedThisEpoch ? "voted" : "window-closed"
 }
+
+/**
+ * The inputs whose change makes a shown optimizer result stale. Voting power
+ * is left out on purpose: it decays every block, so the 15 second re-read of a
+ * failing lock would otherwise clear the result each time. The optimizer reads
+ * the current voting power when the member runs it and applies the result at
+ * once, so a result is never applied to inputs it was not computed from.
+ */
+export function optimizerInputFingerprint({
+  lockIds,
+  gauges,
+  price,
+}: {
+  lockIds: readonly bigint[]
+  gauges: readonly {
+    id: string
+    existingWeight: bigint
+    incentiveValueMicroUsd: bigint
+  }[]
+  price: string
+}): string {
+  return [
+    ...lockIds.map((tokenId) => tokenId.toString()),
+    ...gauges.map(
+      (gauge) =>
+        `${gauge.id}:${gauge.existingWeight.toString()}:${gauge.incentiveValueMicroUsd.toString()}`,
+    ),
+    price,
+  ].join("|")
+}

@@ -41,6 +41,7 @@ import { formatTokenAmount } from "@/utils/format"
 import {
   getLockActionBlockReason,
   hasUnavailableLock,
+  optimizerInputFingerprint,
   selectedLockReadsFailed,
   sumLockField,
 } from "@/utils/lockReads"
@@ -345,18 +346,15 @@ export default function BoostPage(): JSX.Element {
 
     return { optimizerGauges, unpricedIncentiveCount }
   }, [allocationsByToken, apyMap, gauges, votableLocks])
+  // Leaves voting power out: it decays, so a background re-read of a failing
+  // lock would otherwise clear the optimizer's result every 15 seconds.
   const boostOptimizerInputFingerprint = useMemo(
     () =>
-      [
-        ...votableLocks.map(
-          (lock) => `${lock.tokenId.toString()}:${lock.votingPower.toString()}`,
-        ),
-        ...boostOptimizerData.optimizerGauges.map(
-          (gauge) =>
-            `${gauge.id}:${gauge.existingWeight.toString()}:${gauge.incentiveValueMicroUsd.toString()}`,
-        ),
-        String(mezoPrice),
-      ].join("|"),
+      optimizerInputFingerprint({
+        lockIds: votableLocks.map((lock) => lock.tokenId),
+        gauges: boostOptimizerData.optimizerGauges,
+        price: String(mezoPrice),
+      }),
     [boostOptimizerData, mezoPrice, votableLocks],
   )
 
