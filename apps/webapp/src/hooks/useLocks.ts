@@ -2,8 +2,12 @@ import { getContractConfig } from "@/config/contracts"
 import { QUERY_PROFILES } from "@/config/queryProfiles"
 import { useNetwork } from "@/contexts/NetworkContext"
 import { useGatedWriteContract } from "@/hooks/useGatedWalletWrites"
-import { toLockReadFields } from "@/utils/lockReads"
-import { useEffect } from "react"
+import {
+  hasFailedRead,
+  lockReadRefetchInterval,
+  toLockReadFields,
+} from "@/utils/lockReads"
+import { useCallback, useEffect } from "react"
 import {
   useAccount,
   useReadContracts,
@@ -27,12 +31,41 @@ type VeMEZOLock = Omit<Lock, "managedTokenId" | "unboostedVotingPower">
 
 type RefetchFn = () => Promise<unknown>
 
+type ReadResults = readonly ({ status: string } | undefined)[] | undefined
+
+/**
+ * A failed `balanceOf` or `ownerToNFTokenIdList` read drops locks from the list
+ * without a trace, so the page would say "no locks" or show a short total.
+ */
+function isLockListUnavailable({
+  isBalanceError,
+  balanceData,
+  isTokenIdsError,
+  tokenIds,
+}: {
+  isBalanceError: boolean
+  balanceData: ReadResults
+  isTokenIdsError: boolean
+  tokenIds: ReadResults
+}): boolean {
+  return (
+    isBalanceError ||
+    hasFailedRead(balanceData) ||
+    isTokenIdsError ||
+    hasFailedRead(tokenIds)
+  )
+}
+
 export function useVeBTCLocks() {
   const { address } = useAccount()
   const { chainId, isNetworkReady } = useNetwork()
   const contracts = getContractConfig(chainId)
 
-  const { data: balanceData } = useReadContracts({
+  const {
+    data: balanceData,
+    isError: isBalanceError,
+    refetch: refetchBalance,
+  } = useReadContracts({
     contracts: [
       {
         ...contracts.veBTC,
@@ -42,13 +75,18 @@ export function useVeBTCLocks() {
     ],
     query: {
       ...QUERY_PROFILES.SHORT_CACHE,
+      refetchInterval: (query) => lockReadRefetchInterval(query.state),
       enabled: isNetworkReady && !!address,
     },
   })
 
   const balance = balanceData?.[0]?.result as bigint | undefined
 
-  const { data: tokenIds } = useReadContracts({
+  const {
+    data: tokenIds,
+    isError: isTokenIdsError,
+    refetch: refetchTokenIds,
+  } = useReadContracts({
     contracts:
       balance !== undefined && address
         ? Array.from({ length: Number(balance) }, (_, i) => ({
@@ -59,6 +97,7 @@ export function useVeBTCLocks() {
         : [],
     query: {
       ...QUERY_PROFILES.SHORT_CACHE,
+      refetchInterval: (query) => lockReadRefetchInterval(query.state),
       enabled: isNetworkReady && !!balance && balance > 0n,
     },
   })
@@ -67,7 +106,11 @@ export function useVeBTCLocks() {
     tokenIds?.map((r) => r.result as bigint).filter((id) => id !== undefined) ??
     []
 
-  const { data: lockData, isLoading } = useReadContracts({
+  const {
+    data: lockData,
+    isLoading,
+    refetch: refetchLockData,
+  } = useReadContracts({
     contracts: tokenIdList.flatMap((tokenId) => [
       {
         ...contracts.veBTC,
@@ -92,6 +135,7 @@ export function useVeBTCLocks() {
     ]),
     query: {
       ...QUERY_PROFILES.SHORT_CACHE,
+      refetchInterval: (query) => lockReadRefetchInterval(query.state),
       enabled: isNetworkReady && tokenIdList.length > 0,
     },
   })
@@ -120,22 +164,41 @@ export function useVeBTCLocks() {
       }
     }) ?? []
 
+  const lockListUnavailable = isLockListUnavailable({
+    isBalanceError,
+    balanceData,
+    isTokenIdsError,
+    tokenIds,
+  })
+  const refetch = useCallback(
+    () => Promise.all([refetchBalance(), refetchTokenIds(), refetchLockData()]),
+    [refetchBalance, refetchTokenIds, refetchLockData],
+  )
+
   return {
     locks,
     isLoading,
+    lockListUnavailable,
+    refetch,
   }
 }
 
 export function useVeMEZOLocks(): {
   locks: VeMEZOLock[]
   isLoading: boolean
+  /** True when the lock count or a token id read failed: the list may be short. */
+  lockListUnavailable: boolean
   refetch: RefetchFn
 } {
   const { address } = useAccount()
   const { chainId, isNetworkReady } = useNetwork()
   const contracts = getContractConfig(chainId)
 
-  const { data: balanceData } = useReadContracts({
+  const {
+    data: balanceData,
+    isError: isBalanceError,
+    refetch: refetchBalance,
+  } = useReadContracts({
     contracts: [
       {
         ...contracts.veMEZO,
@@ -145,13 +208,18 @@ export function useVeMEZOLocks(): {
     ],
     query: {
       ...QUERY_PROFILES.SHORT_CACHE,
+      refetchInterval: (query) => lockReadRefetchInterval(query.state),
       enabled: isNetworkReady && !!address,
     },
   })
 
   const balance = balanceData?.[0]?.result as bigint | undefined
 
-  const { data: tokenIds } = useReadContracts({
+  const {
+    data: tokenIds,
+    isError: isTokenIdsError,
+    refetch: refetchTokenIds,
+  } = useReadContracts({
     contracts:
       balance !== undefined && address
         ? Array.from({ length: Number(balance) }, (_, i) => ({
@@ -162,6 +230,7 @@ export function useVeMEZOLocks(): {
         : [],
     query: {
       ...QUERY_PROFILES.SHORT_CACHE,
+      refetchInterval: (query) => lockReadRefetchInterval(query.state),
       enabled: isNetworkReady && !!balance && balance > 0n,
     },
   })
@@ -173,7 +242,7 @@ export function useVeMEZOLocks(): {
   const {
     data: lockData,
     isLoading,
-    refetch,
+    refetch: refetchLockData,
   } = useReadContracts({
     contracts: tokenIdList.flatMap((tokenId) => [
       {
@@ -189,6 +258,7 @@ export function useVeMEZOLocks(): {
     ]),
     query: {
       ...QUERY_PROFILES.SHORT_CACHE,
+      refetchInterval: (query) => lockReadRefetchInterval(query.state),
       enabled: isNetworkReady && tokenIdList.length > 0,
     },
   })
@@ -201,9 +271,21 @@ export function useVeMEZOLocks(): {
       }
     }) ?? []
 
+  const lockListUnavailable = isLockListUnavailable({
+    isBalanceError,
+    balanceData,
+    isTokenIdsError,
+    tokenIds,
+  })
+  const refetch = useCallback(
+    () => Promise.all([refetchBalance(), refetchTokenIds(), refetchLockData()]),
+    [refetchBalance, refetchTokenIds, refetchLockData],
+  )
+
   return {
     locks,
     isLoading,
+    lockListUnavailable,
     refetch,
   }
 }
