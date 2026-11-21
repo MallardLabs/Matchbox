@@ -42,6 +42,7 @@ import {
   useClaimableValidatorBribes,
   usePokeBoost,
 } from "@/hooks/useVoting"
+import { type LockStatus, getLockStatus } from "@/utils/lockReads"
 import {
   Button,
   Card,
@@ -66,6 +67,19 @@ import { type Address, formatUnits } from "viem"
 import { useAccount } from "wagmi"
 
 import { getTokenUsdPrice } from "@repo/shared"
+
+const UNAVAILABLE = "Unavailable"
+
+// A lock whose reads failed is "unavailable", never "0 MEZO, Expired".
+const LOCK_STATUS_TAG: Record<
+  LockStatus,
+  { color: "gray" | "green" | "red" | "yellow"; label: string }
+> = {
+  unavailable: { color: "gray", label: UNAVAILABLE },
+  permanent: { color: "green", label: "Permanent" },
+  expired: { color: "red", label: "Expired" },
+  active: { color: "yellow", label: "Active" },
+}
 
 const TransferProfileModal = dynamic(
   () =>
@@ -131,7 +145,7 @@ function VeBTCLockCard({
   validatorIncentivesByGauge: Map<string, ValidatorGaugeIncentives>
 }): JSX.Element {
   const unlockDate = new Date(Number(lock.end) * 1000)
-  const isExpired = unlockDate < new Date()
+  const lockStatus = getLockStatus(lock, Date.now())
   const {
     pokeBoost,
     isPending: isPokePending,
@@ -245,22 +259,12 @@ function VeBTCLockCard({
           </div>
           <Tag
             color={
-              lock.managedTokenId
-                ? "blue"
-                : lock.isPermanent
-                  ? "green"
-                  : isExpired
-                    ? "red"
-                    : "yellow"
+              lock.managedTokenId ? "blue" : LOCK_STATUS_TAG[lockStatus].color
             }
           >
             {lock.managedTokenId
               ? `Managed by #${lock.managedTokenId.toString()}`
-              : lock.isPermanent
-                ? "Permanent"
-                : isExpired
-                  ? "Expired"
-                  : "Active"}
+              : LOCK_STATUS_TAG[lockStatus].label}
           </Tag>
         </div>
 
@@ -273,7 +277,9 @@ function VeBTCLockCard({
               <div className="flex items-center gap-1.5">
                 <TokenIcon symbol="BTC" size={18} />
                 <span className="font-mono text-sm font-medium text-[var(--content-primary)] tabular-nums">
-                  {formatTokenValue(lock.amount, 18)} BTC
+                  {lock.hasLockData
+                    ? `${formatTokenValue(lock.amount, 18)} BTC`
+                    : UNAVAILABLE}
                 </span>
               </div>
             </div>
@@ -282,7 +288,9 @@ function VeBTCLockCard({
                 Voting Power
               </p>
               <span className="font-mono text-sm font-medium text-[var(--content-primary)] tabular-nums">
-                {formatTokenValue(lock.votingPower, 18)}
+                {lock.hasLockData
+                  ? formatTokenValue(lock.votingPower, 18)
+                  : UNAVAILABLE}
               </span>
             </div>
             <div>
@@ -337,7 +345,7 @@ function VeBTCLockCard({
           </div>
         </div>
 
-        {(lock.isPermanent || !isExpired) && (
+        {(lockStatus === "permanent" || lockStatus === "active") && (
           <div className="mt-4 border-t border-[var(--border)] pt-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-xs text-[var(--content-secondary)]">
@@ -398,7 +406,8 @@ function VeMEZOLockCard({
   lock: ReturnType<typeof useVeMEZOLocks>["locks"][0]
   claimableUSD: number
   usedWeight: bigint | undefined
-  canVoteInCurrentEpoch: boolean
+  /** Undefined when the vote state reads failed or are pending. */
+  canVoteInCurrentEpoch: boolean | undefined
   allocations: VoteAllocation[]
   apyMap: Map<string, GaugeAPYData>
 }): JSX.Element {
@@ -406,7 +415,7 @@ function VeMEZOLockCard({
   const { upcomingAPY } = useUpcomingVotingAPY(allocations, apyMap, usedWeight)
 
   const unlockDate = new Date(Number(lock.end) * 1000)
-  const isExpired = unlockDate < new Date()
+  const lockStatus = getLockStatus(lock, Date.now())
   const hasClaimable = claimableUSD > 0
 
   return (
@@ -438,10 +447,8 @@ function VeMEZOLockCard({
               <div className="mt-1 h-[30px]" />
             )}
           </div>
-          <Tag
-            color={lock.isPermanent ? "green" : isExpired ? "red" : "yellow"}
-          >
-            {lock.isPermanent ? "Permanent" : isExpired ? "Expired" : "Active"}
+          <Tag color={LOCK_STATUS_TAG[lockStatus].color}>
+            {LOCK_STATUS_TAG[lockStatus].label}
           </Tag>
         </div>
 
@@ -453,7 +460,9 @@ function VeMEZOLockCard({
             <div className="flex items-center gap-1.5">
               <TokenIcon symbol="MEZO" size={18} />
               <span className="font-mono text-sm font-medium text-[var(--content-primary)] tabular-nums">
-                {formatTokenValue(lock.amount, 18)} MEZO
+                {lock.hasLockData
+                  ? `${formatTokenValue(lock.amount, 18)} MEZO`
+                  : UNAVAILABLE}
               </span>
             </div>
           </div>
@@ -462,7 +471,9 @@ function VeMEZOLockCard({
               Voting Power
             </p>
             <span className="font-mono text-sm font-medium text-[var(--content-primary)] tabular-nums">
-              {formatTokenValue(lock.votingPower, 18)}
+              {lock.hasLockData
+                ? formatTokenValue(lock.votingPower, 18)
+                : UNAVAILABLE}
             </span>
           </div>
           <div>
@@ -470,7 +481,9 @@ function VeMEZOLockCard({
               Used Weight
             </p>
             <span className="font-mono text-sm font-medium text-[var(--content-primary)] tabular-nums">
-              {usedWeight ? formatTokenValue(usedWeight, 18) : "0"}
+              {usedWeight === undefined
+                ? UNAVAILABLE
+                : formatTokenValue(usedWeight, 18)}
             </span>
           </div>
           <div>
@@ -479,17 +492,23 @@ function VeMEZOLockCard({
             </p>
             <span
               className={`text-sm font-medium ${
-                canVoteInCurrentEpoch
-                  ? "text-[var(--positive)]"
-                  : "text-[var(--warning)]"
+                canVoteInCurrentEpoch === undefined
+                  ? "text-[var(--content-secondary)]"
+                  : canVoteInCurrentEpoch
+                    ? "text-[var(--positive)]"
+                    : "text-[var(--warning)]"
               }`}
             >
-              {canVoteInCurrentEpoch ? "Yes" : "Next Epoch"}
+              {canVoteInCurrentEpoch === undefined
+                ? UNAVAILABLE
+                : canVoteInCurrentEpoch
+                  ? "Yes"
+                  : "Next Epoch"}
             </span>
           </div>
         </div>
 
-        {(lock.isPermanent || !isExpired) && (
+        {(lockStatus === "permanent" || lockStatus === "active") && (
           <div className="mt-4 border-t border-[var(--border)] pt-4">
             <p className="text-xs text-[var(--content-secondary)]">
               Unlocks:{" "}
@@ -2277,7 +2296,9 @@ export default function DashboardPage(): JSX.Element {
                             }
                             usedWeight={voteState?.usedWeight}
                             canVoteInCurrentEpoch={
-                              voteState?.canVoteInCurrentEpoch ?? false
+                              voteState?.hasVotedThisEpoch === undefined
+                                ? undefined
+                                : voteState.canVoteInCurrentEpoch
                             }
                             allocations={allocations}
                             apyMap={apyMap}
