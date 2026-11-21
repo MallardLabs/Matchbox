@@ -3,6 +3,10 @@ import {
   LockCarouselSelector,
   type VeBTCLockData,
 } from "@/components/LockCarouselSelector"
+import {
+  LockDataUnavailableNotice,
+  UnavailableValue,
+} from "@/components/LockUnavailable"
 import OnboardingCard from "@/components/OnboardingCard"
 import { SpringIn } from "@/components/SpringIn"
 import { TokenIcon } from "@/components/TokenIcon"
@@ -44,6 +48,10 @@ import {
   useTokenAllowance,
 } from "@/hooks/useVoting"
 import useWalletNetworkGate from "@/hooks/useWalletNetworkGate"
+import {
+  LOCK_DATA_UNAVAILABLE_REASON,
+  hasUnavailableLock,
+} from "@/utils/lockReads"
 import {
   Button,
   Card,
@@ -160,7 +168,12 @@ type ManageTab = "profile" | "incentives" | "analytics"
 export default function IncentivesPage(): JSX.Element {
   const router = useRouter()
   const { isConnected, address: walletAddress } = useAccount()
-  const { locks: veBTCLocks, isLoading: isLoadingLocks } = useVeBTCLocks()
+  const {
+    locks: veBTCLocks,
+    isLoading: isLoadingLocks,
+    lockListUnavailable,
+    refetch: refetchLocks,
+  } = useVeBTCLocks()
   const { chainId, networkName } = useNetwork()
   const { isWrongNetwork, isSwitching, switchWalletNetwork } =
     useWalletNetworkGate()
@@ -444,7 +457,7 @@ export default function IncentivesPage(): JSX.Element {
   }, [isAddIncentivesSuccess, refetchIncentives, refetchTokenBalance])
 
   const handleCreateGauge = () => {
-    if (!selectedLock) return
+    if (!selectedLock || !selectedLock.hasLockData) return
     createGauge(selectedLock.tokenId)
   }
 
@@ -688,6 +701,10 @@ export default function IncentivesPage(): JSX.Element {
           <Skeleton width="100%" height="150px" animation />
           <Skeleton width="100%" height="150px" animation />
         </div>
+      ) : veBTCLocks.length === 0 && lockListUnavailable ? (
+        <SpringIn delay={0} variant="card">
+          <LockDataUnavailableNotice onRetry={refetchLocks} />
+        </SpringIn>
       ) : veBTCLocks.length === 0 ? (
         <SpringIn delay={0} variant="card">
           <Card withBorder overrides={{}}>
@@ -705,6 +722,12 @@ export default function IncentivesPage(): JSX.Element {
           <SpringIn delay={0} variant="card">
             <Card withBorder overrides={{}}>
               <div className="py-4">
+                {(lockListUnavailable || hasUnavailableLock(veBTCLocks)) && (
+                  <LockDataUnavailableNotice
+                    className="mb-4"
+                    onRetry={refetchLocks}
+                  />
+                )}
                 <LockCarouselSelector
                   locks={enrichedVeBTCLocks}
                   selectedIndex={selectedLockIndex}
@@ -720,7 +743,11 @@ export default function IncentivesPage(): JSX.Element {
                         Locked Amount
                       </p>
                       <p className="font-mono text-sm font-medium tabular-nums text-[var(--content-primary)]">
-                        {formatUnits(selectedLock.amount, 18).slice(0, 10)} BTC
+                        {selectedLock.hasLockData ? (
+                          `${formatUnits(selectedLock.amount, 18).slice(0, 10)} BTC`
+                        ) : (
+                          <UnavailableValue />
+                        )}
                       </p>
                     </div>
                     <div>
@@ -728,7 +755,11 @@ export default function IncentivesPage(): JSX.Element {
                         Voting Power
                       </p>
                       <p className="font-mono text-sm font-medium tabular-nums text-[var(--content-primary)]">
-                        {formatUnits(selectedLock.votingPower, 18).slice(0, 10)}
+                        {selectedLock.hasLockData ? (
+                          formatUnits(selectedLock.votingPower, 18).slice(0, 10)
+                        ) : (
+                          <UnavailableValue />
+                        )}
                       </p>
                     </div>
                     <div>
@@ -780,13 +811,21 @@ export default function IncentivesPage(): JSX.Element {
                     {isWrongNetwork ? (
                       switchWalletButton
                     ) : (
-                      <Button
-                        kind="primary"
-                        onClick={handleCreateGauge}
-                        isLoading={isCreating || isConfirmingCreate}
-                      >
-                        Create Boost Gauge
-                      </Button>
+                      <>
+                        <Button
+                          kind="primary"
+                          onClick={handleCreateGauge}
+                          isLoading={isCreating || isConfirmingCreate}
+                          disabled={!selectedLock.hasLockData}
+                        >
+                          Create Boost Gauge
+                        </Button>
+                        {!selectedLock.hasLockData && (
+                          <p className="mt-2 text-xs text-[var(--content-secondary)]">
+                            {LOCK_DATA_UNAVAILABLE_REASON}
+                          </p>
+                        )}
+                      </>
                     )}
                     {createError && (
                       <ParagraphSmall

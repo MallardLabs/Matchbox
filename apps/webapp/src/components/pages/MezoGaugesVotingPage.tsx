@@ -1,4 +1,8 @@
 import { LockCarouselSelector } from "@/components/LockCarouselSelector"
+import {
+  LockDataUnavailableNotice,
+  UnavailableValue,
+} from "@/components/LockUnavailable"
 import MezoGaugeVotingCard from "@/components/MezoGaugeVotingCard"
 import RewardOptimizerPanel, {
   type RewardOptimizerFeedback,
@@ -11,6 +15,14 @@ import useMezoGaugeVoting from "@/hooks/useMezoGaugeVoting"
 import useMezoGauges, { type MezoGaugeRow } from "@/hooks/useMezoGauges"
 import { useMezoPrice } from "@/hooks/useMezoPrice"
 import { resolveMezoGaugeUnpairEligibility } from "@/lib/mezoGaugeUnpair"
+import {
+  getLockActionBlockReason,
+  hasFailedRead,
+  hasUnavailableLock,
+  lockReadRefetchInterval,
+  selectedLockReadsFailed,
+  sumLockField,
+} from "@/utils/lockReads"
 import {
   type RewardOptimizerResult,
   calculateAnnualizedReturnBasisPoints,
@@ -128,7 +140,12 @@ export default function MezoGaugesVotingPage(): JSX.Element {
   const { chainId } = useNetwork()
   const { isConnected } = useAccount()
   const contracts = getContractConfig(chainId)
-  const { locks, isLoading: isLoadingLocks } = useVeMEZOLocks()
+  const {
+    locks,
+    isLoading: isLoadingLocks,
+    lockListUnavailable,
+    refetch: refetchLocks,
+  } = useVeMEZOLocks()
   const { price: mezoPrice } = useMezoPrice()
   const {
     rows,
@@ -202,7 +219,10 @@ export default function MezoGaugesVotingPage(): JSX.Element {
         args: [lock.tokenId] as const,
       },
     ]),
-    query: { enabled: locks.length > 0 },
+    query: {
+      enabled: locks.length > 0,
+      refetchInterval: (query) => lockReadRefetchInterval(query.state),
+    },
   })
   const lockVoteStateByToken = useMemo(() => {
     const result = new Map<
@@ -244,6 +264,7 @@ export default function MezoGaugesVotingPage(): JSX.Element {
   const {
     data: selectedVoteResults,
     isLoading: isLoadingSelectedVotes,
+    isError: isSelectedVotesError,
     refetch: refetchSelectedVotes,
   } = useReadContracts({
     contracts: selectedLocks.flatMap((lock) =>
@@ -255,11 +276,31 @@ export default function MezoGaugesVotingPage(): JSX.Element {
     ),
     query: {
       enabled: selectedLocks.length > 0 && aliveRows.length > 0,
+      refetchInterval: (query) => lockReadRefetchInterval(query.state),
     },
   })
   const isLoadingSelectedGaugeState =
     selectedLocks.length > 0 &&
     (isLoadingEpochStart || isLoadingLockVoteState || isLoadingSelectedVotes)
+
+  // A selected lock whose lock, vote state or prior-vote reads failed blocks
+  // voting, optimizing and unpairing: each would be built from fallback zeros.
+  const selectedReadsFailed = selectedLockReadsFailed({
+    isLoading: isLoadingSelectedGaugeState,
+    voteStates: selectedLockStates.map((state) => ({
+      hasVotedThisEpoch: state.votedThisEpoch,
+      usedWeight: state.usedWeight,
+    })),
+    priorVotesFailed:
+      aliveRows.length > 0 &&
+      (isSelectedVotesError || hasFailedRead(selectedVoteResults)),
+  })
+  const lockActionBlockReason = getLockActionBlockReason({
+    locks: selectedLocks,
+    readsFailed: selectedReadsFailed,
+  })
+  const showLockDataNotice =
+    lockListUnavailable || hasUnavailableLock(locks) || selectedReadsFailed
 
   const selectedVotesByGauge = useMemo(() => {
     const result = new Map<
@@ -338,7 +379,8 @@ export default function MezoGaugesVotingPage(): JSX.Element {
       selectedLocks.length,
     ],
   )
-  const canUnpairSelectedLocks = unpairableTokenIds.length > 0
+  const canUnpairSelectedLocks =
+    unpairableTokenIds.length > 0 && lockActionBlockReason === null
   const hasPriorAllocations =
     onChainAllocationRows.length > 0 ||
     selectedLockUnpairStates.some(
@@ -347,7 +389,7 @@ export default function MezoGaugesVotingPage(): JSX.Element {
         state.hasCatalogAllocations,
     )
   const totalVotingPower = useMemo(
-    () => selectedLocks.reduce((total, lock) => total + lock.votingPower, 0n),
+    () => sumLockField(selectedLocks, (lock) => lock.votingPower),
     [selectedLocks],
   )
   const allVotedThisEpoch =
@@ -395,12 +437,18 @@ export default function MezoGaugesVotingPage(): JSX.Element {
     ])
   }
 
+  async function refetchLockData() {
+    await Promise.allSettled([refetchLocks(), refetchMezoGaugeVoteState()])
+  }
+
   const selectedLockKey = selectedLocks
     .map((lock) => lock.tokenId.toString())
     .join(",")
 
   useEffect(() => {
-    if (isLoadingSelectedGaugeState || !rows) return
+    // Prefill only from reads that returned, or the ballot shows a partial
+    // prior vote and never refreshes once the reads recover.
+    if (isLoadingSelectedGaugeState || !rows || selectedReadsFailed) return
     if (selectedLockKey === restoredLockKey.current) return
     restoredLockKey.current = selectedLockKey
     if (selectedLockKey === "") return
@@ -414,7 +462,13 @@ export default function MezoGaugesVotingPage(): JSX.Element {
     }
     setAllocations(nextAllocations)
     setSelectedGaugeAddresses(nextSelected)
-  }, [currentAllocations, isLoadingSelectedGaugeState, rows, selectedLockKey])
+  }, [
+    currentAllocations,
+    isLoadingSelectedGaugeState,
+    rows,
+    selectedLockKey,
+    selectedReadsFailed,
+  ])
 
   const optimizerData = useMemo(() => {
     let unpricedIncentiveCount = 0
@@ -471,6 +525,7 @@ export default function MezoGaugesVotingPage(): JSX.Element {
     maxVotingNum !== undefined && BigInt(selectedRows.length) > maxVotingNum
   const canVote =
     isConnected &&
+    lockActionBlockReason === null &&
     eligibleLocks.length > 0 &&
     isInVotingWindow &&
     !isLoadingSelectedGaugeState &&
@@ -563,6 +618,7 @@ export default function MezoGaugesVotingPage(): JSX.Element {
   }
 
   function optimizeAllocation() {
+    if (lockActionBlockReason) return
     const votingPowers = eligibleLocks.map((lock) => lock.votingPower)
     const result = optimizeRewardAllocations({
       gauges: optimizerData.optimizerGauges,
@@ -680,6 +736,8 @@ export default function MezoGaugesVotingPage(): JSX.Element {
             </p>
           </div>
         </Card>
+      ) : locks.length === 0 && lockListUnavailable ? (
+        <LockDataUnavailableNotice onRetry={refetchLockData} />
       ) : locks.length === 0 ? (
         <Card withBorder overrides={{}}>
           <div className="p-10 text-center">
@@ -700,6 +758,9 @@ export default function MezoGaugesVotingPage(): JSX.Element {
         <Card withBorder overrides={{}}>
           <div className="py-4">
             <div className="flex flex-col gap-4">
+              {showLockDataNotice && (
+                <LockDataUnavailableNotice onRetry={refetchLockData} />
+              )}
               <LockCarouselSelector
                 locks={carouselLocks}
                 selectedIndex={undefined}
@@ -726,7 +787,11 @@ export default function MezoGaugesVotingPage(): JSX.Element {
                         Voting Power
                       </dt>
                       <dd className="mt-1 font-mono text-lg font-semibold tabular-nums text-[var(--content-primary)]">
-                        {formatUnits(totalVotingPower, 18).slice(0, 10)}
+                        {totalVotingPower === null ? (
+                          <UnavailableValue />
+                        ) : (
+                          formatUnits(totalVotingPower, 18).slice(0, 10)
+                        )}
                       </dd>
                     </div>
                     <div>
@@ -833,7 +898,8 @@ export default function MezoGaugesVotingPage(): JSX.Element {
                       )}
                       <div className="flex flex-col gap-3 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3 sm:flex-row sm:items-center sm:justify-between">
                         <p className="flex items-start gap-1 text-xs text-[var(--content-secondary)]">
-                          {unpairBlockedMessage ??
+                          {lockActionBlockReason ??
+                            unpairBlockedMessage ??
                             "Clear prior MEZO Gauges allocations. This does not change Boost Gauges or veBTC boost."}
                           <Tooltip
                             id="mezo-gauge-unpair-hint"
@@ -949,15 +1015,21 @@ export default function MezoGaugesVotingPage(): JSX.Element {
 
               <RewardOptimizerPanel
                 assetLabel="veMEZO"
-                disabled={eligibleLocks.length === 0 || allocationsReadOnly}
+                disabled={
+                  eligibleLocks.length === 0 ||
+                  allocationsReadOnly ||
+                  lockActionBlockReason !== null
+                }
                 disabledMessage={
                   selectedLocks.length === 0
                     ? "Select at least one veMEZO NFT to calculate an optimized ballot."
-                    : isLoadingSelectedGaugeState
-                      ? "Loading the selected NFTs and their prior allocations."
-                      : allocationsReadOnly
-                        ? "Every selected veMEZO NFT has already voted this epoch."
-                        : "None of the selected veMEZO NFTs are eligible to vote in this epoch."
+                    : lockActionBlockReason
+                      ? lockActionBlockReason
+                      : isLoadingSelectedGaugeState
+                        ? "Loading the selected NFTs and their prior allocations."
+                        : allocationsReadOnly
+                          ? "Every selected veMEZO NFT has already voted this epoch."
+                          : "None of the selected veMEZO NFTs are eligible to vote in this epoch."
                 }
                 isLoading={isLoadingSelectedGaugeState}
                 unpricedIncentiveCount={optimizerData.unpricedIncentiveCount}
@@ -1238,6 +1310,12 @@ export default function MezoGaugesVotingPage(): JSX.Element {
               </p>
             )}
 
+            {lockActionBlockReason && (
+              <p className="text-pretty text-xs text-[var(--content-secondary)]">
+                {lockActionBlockReason}
+              </p>
+            )}
+
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex flex-wrap gap-2">
                 {canUnpairSelectedLocks && (
@@ -1259,6 +1337,7 @@ export default function MezoGaugesVotingPage(): JSX.Element {
                 {multiVote.canExportSafeBatch && eligibleLocks.length > 1 && (
                   <Button
                     kind="secondary"
+                    disabled={lockActionBlockReason !== null}
                     onClick={() =>
                       void multiVote.exportVoteBatch(
                         eligibleLocks.map((lock) => lock.tokenId),
@@ -1273,6 +1352,7 @@ export default function MezoGaugesVotingPage(): JSX.Element {
                 {multiVote.canCopyBatchJson && eligibleLocks.length > 1 && (
                   <Button
                     kind="tertiary"
+                    disabled={lockActionBlockReason !== null}
                     onClick={() =>
                       void multiVote.copyVoteBatchJson(
                         eligibleLocks.map((lock) => lock.tokenId),
@@ -1300,7 +1380,11 @@ export default function MezoGaugesVotingPage(): JSX.Element {
                 ) && (
                   <Button
                     kind="secondary"
-                    disabled={!isAllocationValid || multiVote.isInProgress}
+                    disabled={
+                      lockActionBlockReason !== null ||
+                      !isAllocationValid ||
+                      multiVote.isInProgress
+                    }
                     onClick={() =>
                       void multiVote.voteAll(
                         multiVote.lockStates

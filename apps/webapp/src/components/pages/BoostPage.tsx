@@ -5,6 +5,10 @@ import {
   LockCarouselSelector,
   type VeMEZOLockData,
 } from "@/components/LockCarouselSelector"
+import {
+  LockDataUnavailableNotice,
+  UnavailableValue,
+} from "@/components/LockUnavailable"
 import MarqueeText from "@/components/MarqueeText"
 import OnboardingCard from "@/components/OnboardingCard"
 import PaginationControls from "@/components/PaginationControls"
@@ -34,6 +38,12 @@ import { useClaimableBribes } from "@/hooks/useVoting"
 import { useAllVoteAllocations, useBatchVoteState } from "@/hooks/useVoting"
 import { boostMultiplierNumberFromCalculatorInputs } from "@/utils/boostMultiplierFromCalculatorInputs"
 import { formatTokenAmount } from "@/utils/format"
+import {
+  getLockActionBlockReason,
+  hasUnavailableLock,
+  selectedLockReadsFailed,
+  sumLockField,
+} from "@/utils/lockReads"
 import {
   type RewardOptimizerResult,
   calculateAnnualizedReturnBasisPoints,
@@ -109,7 +119,12 @@ function hasBasisPointPrecision(percentage: number): boolean {
 
 export default function BoostPage(): JSX.Element {
   const { isConnected } = useAccount()
-  const { locks: veMEZOLocks, isLoading: isLoadingLocks } = useVeMEZOLocks()
+  const {
+    locks: veMEZOLocks,
+    isLoading: isLoadingLocks,
+    lockListUnavailable,
+    refetch: refetchLocks,
+  } = useVeMEZOLocks()
   const {
     gauges,
     isLoading: isLoadingGauges,
@@ -190,27 +205,62 @@ export default function BoostPage(): JSX.Element {
   // Batch fetch vote allocations for all locks to calculate APY for each
   const {
     allocationsByToken,
+    unavailableTokenIds: unavailableAllocationTokenIds,
     isLoading: isLoadingVoteAllocations,
     refetch: refetchVoteAllocations,
   } = useAllVoteAllocations(allVeMEZOTokenIds, gaugeAddresses)
 
+  // A selected lock whose lock, vote state or prior-vote reads failed blocks
+  // every action below: they would be sized or gated from fallback zeros.
+  const selectedReadsFailed = selectedLockReadsFailed({
+    isLoading: isLoadingVoteState || isLoadingVoteAllocations,
+    voteStates: selectedLocks.map((lock) => {
+      const state = voteStateMap.get(lock.tokenId.toString())
+      return {
+        hasVotedThisEpoch: state?.hasVotedThisEpoch,
+        usedWeight: state?.usedWeight,
+      }
+    }),
+    priorVotesFailed: selectedLocks.some((lock) =>
+      unavailableAllocationTokenIds.has(lock.tokenId.toString()),
+    ),
+  })
+  const lockActionBlockReason = getLockActionBlockReason({
+    locks: selectedLocks,
+    readsFailed: selectedReadsFailed,
+  })
+  const selectedVotingPowerTotal = sumLockField(
+    selectedLocks,
+    (lock) => lock.votingPower,
+  )
+  const showLockDataNotice =
+    lockListUnavailable ||
+    hasUnavailableLock(veMEZOLocks) ||
+    selectedReadsFailed
+  const refetchLockData = useCallback(
+    () =>
+      Promise.allSettled([
+        refetchLocks(),
+        refetchVoteState(),
+        refetchVoteAllocations(),
+      ]),
+    [refetchLocks, refetchVoteState, refetchVoteAllocations],
+  )
+
   // Derive aggregated vote state from batch data
   const {
-    totalVotingPower,
     votableVotingPower,
     votableLocks,
     anyVotedThisEpoch,
     allVotedThisEpoch,
     currentAllocations,
   } = useMemo(() => {
-    let power = 0n
     let eligiblePower = 0n
     const votable: typeof selectedLocks = []
     let anyVoted = false
     let allVoted = selectedLocks.length > 0
 
     for (const lock of selectedLocks) {
-      power += lock.votingPower
       const state = voteStateMap.get(lock.tokenId.toString())
       if (state?.canVoteInCurrentEpoch) {
         votable.push(lock)
@@ -242,7 +292,6 @@ export default function BoostPage(): JSX.Element {
     }
 
     return {
-      totalVotingPower: power,
       votableVotingPower: eligiblePower,
       votableLocks: votable,
       anyVotedThisEpoch: anyVoted,
@@ -602,6 +651,7 @@ export default function BoostPage(): JSX.Element {
   const cartStatusMessage = useMemo(() => {
     if (selectedLocks.length === 0)
       return "Select veMEZO locks to finalize your votes."
+    if (lockActionBlockReason) return lockActionBlockReason
     if (votableLocks.length === 0)
       return "All selected locks have already voted this epoch."
     if (gaugeAllocations.size === 0 || totalAllocationRaw === 0) {
@@ -619,6 +669,7 @@ export default function BoostPage(): JSX.Element {
     return null
   }, [
     selectedLocks.length,
+    lockActionBlockReason,
     votableLocks.length,
     gaugeAllocations.size,
     hasValidAllocationEntries,
@@ -749,7 +800,9 @@ export default function BoostPage(): JSX.Element {
     ])
 
   const canUnpairSelectedLocks =
-    unpairableLocks.length > 0 && unresolvedUnpairCount === 0
+    unpairableLocks.length > 0 &&
+    unresolvedUnpairCount === 0 &&
+    lockActionBlockReason === null
   const unpairSafeActionCount =
     unpairableLocks.length +
     (unpairableLocks.some((request) => request.affectedVeBTCTokenIds.length > 0)
@@ -898,6 +951,7 @@ export default function BoostPage(): JSX.Element {
   })
 
   function handleOptimizeRewards() {
+    if (lockActionBlockReason) return
     const votingPowers = votableLocks.map((lock) => lock.votingPower)
     const result = optimizeRewardAllocations({
       gauges: boostOptimizerData.optimizerGauges,
@@ -1025,6 +1079,7 @@ export default function BoostPage(): JSX.Element {
 
   const handleVote = async () => {
     if (
+      lockActionBlockReason ||
       votableLocks.length === 0 ||
       selectedGaugeIndexes.size === 0 ||
       !isAllocationValid
@@ -1061,6 +1116,7 @@ export default function BoostPage(): JSX.Element {
 
   const handleExportVoteBatch = async () => {
     if (
+      lockActionBlockReason ||
       votableLocks.length < 2 ||
       selectedGaugeIndexes.size === 0 ||
       !isAllocationValid
@@ -1085,6 +1141,7 @@ export default function BoostPage(): JSX.Element {
 
   const handleCopyVoteBatchJson = async () => {
     if (
+      lockActionBlockReason ||
       votableLocks.length < 2 ||
       selectedGaugeIndexes.size === 0 ||
       !isAllocationValid
@@ -1373,8 +1430,11 @@ export default function BoostPage(): JSX.Element {
                     const currentVote = gaugeAllocations.get(gaugeIndex) ?? 0
                     const snapshotVote =
                       cartSnapshots.get(gaugeIndex) ?? currentVote
+                    // No projection from a lock whose voting power is unknown.
                     const isProjected =
-                      selectedLocks.length > 0 && currentVote > 0
+                      selectedLocks.length > 0 &&
+                      currentVote > 0 &&
+                      lockActionBlockReason === null
                     const displayAPY = isProjected
                       ? calculateProjectedAPY(
                           apyData,
@@ -1537,7 +1597,7 @@ export default function BoostPage(): JSX.Element {
                               )}
                             </Button>
                           </div>
-                          {selectedLocks.length > 0 && currentVote > 0 && (
+                          {isProjected && (
                             <p className="w-full text-right text-2xs text-[var(--content-secondary)]">
                               ~
                               {formatTokenAmount(
@@ -1757,7 +1817,11 @@ export default function BoostPage(): JSX.Element {
                         <Button
                           kind="secondary"
                           onClick={() => void handleExportVoteBatch()}
-                          disabled={!isAllocationValid || totalAllocation === 0}
+                          disabled={
+                            lockActionBlockReason !== null ||
+                            !isAllocationValid ||
+                            totalAllocation === 0
+                          }
                         >
                           Export Safe batch
                         </Button>
@@ -1767,7 +1831,11 @@ export default function BoostPage(): JSX.Element {
                           kind="tertiary"
                           size="small"
                           onClick={() => void handleCopyVoteBatchJson()}
-                          disabled={!isAllocationValid || totalAllocation === 0}
+                          disabled={
+                            lockActionBlockReason !== null ||
+                            !isAllocationValid ||
+                            totalAllocation === 0
+                          }
                         >
                           {copiedVoteBatchJson ? "Copied" : "Copy tx JSON"}
                         </Button>
@@ -1778,6 +1846,7 @@ export default function BoostPage(): JSX.Element {
                         isLoading={isMultiVoteInProgress}
                         disabled={
                           selectedLocks.length === 0 ||
+                          lockActionBlockReason !== null ||
                           votableLocks.length === 0 ||
                           gaugeAllocations.size === 0 ||
                           totalAllocation === 0 ||
@@ -1969,6 +2038,9 @@ export default function BoostPage(): JSX.Element {
               <Card withBorder overrides={{}}>
                 <div className="py-4">
                   <div className="flex flex-col gap-4">
+                    {showLockDataNotice && (
+                      <LockDataUnavailableNotice onRetry={refetchLockData} />
+                    )}
                     <LockCarouselSelector
                       locks={enrichedVeMEZOLocks}
                       multiSelect
@@ -1994,7 +2066,14 @@ export default function BoostPage(): JSX.Element {
                               Voting Power
                             </dt>
                             <dd className="mt-1 font-mono text-lg font-semibold tabular-nums text-[var(--content-primary)]">
-                              {formatUnits(totalVotingPower, 18).slice(0, 10)}
+                              {selectedVotingPowerTotal === null ? (
+                                <UnavailableValue />
+                              ) : (
+                                formatUnits(selectedVotingPowerTotal, 18).slice(
+                                  0,
+                                  10,
+                                )
+                              )}
                             </dd>
                           </div>
                           <div>
@@ -2103,7 +2182,8 @@ export default function BoostPage(): JSX.Element {
                             </div>
                             <div className="flex flex-col gap-3 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3 sm:flex-row sm:items-center sm:justify-between">
                               <p className="text-xs text-[var(--content-secondary)]">
-                                {unpairBlockedMessage ??
+                                {lockActionBlockReason ??
+                                  unpairBlockedMessage ??
                                   "Clear prior allocations and refresh affected veBTC boosts."}
                               </p>
                               <div className="flex flex-wrap gap-2">
@@ -2176,13 +2256,18 @@ export default function BoostPage(): JSX.Element {
 
                     <RewardOptimizerPanel
                       assetLabel="veMEZO"
-                      disabled={votableLocks.length === 0}
+                      disabled={
+                        votableLocks.length === 0 ||
+                        lockActionBlockReason !== null
+                      }
                       disabledMessage={
                         selectedLocks.length === 0
                           ? "Select at least one veMEZO lock to calculate an optimized ballot."
-                          : isLoadingVoteState || isLoadingVoteAllocations
-                            ? "Loading the selected locks and their prior allocations."
-                            : "None of the selected veMEZO locks are eligible to vote in this epoch."
+                          : lockActionBlockReason
+                            ? lockActionBlockReason
+                            : isLoadingVoteState || isLoadingVoteAllocations
+                              ? "Loading the selected locks and their prior allocations."
+                              : "None of the selected veMEZO locks are eligible to vote in this epoch."
                       }
                       isLoading={
                         isLoadingAPY ||
@@ -2331,7 +2416,8 @@ export default function BoostPage(): JSX.Element {
                                   gaugeAllocations.get(gauge.originalIndex) ?? 0
                                 const isProjected =
                                   selectedLocks.length > 0 &&
-                                  userVotePercentage > 0
+                                  userVotePercentage > 0 &&
+                                  lockActionBlockReason === null
                                 const displayAPY = isProjected
                                   ? calculateProjectedAPY(
                                       apyData,
@@ -2490,8 +2576,15 @@ export default function BoostPage(): JSX.Element {
             </SpringIn>
           )}
 
+          {/* The lock list read failed: never say "no locks" */}
+          {veMEZOLocks.length === 0 && lockListUnavailable && (
+            <SpringIn delay={0} variant="card">
+              <LockDataUnavailableNotice onRetry={refetchLockData} />
+            </SpringIn>
+          )}
+
           {/* Empty state when no locks */}
-          {veMEZOLocks.length === 0 && (
+          {veMEZOLocks.length === 0 && !lockListUnavailable && (
             <SpringIn delay={0} variant="card">
               <Card withBorder overrides={{}}>
                 <div className="p-12 text-center">

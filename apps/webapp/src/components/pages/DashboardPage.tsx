@@ -1,5 +1,10 @@
 import { AnimatedNumber } from "@/components/AnimatedNumber"
 import GaugeCard from "@/components/GaugeCard"
+import {
+  LockDataUnavailableNotice,
+  UnavailableValue,
+  lockStatusTag,
+} from "@/components/LockUnavailable"
 import MarqueeText from "@/components/MarqueeText"
 import PaginationControls from "@/components/PaginationControls"
 import ProLaunchBanner from "@/components/ProLaunchBanner"
@@ -42,7 +47,12 @@ import {
   useClaimableValidatorBribes,
   usePokeBoost,
 } from "@/hooks/useVoting"
-import { type LockStatus, getLockStatus } from "@/utils/lockReads"
+import {
+  LOCK_UNAVAILABLE_LABEL,
+  getLockStatus,
+  hasUnavailableLock,
+  sumLockField,
+} from "@/utils/lockReads"
 import {
   Button,
   Card,
@@ -67,19 +77,6 @@ import { type Address, formatUnits } from "viem"
 import { useAccount } from "wagmi"
 
 import { getTokenUsdPrice } from "@repo/shared"
-
-const UNAVAILABLE = "Unavailable"
-
-// A lock whose reads failed is "unavailable", never "0 MEZO, Expired".
-const LOCK_STATUS_TAG: Record<
-  LockStatus,
-  { color: "gray" | "green" | "red" | "yellow"; label: string }
-> = {
-  unavailable: { color: "gray", label: UNAVAILABLE },
-  permanent: { color: "green", label: "Permanent" },
-  expired: { color: "red", label: "Expired" },
-  active: { color: "yellow", label: "Active" },
-}
 
 const TransferProfileModal = dynamic(
   () =>
@@ -259,12 +256,12 @@ function VeBTCLockCard({
           </div>
           <Tag
             color={
-              lock.managedTokenId ? "blue" : LOCK_STATUS_TAG[lockStatus].color
+              lock.managedTokenId ? "blue" : lockStatusTag(lockStatus).color
             }
           >
             {lock.managedTokenId
               ? `Managed by #${lock.managedTokenId.toString()}`
-              : LOCK_STATUS_TAG[lockStatus].label}
+              : lockStatusTag(lockStatus).label}
           </Tag>
         </div>
 
@@ -277,9 +274,11 @@ function VeBTCLockCard({
               <div className="flex items-center gap-1.5">
                 <TokenIcon symbol="BTC" size={18} />
                 <span className="font-mono text-sm font-medium text-[var(--content-primary)] tabular-nums">
-                  {lock.hasLockData
-                    ? `${formatTokenValue(lock.amount, 18)} BTC`
-                    : UNAVAILABLE}
+                  {lock.hasLockData ? (
+                    `${formatTokenValue(lock.amount, 18)} BTC`
+                  ) : (
+                    <UnavailableValue />
+                  )}
                 </span>
               </div>
             </div>
@@ -288,9 +287,11 @@ function VeBTCLockCard({
                 Voting Power
               </p>
               <span className="font-mono text-sm font-medium text-[var(--content-primary)] tabular-nums">
-                {lock.hasLockData
-                  ? formatTokenValue(lock.votingPower, 18)
-                  : UNAVAILABLE}
+                {lock.hasLockData ? (
+                  formatTokenValue(lock.votingPower, 18)
+                ) : (
+                  <UnavailableValue />
+                )}
               </span>
             </div>
             <div>
@@ -447,8 +448,8 @@ function VeMEZOLockCard({
               <div className="mt-1 h-[30px]" />
             )}
           </div>
-          <Tag color={LOCK_STATUS_TAG[lockStatus].color}>
-            {LOCK_STATUS_TAG[lockStatus].label}
+          <Tag color={lockStatusTag(lockStatus).color}>
+            {lockStatusTag(lockStatus).label}
           </Tag>
         </div>
 
@@ -460,9 +461,11 @@ function VeMEZOLockCard({
             <div className="flex items-center gap-1.5">
               <TokenIcon symbol="MEZO" size={18} />
               <span className="font-mono text-sm font-medium text-[var(--content-primary)] tabular-nums">
-                {lock.hasLockData
-                  ? `${formatTokenValue(lock.amount, 18)} MEZO`
-                  : UNAVAILABLE}
+                {lock.hasLockData ? (
+                  `${formatTokenValue(lock.amount, 18)} MEZO`
+                ) : (
+                  <UnavailableValue />
+                )}
               </span>
             </div>
           </div>
@@ -471,9 +474,11 @@ function VeMEZOLockCard({
               Voting Power
             </p>
             <span className="font-mono text-sm font-medium text-[var(--content-primary)] tabular-nums">
-              {lock.hasLockData
-                ? formatTokenValue(lock.votingPower, 18)
-                : UNAVAILABLE}
+              {lock.hasLockData ? (
+                formatTokenValue(lock.votingPower, 18)
+              ) : (
+                <UnavailableValue />
+              )}
             </span>
           </div>
           <div>
@@ -481,9 +486,11 @@ function VeMEZOLockCard({
               Used Weight
             </p>
             <span className="font-mono text-sm font-medium text-[var(--content-primary)] tabular-nums">
-              {usedWeight === undefined
-                ? UNAVAILABLE
-                : formatTokenValue(usedWeight, 18)}
+              {usedWeight === undefined ? (
+                <UnavailableValue />
+              ) : (
+                formatTokenValue(usedWeight, 18)
+              )}
             </span>
           </div>
           <div>
@@ -500,7 +507,7 @@ function VeMEZOLockCard({
               }`}
             >
               {canVoteInCurrentEpoch === undefined
-                ? UNAVAILABLE
+                ? LOCK_UNAVAILABLE_LABEL
                 : canVoteInCurrentEpoch
                   ? "Yes"
                   : "Next Epoch"}
@@ -1290,8 +1297,18 @@ function ValidatorRewardRows({
 
 export default function DashboardPage(): JSX.Element {
   const { isConnected } = useAccount()
-  const { locks: veBTCLocks, isLoading: isLoadingVeBTC } = useVeBTCLocks()
-  const { locks: veMEZOLocks, isLoading: isLoadingVeMEZO } = useVeMEZOLocks()
+  const {
+    locks: veBTCLocks,
+    isLoading: isLoadingVeBTC,
+    lockListUnavailable: veBTCLockListUnavailable,
+    refetch: refetchVeBTCLocks,
+  } = useVeBTCLocks()
+  const {
+    locks: veMEZOLocks,
+    isLoading: isLoadingVeMEZO,
+    lockListUnavailable: veMEZOLockListUnavailable,
+    refetch: refetchVeMEZOLocks,
+  } = useVeMEZOLocks()
   const { price: btcPrice } = useBtcPrice()
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false)
   const { price: mezoPrice } = useMezoPrice()
@@ -1471,14 +1488,17 @@ export default function DashboardPage(): JSX.Element {
 
   const isLoadingCore = isLoadingVeBTC || isLoadingVeMEZO
 
-  const totalVeBTCVotingPower = veBTCLocks.reduce(
-    (acc, lock) => acc + lock.votingPower,
-    0n,
-  )
-  const totalVeMEZOVotingPower = veMEZOLocks.reduce(
-    (acc, lock) => acc + lock.votingPower,
-    0n,
-  )
+  // Null when a lock's reads (or the lock list) failed: shown as Unavailable.
+  const totalVeBTCVotingPower = veBTCLockListUnavailable
+    ? null
+    : sumLockField(veBTCLocks, (lock) => lock.votingPower)
+  const totalVeMEZOVotingPower = veMEZOLockListUnavailable
+    ? null
+    : sumLockField(veMEZOLocks, (lock) => lock.votingPower)
+  const showVeMEZOUnavailableNotice =
+    veMEZOLockListUnavailable || hasUnavailableLock(veMEZOLocks)
+  const showVeBTCUnavailableNotice =
+    veBTCLockListUnavailable || hasUnavailableLock(veBTCLocks)
 
   // Get gauge registry with ownership data so veBTC weights are available
   const { gauges: allGauges, isLoading: isLoadingGauges } = useBoostGauges({
@@ -2205,7 +2225,11 @@ export default function DashboardPage(): JSX.Element {
                       </p>
                     </div>
                     <span className="font-mono text-xl font-semibold text-[var(--content-primary)]">
-                      {veMEZOLocks.length}
+                      {veMEZOLockListUnavailable ? (
+                        <UnavailableValue />
+                      ) : (
+                        veMEZOLocks.length
+                      )}
                     </span>
                   </div>
                 </Card>
@@ -2221,7 +2245,11 @@ export default function DashboardPage(): JSX.Element {
                       </p>
                     </div>
                     <span className="font-mono text-xl font-semibold tabular-nums text-[var(--content-primary)]">
-                      {formatTokenValue(totalVeMEZOVotingPower, 18)}
+                      {totalVeMEZOVotingPower === null ? (
+                        <UnavailableValue />
+                      ) : (
+                        formatTokenValue(totalVeMEZOVotingPower, 18)
+                      )}
                     </span>
                   </div>
                 </Card>
@@ -2237,7 +2265,11 @@ export default function DashboardPage(): JSX.Element {
                       </p>
                     </div>
                     <span className="font-mono text-xl font-semibold text-[var(--content-primary)]">
-                      {veBTCLocks.length}
+                      {veBTCLockListUnavailable ? (
+                        <UnavailableValue />
+                      ) : (
+                        veBTCLocks.length
+                      )}
                     </span>
                   </div>
                 </Card>
@@ -2253,7 +2285,11 @@ export default function DashboardPage(): JSX.Element {
                       </p>
                     </div>
                     <span className="font-mono text-xl font-semibold tabular-nums text-[var(--content-primary)]">
-                      {formatTokenValue(totalVeBTCVotingPower, 18)}
+                      {totalVeBTCVotingPower === null ? (
+                        <UnavailableValue />
+                      ) : (
+                        formatTokenValue(totalVeBTCVotingPower, 18)
+                      )}
                     </span>
                   </div>
                 </Card>
@@ -2265,7 +2301,14 @@ export default function DashboardPage(): JSX.Element {
                 <h2 className="mb-4 text-xl font-semibold text-[var(--content-primary)]">
                   Your veMEZO Locks
                 </h2>
-                {veMEZOLocks.length === 0 ? (
+                {showVeMEZOUnavailableNotice && (
+                  <LockDataUnavailableNotice
+                    className="mb-4"
+                    onRetry={refetchVeMEZOLocks}
+                  />
+                )}
+                {veMEZOLocks.length === 0 &&
+                veMEZOLockListUnavailable ? null : veMEZOLocks.length === 0 ? (
                   <Card withBorder overrides={{}}>
                     <div className="py-8 text-center">
                       <ParagraphMedium color="var(--content-secondary)">
@@ -2339,7 +2382,14 @@ export default function DashboardPage(): JSX.Element {
                     </div>
                   )}
                 </div>
-                {veBTCLocks.length === 0 ? (
+                {showVeBTCUnavailableNotice && (
+                  <LockDataUnavailableNotice
+                    className="mb-4"
+                    onRetry={refetchVeBTCLocks}
+                  />
+                )}
+                {veBTCLocks.length === 0 &&
+                veBTCLockListUnavailable ? null : veBTCLocks.length === 0 ? (
                   <Card withBorder overrides={{}}>
                     <div className="py-8 text-center">
                       <ParagraphMedium color="var(--content-secondary)">
